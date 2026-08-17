@@ -1,0 +1,870 @@
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+// ----------------------------------------------------
+// 1. Глобальный Пользователь и Роли Платформы
+// Роли платформы: NONE, DEVELOPER, SUPERADMIN, PLATFORM_ADMIN, FULL_ACCESS, PLATFORM_SUPPORT, SEO_ADMIN
+// ----------------------------------------------------
+
+model PlatformUser {
+  id                String   @id @default(uuid())
+  email             String   @unique
+  phone             String?
+  passwordHash      String
+  fullName          String
+  avatarUrl         String?
+  platformRole      String   @default("NONE")
+  preferredLanguage String   @default("ru") // ru, uz-Latn, uz-Cyrl
+  isActive          Boolean  @default(true)
+  twoFactorEnabled  Boolean  @default(false)
+  twoFactorSecret   String?  // TOTP secret (encrypted)
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+
+  memberships          CenterMembership[]
+  ownedCenters         LearningCenter[]    @relation("CenterOwner")
+  auditLogs            AuditLog[]          @relation("ActorAuditLogs")
+  ticketsCreated       SupportTicket[]     @relation("TicketCreator")
+  ticketMessages       TicketMessage[]     @relation("MessageSender")
+  notifications        Notification[]
+  passwordResetTokens  PasswordResetToken[]
+  userSessions         UserSession[]
+
+  @@index([email])
+  @@index([phone])
+}
+
+// ----------------------------------------------------
+// 2. Учебный Центр (Тенант) & Биллинг Аренды
+// Типы центров: OFFLINE, ONLINE, HYBRID
+// Статусы центра: TRIAL, ACTIVE, PAUSED, OVERDUE, BLOCKED, CANCELLED
+// ----------------------------------------------------
+
+model LearningCenter {
+  id              String   @id @default(uuid())
+  slug            String   @unique
+  name            String
+  centerType      String   @default("HYBRID")
+  status          String   @default("TRIAL") // TRIAL, ACTIVE, PAUSED, OVERDUE, BLOCKED, CANCELLED
+  logoUrl         String?
+  brandingConfig  String?  // JSON: colors, custom subtitle, etc.
+  defaultLanguage String   @default("ru")
+  timeZone        String   @default("Asia/Tashkent")
+  gradingScale    String   @default("PERCENT_100") // PERCENT_100, POINTS_5, PASS_FAIL
+  ownerId         String
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  owner           PlatformUser       @relation("CenterOwner", fields: [ownerId], references: [id])
+  subscriptions   Subscription[]
+  memberships     CenterMembership[]
+  inviteCodes     InviteCode[]
+  courses         Course[]
+  branches        Branch[]
+  subjects        Subject[]
+  scheduleSlots   ScheduleSlot[]
+  centerPayments  CenterPayment[]
+  supportTickets  SupportTicket[]
+  auditLogs       AuditLog[]
+  notifications   Notification[]
+  activityLogs    ActivityLog[]
+  academicTerms   AcademicTerm[]
+  holidays        Holiday[]
+  announcements   Announcement[]
+  grades          Grade[]
+
+  @@index([slug])
+  @@index([ownerId])
+}
+
+model SubscriptionPlan {
+  id           String   @id @default(uuid())
+  name         String
+  maxStudents  Int
+  maxTeachers  Int
+  maxCourses   Int
+  maxBranches  Int      @default(1)
+  maxStorage   Int      @default(5120) // MB
+  priceMonthly Float
+  featuresJson String?
+  isActive     Boolean  @default(true)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  subscriptions Subscription[]
+}
+
+// Статусы подписки: TRIAL, ACTIVE, PAST_DUE, FROZEN, CANCELLED
+model Subscription {
+  id                    String   @id @default(uuid())
+  centerId              String
+  planId                String
+  status                String   @default("TRIAL")
+  trialEndsAt           DateTime?
+  currentPeriodStartsAt DateTime @default(now())
+  currentPeriodEndsAt   DateTime
+  autoRenew             Boolean  @default(true)
+  createdAt             DateTime @default(now())
+  updatedAt             DateTime @updatedAt
+
+  center LearningCenter   @relation(fields: [centerId], references: [id], onDelete: Cascade)
+  plan   SubscriptionPlan @relation(fields: [planId], references: [id])
+
+  @@index([centerId])
+}
+
+// ----------------------------------------------------
+// 3. Филиалы (Branches)
+// ----------------------------------------------------
+
+model Branch {
+  id        String   @id @default(uuid())
+  centerId  String
+  name      String
+  address   String?
+  phone     String?
+  email     String?
+  isActive  Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  center       LearningCenter @relation(fields: [centerId], references: [id], onDelete: Cascade)
+  groups       Group[]
+  scheduleSlots ScheduleSlot[]
+
+  @@index([centerId])
+}
+
+// ----------------------------------------------------
+// 4. Предметы (Subjects)
+// ----------------------------------------------------
+
+model Subject {
+  id        String   @id @default(uuid())
+  centerId  String
+  name      String
+  color     String?  // hex color for UI
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  center  LearningCenter @relation(fields: [centerId], references: [id], onDelete: Cascade)
+  courses Course[]
+  groups  Group[]
+
+  @@index([centerId])
+}
+
+// ----------------------------------------------------
+// 5. Роли Уровня Центров & Зачисление
+// Роли центра: DIRECTOR, CENTER_ADMIN, TEACHER, TEACHER_ASSISTANT, CENTER_SUPPORT, STUDENT, PARENT
+// Статусы membership: ACTIVE, INACTIVE, SUSPENDED
+// ----------------------------------------------------
+
+model CenterMembership {
+  id          String   @id @default(uuid())
+  userId      String
+  centerId    String
+  role        String   // DIRECTOR, CENTER_ADMIN, TEACHER, TEACHER_ASSISTANT, CENTER_SUPPORT, STUDENT, PARENT
+  status      String   @default("ACTIVE")
+  permissions String?  // JSON: granular permission overrides for this membership
+  joinedAt    DateTime @default(now())
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  user   PlatformUser   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  center LearningCenter @relation(fields: [centerId], references: [id], onDelete: Cascade)
+
+  // Relations within tenant
+  createdInvites          InviteCode[]          @relation("InviteCreator")
+  createdCourses          Course[]              @relation("CourseCreator")
+  taughtGroups            Group[]               @relation("GroupTeacher")
+  assistedGroups          Group[]               @relation("GroupAssistant")
+  enrollments             Enrollment[]          @relation("StudentEnrollments")
+  attendances             Attendance[]          @relation("StudentAttendances")
+  markedAttendances       Attendance[]          @relation("MarkerAttendances")
+  homeworkSubmissions     HomeworkSubmission[]  @relation("StudentSubmissions")
+  gradedSubmissions       HomeworkSubmission[]  @relation("GraderSubmissions")
+  parentLinksAsParent     ParentLink[]          @relation("ParentLinks")
+  parentLinksAsStudent    ParentLink[]          @relation("StudentLinks")
+  payments                CenterPayment[]       @relation("StudentPayments")
+  testAttempts            TestAttempt[]         @relation("StudentTestAttempts")
+  performanceSnapshots    PerformanceSnapshot[] @relation("StudentSnapshots")
+  activityLogs            ActivityLog[]         @relation("MemberActivityLogs")
+  substituteLessons       Lesson[]              @relation("SubstituteTeacherLessons")
+  gradesAsStudent         Grade[]               @relation("StudentGrades")
+  gradesAsTeacher         Grade[]               @relation("TeacherGrades")
+  gradesFinalized         Grade[]               @relation("GradeFinalizerGrades")
+  announcements           Announcement[]        @relation("AnnouncementAuthor")
+  createdScheduleSlots    ScheduleSlot[]        @relation("ScheduleCreator")
+
+  @@unique([userId, centerId, role])
+  @@index([userId])
+  @@index([centerId])
+}
+
+// ----------------------------------------------------
+// 6. Инвайт-Система & Привязка Родителей
+// ----------------------------------------------------
+
+model InviteCode {
+  id                    String    @id @default(uuid())
+  centerId              String
+  code                  String    @unique
+  targetRole            String    @default("STUDENT")
+  courseId              String?
+  groupId               String?
+  maxUses               Int       @default(1)
+  usesCount             Int       @default(0)
+  expiresAt             DateTime?
+  createdByMembershipId String
+  isRevoked             Boolean   @default(false)
+  createdAt             DateTime  @default(now())
+  updatedAt             DateTime  @updatedAt
+
+  center    LearningCenter   @relation(fields: [centerId], references: [id], onDelete: Cascade)
+  creator   CenterMembership @relation("InviteCreator", fields: [createdByMembershipId], references: [id])
+  course    Course?          @relation(fields: [courseId], references: [id], onDelete: SetNull)
+  group     Group?           @relation(fields: [groupId], references: [id], onDelete: SetNull)
+
+  @@index([code])
+  @@index([centerId])
+}
+
+// Статусы ParentLink: PENDING, CONFIRMED, REJECTED
+model ParentLink {
+  id                  String    @id @default(uuid())
+  parentMembershipId  String
+  studentMembershipId String
+  status              String    @default("PENDING")
+  initiatedBy         String    @default("ADMIN")
+  inviteCodeUsed      String?
+  confirmedAt         DateTime?
+  createdAt           DateTime  @default(now())
+  updatedAt           DateTime  @updatedAt
+
+  parent  CenterMembership @relation("ParentLinks", fields: [parentMembershipId], references: [id], onDelete: Cascade)
+  student CenterMembership @relation("StudentLinks", fields: [studentMembershipId], references: [id], onDelete: Cascade)
+
+  @@unique([parentMembershipId, studentMembershipId])
+}
+
+// ----------------------------------------------------
+// 7. Учебные Курсы, Группы, Уроки
+// ----------------------------------------------------
+
+model Course {
+  id                    String   @id @default(uuid())
+  centerId              String
+  subjectId             String?
+  title                 String
+  description           String?
+  coverImage            String?
+  priceMonthly          Float    @default(0)
+  isPublished           Boolean  @default(false)
+  createdByMembershipId String
+  createdAt             DateTime @default(now())
+  updatedAt             DateTime @updatedAt
+
+  center  LearningCenter    @relation(fields: [centerId], references: [id], onDelete: Cascade)
+  subject Subject?          @relation(fields: [subjectId], references: [id], onDelete: SetNull)
+  creator CenterMembership  @relation("CourseCreator", fields: [createdByMembershipId], references: [id])
+  modules CourseModule[]
+  groups  Group[]
+  invites InviteCode[]
+
+  @@index([centerId])
+  @@index([subjectId])
+}
+
+model CourseModule {
+  id         String   @id @default(uuid())
+  courseId   String
+  title      String
+  orderIndex Int      @default(0)
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  course  Course   @relation(fields: [courseId], references: [id], onDelete: Cascade)
+  lessons Lesson[]
+
+  @@index([courseId])
+}
+
+// Типы уроков: ONLINE, OFFLINE
+// Статусы: ACTIVE, ARCHIVED, CANCELLED
+model Lesson {
+  id                              String    @id @default(uuid())
+  moduleId                        String
+  scheduleSlotId                  String?   // Link to recurring schedule slot
+  title                           String
+  lessonType                      String    @default("OFFLINE")
+  status                          String    @default("ACTIVE") // ACTIVE, ARCHIVED, CANCELLED
+  orderIndex                      Int       @default(0)
+  scheduledAt                     DateTime?
+  durationMinutes                 Int       @default(60)
+  content                         String?
+  videoUrl                        String?
+  onlineMeetingUrl                String?
+  location                        String?
+  attachmentsJson                 String?
+  substituteTeacherMembershipId   String?
+  cancelledReason                 String?
+  createdAt                       DateTime  @default(now())
+  updatedAt                       DateTime  @updatedAt
+
+  module            CourseModule      @relation(fields: [moduleId], references: [id], onDelete: Cascade)
+  scheduleSlot      ScheduleSlot?     @relation(fields: [scheduleSlotId], references: [id], onDelete: SetNull)
+  substituteTeacher CenterMembership? @relation("SubstituteTeacherLessons", fields: [substituteTeacherMembershipId], references: [id], onDelete: SetNull)
+  attendances       Attendance[]
+  homeworks         Homework[]
+  materials         Material[]
+  grades            Grade[]
+
+  @@index([moduleId])
+  @@index([scheduleSlotId])
+}
+
+// ----------------------------------------------------
+// 8. Расписание (ScheduleSlot — recurring timetable)
+// ----------------------------------------------------
+
+// Статусы: ACTIVE, CANCELLED, RESCHEDULED
+model ScheduleSlot {
+  id                  String    @id @default(uuid())
+  centerId            String
+  groupId             String
+  teacherMembershipId String
+  branchId            String?
+  subjectId           String?
+  roomName            String?
+  dayOfWeek           Int       // 1=Mon, 2=Tue ... 7=Sun
+  startTime           String    // "09:00"
+  endTime             String    // "10:30"
+  isRecurring         Boolean   @default(true)
+  overrideDate        String?   // "2026-09-15" for one-off overrides
+  status              String    @default("ACTIVE") // ACTIVE, CANCELLED, RESCHEDULED
+  cancelledReason     String?
+  createdByMemberId   String?
+  createdAt           DateTime  @default(now())
+  updatedAt           DateTime  @updatedAt
+
+  center    LearningCenter   @relation(fields: [centerId], references: [id], onDelete: Cascade)
+  group     Group            @relation(fields: [groupId], references: [id], onDelete: Cascade)
+  teacher   CenterMembership @relation("ScheduleCreator", fields: [teacherMembershipId], references: [id])
+  branch    Branch?          @relation(fields: [branchId], references: [id], onDelete: SetNull)
+  lessons   Lesson[]
+
+  @@index([centerId])
+  @@index([groupId])
+  @@index([teacherMembershipId])
+}
+
+model Group {
+  id                    String    @id @default(uuid())
+  courseId              String
+  branchId              String?
+  subjectId             String?
+  name                  String
+  teacherMembershipId   String?
+  assistantMembershipId String?   // TEACHER_ASSISTANT
+  maxStudents           Int       @default(30)
+  startDate             DateTime?
+  endDate               DateTime?
+  createdAt             DateTime  @default(now())
+  updatedAt             DateTime  @updatedAt
+
+  course      Course            @relation(fields: [courseId], references: [id], onDelete: Cascade)
+  branch      Branch?           @relation(fields: [branchId], references: [id], onDelete: SetNull)
+  subject     Subject?          @relation(fields: [subjectId], references: [id], onDelete: SetNull)
+  teacher     CenterMembership? @relation("GroupTeacher", fields: [teacherMembershipId], references: [id], onDelete: SetNull)
+  assistant   CenterMembership? @relation("GroupAssistant", fields: [assistantMembershipId], references: [id], onDelete: SetNull)
+  enrollments           Enrollment[]
+  invites               InviteCode[]
+  payments              CenterPayment[]
+  performanceSnapshots  PerformanceSnapshot[]
+  scheduleSlots         ScheduleSlot[]
+  grades                Grade[]
+  announcements         Announcement[]
+
+  @@index([courseId])
+  @@index([teacherMembershipId])
+}
+
+// Статусы Enrollment: ACTIVE, WAITLIST, COMPLETED, DROPPED
+model Enrollment {
+  id                  String   @id @default(uuid())
+  studentMembershipId String
+  groupId             String
+  status              String   @default("ACTIVE")
+  enrolledAt          DateTime @default(now())
+  createdAt           DateTime @default(now())
+  updatedAt           DateTime @updatedAt
+
+  student CenterMembership @relation("StudentEnrollments", fields: [studentMembershipId], references: [id], onDelete: Cascade)
+  group   Group            @relation(fields: [groupId], references: [id], onDelete: Cascade)
+
+  @@unique([studentMembershipId, groupId])
+  @@index([groupId])
+  @@index([studentMembershipId])
+}
+
+// ----------------------------------------------------
+// 9. Учебный Процесс (Посещаемость, ДЗ, Оценки)
+// ----------------------------------------------------
+
+// Статусы посещаемости: PRESENT, ABSENT, EXCUSED, LATE
+model Attendance {
+  id                   String   @id @default(uuid())
+  lessonId             String
+  studentMembershipId  String
+  groupId              String?
+  status               String   @default("PRESENT") // PRESENT, ABSENT, EXCUSED, LATE
+  note                 String?
+  markedByMembershipId String
+  markedAt             DateTime @default(now())
+  createdAt            DateTime @default(now())
+  updatedAt            DateTime @updatedAt
+
+  lesson  Lesson           @relation(fields: [lessonId], references: [id], onDelete: Cascade)
+  student CenterMembership @relation("StudentAttendances", fields: [studentMembershipId], references: [id], onDelete: Cascade)
+  marker  CenterMembership @relation("MarkerAttendances", fields: [markedByMembershipId], references: [id])
+
+  @@unique([lessonId, studentMembershipId])
+  @@index([lessonId])
+  @@index([studentMembershipId])
+}
+
+model Homework {
+  id              String   @id @default(uuid())
+  lessonId        String
+  title           String
+  description     String?
+  dueDate         DateTime?
+  attachmentsJson String?
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  lesson      Lesson               @relation(fields: [lessonId], references: [id], onDelete: Cascade)
+  submissions HomeworkSubmission[]
+  materials   HomeworkMaterial[]
+
+  @@index([lessonId])
+}
+
+// Статусы: NOT_SUBMITTED, SUBMITTED, UNDER_REVIEW, ACCEPTED, REJECTED
+model HomeworkSubmission {
+  id                   String    @id @default(uuid())
+  homeworkId           String
+  studentMembershipId  String
+  groupId              String?
+  submissionText       String?
+  filesJson            String?
+  status               String    @default("NOT_SUBMITTED") // NOT_SUBMITTED, SUBMITTED, UNDER_REVIEW, ACCEPTED, REJECTED
+  grade                Int?
+  feedback             String?
+  gradedByMembershipId String?
+  submittedAt          DateTime  @default(now())
+  gradedAt             DateTime?
+  createdAt            DateTime  @default(now())
+  updatedAt            DateTime  @updatedAt
+
+  homework Homework          @relation(fields: [homeworkId], references: [id], onDelete: Cascade)
+  student  CenterMembership  @relation("StudentSubmissions", fields: [studentMembershipId], references: [id], onDelete: Cascade)
+  grader   CenterMembership? @relation("GraderSubmissions", fields: [gradedByMembershipId], references: [id], onDelete: SetNull)
+  grade_record Grade?        @relation("SubmissionGrade")
+
+  @@unique([homeworkId, studentMembershipId])
+  @@index([homeworkId])
+  @@index([studentMembershipId])
+}
+
+// ----------------------------------------------------
+// 10. Оценки (Grade) — отдельная модель с lifecycle
+// Типы: HOMEWORK, TEST, ORAL, WRITTEN, MIDTERM, FINAL, PROJECT, OTHER
+// Lifecycle: DRAFT, SUBMITTED, FINAL
+// ----------------------------------------------------
+
+model Grade {
+  id                    String    @id @default(uuid())
+  centerId              String
+  studentMembershipId   String
+  groupId               String?
+  lessonId              String?
+  teacherMembershipId   String
+  gradeType             String    @default("HOMEWORK") // HOMEWORK, TEST, ORAL, WRITTEN, MIDTERM, FINAL, PROJECT, OTHER
+  value                 Float
+  maxValue              Float     @default(100)
+  comment               String?
+  lifecycle             String    @default("DRAFT") // DRAFT, SUBMITTED, FINAL
+  homeworkSubmissionId  String?   @unique
+  finalizedAt           DateTime?
+  finalizedById         String?
+  deletedAt             DateTime? // soft delete
+  deletedById           String?
+  createdAt             DateTime  @default(now())
+  updatedAt             DateTime  @updatedAt
+
+  center              LearningCenter    @relation(fields: [centerId], references: [id], onDelete: Cascade)
+  student             CenterMembership  @relation("StudentGrades", fields: [studentMembershipId], references: [id], onDelete: Cascade)
+  group               Group?            @relation(fields: [groupId], references: [id], onDelete: SetNull)
+  lesson              Lesson?           @relation(fields: [lessonId], references: [id], onDelete: SetNull)
+  teacher             CenterMembership  @relation("TeacherGrades", fields: [teacherMembershipId], references: [id])
+  finalizedBy         CenterMembership? @relation("GradeFinalizerGrades", fields: [finalizedById], references: [id], onDelete: SetNull)
+  homeworkSubmission  HomeworkSubmission? @relation("SubmissionGrade", fields: [homeworkSubmissionId], references: [id], onDelete: SetNull)
+
+  @@index([centerId])
+  @@index([studentMembershipId])
+  @@index([groupId])
+  @@index([teacherMembershipId])
+}
+
+// ----------------------------------------------------
+// 11. Платежи Учеников Учебному Центру
+// ----------------------------------------------------
+
+model CenterPayment {
+  id                  String    @id @default(uuid())
+  centerId            String
+  studentMembershipId String
+  groupId             String?
+  amount              Float
+  originalAmount      Float?
+  discountAmount      Float     @default(0)
+  currency            String    @default("UZS")
+  status              String    @default("PENDING") // PENDING, PAID, PARTIALLY_PAID, FAILED, REFUNDED
+  paymentMethod       String    @default("CASH")
+  installmentIndex    Int?
+  externalTxId        String?
+  note                String?
+  paidAt              DateTime?
+  refundedAt          DateTime?
+  deletedAt           DateTime? // soft delete
+  createdAt           DateTime  @default(now())
+  updatedAt           DateTime  @updatedAt
+
+  center  LearningCenter   @relation(fields: [centerId], references: [id], onDelete: Cascade)
+  student CenterMembership @relation("StudentPayments", fields: [studentMembershipId], references: [id], onDelete: Cascade)
+  group   Group?            @relation(fields: [groupId], references: [id], onDelete: SetNull)
+
+  @@index([centerId])
+  @@index([studentMembershipId])
+  @@index([status])
+}
+
+// ----------------------------------------------------
+// 12. Объявления (Announcements)
+// ----------------------------------------------------
+
+model Announcement {
+  id         String    @id @default(uuid())
+  centerId   String
+  authorId   String    // CenterMembership id
+  title      String
+  body       String
+  targetRole String?   // null = all, STUDENT, TEACHER, PARENT, etc.
+  groupId    String?   // null = all groups
+  isPinned   Boolean   @default(false)
+  publishAt  DateTime  @default(now())
+  expiresAt  DateTime?
+  createdAt  DateTime  @default(now())
+  updatedAt  DateTime  @updatedAt
+
+  center LearningCenter   @relation(fields: [centerId], references: [id], onDelete: Cascade)
+  author CenterMembership @relation("AnnouncementAuthor", fields: [authorId], references: [id])
+  group  Group?           @relation(fields: [groupId], references: [id], onDelete: SetNull)
+
+  @@index([centerId])
+  @@index([publishAt])
+}
+
+// ----------------------------------------------------
+// 13. Поддержка и Аудит
+// ----------------------------------------------------
+
+model SupportTicket {
+  id            String   @id @default(uuid())
+  centerId      String?
+  creatorUserId String
+  subject       String
+  status        String   @default("OPEN")
+  priority      String   @default("MEDIUM")
+  scope         String   @default("TENANT")
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  center   LearningCenter? @relation(fields: [centerId], references: [id], onDelete: Cascade)
+  creator  PlatformUser    @relation("TicketCreator", fields: [creatorUserId], references: [id], onDelete: Cascade)
+  messages TicketMessage[]
+
+  @@index([creatorUserId])
+}
+
+model TicketMessage {
+  id              String   @id @default(uuid())
+  ticketId        String
+  senderUserId    String
+  message         String
+  attachmentsJson String?
+  isInternal      Boolean  @default(false)
+  createdAt       DateTime @default(now())
+
+  ticket SupportTicket @relation(fields: [ticketId], references: [id], onDelete: Cascade)
+  sender PlatformUser  @relation("MessageSender", fields: [senderUserId], references: [id], onDelete: Cascade)
+}
+
+model AuditLog {
+  id          String   @id @default(uuid())
+  centerId    String?
+  actorUserId String
+  action      String   // LOGIN_SUCCESS, LOGIN_FAILED, LOGOUT, GRADE_FINALIZED, etc.
+  resource    String
+  resourceId  String?
+  detailsJson String?
+  ipAddress   String?
+  createdAt   DateTime @default(now())
+
+  center LearningCenter? @relation(fields: [centerId], references: [id], onDelete: SetNull)
+  actor  PlatformUser    @relation("ActorAuditLogs", fields: [actorUserId], references: [id], onDelete: Cascade)
+
+  @@index([actorUserId])
+  @@index([centerId])
+  @@index([action])
+  @@index([createdAt])
+}
+
+// ----------------------------------------------------
+// 14. Auth — Session Revocation & Password Reset
+// ----------------------------------------------------
+
+model UserSession {
+  id         String   @id @default(uuid())
+  userId     String
+  jti        String   @unique  // JWT ID for revocation
+  isRevoked  Boolean  @default(false)
+  createdAt  DateTime @default(now())
+  expiresAt  DateTime
+  ipAddress  String?
+  userAgent  String?
+
+  user PlatformUser @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([jti])
+}
+
+model PasswordResetToken {
+  id        String   @id @default(uuid())
+  userId    String
+  token     String   @unique
+  expiresAt DateTime
+  usedAt    DateTime?
+  createdAt DateTime @default(now())
+
+  user PlatformUser @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([token])
+  @@index([userId])
+}
+
+// ----------------------------------------------------
+// 15. Учебные Материалы (Video / Lecture / Book / Test)
+// ----------------------------------------------------
+
+model Material {
+  id              String   @id @default(uuid())
+  lessonId        String?
+  centerId        String
+  title           String
+  materialType    String   @default("LECTURE") // VIDEO, LECTURE, BOOK, TEST, LINK
+  contentText     String?
+  fileUrl         String?
+  externalUrl     String?
+  durationMinutes Int?
+  pagesRange      String?
+  orderIndex      Int      @default(0)
+  isPrivate       Boolean  @default(true) // Private by default — access control
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  lesson    Lesson?          @relation(fields: [lessonId], references: [id], onDelete: SetNull)
+  test      Test?
+  homeworks HomeworkMaterial[]
+
+  @@index([lessonId])
+  @@index([centerId])
+}
+
+// ----------------------------------------------------
+// 16. Тесты с Автопроверкой
+// ----------------------------------------------------
+
+model Test {
+  id                  String   @id @default(uuid())
+  materialId          String   @unique
+  timeLimitMinutes    Int?
+  maxAttempts         Int      @default(1)
+  passingScorePercent Int      @default(60)
+  shuffleQuestions    Boolean  @default(false)
+  createdAt           DateTime @default(now())
+  updatedAt           DateTime @updatedAt
+
+  material  Material       @relation(fields: [materialId], references: [id], onDelete: Cascade)
+  questions TestQuestion[]
+  attempts  TestAttempt[]
+}
+
+model TestQuestion {
+  id            String   @id @default(uuid())
+  testId        String
+  questionText  String
+  questionType  String   @default("SINGLE_CHOICE") // SINGLE_CHOICE, MULTIPLE_CHOICE, TEXT
+  optionsJson   String?
+  correctAnswer String?
+  points        Int      @default(1)
+  orderIndex    Int      @default(0)
+  createdAt     DateTime @default(now())
+
+  test Test @relation(fields: [testId], references: [id], onDelete: Cascade)
+
+  @@index([testId])
+}
+
+model TestAttempt {
+  id                  String    @id @default(uuid())
+  testId              String
+  studentMembershipId String
+  answersJson         String?
+  scorePercent        Float?
+  scorePoints         Int?
+  maxPoints           Int?
+  startedAt           DateTime  @default(now())
+  completedAt         DateTime?
+
+  test    Test             @relation(fields: [testId], references: [id], onDelete: Cascade)
+  student CenterMembership @relation("StudentTestAttempts", fields: [studentMembershipId], references: [id], onDelete: Cascade)
+
+  @@index([testId])
+  @@index([studentMembershipId])
+}
+
+// ----------------------------------------------------
+// 17. Homework <-> Material (many-to-many)
+// ----------------------------------------------------
+
+model HomeworkMaterial {
+  id         String @id @default(uuid())
+  homeworkId String
+  materialId String
+
+  homework Homework @relation(fields: [homeworkId], references: [id], onDelete: Cascade)
+  material Material @relation(fields: [materialId], references: [id], onDelete: Cascade)
+
+  @@unique([homeworkId, materialId])
+}
+
+// ----------------------------------------------------
+// 18. Успеваемость и Активность
+// ----------------------------------------------------
+
+model PerformanceSnapshot {
+  id                        String   @id @default(uuid())
+  studentMembershipId       String
+  groupId                   String
+  periodStart               DateTime
+  periodEnd                 DateTime
+  averageGrade              Float?
+  attendancePercent         Float?
+  homeworkCompletionPercent Float?
+  trend                     String   @default("STABLE") // UP, DOWN, STABLE
+  calculatedAt              DateTime @default(now())
+
+  student CenterMembership @relation("StudentSnapshots", fields: [studentMembershipId], references: [id], onDelete: Cascade)
+  group   Group            @relation(fields: [groupId], references: [id], onDelete: Cascade)
+
+  @@index([studentMembershipId])
+  @@index([groupId])
+}
+
+model ActivityLog {
+  id               String   @id @default(uuid())
+  userMembershipId String
+  centerId         String
+  activityType     String   // LOGIN, VIEW_MATERIAL, VIEW_VIDEO, COMPLETE_TEST, SUBMIT_HOMEWORK, VIEW_LESSON
+  resourceType     String?
+  resourceId       String?
+  metadataJson     String?
+  createdAt        DateTime @default(now())
+
+  member CenterMembership @relation("MemberActivityLogs", fields: [userMembershipId], references: [id], onDelete: Cascade)
+  center LearningCenter   @relation(fields: [centerId], references: [id], onDelete: Cascade)
+
+  @@index([userMembershipId])
+  @@index([centerId])
+  @@index([activityType])
+}
+
+// ----------------------------------------------------
+// 19. Уведомления
+// Типы: INVITE, NEW_HOMEWORK, SCHEDULE_CHANGE, PAYMENT_DUE, PAYMENT_OVERDUE,
+//       GRADE_POSTED, SUBSCRIPTION_EXPIRING, STAFF_ADDED, GENERAL,
+//       ATTENDANCE_ABSENT, ANNOUNCEMENT
+// Каналы: IN_APP, EMAIL, SMS, PUSH
+// ----------------------------------------------------
+
+model Notification {
+  id         String    @id @default(uuid())
+  userId     String
+  centerId   String?
+  type       String    @default("GENERAL")
+  titleKey   String
+  bodyKey    String
+  bodyParams String?
+  channel    String    @default("IN_APP") // IN_APP, EMAIL, SMS, PUSH
+  isRead     Boolean   @default(false)
+  sentAt     DateTime?
+  createdAt  DateTime  @default(now())
+
+  user   PlatformUser    @relation(fields: [userId], references: [id], onDelete: Cascade)
+  center LearningCenter? @relation(fields: [centerId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([centerId])
+  @@index([isRead])
+}
+
+// ----------------------------------------------------
+// 20. Учебный Календарь
+// ----------------------------------------------------
+
+model AcademicTerm {
+  id        String   @id @default(uuid())
+  centerId  String
+  name      String
+  startDate DateTime
+  endDate   DateTime
+  createdAt DateTime @default(now())
+
+  center LearningCenter @relation(fields: [centerId], references: [id], onDelete: Cascade)
+
+  @@index([centerId])
+}
+
+model Holiday {
+  id        String   @id @default(uuid())
+  centerId  String
+  name      String
+  startDate DateTime
+  endDate   DateTime
+  createdAt DateTime @default(now())
+
+  center LearningCenter @relation(fields: [centerId], references: [id], onDelete: Cascade)
+
+  @@index([centerId])
+}
+

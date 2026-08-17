@@ -1,0 +1,358 @@
+{
+  "common": {
+    "appName": "AcademiaSaaS",
+    "appTagline": "Multi-tenant LMS platforma",
+    "loading": "Yuklanmoqda...",
+    "save": "Saqlash",
+    "cancel": "Bekor qilish",
+    "delete": "Oʻchirish",
+    "edit": "Tahrirlash",
+    "create": "Yaratish",
+    "search": "Qidirish",
+    "filter": "Filtr",
+    "export": "Eksport",
+    "back": "Orqaga",
+    "next": "Keyingi",
+    "submit": "Yuborish",
+    "confirm": "Tasdiqlash",
+    "close": "Yopish",
+    "yes": "Ha",
+    "no": "Yoʻq",
+    "all": "Hammasi",
+    "none": "Yoʻq",
+    "actions": "Amallar",
+    "status": "Holat",
+    "date": "Sana",
+    "noData": "Maʼlumot yoʻq",
+    "error": "Xatolik",
+    "success": "Muvaffaqiyatli",
+    "warning": "Diqqat",
+    "language": "Til",
+    "settings": "Sozlamalar",
+    "profile": "Profil",
+    "logout": "Chiqish"
+  },
+
+  "languages": {
+    "ru": "Русский",
+    "uz-Latn": "Oʻzbekcha (Lotin)",
+    "uz-Cyrl": "Ўзбекча (Кирилл)",
+    "en": "English"
+  },
+
+  "auth": {
+    "login": "Tizimga kirish",
+    "register": "Roʻyxatdan oʻtish",
+    "email": "Email",
+    "password": "Parol",
+    "confirmPassword": "Parolni tasdiqlang",
+    "fullName": "FISh",
+    "phone": "Telefon",
+    "forgotPassword": "Parolni unutdingizmi?",
+    "noAccount": "Akkauntingiz yoʻqmi?",
+    "hasAccount": "Akkauntingiz bormi?",
+    "loginButton": "Kirish",
+    "registerButton": "Roʻyxatdan oʻtish",
+    "setPassword": "Parol oʻrnatish",
+    "setPasswordDescription": "Shaxsiy kabinetga kirish uchun parol oʻrnating",
+    "inviteWelcome": "Xush kelibsiz! Sizga «{centerName}» oʻquv markaziga kirish huquqi berildi",
+    "invalidCredentials": "Email yoki parol notoʻgʻri",
+    "accountDisabled": "Akkaunt faolsizlantirilgan"
+  },
+
+  "nav": {
+    "dashboard": "Bosh sahifa",
+    "courses": "Kurslar",
+    "groups": "Guruhlar",
+    "schedule": "Jadval",
+    "grades": "Baholar",
+    "attendance": "Davomat",
+    "homework": "Uy vazifalari",
+    "payments": "Toʻlovlar",
+    "invites": "Taklifnomalar",
+    "staff": "Xodimlar",
+    "students": "Oʻquvchilar",
+    "parents": "Ota-onalar",
+    "support": "Qoʻllab-quvvatlash",
+    "settings": "Sozlamalar",
+    "platformAdmin": "Platforma paneli",
+    "reports": "Hisobotlar",
+    "notifications": "Bildirishnomalar"
+  },
+
+  "roles": {
+    "SUPERADMIN": "Superadmin",
+    "PLATFORM_ADMIN": "Platforma admini",
+    "FULL_ACCESS": "Toʻliq kirish",
+    "PLATFORM_SUPPORT": "Platforma qoʻllab-quvvatlashi",
+    "SEO_ADMIN": "SEO-admin",
+    "DIRECTOR": "Direktor",
+    "CENTER_ADMIN": "Markaz administratori",
+    "TEACHER": "Oʻqituvchi",
+    "CENTER_SUPPORT": "Markaz qoʻllab-quvvatlashi",
+    "STUDENT": "Oʻquvchi",
+    "PARENT": "Ota-ona"
+  },
+
+  "dashboard": {
+    "welcome": "Assalomu alaykum, {name}! 👋",
+    "selectCenter": "Chap menyuda oʻquv markazini tanlang",
+    "welcomeToCenter": "«{centerName}» ish maydoniga xush kelibsiz",
+    "directorCabinet": "Direktor kabineti",
+    "adminCabinet": "Administrator kabineti",
+    "teacherCabinet": "Oʻqituvchi kabineti",
+    "studentCabinet": "Oʻquvchi kabineti",
+    "parentCabinet": "Ota-ona kabineti",
+    "globalPanel": "Global panel",
+    "activeStudents": "Faol Oʻquvchilar",
+    "teachers": "Oʻqituvchilar",
+    "totalCourses": "Jami Kurslar",
+    "centerRevenue": "Markaz Daromadi",
+    "subscriptionPlan": "Platforma obuna tarifi",
+    "activeUntil": "{date} gacha faol",
+    "frozenAlert": "Oʻquv markazi obunasi toʻxtatilgan. Oʻquvchilar va oʻqituvchilar kirishi ijara toʻlanguncha cheklangan.",
+    "payRent": "Ijara toʻlash"
+  },
+
+  "courses": {
+    "title": "Oʻquv Kurslari",
+    "description": "Jadval va materiallarni koʻrish",
+    "createCourse": "Kurs yaratish",
+    "courseName": "Kurs nomi",
+    "courseDescription": "Kurs tavsifi",
+    "published": "Chop etilgan",
+    "draft": "Qoralama",
+    "modules": "Modullar",
+    "lessons": "Darslar",
+    "materials": "Materiallar"
+  },
+
+  "groups": {
+    "title": "Guruhlar (oqimlar)",
+    "createGroup": "Guruh yaratish",
+    "groupName": "Guruh nomi",
+    "assignTeacher": "Oʻqituvchi tayinlash",
+    "maxStudents": "Maks. oʻquvchilar",
+    "enrolled": "Roʻyxatga olingan",
+    "startDate": "Boshlanish sanasi",
+    "endDate": "Tugash sanasi"
+  },
+
+  "lessons": {
+    "title": "Darslar",
+    "createLesson": "Dars yaratish",
+    "lessonTitle": "Dars mavzusi",
+    "online": "Onlayn",
+    "offline": "Oflayn",
+    "scheduled": "{date} ga rejalashtirilgan",
+    "duration": "{minutes} daq",
+    "active": "Faol",
+    "archived": "Arxivlangan",
+    "meetingUrl": "Konferentsiya havolasi",
+    "location": "Auditoriya"
+  },
+
+  "materials": {
+    "title": "Materiallar",
+    "addMaterial": "Material qoʻshish",
+    "video": "Video",
+    "lecture": "Maʼruza",
+    "book": "Kitob",
+    "test": "Test",
+    "videoDescription": "Yuklangan fayl yoki havola",
+    "lectureDescription": "Matn konspekti yoki PDF",
+    "bookDescription": "Oʻqish uchun fayl",
+    "testDescription": "Avtotekshiruvli test"
+  },
+
+  "attendance": {
+    "title": "Davomat",
+    "markAttendance": "Davomatni belgilash",
+    "present": "Qatnashdi",
+    "absent": "Qatnashmadi",
+    "excused": "Sababli",
+    "late": "Kechikdi",
+    "attendanceRate": "% davomat"
+  },
+
+  "homework": {
+    "title": "Uy Vazifalari",
+    "createHomework": "UV yaratish",
+    "dueDate": "Topshirish muddati",
+    "notStarted": "Boshlanmagan",
+    "inProgress": "Jarayonda",
+    "submitted": "Topshirilgan",
+    "graded": "Tekshirilgan",
+    "overdue": "Muddati oʻtgan",
+    "submitHomework": "Vazifani topshirish",
+    "gradeHomework": "Vazifani baholash"
+  },
+
+  "payments": {
+    "title": "Toʻlovlar",
+    "description": "Toʻlovlar tarixi",
+    "amount": "Summa",
+    "paid": "Toʻlangan",
+    "pending": "Kutilmoqda",
+    "overdue": "Muddati oʻtgan",
+    "failed": "Toʻlov xatosi",
+    "refunded": "Qaytarilgan",
+    "cash": "Naqd pul",
+    "online": "Onlayn",
+    "bankTransfer": "Bank oʻtkazmasi",
+    "markAsPaid": "Toʻlangan deb belgilash",
+    "financialReport": "Moliyaviy hisobot",
+    "debtors": "Qarzdorlar",
+    "totalCollected": "Yigʻilgan",
+    "totalExpected": "Kutilmoqda",
+    "totalOverdue": "Muddati oʻtgan"
+  },
+
+  "invites": {
+    "title": "Taklifnomalar va Kirish",
+    "description": "Markazga taklif kodlari",
+    "createInvite": "Taklif kodi yaratish",
+    "inviteCode": "Taklif kodi",
+    "targetRole": "Rol",
+    "maxUses": "Maks. foydalanishlar",
+    "usesCount": "Ishlatilgan",
+    "expiresAt": "Amal qilish muddati",
+    "revoke": "Bekor qilish",
+    "revoked": "Bekor qilingan",
+    "active": "Faol",
+    "expired": "Muddati tugagan",
+    "bulkImport": "Ommaviy import (CSV)",
+    "parentInvite": "Ota-ona uchun taklif"
+  },
+
+  "staff": {
+    "title": "Markaz xodimlari",
+    "addStaff": "Xodim qoʻshish",
+    "staffEmail": "Xodim emaili",
+    "staffName": "Xodim FIShi",
+    "staffRole": "Rol",
+    "deactivate": "Faolsizlantirish",
+    "activate": "Faollashtirish"
+  },
+
+  "parent": {
+    "childProgress": "Farzandlaringiz Oʻzlashtirishi",
+    "noChildren": "Ushbu markazda sizga bogʻlangan farzandlar yoʻq.",
+    "getInviteCode": "Markazda sizga shaxsiy ota-ona taklif kodini berishlari kerak.",
+    "switchChild": "Farzandni tanlash",
+    "coursesAndGroups": "Kurslar va Guruhlar",
+    "paymentHistory": "Toʻlovlar Tarixi"
+  },
+
+  "student": {
+    "myCourses": "Mening Kurslarim va Oqimlarim",
+    "noCourses": "Siz hali hech qanday guruhga yozilmadingiz.",
+    "useInviteCode": "Darslarga kirish uchun oʻqituvchidan taklif kodini oling.",
+    "teacher": "Oʻqituvchi",
+    "assigningTeacher": "Tayinlanmoqda"
+  },
+
+  "performance": {
+    "title": "Oʻzlashtirish",
+    "averageGrade": "Oʻrtacha baho",
+    "attendanceRate": "% Davomat",
+    "homeworkCompletion": "% Topshirilgan UV",
+    "trend": "Tendentsiya",
+    "trendUp": "Oʻsish",
+    "trendDown": "Pasayish",
+    "trendStable": "Barqaror"
+  },
+
+  "activity": {
+    "title": "Faollik",
+    "lastLogin": "Oxirgi kirish",
+    "materialViewed": "Material koʻrildi",
+    "videoWatched": "Video koʻrildi",
+    "testCompleted": "Test topshirildi",
+    "homeworkSubmitted": "UV topshirildi"
+  },
+
+  "platform": {
+    "title": "Platforma Boshqaruv Paneli",
+    "centerManagement": "Markazlarni boshqarish",
+    "createCenter": "Oʻquv markazi yaratish",
+    "centerName": "Markaz nomi",
+    "centerSlug": "Slug (URL-yoʻl)",
+    "centerType": "Markaz turi",
+    "centerStatus": "Markaz holati",
+    "directorEmail": "Direktor emaili",
+    "directorName": "Direktor FIShi",
+    "selectPlan": "Tarif rejasi",
+    "plans": "Tarif rejalari",
+    "subscriptions": "Obunalar",
+    "analytics": "Platforma tahlili",
+    "mrr": "Oylik daromad (MRR)",
+    "churn": "Churn Rate",
+    "impersonate": "Foydalanuvchi sifatida kirish",
+    "auditLog": "Audit jurnali",
+    "offline": "Oflayn",
+    "online": "Onlayn",
+    "hybrid": "Gibrid",
+    "trial": "Sinov",
+    "active": "Faol",
+    "frozen": "Muzlatilgan",
+    "blocked": "Bloklangan"
+  },
+
+  "subscription": {
+    "title": "Obuna",
+    "currentPlan": "Joriy tarif",
+    "activeUntil": "Gacha faol",
+    "renew": "Obunani yangilash",
+    "changePlan": "Tarifni oʻzgartirish",
+    "trialEnds": "Sinov muddati {date} da tugaydi"
+  },
+
+  "support": {
+    "title": "Qoʻllab-quvvatlash",
+    "createTicket": "Murojaat yaratish",
+    "subject": "Murojaat mavzusi",
+    "priority": "Muhimlik",
+    "priorityLow": "Past",
+    "priorityMedium": "Oʻrta",
+    "priorityHigh": "Yuqori",
+    "statusOpen": "Ochiq",
+    "statusInProgress": "Jarayonda",
+    "statusResolved": "Hal qilingan",
+    "statusClosed": "Yopilgan"
+  },
+
+  "notifications": {
+    "title": "Bildirishnomalar",
+    "markRead": "Oʻqilgan",
+    "markAllRead": "Hammasini oʻqish",
+    "noNotifications": "Yangi bildirishnomalar yoʻq",
+    "invite": "Sizni oʻquv markaziga taklif qilishdi",
+    "newHomework": "Yangi uy vazifasi: {title}",
+    "scheduleChange": "Jadvalda oʻzgarish: {title}",
+    "paymentDue": "Toʻlov muddati: {amount}",
+    "paymentOverdue": "Muddati oʻtgan toʻlov: {amount}",
+    "gradePosted": "Baho qoʻyildi: {grade}",
+    "subscriptionExpiring": "Obuna {date} da tugaydi"
+  },
+
+  "landing": {
+    "heroTitle": "Sizning uchun yagona makon",
+    "heroHighlight": "oʻquv markazi, oʻqituvchilar va oʻquvchilar",
+    "heroDescription": "Oflayn va onlayn kurslarni joylashtiring, jadval, baholar va davomatni yuritiling. Platforma belgilangan oylik obuna asosida ishlaydi — biz oʻquvchilaringizdan komissiya olmaymiz!",
+    "createWorkspace": "Markaz ish maydonini yaratish",
+    "enterInviteCode": "Taklif kodi bilan kirish",
+    "closedSystem": "Yopiq tizim (Marketplace emas)",
+    "closedSystemDesc": "Hech qanday tashqi kataloglar va raqobatchilar yoʻq. Oʻquvchilar va ota-onalar kirishi faqat markazingiz taklif havolasi orqali.",
+    "zeroCommission": "0% kurs komissiyasi",
+    "zeroCommissionDesc": "Siz faqat platforma ijarasi uchun toʻlaysiz. Oʻquvchilardan kurslar uchun pul toʻgʻridan-toʻgʻri sizga keladi.",
+    "parentCabinet": "Ota-ona Kabineti",
+    "parentCabinetDesc": "Baholar, oʻzlashtirish va davomatni nazorat qilish uchun ota-onani farzandga ikki tomonlama xavfsiz bogʻlash.",
+    "pricingTitle": "Shaffof ijara tariflari",
+    "pricingDescription": "Oʻquv markazingiz uchun mos tarifni tanlang. 14 kunlik bepul sinov muddati bilan boshlang.",
+    "tryFree": "14 kun sinab koʻrish",
+    "connectPro": "Pro-ni ulash",
+    "contactUs": "Biz bilan bogʻlanish",
+    "copyright": "© 2026 AcademiaSaaS Platform. Barcha huquqlar himoyalangan. Oʻquv markazlari uchun yopiq LMS-tizim."
+  }
+}

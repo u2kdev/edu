@@ -1,0 +1,358 @@
+{
+  "common": {
+    "appName": "AcademiaSaaS",
+    "appTagline": "Multi-tenant LMS платформа",
+    "loading": "Загрузка...",
+    "save": "Сохранить",
+    "cancel": "Отмена",
+    "delete": "Удалить",
+    "edit": "Редактировать",
+    "create": "Создать",
+    "search": "Поиск",
+    "filter": "Фильтр",
+    "export": "Экспорт",
+    "back": "Назад",
+    "next": "Далее",
+    "submit": "Отправить",
+    "confirm": "Подтвердить",
+    "close": "Закрыть",
+    "yes": "Да",
+    "no": "Нет",
+    "all": "Все",
+    "none": "Нет",
+    "actions": "Действия",
+    "status": "Статус",
+    "date": "Дата",
+    "noData": "Нет данных",
+    "error": "Ошибка",
+    "success": "Успешно",
+    "warning": "Внимание",
+    "language": "Язык",
+    "settings": "Настройки",
+    "profile": "Профиль",
+    "logout": "Выйти"
+  },
+
+  "languages": {
+    "ru": "Русский",
+    "uz-Latn": "Oʻzbekcha (Lotin)",
+    "uz-Cyrl": "Ўзбекча (Кирилл)",
+    "en": "English"
+  },
+
+  "auth": {
+    "login": "Войти в систему",
+    "register": "Регистрация",
+    "email": "Email",
+    "password": "Пароль",
+    "confirmPassword": "Подтвердите пароль",
+    "fullName": "ФИО",
+    "phone": "Телефон",
+    "forgotPassword": "Забыли пароль?",
+    "noAccount": "Нет аккаунта?",
+    "hasAccount": "Уже есть аккаунт?",
+    "loginButton": "Войти",
+    "registerButton": "Зарегистрироваться",
+    "setPassword": "Установить пароль",
+    "setPasswordDescription": "Задайте пароль для доступа к личному кабинету",
+    "inviteWelcome": "Добро пожаловать! Вам предоставлен доступ к учебному центру «{centerName}»",
+    "invalidCredentials": "Неверный email или пароль",
+    "accountDisabled": "Аккаунт деактивирован"
+  },
+
+  "nav": {
+    "dashboard": "Главная",
+    "courses": "Курсы",
+    "groups": "Группы",
+    "schedule": "Расписание",
+    "grades": "Оценки",
+    "attendance": "Посещаемость",
+    "homework": "Домашние задания",
+    "payments": "Платежи",
+    "invites": "Приглашения",
+    "staff": "Сотрудники",
+    "students": "Ученики",
+    "parents": "Родители",
+    "support": "Поддержка",
+    "settings": "Настройки",
+    "platformAdmin": "Панель платформы",
+    "reports": "Отчёты",
+    "notifications": "Уведомления"
+  },
+
+  "roles": {
+    "SUPERADMIN": "Суперадмин",
+    "PLATFORM_ADMIN": "Админ платформы",
+    "FULL_ACCESS": "Полный доступ",
+    "PLATFORM_SUPPORT": "Саппорт платформы",
+    "SEO_ADMIN": "SEO-админ",
+    "DIRECTOR": "Директор",
+    "CENTER_ADMIN": "Администратор центра",
+    "TEACHER": "Преподаватель",
+    "CENTER_SUPPORT": "Саппорт центра",
+    "STUDENT": "Ученик",
+    "PARENT": "Родитель"
+  },
+
+  "dashboard": {
+    "welcome": "Здравствуйте, {name}! 👋",
+    "selectCenter": "Выберите учебный центр в левом меню",
+    "welcomeToCenter": "Добро пожаловать в воркспейс «{centerName}»",
+    "directorCabinet": "Кабинет Директора",
+    "adminCabinet": "Кабинет Администратора",
+    "teacherCabinet": "Кабинет Преподавателя",
+    "studentCabinet": "Кабинет Ученика",
+    "parentCabinet": "Кабинет Родителя",
+    "globalPanel": "Глобальная Панель",
+    "activeStudents": "Активные Ученики",
+    "teachers": "Преподаватели",
+    "totalCourses": "Всего Курсов",
+    "centerRevenue": "Выручка Центру",
+    "subscriptionPlan": "Тариф подписки платформы",
+    "activeUntil": "Активен до {date}",
+    "frozenAlert": "Подписка учебного центра приостановлена. Доступ учеников и учителей ограничен до оплаты аренды.",
+    "payRent": "Оплатить аренду"
+  },
+
+  "courses": {
+    "title": "Учебные Курсы",
+    "description": "Просмотр расписания и материалов",
+    "createCourse": "Создать курс",
+    "courseName": "Название курса",
+    "courseDescription": "Описание курса",
+    "published": "Опубликован",
+    "draft": "Черновик",
+    "modules": "Модули",
+    "lessons": "Занятия",
+    "materials": "Материалы"
+  },
+
+  "groups": {
+    "title": "Группы (потоки)",
+    "createGroup": "Создать группу",
+    "groupName": "Название группы",
+    "assignTeacher": "Назначить учителя",
+    "maxStudents": "Макс. учеников",
+    "enrolled": "Зачислено",
+    "startDate": "Дата начала",
+    "endDate": "Дата окончания"
+  },
+
+  "lessons": {
+    "title": "Занятия",
+    "createLesson": "Создать занятие",
+    "lessonTitle": "Тема занятия",
+    "online": "Онлайн",
+    "offline": "Офлайн",
+    "scheduled": "Запланировано на {date}",
+    "duration": "{minutes} мин",
+    "active": "Активно",
+    "archived": "В архиве",
+    "meetingUrl": "Ссылка на конференцию",
+    "location": "Аудитория"
+  },
+
+  "materials": {
+    "title": "Материалы",
+    "addMaterial": "Добавить материал",
+    "video": "Видео",
+    "lecture": "Лекция",
+    "book": "Книга",
+    "test": "Тест",
+    "videoDescription": "Загруженный файл или ссылка",
+    "lectureDescription": "Текстовый конспект или PDF",
+    "bookDescription": "Файл для чтения",
+    "testDescription": "Тест с автопроверкой"
+  },
+
+  "attendance": {
+    "title": "Посещаемость",
+    "markAttendance": "Отметить посещаемость",
+    "present": "Присутствует",
+    "absent": "Отсутствует",
+    "excused": "По ув. причине",
+    "late": "Опоздал",
+    "attendanceRate": "% посещаемости"
+  },
+
+  "homework": {
+    "title": "Домашние задания",
+    "createHomework": "Создать ДЗ",
+    "dueDate": "Срок сдачи",
+    "notStarted": "Не начато",
+    "inProgress": "В процессе",
+    "submitted": "Сдано",
+    "graded": "Проверено",
+    "overdue": "Просрочено",
+    "submitHomework": "Сдать задание",
+    "gradeHomework": "Оценить задание"
+  },
+
+  "payments": {
+    "title": "Платежи и Оплата",
+    "description": "История платежей и взносов",
+    "amount": "Сумма",
+    "paid": "Оплачено",
+    "pending": "Ожидает оплаты",
+    "overdue": "Просрочено",
+    "failed": "Ошибка оплаты",
+    "refunded": "Возврат",
+    "cash": "Наличные",
+    "online": "Онлайн",
+    "bankTransfer": "Банковский перевод",
+    "markAsPaid": "Отметить оплату",
+    "financialReport": "Финансовый отчёт",
+    "debtors": "Должники",
+    "totalCollected": "Собрано",
+    "totalExpected": "Ожидается",
+    "totalOverdue": "Просрочено"
+  },
+
+  "invites": {
+    "title": "Инвайты и Доступ",
+    "description": "Коды приглашения в центр",
+    "createInvite": "Создать инвайт-код",
+    "inviteCode": "Код приглашения",
+    "targetRole": "Роль",
+    "maxUses": "Макс. использований",
+    "usesCount": "Использовано",
+    "expiresAt": "Срок действия",
+    "revoke": "Отозвать",
+    "revoked": "Отозван",
+    "active": "Активен",
+    "expired": "Истёк",
+    "bulkImport": "Массовый импорт (CSV)",
+    "parentInvite": "Инвайт для родителя"
+  },
+
+  "staff": {
+    "title": "Сотрудники центра",
+    "addStaff": "Добавить сотрудника",
+    "staffEmail": "Email сотрудника",
+    "staffName": "ФИО сотрудника",
+    "staffRole": "Роль",
+    "deactivate": "Деактивировать",
+    "activate": "Активировать"
+  },
+
+  "parent": {
+    "childProgress": "Успеваемость Ваших Детей",
+    "noChildren": "У вас пока нет привязанных детей в этом центре.",
+    "getInviteCode": "Вам должны выдать персональный родительский инвайт-код в центре.",
+    "switchChild": "Выбрать ребёнка",
+    "coursesAndGroups": "Курсы и Группы",
+    "paymentHistory": "История Оплат"
+  },
+
+  "student": {
+    "myCourses": "Мои Зачисленные Курсы & Потоки",
+    "noCourses": "Вы пока не зачислены ни в одну группу.",
+    "useInviteCode": "Воспользуйтесь инвайт-кодом от преподавателя для доступа к занятиям.",
+    "teacher": "Преподаватель",
+    "assigningTeacher": "Назначается"
+  },
+
+  "performance": {
+    "title": "Успеваемость",
+    "averageGrade": "Средний балл",
+    "attendanceRate": "% Посещаемости",
+    "homeworkCompletion": "% Сданных ДЗ",
+    "trend": "Тренд",
+    "trendUp": "Рост",
+    "trendDown": "Снижение",
+    "trendStable": "Стабильно"
+  },
+
+  "activity": {
+    "title": "Активность",
+    "lastLogin": "Последний вход",
+    "materialViewed": "Просмотрен материал",
+    "videoWatched": "Просмотрено видео",
+    "testCompleted": "Пройден тест",
+    "homeworkSubmitted": "Сдано ДЗ"
+  },
+
+  "platform": {
+    "title": "Панель Управления Платформой",
+    "centerManagement": "Управление центрами",
+    "createCenter": "Создать учебный центр",
+    "centerName": "Название центра",
+    "centerSlug": "Slug (URL-путь)",
+    "centerType": "Тип центра",
+    "centerStatus": "Статус центра",
+    "directorEmail": "Email Директора",
+    "directorName": "ФИО Директора",
+    "selectPlan": "Тарифный план",
+    "plans": "Тарифные планы",
+    "subscriptions": "Подписки",
+    "analytics": "Аналитика платформы",
+    "mrr": "Ежемесячная выручка (MRR)",
+    "churn": "Churn Rate",
+    "impersonate": "Войти как пользователь",
+    "auditLog": "Журнал аудита",
+    "offline": "Офлайн",
+    "online": "Онлайн",
+    "hybrid": "Гибрид",
+    "trial": "Пробный",
+    "active": "Активен",
+    "frozen": "Заморожен",
+    "blocked": "Заблокирован"
+  },
+
+  "subscription": {
+    "title": "Подписка",
+    "currentPlan": "Текущий тариф",
+    "activeUntil": "Активна до",
+    "renew": "Продлить подписку",
+    "changePlan": "Сменить тариф",
+    "trialEnds": "Пробный период заканчивается {date}"
+  },
+
+  "support": {
+    "title": "Поддержка",
+    "createTicket": "Создать обращение",
+    "subject": "Тема обращения",
+    "priority": "Приоритет",
+    "priorityLow": "Низкий",
+    "priorityMedium": "Средний",
+    "priorityHigh": "Высокий",
+    "statusOpen": "Открыт",
+    "statusInProgress": "В работе",
+    "statusResolved": "Решён",
+    "statusClosed": "Закрыт"
+  },
+
+  "notifications": {
+    "title": "Уведомления",
+    "markRead": "Прочитано",
+    "markAllRead": "Прочитать все",
+    "noNotifications": "Нет новых уведомлений",
+    "invite": "Вас пригласили в учебный центр",
+    "newHomework": "Новое домашнее задание: {title}",
+    "scheduleChange": "Изменение в расписании: {title}",
+    "paymentDue": "Срок оплаты: {amount}",
+    "paymentOverdue": "Просроченная оплата: {amount}",
+    "gradePosted": "Выставлена оценка: {grade}",
+    "subscriptionExpiring": "Подписка истекает {date}"
+  },
+
+  "landing": {
+    "heroTitle": "Единое пространство для вашего",
+    "heroHighlight": "учебного центра, учителей и учеников",
+    "heroDescription": "Размещайте офлайн- и онлайн-курсы, ведите расписание, оценки и посещаемость. Платформа работает по фиксированной месячной подписке — мы не берем комиссию с ваших учеников!",
+    "createWorkspace": "Создать воркспейс центра",
+    "enterInviteCode": "Войти по инвайт-коду",
+    "closedSystem": "Закрытая система (Не маркетплейс)",
+    "closedSystemDesc": "Никаких сторонних каталогов и конкурентов. Доступ учеников и родителей строго по инвайт-ссылке вашего центра.",
+    "zeroCommission": "0% комиссия с курсов",
+    "zeroCommissionDesc": "Вы платите только за фиксированную аренду платформы. Деньги за курсы от учеников поступают напрямую вам.",
+    "parentCabinet": "Кабинет Родителя",
+    "parentCabinetDesc": "Двусторонняя безопасная привязка родителя к ребенку для контроля оценок, успеваемости и посещаемости.",
+    "pricingTitle": "Прозрачные тарифы аренды",
+    "pricingDescription": "Выберите подходящий тариф для вашего учебного центра. Начните с 14 дней бесплатного trial-периода.",
+    "tryFree": "Попробовать 14 дней",
+    "connectPro": "Подключить Pro",
+    "contactUs": "Связаться с нами",
+    "copyright": "© 2026 AcademiaSaaS Platform. Все права защищены. Закрытая LMS-система для учебных центров."
+  }
+}
