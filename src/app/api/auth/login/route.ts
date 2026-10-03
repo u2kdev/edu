@@ -1,57 +1,20 @@
 import { NextResponse } from "next/server";
 import { db } from "@/lib/db";
 import { comparePassword, signJWT } from "@/lib/auth";
-
-// Simple in-memory rate limiter (per IP, resets on server restart)
-// In production: replace with Redis-based rate limiter
-const loginAttempts = new Map<string, { count: number; lastAttempt: number }>();
-const MAX_ATTEMPTS = 10;
-const WINDOW_MS = 15 * 60 * 1000; // 15 minutes
-
-function getClientIp(req: Request): string {
-  const forwarded = req.headers.get("x-forwarded-for");
-  return forwarded ? forwarded.split(",")[0].trim() : "unknown";
-}
-
-function checkRateLimit(ip: string): boolean {
-  const now = Date.now();
-  const record = loginAttempts.get(ip);
-  if (!record || now - record.lastAttempt > WINDOW_MS) {
-    loginAttempts.set(ip, { count: 1, lastAttempt: now });
-    return true; // allowed
-  }
-  if (record.count >= MAX_ATTEMPTS) {
-    return false; // rate limited
-  }
-  record.count++;
-  record.lastAttempt = now;
-  return true; // allowed
-}
-
-function clearRateLimit(ip: string) {
-  loginAttempts.delete(ip);
-}
+import { getClientIp, checkRateLimit, clearRateLimit } from "@/lib/rate-limit";
+import { loginSchema } from "@/lib/validation/auth";
+import { apiError, handleApiError, apiSuccess } from "@/lib/api-response";
 
 export async function POST(req: Request) {
   const ip = getClientIp(req);
 
   try {
-    // Rate limit check
     if (!checkRateLimit(ip)) {
-      return NextResponse.json(
-        { error: "Слишком много попыток входа. Попробуйте через 15 минут." },
-        { status: 429 }
-      );
+      return apiError("Слишком много попыток входа. Попробуйте через 15 минут.", "RATE_LIMITED", 429);
     }
 
-    const { email, password } = await req.json();
-
-    if (!email || !password) {
-      return NextResponse.json(
-        { error: "Введите email и пароль" },
-        { status: 400 }
-      );
-    }
+    const body = await req.json();
+    const { email, password } = loginSchema.parse(body);
 
     const user = await db.platformUser.findUnique({
       where: { email: email.toLowerCase().trim() },
@@ -63,7 +26,6 @@ export async function POST(req: Request) {
     });
 
     if (!user || !user.isActive) {
-      // Log failed attempt (don't reveal whether email exists)
       try {
         await db.auditLog.create({
           data: {
@@ -75,15 +37,11 @@ export async function POST(req: Request) {
           },
         });
       } catch { /* ignore audit log failure for login */ }
-      return NextResponse.json(
-        { error: "Неверный email или пароль" },
-        { status: 401 }
-      );
+      return apiError("Неверный email или пароль", "UNAUTHORIZED", 401);
     }
 
     const isMatch = await comparePassword(password, user.passwordHash);
     if (!isMatch) {
-      // Log failed password attempt
       try {
         await db.auditLog.create({
           data: {
@@ -96,13 +54,9 @@ export async function POST(req: Request) {
           },
         });
       } catch { /* ignore audit log failure */ }
-      return NextResponse.json(
-        { error: "Неверный email или пароль" },
-        { status: 401 }
-      );
+      return apiError("Неверный email или пароль", "UNAUTHORIZED", 401);
     }
 
-    // Successful login — clear rate limit
     clearRateLimit(ip);
 
     const activeMembership = user.memberships[0];
@@ -115,7 +69,6 @@ export async function POST(req: Request) {
       activeCenterRole: activeMembership?.role,
     });
 
-    // Log successful login to audit log
     try {
       await db.auditLog.create({
         data: {
@@ -135,8 +88,7 @@ export async function POST(req: Request) {
       });
     } catch { /* ignore audit log failure */ }
 
-    const response = NextResponse.json({
-      success: true,
+    const response = apiSuccess({
       user: {
         id: user.id,
         email: user.email,
@@ -156,7 +108,7 @@ export async function POST(req: Request) {
 
     return response;
   } catch (err: any) {
-    console.error("Login Error:", err);
-    return NextResponse.json({ error: "Внутренняя ошибка сервера" }, { status: 500 });
+    return handleApiError(err);
   }
 }
+

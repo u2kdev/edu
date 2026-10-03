@@ -165,8 +165,8 @@ describe("Phase 12: Real-World E2E Validation Journey", () => {
       maxStudents: 10,
       teacherMembershipId: teacherMembershipId,
     });
-    let res = await createGroup(grpReq);
-    let data = await res.json();
+    let res: any = await createGroup(grpReq);
+    let data: any = await res.json();
     expect(res.status).toBe(200);
     groupId = data.group.id;
 
@@ -221,8 +221,8 @@ describe("Phase 12: Real-World E2E Validation Journey", () => {
       courseId: courseId,
       title: "E2E Module 1",
     });
-    let res = await createModule(modReq);
-    let data = await res.json();
+    let res: any = await createModule(modReq);
+    let data: any = await res.json();
     expect(res.status).toBe(200);
     moduleId = data.module.id;
 

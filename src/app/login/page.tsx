@@ -109,6 +109,31 @@ export default function LoginPage() {
 
         </div>
 
+        {/* Development Fast Login */}
+        <div className="mt-6 flex flex-col gap-2">
+          <p className="text-xs text-slate-500 text-center uppercase tracking-wider font-semibold mb-2">Быстрый вход (Dev)</p>
+          <div className="grid grid-cols-2 gap-2">
+            <button
+              onClick={() => {
+                setEmail("admin@platform.com");
+                setPassword("Password123!");
+              }}
+              className="py-2 text-xs font-semibold rounded-lg bg-purple-500/10 text-purple-400 border border-purple-500/20 hover:bg-purple-500/20 transition-all"
+            >
+              Суперадмин
+            </button>
+            <button
+              onClick={() => {
+                setEmail("director@it-academy.com");
+                setPassword("Password123!");
+              }}
+              className="py-2 text-xs font-semibold rounded-lg bg-blue-500/10 text-blue-400 border border-blue-500/20 hover:bg-blue-500/20 transition-all"
+            >
+              Директор Центра
+            </button>
+          </div>
+        </div>
+
         <div className="text-center mt-6 text-sm text-slate-400">
           Ещё нет аккаунта?{" "}
           <Link href="/register" className="text-brand-400 hover:underline font-semibold">
