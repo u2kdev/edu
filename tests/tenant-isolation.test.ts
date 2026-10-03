@@ -41,7 +41,7 @@ describe("Tenant Isolation (Prisma Extension)", () => {
         title: "Test Course",
         isPublished: false,
         createdByMembershipId: m!.id,
-      }
+      } as any
     });
 
     expect(newCourse.centerId).toBe(center1Id); // Injected automatically

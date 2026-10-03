@@ -56,23 +56,21 @@ export function getTenantDb(centerId: string) {
               if (operation === "findUnique") {
                 operation = "findFirst";
                 args.where = { ...args.where, centerId };
-                return db[model].findFirst(args);
+                return (db as any)[model].findFirst(args);
               }
               
               if (operation === "update") {
                 operation = "updateMany";
                 args.where = { ...args.where, centerId };
-                const res = await db[model].updateMany(args);
+                const res = await (db as any)[model].updateMany(args);
                 if (res.count === 0) throw new Error("Record not found or access denied");
-                // updateMany doesn't return the record, but API might expect it. 
-                // We'll return a mock or re-fetch.
-                return db[model].findFirst({ where: args.where });
+                return (db as any)[model].findFirst({ where: args.where });
               }
 
               if (operation === "delete") {
                 operation = "deleteMany";
                 args.where = { ...args.where, centerId };
-                const res = await db[model].deleteMany(args);
+                const res = await (db as any)[model].deleteMany(args);
                 if (res.count === 0) throw new Error("Record not found or access denied");
                 return { ...args.where, _deleted: true };
               }

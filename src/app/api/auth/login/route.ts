@@ -1,28 +1,27 @@
-import { NextResponse } from "next/server";
+import { z } from "zod";
 import { db } from "@/lib/db";
-import { comparePassword, signJWT } from "@/lib/auth";
-import { getClientIp, checkRateLimit, clearRateLimit } from "@/lib/rate-limit";
+import { comparePassword, signJWT, JWTPayload } from "@/lib/auth";
+import { checkRateLimit } from "@/lib/rate-limit";
+import { apiError, apiSuccess, handleApiError } from "@/lib/api-response";
 import { loginSchema } from "@/lib/validation/auth";
-import { apiError, handleApiError, apiSuccess } from "@/lib/api-response";
+import { v4 as uuidv4 } from "uuid";
+import { cookies } from "next/headers";
 
 export async function POST(req: Request) {
-  const ip = getClientIp(req);
-
   try {
+    const ip = req.headers.get("x-forwarded-for") || "unknown";
+    const userAgent = req.headers.get("user-agent") || "unknown";
+
     if (!checkRateLimit(ip)) {
-      return apiError("Слишком много попыток входа. Попробуйте через 15 минут.", "RATE_LIMITED", 429);
+      return apiError("Too many attempts", "RATE_LIMITED", 429);
     }
 
     const body = await req.json();
-    const { email, password } = loginSchema.parse(body);
+    const parsed = loginSchema.parse(body);
+    const { email, password, rememberMe } = parsed;
 
     const user = await db.platformUser.findUnique({
       where: { email: email.toLowerCase().trim() },
-      include: {
-        memberships: {
-          where: { status: "ACTIVE" },
-        },
-      },
     });
 
     if (!user || !user.isActive) {
@@ -36,11 +35,12 @@ export async function POST(req: Request) {
             ipAddress: ip,
           },
         });
-      } catch { /* ignore audit log failure for login */ }
-      return apiError("Неверный email или пароль", "UNAUTHORIZED", 401);
+      } catch (e) {}
+      return apiError("auth.invalidCredentials", "UNAUTHORIZED", 401);
     }
 
     const isMatch = await comparePassword(password, user.passwordHash);
+
     if (!isMatch) {
       try {
         await db.auditLog.create({
@@ -49,66 +49,67 @@ export async function POST(req: Request) {
             action: "LOGIN_FAILED",
             resource: "PlatformUser",
             resourceId: user.id,
-            detailsJson: JSON.stringify({ reason: "wrong_password", ip }),
+            detailsJson: JSON.stringify({ reason: "invalid_password", ip }),
             ipAddress: ip,
           },
         });
-      } catch { /* ignore audit log failure */ }
-      return apiError("Неверный email или пароль", "UNAUTHORIZED", 401);
+      } catch (e) {}
+      return apiError("auth.invalidCredentials", "UNAUTHORIZED", 401);
     }
 
-    clearRateLimit(ip);
+    const jti = uuidv4();
+    const expiresIn = rememberMe ? "30d" : "1d";
+    const expiresAt = new Date(Date.now() + (rememberMe ? 30 : 1) * 24 * 60 * 60 * 1000);
 
-    const activeMembership = user.memberships[0];
-
-    const token = signJWT({
+    const payload: JWTPayload & { jti: string } = {
       userId: user.id,
       email: user.email,
       platformRole: user.platformRole,
-      activeCenterId: activeMembership?.centerId,
-      activeCenterRole: activeMembership?.role,
+      jti,
+    } as any;
+
+    const token = signJWT(payload, expiresIn);
+
+    // Create session in DB
+    await db.userSession.create({
+      data: {
+        userId: user.id,
+        jti,
+        expiresAt,
+        ipAddress: ip,
+        userAgent,
+      }
     });
 
     try {
       await db.auditLog.create({
         data: {
-          centerId: activeMembership?.centerId || null,
           actorUserId: user.id,
           action: "LOGIN_SUCCESS",
           resource: "PlatformUser",
           resourceId: user.id,
-          detailsJson: JSON.stringify({
-            email: user.email,
-            platformRole: user.platformRole,
-            activeCenterRole: activeMembership?.role || null,
-            ip,
-          }),
           ipAddress: ip,
         },
       });
-    } catch { /* ignore audit log failure */ }
+    } catch (e) {}
 
-    const response = apiSuccess({
+    cookies().set("auth_token", token, {
+      httpOnly: true,
+      secure: process.env.NODE_ENV === "production",
+      sameSite: "lax",
+      path: "/",
+      maxAge: rememberMe ? 30 * 24 * 60 * 60 : 24 * 60 * 60,
+    });
+
+    return apiSuccess({
       user: {
         id: user.id,
         email: user.email,
         fullName: user.fullName,
-        platformRole: user.platformRole,
-      },
-      activeCenterId: activeMembership?.centerId,
+        role: user.platformRole,
+      }
     });
-
-    response.cookies.set("auth_token", token, {
-      httpOnly: true,
-      secure: process.env.NODE_ENV === "production",
-      sameSite: "lax",
-      maxAge: 7 * 24 * 60 * 60,
-      path: "/",
-    });
-
-    return response;
-  } catch (err: any) {
-    return handleApiError(err);
+  } catch (error: any) {
+    return handleApiError(error);
   }
 }
-

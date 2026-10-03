@@ -77,15 +77,15 @@ describe("Phase C & E: IDOR / Privilege Escalation Tests", () => {
     // 4. Create resources in A
     const course = await db.course.create({ data: { centerId: tenantA, title: "Course A", createdByMembershipId: mDirA.id } });
     courseA = course.id;
-    const mod = await db.courseModule.create({ data: { courseId: courseA, title: "Module A", orderIndex: 1 } });
+    const mod = await db.courseModule.create({ data: { centerId: tenantA, courseId: courseA, title: "Module A", orderIndex: 1 } });
     moduleA = mod.id;
-    const lesson = await db.lesson.create({ data: { moduleId: moduleA, title: "Lesson A", orderIndex: 1 } });
+    const lesson = await db.lesson.create({ data: { centerId: tenantA, moduleId: moduleA, title: "Lesson A", orderIndex: 1 } });
     lessonA = lesson.id;
 
-    const group = await db.group.create({ data: { courseId: courseA, name: "Group A", teacherMembershipId: teacherAMemId } });
+    const group = await db.group.create({ data: { centerId: tenantA, courseId: courseA, name: "Group A", teacherMembershipId: teacherAMemId } });
     groupA = group.id;
 
-    await db.enrollment.create({ data: { studentMembershipId: studentAMemId, groupId: groupA } });
+    await db.enrollment.create({ data: { centerId: tenantA, studentMembershipId: studentAMemId, groupId: groupA } });
 
     // 5. Create some grades & attendance
     await db.attendance.create({ data: { lessonId: lessonA, studentMembershipId: studentAMemId, status: "PRESENT", markedByMembershipId: teacherAMemId } });
@@ -94,11 +94,11 @@ describe("Phase C & E: IDOR / Privilege Escalation Tests", () => {
     // 6. Create resources in B
     const courseObjB = await db.course.create({ data: { centerId: tenantB, title: "Course B", createdByMembershipId: mDirB.id } });
     courseB = courseObjB.id;
-    const modObjB = await db.courseModule.create({ data: { courseId: courseB, title: "Module B", orderIndex: 1 } });
+    const modObjB = await db.courseModule.create({ data: { centerId: tenantB, courseId: courseB, title: "Module B", orderIndex: 1 } });
     moduleB = modObjB.id;
-    const lessonObjB = await db.lesson.create({ data: { moduleId: moduleB, title: "Lesson B", orderIndex: 1 } });
+    const lessonObjB = await db.lesson.create({ data: { centerId: tenantB, moduleId: moduleB, title: "Lesson B", orderIndex: 1 } });
     lessonB = lessonObjB.id;
-    const groupObjB = await db.group.create({ data: { courseId: courseB, name: "Group B", teacherMembershipId: mDirB.id } });
+    const groupObjB = await db.group.create({ data: { centerId: tenantB, courseId: courseB, name: "Group B", teacherMembershipId: mDirB.id } });
     groupB = groupObjB.id;
   });
 
