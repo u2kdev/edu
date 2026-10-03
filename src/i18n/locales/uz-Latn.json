@@ -57,7 +57,14 @@
     "setPasswordDescription": "Shaxsiy kabinetga kirish uchun parol oʻrnating",
     "inviteWelcome": "Xush kelibsiz! Sizga «{centerName}» oʻquv markaziga kirish huquqi berildi",
     "invalidCredentials": "Email yoki parol notoʻgʻri",
-    "accountDisabled": "Akkaunt faolsizlantirilgan"
+    "accountDisabled": "Akkaunt faolsizlantirilgan",
+    "email.invalid": "Noto'g'ri email formati",
+    "password.min_6": "Parol kamida 6 ta belgidan iborat bo'lishi kerak",
+    "password.min_8": "Parol kamida 8 ta belgidan iborat bo'lishi kerak",
+    "password.max_50": "Parol 50 belgidan oshmasligi kerak",
+    "fullName.min_2": "Ism kamida 2 ta belgidan iborat bo'lishi kerak",
+    "fullName.max_100": "Ism 100 belgidan oshmasligi kerak",
+    "token.required": "Token kiritish majburiy"
   },
 
   "nav": {

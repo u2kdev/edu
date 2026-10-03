@@ -61,23 +61,31 @@ model LearningCenter {
   createdAt       DateTime @default(now())
   updatedAt       DateTime @updatedAt
 
-  owner          PlatformUser       @relation("CenterOwner", fields: [ownerId], references: [id])
-  subscriptions  Subscription[]
-  memberships    CenterMembership[]
-  inviteCodes    InviteCode[]
-  courses        Course[]
-  branches       Branch[]
-  subjects       Subject[]
-  scheduleSlots  ScheduleSlot[]
-  centerPayments CenterPayment[]
-  supportTickets SupportTicket[]
-  auditLogs      AuditLog[]
-  notifications  Notification[]
-  activityLogs   ActivityLog[]
-  academicTerms  AcademicTerm[]
-  holidays       Holiday[]
-  announcements  Announcement[]
-  grades         Grade[]
+  owner              PlatformUser         @relation("CenterOwner", fields: [ownerId], references: [id])
+  subscriptions      Subscription[]
+  memberships        CenterMembership[]
+  inviteCodes        InviteCode[]
+  courses            Course[]
+  branches           Branch[]
+  subjects           Subject[]
+  scheduleSlots      ScheduleSlot[]
+  centerPayments     CenterPayment[]
+  supportTickets     SupportTicket[]
+  auditLogs          AuditLog[]
+  notifications      Notification[]
+  activityLogs       ActivityLog[]
+  academicTerms      AcademicTerm[]
+  holidays           Holiday[]
+  announcements      Announcement[]
+  grades             Grade[]
+  CourseModule       CourseModule[]
+  Lesson             Lesson[]
+  Homework           Homework[]
+  HomeworkSubmission HomeworkSubmission[]
+  Test               Test[]
+  TestQuestion       TestQuestion[]
+  TestAttempt        TestAttempt[]
+  Enrollment         Enrollment[]
 
   @@index([slug])
   @@index([ownerId])
@@ -290,9 +298,12 @@ model CourseModule {
   createdAt  DateTime @default(now())
   updatedAt  DateTime @updatedAt
 
-  course  Course   @relation(fields: [courseId], references: [id], onDelete: Cascade)
-  lessons Lesson[]
+  course   Course         @relation(fields: [courseId], references: [id], onDelete: Cascade)
+  lessons  Lesson[]
+  centerId String
+  center   LearningCenter @relation(fields: [centerId], references: [id], onDelete: Cascade)
 
+  @@index([centerId])
   @@index([courseId])
 }
 
@@ -325,7 +336,10 @@ model Lesson {
   homeworks         Homework[]
   materials         Material[]
   grades            Grade[]
+  centerId          String
+  center            LearningCenter    @relation(fields: [centerId], references: [id], onDelete: Cascade)
 
+  @@index([centerId])
   @@index([moduleId])
   @@index([scheduleSlotId])
 }
@@ -367,6 +381,7 @@ model ScheduleSlot {
 
 model Group {
   id                    String    @id @default(uuid())
+  centerId              String
   courseId              String
   branchId              String?
   subjectId             String?
@@ -399,6 +414,7 @@ model Group {
 // Статусы Enrollment: ACTIVE, WAITLIST, COMPLETED, DROPPED
 model Enrollment {
   id                  String   @id @default(uuid())
+  centerId            String
   studentMembershipId String
   groupId             String
   status              String   @default("ACTIVE")
@@ -408,8 +424,10 @@ model Enrollment {
 
   student CenterMembership @relation("StudentEnrollments", fields: [studentMembershipId], references: [id], onDelete: Cascade)
   group   Group            @relation(fields: [groupId], references: [id], onDelete: Cascade)
+  center  LearningCenter   @relation(fields: [centerId], references: [id], onDelete: Cascade)
 
   @@unique([studentMembershipId, groupId])
+  @@index([centerId])
   @@index([groupId])
   @@index([studentMembershipId])
 }
@@ -453,7 +471,10 @@ model Homework {
   lesson      Lesson               @relation(fields: [lessonId], references: [id], onDelete: Cascade)
   submissions HomeworkSubmission[]
   materials   HomeworkMaterial[]
+  centerId    String
+  center      LearningCenter       @relation(fields: [centerId], references: [id], onDelete: Cascade)
 
+  @@index([centerId])
   @@index([lessonId])
 }
 
@@ -478,8 +499,11 @@ model HomeworkSubmission {
   student      CenterMembership  @relation("StudentSubmissions", fields: [studentMembershipId], references: [id], onDelete: Cascade)
   grader       CenterMembership? @relation("GraderSubmissions", fields: [gradedByMembershipId], references: [id], onDelete: SetNull)
   grade_record Grade?            @relation("SubmissionGrade")
+  centerId     String
+  center       LearningCenter    @relation(fields: [centerId], references: [id], onDelete: Cascade)
 
   @@unique([homeworkId, studentMembershipId])
+  @@index([centerId])
   @@index([homeworkId])
   @@index([studentMembershipId])
 }
@@ -621,7 +645,7 @@ model TicketMessage {
 model AuditLog {
   id          String   @id @default(uuid())
   centerId    String?
-  actorUserId String
+  actorUserId String?
   action      String // LOGIN_SUCCESS, LOGIN_FAILED, LOGOUT, GRADE_FINALIZED, etc.
   resource    String
   resourceId  String?
@@ -630,7 +654,7 @@ model AuditLog {
   createdAt   DateTime @default(now())
 
   center LearningCenter? @relation(fields: [centerId], references: [id], onDelete: SetNull)
-  actor  PlatformUser    @relation("ActorAuditLogs", fields: [actorUserId], references: [id], onDelete: Cascade)
+  actor  PlatformUser?   @relation("ActorAuditLogs", fields: [actorUserId], references: [id], onDelete: Cascade)
 
   @@index([actorUserId])
   @@index([centerId])
@@ -717,6 +741,10 @@ model Test {
   material  Material       @relation(fields: [materialId], references: [id], onDelete: Cascade)
   questions TestQuestion[]
   attempts  TestAttempt[]
+  centerId  String
+  center    LearningCenter @relation(fields: [centerId], references: [id], onDelete: Cascade)
+
+  @@index([centerId])
 }
 
 model TestQuestion {
@@ -730,8 +758,11 @@ model TestQuestion {
   orderIndex    Int      @default(0)
   createdAt     DateTime @default(now())
 
-  test Test @relation(fields: [testId], references: [id], onDelete: Cascade)
+  test     Test           @relation(fields: [testId], references: [id], onDelete: Cascade)
+  centerId String
+  center   LearningCenter @relation(fields: [centerId], references: [id], onDelete: Cascade)
 
+  @@index([centerId])
   @@index([testId])
 }
 
@@ -746,9 +777,12 @@ model TestAttempt {
   startedAt           DateTime  @default(now())
   completedAt         DateTime?
 
-  test    Test             @relation(fields: [testId], references: [id], onDelete: Cascade)
-  student CenterMembership @relation("StudentTestAttempts", fields: [studentMembershipId], references: [id], onDelete: Cascade)
+  test     Test             @relation(fields: [testId], references: [id], onDelete: Cascade)
+  student  CenterMembership @relation("StudentTestAttempts", fields: [studentMembershipId], references: [id], onDelete: Cascade)
+  centerId String
+  center   LearningCenter   @relation(fields: [centerId], references: [id], onDelete: Cascade)
 
+  @@index([centerId])
   @@index([testId])
   @@index([studentMembershipId])
 }

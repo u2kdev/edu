@@ -29,7 +29,7 @@ export async function POST(req: Request) {
       try {
         await db.auditLog.create({
           data: {
-            actorUserId: user?.id || "unknown",
+            actorUserId: user?.id || null,
             action: "LOGIN_FAILED",
             resource: "PlatformUser",
             detailsJson: JSON.stringify({ email: email.toLowerCase().trim(), reason: "user_not_found_or_inactive", ip }),
