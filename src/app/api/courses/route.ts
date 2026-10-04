@@ -1,14 +1,14 @@
 import { NextResponse } from "next/server";
-import { db } from "@/lib/db";
+import { getTenantDb } from "@/lib/db-tenant";
 import { requireTenantAccess, logAuditEvent } from "@/lib/tenant";
 import { checkSubscriptionLimit } from "@/lib/limits";
 
 export async function GET(req: Request) {
   try {
     const tenantCtx = await requireTenantAccess();
+    const tenantDb = getTenantDb(tenantCtx.center.id);
 
-    const courses = await db.course.findMany({
-      where: { centerId: tenantCtx.center.id },
+    const courses = await tenantDb.course.findMany({
       include: {
         modules: {
           include: {
@@ -39,6 +39,7 @@ export async function GET(req: Request) {
 export async function POST(req: Request) {
   try {
     const tenantCtx = await requireTenantAccess();
+    const tenantDb = getTenantDb(tenantCtx.center.id);
 
     if (tenantCtx.role !== "DIRECTOR" && tenantCtx.role !== "CENTER_ADMIN") {
       return NextResponse.json({ error: "Недостаточно прав для создания курсов" }, { status: 403 });
@@ -50,8 +51,6 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: "Укажите название курса" }, { status: 400 });
     }
 
-    // SECURITY: Platform staff impersonating must have a resolved membership in this center
-    // We cannot use center.ownerId here — it's a userId, not a membershipId
     if (!tenantCtx.membership?.id) {
       return NextResponse.json({
         error: "Could not resolve your membership in this center. Ensure you have a membership record.",
@@ -63,7 +62,7 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: "PLAN_LIMIT_REACHED: Вы достигли лимита курсов по вашему тарифу." }, { status: 403 });
     }
 
-    const course = await db.course.create({
+    const course = await tenantDb.course.create({
       data: {
         centerId: tenantCtx.center.id,
         title,

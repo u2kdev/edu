@@ -1,34 +1,33 @@
 import { NextResponse } from "next/server";
-import { db } from "@/lib/db";
+import { getTenantDb } from "@/lib/db-tenant";
 import { requireTenantAccess } from "@/lib/tenant";
 
 // GET /api/center-payments/report - Financial report & forecast
 export async function GET(req: Request) {
   try {
     const tenantCtx = await requireTenantAccess();
+    const tenantDb = getTenantDb(tenantCtx.center.id);
     if (tenantCtx.role !== "DIRECTOR" && tenantCtx.role !== "CENTER_ADMIN" && !tenantCtx.isPlatformStaff) {
       return NextResponse.json({ error: "Forbidden" }, { status: 403 });
     }
 
-    const centerId = tenantCtx.center.id;
-
     // Total paid revenue
-    const paidSum = await db.centerPayment.aggregate({
-      where: { centerId, status: "PAID" },
+    const paidSum = await tenantDb.centerPayment.aggregate({
+      where: { status: "PAID" },
       _sum: { amount: true },
       _count: true,
     });
 
     // Total pending revenue
-    const pendingSum = await db.centerPayment.aggregate({
-      where: { centerId, status: "PENDING" },
+    const pendingSum = await tenantDb.centerPayment.aggregate({
+      where: { status: "PENDING" },
       _sum: { amount: true },
       _count: true,
     });
 
     // Count active student enrollments for MRR revenue forecasting
-    const activeStudentsCount = await db.centerMembership.count({
-      where: { centerId, role: "STUDENT", status: "ACTIVE" },
+    const activeStudentsCount = await tenantDb.centerMembership.count({
+      where: { role: "STUDENT", status: "ACTIVE" },
     });
 
     // Estimate average payment amount per student from historical payments
@@ -36,8 +35,8 @@ export async function GET(req: Request) {
     const expectedMRR = Math.round(activeStudentsCount * avgPayment);
 
     // Debtors: students with pending payments
-    const pendingPayments = await db.centerPayment.findMany({
-      where: { centerId, status: "PENDING" },
+    const pendingPayments = await tenantDb.centerPayment.findMany({
+      where: { status: "PENDING" },
       include: {
         student: {
           include: {
