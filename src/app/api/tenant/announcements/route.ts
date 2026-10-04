@@ -1,11 +1,12 @@
 import { NextResponse } from "next/server";
-import { db } from "@/lib/db";
+import { getTenantDb } from "@/lib/db-tenant";
 import { requireTenantAccess, logAuditEvent } from "@/lib/tenant";
 
 // GET /api/tenant/announcements
 export async function GET(req: Request) {
   try {
     const tenantCtx = await requireTenantAccess();
+    const tenantDb = getTenantDb(tenantCtx.center.id);
     const { searchParams } = new URL(req.url);
     const groupId = searchParams.get("groupId");
     const page = Math.max(1, parseInt(searchParams.get("page") || "1"));
@@ -13,7 +14,6 @@ export async function GET(req: Request) {
     const now = new Date();
 
     let whereCondition: any = {
-      centerId: tenantCtx.center.id,
       publishAt: { lte: now }, // Only published
       OR: [{ expiresAt: null }, { expiresAt: { gte: now } }], // Not expired
     };
@@ -37,17 +37,17 @@ export async function GET(req: Request) {
         let relevantGroupIds: string[] = [];
 
         if (tenantCtx.role === "STUDENT") {
-          const enrollments = await db.enrollment.findMany({
+          const enrollments = await tenantDb.enrollment.findMany({
             where: { studentMembershipId: tenantCtx.membership.id },
             select: { groupId: true },
           });
           relevantGroupIds = enrollments.map((e) => e.groupId);
         } else {
-          const childLinks = await db.parentLink.findMany({
+          const childLinks = await tenantDb.parentLink.findMany({
             where: { parentMembershipId: tenantCtx.membership.id, status: "CONFIRMED" },
             select: { studentMembershipId: true },
           });
-          const childEnrollments = await db.enrollment.findMany({
+          const childEnrollments = await tenantDb.enrollment.findMany({
             where: { studentMembershipId: { in: childLinks.map((l) => l.studentMembershipId) } },
             select: { groupId: true },
           });
@@ -59,16 +59,15 @@ export async function GET(req: Request) {
     }
 
     if (groupId) {
-      // SECURITY: Validate group belongs to tenant
-      const group = await db.group.findFirst({
-        where: { id: groupId, course: { centerId: tenantCtx.center.id } },
+      const group = await tenantDb.group.findFirst({
+        where: { id: groupId },
       });
       if (!group) return NextResponse.json({ error: "Group not found" }, { status: 404 });
       whereCondition.groupId = groupId;
     }
 
-    const [announcements, total] = await db.$transaction([
-      db.announcement.findMany({
+    const [announcements, total] = await tenantDb.$transaction([
+      tenantDb.announcement.findMany({
         where: whereCondition,
         include: {
           author: { include: { user: { select: { fullName: true } } } },
@@ -78,7 +77,7 @@ export async function GET(req: Request) {
         skip: (page - 1) * pageSize,
         take: pageSize,
       }),
-      db.announcement.count({ where: whereCondition }),
+      tenantDb.announcement.count({ where: whereCondition }),
     ]);
 
     return NextResponse.json({ announcements, total, page, pageSize });
@@ -91,6 +90,7 @@ export async function GET(req: Request) {
 export async function POST(req: Request) {
   try {
     const tenantCtx = await requireTenantAccess();
+    const tenantDb = getTenantDb(tenantCtx.center.id);
 
     // Teachers can create announcements for their own groups only
     if (
@@ -112,13 +112,11 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: "Title and body are required" }, { status: 400 });
     }
 
-    // TEACHER: can only target their own groups
     if (tenantCtx.role === "TEACHER" && groupId) {
-      const group = await db.group.findFirst({
+      const group = await tenantDb.group.findFirst({
         where: {
           id: groupId,
           teacherMembershipId: tenantCtx.membership.id,
-          course: { centerId: tenantCtx.center.id },
         },
       });
       if (!group) {
@@ -126,15 +124,14 @@ export async function POST(req: Request) {
       }
     }
 
-    // Validate groupId belongs to this tenant
     if (groupId) {
-      const group = await db.group.findFirst({
-        where: { id: groupId, course: { centerId: tenantCtx.center.id } },
+      const group = await tenantDb.group.findFirst({
+        where: { id: groupId },
       });
       if (!group) return NextResponse.json({ error: "Group not found" }, { status: 404 });
     }
 
-    const announcement = await db.announcement.create({
+    const announcement = await tenantDb.announcement.create({
       data: {
         centerId: tenantCtx.center.id,
         authorId: tenantCtx.membership.id,
@@ -167,17 +164,16 @@ export async function POST(req: Request) {
 export async function PATCH(req: Request) {
   try {
     const tenantCtx = await requireTenantAccess();
+    const tenantDb = getTenantDb(tenantCtx.center.id);
     const { id, title, body, targetRole, groupId, isPinned, publishAt, expiresAt } = await req.json();
 
     if (!id) return NextResponse.json({ error: "Announcement ID required" }, { status: 400 });
 
-    // SECURITY: Verify announcement belongs to this tenant
-    const existing = await db.announcement.findFirst({
-      where: { id, centerId: tenantCtx.center.id },
+    const existing = await tenantDb.announcement.findFirst({
+      where: { id },
     });
     if (!existing) return NextResponse.json({ error: "Announcement not found" }, { status: 404 });
 
-    // TEACHER: can only edit their own announcements
     if (tenantCtx.role === "TEACHER" && tenantCtx.membership) {
       if (existing.authorId !== tenantCtx.membership.id) {
         return NextResponse.json({ error: "You can only edit your own announcements" }, { status: 403 });
@@ -191,13 +187,13 @@ export async function PATCH(req: Request) {
     }
 
     if (groupId && groupId !== existing.groupId) {
-      const group = await db.group.findFirst({
-        where: { id: groupId, course: { centerId: tenantCtx.center.id } },
+      const group = await tenantDb.group.findFirst({
+        where: { id: groupId },
       });
       if (!group) return NextResponse.json({ error: "Group not found in this center" }, { status: 404 });
     }
 
-    const announcement = await db.announcement.update({
+    await tenantDb.announcement.updateMany({
       where: { id },
       data: {
         title: title?.trim() || existing.title,
@@ -209,6 +205,7 @@ export async function PATCH(req: Request) {
         expiresAt: expiresAt !== undefined ? (expiresAt ? new Date(expiresAt) : null) : existing.expiresAt,
       },
     });
+    const announcement = await tenantDb.announcement.findFirst({ where: { id } });
 
     return NextResponse.json({ success: true, announcement });
   } catch (err: any) {
@@ -220,15 +217,15 @@ export async function PATCH(req: Request) {
 export async function DELETE(req: Request) {
   try {
     const tenantCtx = await requireTenantAccess();
+    const tenantDb = getTenantDb(tenantCtx.center.id);
     const { id } = await req.json();
     if (!id) return NextResponse.json({ error: "Announcement ID required" }, { status: 400 });
 
-    const existing = await db.announcement.findFirst({
-      where: { id, centerId: tenantCtx.center.id },
+    const existing = await tenantDb.announcement.findFirst({
+      where: { id },
     });
     if (!existing) return NextResponse.json({ error: "Announcement not found" }, { status: 404 });
 
-    // Only the author, admin, or director can delete
     if (tenantCtx.role === "TEACHER" && tenantCtx.membership && existing.authorId !== tenantCtx.membership.id) {
       return NextResponse.json({ error: "You can only delete your own announcements" }, { status: 403 });
     }
@@ -241,7 +238,7 @@ export async function DELETE(req: Request) {
       return NextResponse.json({ error: "Forbidden" }, { status: 403 });
     }
 
-    await db.announcement.delete({ where: { id } });
+    await tenantDb.announcement.deleteMany({ where: { id } });
 
     await logAuditEvent({
       centerId: tenantCtx.center.id,
