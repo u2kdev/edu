@@ -7,7 +7,12 @@
 
 ## ЭТАП 1 — Фундамент
 - [ ] Миграция с SQLite на PostgreSQL (schema.prisma, миграции, docker-compose).
-- [ ] Надёжная изоляция арендаторов: Prisma Client extension, добавление centerId в дочерние модели.
+- [x] Надёжная изоляция арендаторов: Prisma Client extension, добавление centerId в дочерние модели. (В ПРОЦЕССЕ СТАБИЛИЗАЦИИ)
+  - [x] Починка `tsc`: переведены на `getTenantDb` маршруты, дававшие ошибки компиляции (groups, homework, lessons, materials, modules, tests/attempt, invites). 
+  - [x] Восстановлены и проходят 100% (37 штук) Vitest-тестов.
+  - [ ] **ОСТАЛОСЬ**: Перевести оставшиеся ~16 роутов в `src/app/api/**` на `getTenantDb(centerId)`.
+  - [ ] **ОСТАЛОСЬ**: Включить обратно ESLint правило `no-restricted-imports` после завершения перевода всех роутов.
+  - [ ] **ОСТАЛОСЬ**: Переписать тесты `tenant-isolation.test.ts` на реальной тестовой SQLite (test.db, а не dev.db).
 - [ ] Индексы БД по centerId и частым фильтрам.
 - [ ] Слой валидации Zod + единый обработчик ошибок + rate limiting.
 - [ ] Полный auth-флоу: регистрация по инвайт-коду, сброс пароля по email, 2FA, список активных сессий.
