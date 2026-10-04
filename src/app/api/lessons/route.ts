@@ -1,11 +1,12 @@
 import { NextResponse } from "next/server";
-import { db } from "@/lib/db";
+import { getTenantDb } from "@/lib/db-tenant";
 import { requireTenantAccess, logAuditEvent } from "@/lib/tenant";
 
 // POST /api/lessons - Create a lesson inside a module
 export async function POST(req: Request) {
   try {
     const tenantCtx = await requireTenantAccess();
+    const tenantDb = getTenantDb(tenantCtx.center.id);
     if (tenantCtx.role !== "DIRECTOR" && tenantCtx.role !== "CENTER_ADMIN" && tenantCtx.role !== "TEACHER" && !tenantCtx.isPlatformStaff) {
       return NextResponse.json({ error: "Forbidden" }, { status: 403 });
     }
@@ -17,15 +18,16 @@ export async function POST(req: Request) {
     }
 
     // Get highest orderIndex for this module
-    const maxLesson = await db.lesson.findFirst({
+    const maxLesson = await tenantDb.lesson.findFirst({
       where: { moduleId },
       orderBy: { orderIndex: "desc" },
     });
 
     const nextOrderIndex = (maxLesson?.orderIndex ?? 0) + 1;
 
-    const lesson = await db.lesson.create({
+    const lesson = await tenantDb.lesson.create({
       data: {
+        centerId: tenantCtx.center.id,
         moduleId,
         title,
         lessonType: lessonType || "OFFLINE",
@@ -60,6 +62,7 @@ export async function POST(req: Request) {
 export async function PATCH(req: Request) {
   try {
     const tenantCtx = await requireTenantAccess();
+    const tenantDb = getTenantDb(tenantCtx.center.id);
     if (tenantCtx.role !== "DIRECTOR" && tenantCtx.role !== "CENTER_ADMIN" && tenantCtx.role !== "TEACHER" && !tenantCtx.isPlatformStaff) {
       return NextResponse.json({ error: "Forbidden" }, { status: 403 });
     }
@@ -83,10 +86,12 @@ export async function PATCH(req: Request) {
     if (orderIndex !== undefined) updateData.orderIndex = parseInt(orderIndex);
     if (substituteTeacherMembershipId !== undefined) updateData.substituteTeacherMembershipId = substituteTeacherMembershipId || null;
 
-    const lesson = await db.lesson.update({
+    // Use updateMany because tenantDb overrides update to updateMany internally anyway
+    await tenantDb.lesson.updateMany({
       where: { id: lessonId },
       data: updateData,
     });
+    const lesson = await tenantDb.lesson.findFirst({ where: { id: lessonId } });
 
     return NextResponse.json({ success: true, lesson });
   } catch (err: any) {

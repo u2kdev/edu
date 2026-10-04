@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { db } from "@/lib/db";
+import { getTenantDb } from "@/lib/db-tenant";
 import { getAuthSession } from "@/lib/auth";
 import { requireTenantAccess, logAuditEvent } from "@/lib/tenant";
 
@@ -12,13 +12,14 @@ export async function POST(req: Request) {
     }
 
     const tenantCtx = await requireTenantAccess();
+    const tenantDb = getTenantDb(tenantCtx.center.id);
     const { testId, studentAnswers } = await req.json(); // studentAnswers: { questionId: string, answer: string | string[] }
 
     if (!testId || !studentAnswers) {
       return NextResponse.json({ error: "Test ID and answers are required" }, { status: 400 });
     }
 
-    const test = await db.test.findUnique({
+    const test = await tenantDb.test.findFirst({
       where: { id: testId },
       include: { questions: true },
     });
@@ -28,7 +29,7 @@ export async function POST(req: Request) {
     }
 
     // Check attempts limit
-    const existingAttempts = await db.testAttempt.count({
+    const existingAttempts = await tenantDb.testAttempt.count({
       where: {
         testId: test.id,
         studentMembershipId: tenantCtx.membership?.id,
@@ -81,8 +82,9 @@ export async function POST(req: Request) {
 
     const scorePercent = totalMaxPoints > 0 ? Math.round((earnedPoints / totalMaxPoints) * 100) : 0;
 
-    const attempt = await db.testAttempt.create({
+    const attempt = await tenantDb.testAttempt.create({
       data: {
+        centerId: tenantCtx.center.id,
         testId: test.id,
         studentMembershipId: tenantCtx.membership?.id!,
         answersJson: JSON.stringify(studentAnswers),
@@ -95,7 +97,7 @@ export async function POST(req: Request) {
     });
 
     // Also log activity
-    await db.activityLog.create({
+    await tenantDb.activityLog.create({
       data: {
         userMembershipId: tenantCtx.membership?.id!,
         centerId: tenantCtx.center.id,

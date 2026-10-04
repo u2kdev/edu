@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { db } from "@/lib/db";
 import { requireTenantAccess, logAuditEvent } from "@/lib/tenant";
 import { hashPassword } from "@/lib/auth";
+import { getTenantDb } from "@/lib/db-tenant";
 import crypto from "crypto";
 
 // POST /api/invites/bulk-import - Bulk import students from CSV data (fullName, email, phone)
@@ -49,16 +50,17 @@ export async function POST(req: Request) {
         });
       }
 
+      const tenantDb = getTenantDb(tenantCtx.center.id);
       // Find or create Student Membership
-      let membership = await db.centerMembership.findFirst({
-        where: { userId: user.id, centerId: tenantCtx.center.id, role: "STUDENT" },
+      let membership = await tenantDb.centerMembership.findFirst({
+        where: { userId: user.id, role: "STUDENT" },
       });
 
       if (!membership) {
-        membership = await db.centerMembership.create({
+        membership = await tenantDb.centerMembership.create({
           data: {
-            userId: user.id,
             centerId: tenantCtx.center.id,
+            userId: user.id,
             role: "STUDENT",
             status: "ACTIVE",
           },
@@ -70,12 +72,14 @@ export async function POST(req: Request) {
 
       // Enroll in group if specified
       if (groupId) {
-        const existingEnrollment = await db.enrollment.findFirst({
+        const tenantDb = getTenantDb(tenantCtx.center.id);
+        const existingEnrollment = await tenantDb.enrollment.findFirst({
           where: { studentMembershipId: membership.id, groupId },
         });
         if (!existingEnrollment) {
-          await db.enrollment.create({
+          await tenantDb.enrollment.create({
             data: {
+              centerId: tenantCtx.center.id,
               studentMembershipId: membership.id,
               groupId,
               status: "ACTIVE",

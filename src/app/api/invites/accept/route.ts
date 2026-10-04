@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { db } from "@/lib/db";
 import { getAuthSession, signJWT } from "@/lib/auth";
+import { getTenantDb } from "@/lib/db-tenant";
 
 export async function POST(req: Request) {
   try {
@@ -64,8 +65,9 @@ export async function POST(req: Request) {
       });
 
       if (group) {
+        const tenantDb = getTenantDb(invite.centerId);
         const currentCount = group._count.enrollments;
-        const existingEnrollment = await db.enrollment.findFirst({
+        const existingEnrollment = await tenantDb.enrollment.findFirst({
           where: {
             studentMembershipId: membership.id,
             groupId: invite.groupId,
@@ -80,8 +82,9 @@ export async function POST(req: Request) {
             );
           }
 
-          await db.enrollment.create({
+          await tenantDb.enrollment.create({
             data: {
+              centerId: invite.centerId,
               studentMembershipId: membership.id,
               groupId: invite.groupId,
               status: "ACTIVE",

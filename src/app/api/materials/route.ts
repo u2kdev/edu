@@ -1,17 +1,17 @@
 import { NextResponse } from "next/server";
-import { db } from "@/lib/db";
+import { getTenantDb } from "@/lib/db-tenant";
 import { requireTenantAccess, logAuditEvent } from "@/lib/tenant";
 
 // GET /api/materials?lessonId=xxx - List materials for a lesson
 export async function GET(req: Request) {
   try {
     const tenantCtx = await requireTenantAccess();
+    const tenantDb = getTenantDb(tenantCtx.center.id);
     const { searchParams } = new URL(req.url);
     const lessonId = searchParams.get("lessonId");
 
-    const materials = await db.material.findMany({
+    const materials = await tenantDb.material.findMany({
       where: {
-        centerId: tenantCtx.center.id,
         ...(lessonId ? { lessonId } : {}),
       },
       include: {
@@ -34,6 +34,7 @@ export async function GET(req: Request) {
 export async function POST(req: Request) {
   try {
     const tenantCtx = await requireTenantAccess();
+    const tenantDb = getTenantDb(tenantCtx.center.id);
     if (tenantCtx.role !== "DIRECTOR" && tenantCtx.role !== "CENTER_ADMIN" && tenantCtx.role !== "TEACHER" && !tenantCtx.isPlatformStaff) {
       return NextResponse.json({ error: "Forbidden" }, { status: 403 });
     }
@@ -60,14 +61,14 @@ export async function POST(req: Request) {
     }
 
     // Get max orderIndex
-    const maxMat = await db.material.findFirst({
-      where: { centerId: tenantCtx.center.id, ...(lessonId ? { lessonId } : {}) },
+    const maxMat = await tenantDb.material.findFirst({
+      where: { ...(lessonId ? { lessonId } : {}) },
       orderBy: { orderIndex: "desc" },
     });
 
     const nextOrder = (maxMat?.orderIndex ?? 0) + 1;
 
-    const material = await db.material.create({
+    const material = await tenantDb.material.create({
       data: {
         centerId: tenantCtx.center.id,
         lessonId: lessonId || null,
@@ -84,8 +85,9 @@ export async function POST(req: Request) {
 
     // If materialType is TEST, create associated Test & Questions
     if (materialType === "TEST" && testConfig) {
-      const test = await db.test.create({
+      const test = await tenantDb.test.create({
         data: {
+          centerId: tenantCtx.center.id,
           materialId: material.id,
           timeLimitMinutes: testConfig.timeLimitMinutes ? parseInt(testConfig.timeLimitMinutes) : null,
           maxAttempts: testConfig.maxAttempts ? parseInt(testConfig.maxAttempts) : 1,
@@ -97,8 +99,9 @@ export async function POST(req: Request) {
       if (Array.isArray(testConfig.questions) && testConfig.questions.length > 0) {
         for (let i = 0; i < testConfig.questions.length; i++) {
           const q = testConfig.questions[i];
-          await db.testQuestion.create({
+          await tenantDb.testQuestion.create({
             data: {
+              centerId: tenantCtx.center.id,
               testId: test.id,
               questionText: q.questionText,
               questionType: q.questionType || "SINGLE_CHOICE",
@@ -121,7 +124,7 @@ export async function POST(req: Request) {
       details: { title, materialType, lessonId },
     });
 
-    const fullMaterial = await db.material.findUnique({
+    const fullMaterial = await tenantDb.material.findFirst({
       where: { id: material.id },
       include: { test: { include: { questions: true } } },
     });

@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { db } from "@/lib/db";
 import { hashPassword, signJWT } from "@/lib/auth";
+import { getTenantDb } from "@/lib/db-tenant";
 import { logAuditEvent } from "@/lib/tenant";
 import { checkSubscriptionLimit } from "@/lib/limits";
 import crypto from "crypto";
@@ -113,11 +114,10 @@ export async function POST(req: Request) {
       );
     }
 
-    // Check if user already has this role in this center
-    let membership = await db.centerMembership.findFirst({
+    const tenantDb = getTenantDb(invite.centerId);
+    let membership = await tenantDb.centerMembership.findFirst({
       where: {
         userId: user.id,
-        centerId: invite.centerId,
         role: invite.targetRole,
       },
     });
@@ -135,7 +135,7 @@ export async function POST(req: Request) {
         }
       }
 
-      membership = await db.centerMembership.create({
+      membership = await tenantDb.centerMembership.create({
         data: {
           userId: user.id,
           centerId: invite.centerId,
@@ -145,7 +145,7 @@ export async function POST(req: Request) {
       });
     } else if (membership.status !== "ACTIVE") {
       // Re-activate if previously deactivated
-      membership = await db.centerMembership.update({
+      membership = await tenantDb.centerMembership.update({
         where: { id: membership.id },
         data: { status: "ACTIVE" },
       });
@@ -159,8 +159,9 @@ export async function POST(req: Request) {
       });
 
       if (group) {
+        const tenantDb = getTenantDb(invite.centerId);
         const currentCount = group._count.enrollments;
-        const existingEnrollment = await db.enrollment.findFirst({
+        const existingEnrollment = await tenantDb.enrollment.findFirst({
           where: {
             studentMembershipId: membership.id,
             groupId: invite.groupId,
@@ -175,8 +176,9 @@ export async function POST(req: Request) {
             );
           }
 
-          await db.enrollment.create({
+          await tenantDb.enrollment.create({
             data: {
+              centerId: invite.centerId,
               studentMembershipId: membership.id,
               groupId: invite.groupId,
               status: "ACTIVE",
