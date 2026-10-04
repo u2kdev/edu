@@ -8,7 +8,6 @@ export const TENANT_MODELS = [
   "ScheduleSlot",
   "Group",
   "Enrollment",
-  "Attendance",
   "Homework",
   "HomeworkSubmission",
   "Grade",

@@ -667,19 +667,20 @@ model AuditLog {
 // ----------------------------------------------------
 
 model UserSession {
-  id        String   @id @default(uuid())
-  userId    String
-  jti       String   @unique // JWT ID for revocation
-  isRevoked Boolean  @default(false)
-  createdAt DateTime @default(now())
-  expiresAt DateTime
-  ipAddress String?
-  userAgent String?
+  id         String    @id @default(uuid())
+  userId     String
+  jtiHash    String    @unique // Hash of JWT ID for revocation check
+  userAgent  String?
+  ipAddress  String?
+  createdAt  DateTime  @default(now())
+  lastSeenAt DateTime  @default(now())
+  expiresAt  DateTime
+  revokedAt  DateTime?
 
   user PlatformUser @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@index([userId])
-  @@index([jti])
+  @@index([jtiHash])
 }
 
 model PasswordResetToken {

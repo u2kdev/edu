@@ -26,7 +26,9 @@ async function main() {
     },
   });
 
-  const passwordHash = await bcrypt.hash("Password123!", 10);
+  // DEV ONLY: Using a hardcoded test password since this seed is blocked in production
+  const testPassword = process.env.DEV_SEED_PASSWORD || "Password123!";
+  const passwordHash = await bcrypt.hash(testPassword, 10);
 
   // 2. Create Superadmin User
   await prisma.platformUser.upsert({

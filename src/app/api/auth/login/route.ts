@@ -72,11 +72,13 @@ export async function POST(req: Request) {
 
     const token = signJWT(payload, expiresIn);
 
+    const { hashJti } = await import("@/lib/auth");
+    
     // Create session in DB
     await db.userSession.create({
       data: {
         userId: user.id,
-        jti,
+        jtiHash: hashJti(jti),
         expiresAt,
         ipAddress: ip,
         userAgent,

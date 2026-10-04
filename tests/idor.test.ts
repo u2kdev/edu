@@ -1,10 +1,10 @@
 import { describe, it, expect, beforeAll, afterAll, vi } from "vitest";
 import { db } from "../src/lib/db";
 import { signJWT } from "../src/lib/auth";
-import { GET as getAttendance } from "../src/app/api/attendance/route";
+import { GET as getAttendance, POST as postAttendance } from "../src/app/api/attendance/route";
 import { GET as getHomework } from "../src/app/api/homework/route";
-import { GET as getGrades } from "../src/app/api/grades/route";
-import { GET as getCourses } from "../src/app/api/courses/route";
+import { GET as getGrades, PATCH as patchGrades } from "../src/app/api/grades/route";
+import { GET as getCourses, POST as postCourses } from "../src/app/api/courses/route";
 import { GET as getGroups } from "../src/app/api/groups/route";
 import { GET as getSchedule } from "../src/app/api/tenant/schedule/route";
 
@@ -177,7 +177,9 @@ describe("Phase C & E: IDOR / Privilege Escalation Tests", () => {
     setAuth(directorA, tenantA, "DIRECTOR");
     const req = mockRequest(`/api/courses?id=${courseB}`);
     const res = await getCourses(req);
-    expect(res.status).toBe(404);
+    const data = await res.json();
+    expect(res.status).toBe(200);
+    expect(data.courses.some((c: any) => c.id === courseB)).toBe(false);
   });
 
   it("CRITICAL: Tenant A user tries to read Tenant B groups", async () => {
@@ -201,5 +203,34 @@ describe("Phase C & E: IDOR / Privilege Escalation Tests", () => {
     const req = mockRequest(`/api/tenant/schedule?groupId=${groupB}`);
     const res = await getSchedule(req);
     expect(res.status).toBe(404);
+  });
+
+  // Mutating IDOR Tests
+  it("CRITICAL: Tenant A user tries to mark attendance for Tenant B lesson (Mutation IDOR)", async () => {
+    setAuth(teacherA, tenantA, "TEACHER");
+    const req = new Request(`http://localhost/api/attendance`, {
+      method: "POST",
+      body: JSON.stringify({ lessonId: lessonB, records: [{ studentMembershipId: studentBMemId, status: "PRESENT" }] })
+    });
+    const res = await postAttendance(req);
+    expect(res.status).toBe(404);
+  });
+
+  it("CRITICAL: Tenant A user tries to modify Tenant B grade (Mutation IDOR)", async () => {
+    // We need to create a grade in B first
+    const dirBMem = await db.centerMembership.findFirst({ where: { userId: directorB } });
+    const gradeObjB = await db.grade.create({ data: { centerId: tenantB, studentMembershipId: studentBMemId, groupId: groupB, teacherMembershipId: dirBMem!.id, gradeType: "HOMEWORK", value: 50, maxValue: 100 } });
+    
+    setAuth(directorA, tenantA, "DIRECTOR");
+    const req = new Request(`http://localhost/api/grades`, {
+      method: "PATCH",
+      body: JSON.stringify({ id: gradeObjB.id, value: 100 })
+    });
+    const res = await patchGrades(req);
+    expect(res.status).toBe(404);
+
+    // Verify DB wasn't changed
+    const check = await db.grade.findUnique({ where: { id: gradeObjB.id } });
+    expect(check?.value).toBe(50);
   });
 });

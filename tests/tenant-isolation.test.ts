@@ -159,7 +159,7 @@ describe("True Tenant Isolation (Real SQLite DB)", () => {
         name: "Nested Group",
         courseId: courseA,
         maxStudents: 10,
-      }
+      } as any
     });
     expect(g.centerId).toBe(centerA);
   });

@@ -12,7 +12,7 @@
   - [x] Переписаны тесты `tenant-isolation.test.ts` на реальной изолированной SQLite (`test.db`).
 - [ ] Миграция с SQLite на PostgreSQL (schema.prisma, миграции, docker-compose).
 - [ ] Индексы БД по centerId и частым фильтрам.
-- [x] Слой валидации Zod + rate limiting + API response (с поддержкой локализации ru/uz).
+- [ ] Слой валидации Zod + rate limiting + API response (с поддержкой локализации ru/uz). (ЧАСТИЧНО: Auth-роуты на Zod, остальные вручную)
 - [ ] Полный auth-флоу: регистрация по инвайт-коду, сброс пароля по email, 2FA, список активных сессий.
 - [ ] Файловое хранилище через абстракцию StorageProvider (local/S3).
 - [ ] Реальные адаптеры уведомлений (Email/SMTP, SMS/Eskiz.uz).
