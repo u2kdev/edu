@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { getTenantDb } from "@/lib/db-tenant";
 import { requireTenantAccess } from "@/lib/tenant";
+// eslint-disable-next-line no-restricted-imports
 import { db } from "@/lib/db"; // Required for cross-tenant unique check
 
 function generateRandomCode(length: number = 8): string {

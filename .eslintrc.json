@@ -1,3 +1,41 @@
 {
-  "extends": "next/core-web-vitals"
+  "extends": "next/core-web-vitals",
+  "rules": {
+    "no-restricted-imports": "off"
+  },
+  "overrides": [
+    {
+      "files": [
+        "src/app/api/**/*.ts"
+      ],
+      "rules": {
+        "no-restricted-imports": [
+          "error",
+          {
+            "patterns": [
+              {
+                "group": ["@/lib/db"],
+                "message": "Use getTenantDb(centerId) instead of raw db for tenant routes. Raw db is only allowed in /api/auth/*, /api/platform/*, and for platform models."
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "files": [
+        "src/app/api/auth/**/*.ts",
+        "src/app/api/platform/**/*.ts",
+        "src/app/api/developer/**/*.ts",
+        "src/app/api/health/route.ts",
+        "src/app/api/tickets/route.ts",
+        "src/app/api/notifications/route.ts",
+        "src/app/api/tenant/onboarding/route.ts",
+        "src/app/api/tenant/staff/route.ts"
+      ],
+      "rules": {
+        "no-restricted-imports": "off"
+      }
+    }
+  ]
 }

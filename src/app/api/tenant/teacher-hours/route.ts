@@ -1,20 +1,20 @@
 import { NextResponse } from "next/server";
-import { db } from "@/lib/db";
+import { getTenantDb } from "@/lib/db-tenant";
 import { requireTenantAccess } from "@/lib/tenant";
 
 // GET /api/tenant/teacher-hours - Teacher academic hours and salary report for Director/Admin
 export async function GET(req: Request) {
   try {
     const tenantCtx = await requireTenantAccess();
+    const tenantDb = getTenantDb(tenantCtx.center.id);
+
     if (tenantCtx.role !== "DIRECTOR" && tenantCtx.role !== "CENTER_ADMIN" && !tenantCtx.isPlatformStaff) {
       return NextResponse.json({ error: "Forbidden" }, { status: 403 });
     }
 
-    const centerId = tenantCtx.center.id;
-
     // Load all teachers in center
-    const teachers = await db.centerMembership.findMany({
-      where: { centerId, role: "TEACHER" },
+    const teachers = await tenantDb.centerMembership.findMany({
+      where: { role: "TEACHER" },
       include: {
         user: { select: { fullName: true, email: true, phone: true } },
         taughtGroups: {
