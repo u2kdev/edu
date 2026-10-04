@@ -1,4 +1,6 @@
 import { NextResponse } from "next/server";
+// Reason: Exception: Developer routes operate on platform models.
+// eslint-disable-next-line no-restricted-imports
 import { db } from "@/lib/db";
 import { requireDeveloper, handlePlatformError } from "@/lib/platformAuth";
 import { hashPassword } from "@/lib/auth";

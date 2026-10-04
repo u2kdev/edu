@@ -1,12 +1,10 @@
 {
   "extends": "next/core-web-vitals",
-  "rules": {
-    "no-restricted-imports": "off"
-  },
   "overrides": [
     {
       "files": [
-        "src/app/api/**/*.ts"
+        "src/app/api/**/*.ts",
+        "src/app/api/**/*.tsx"
       ],
       "rules": {
         "no-restricted-imports": [
@@ -14,27 +12,19 @@
           {
             "patterns": [
               {
-                "group": ["@/lib/db"],
-                "message": "Use getTenantDb(centerId) instead of raw db for tenant routes. Raw db is only allowed in /api/auth/*, /api/platform/*, and for platform models."
+                "group": ["@/lib/db", "*/lib/db", "../**/lib/db", "**/lib/db"],
+                "message": "Use getTenantDb(centerId) instead of raw db for tenant routes. Raw db is only allowed with explicit inline disable."
               }
             ]
           }
+        ],
+        "no-restricted-syntax": [
+          "error",
+          {
+            "selector": "NewExpression[callee.name='PrismaClient']",
+            "message": "Do not instantiate PrismaClient directly in API routes."
+          }
         ]
-      }
-    },
-    {
-      "files": [
-        "src/app/api/auth/**/*.ts",
-        "src/app/api/platform/**/*.ts",
-        "src/app/api/developer/**/*.ts",
-        "src/app/api/health/route.ts",
-        "src/app/api/tickets/route.ts",
-        "src/app/api/notifications/route.ts",
-        "src/app/api/tenant/onboarding/route.ts",
-        "src/app/api/tenant/staff/route.ts"
-      ],
-      "rules": {
-        "no-restricted-imports": "off"
       }
     }
   ]

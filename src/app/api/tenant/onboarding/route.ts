@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+// Reason: Exception: Creation of platform-level models.
 // eslint-disable-next-line no-restricted-imports
 import { db } from "@/lib/db";
 import { getTenantDb } from "@/lib/db-tenant";

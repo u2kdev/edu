@@ -113,14 +113,29 @@ export async function POST(req: Request) {
            }
         });
       } else {
-        await tenantDb.attendance.create({
-           data: {
-             lessonId,
-             studentMembershipId: r.studentMembershipId,
-             status: r.status,
-             markedByMembershipId: markerId,
-           }
-        });
+        try {
+          await tenantDb.attendance.create({
+             data: {
+               lessonId,
+               studentMembershipId: r.studentMembershipId,
+               status: r.status,
+               markedByMembershipId: markerId,
+             }
+          });
+        } catch (e: any) {
+          if (e.code === 'P2002') {
+            await tenantDb.attendance.updateMany({
+               where: { lessonId, studentMembershipId: r.studentMembershipId },
+               data: {
+                 status: r.status,
+                 markedByMembershipId: markerId,
+                 markedAt: new Date(),
+               }
+            });
+          } else {
+            throw e;
+          }
+        }
       }
     }
 

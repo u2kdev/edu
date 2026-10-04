@@ -43,15 +43,31 @@ export async function POST(req: Request) {
            }
         });
       } else {
-        await tenantDb.attendance.create({
-           data: {
-             lessonId,
-             studentMembershipId: en.studentMembershipId,
-             groupId,
-             status,
-             markedByMembershipId: markerId,
-           }
-        });
+        try {
+          await tenantDb.attendance.create({
+             data: {
+               lessonId,
+               studentMembershipId: en.studentMembershipId,
+               groupId,
+               status,
+               markedByMembershipId: markerId,
+             }
+          });
+        } catch (e: any) {
+          if (e.code === 'P2002') {
+            await tenantDb.attendance.updateMany({
+               where: { lessonId, studentMembershipId: en.studentMembershipId },
+               data: {
+                 groupId,
+                 status,
+                 markedByMembershipId: markerId,
+                 markedAt: new Date(),
+               }
+            });
+          } else {
+            throw e;
+          }
+        }
       }
     }
 

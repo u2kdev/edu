@@ -4,6 +4,9 @@ import { signJWT } from "../src/lib/auth";
 import { GET as getAttendance } from "../src/app/api/attendance/route";
 import { GET as getHomework } from "../src/app/api/homework/route";
 import { GET as getGrades } from "../src/app/api/grades/route";
+import { GET as getCourses } from "../src/app/api/courses/route";
+import { GET as getGroups } from "../src/app/api/groups/route";
+import { GET as getSchedule } from "../src/app/api/tenant/schedule/route";
 
 // Mock next/headers
 let mockToken: string = "";
@@ -168,5 +171,35 @@ describe("Phase C & E: IDOR / Privilege Escalation Tests", () => {
     // If the privilege escalation succeeded, they would see all grades.
     expect(res.status).toBe(200);
     expect(data.grades.every((g: any) => g.teacherMembershipId === teacherAMemId)).toBe(true);
+  });
+
+  it("CRITICAL: Tenant A user tries to read Tenant B courses", async () => {
+    setAuth(directorA, tenantA, "DIRECTOR");
+    const req = mockRequest(`/api/courses?id=${courseB}`);
+    const res = await getCourses(req);
+    expect(res.status).toBe(404);
+  });
+
+  it("CRITICAL: Tenant A user tries to read Tenant B groups", async () => {
+    setAuth(directorA, tenantA, "DIRECTOR");
+    const req = mockRequest(`/api/groups`);
+    const res = await getGroups(req);
+    const data = await res.json();
+    // Should not include group B
+    expect(data.groups.some((g: any) => g.id === groupB)).toBe(false);
+  });
+
+  it("CRITICAL: Tenant A user tries to read Tenant B homework", async () => {
+    setAuth(studentA, tenantA, "STUDENT");
+    const req = mockRequest(`/api/homework?lessonId=${lessonB}`);
+    const res = await getHomework(req);
+    expect(res.status).toBe(404);
+  });
+
+  it("CRITICAL: Tenant A user tries to read Tenant B schedule", async () => {
+    setAuth(directorA, tenantA, "DIRECTOR");
+    const req = mockRequest(`/api/tenant/schedule?groupId=${groupB}`);
+    const res = await getSchedule(req);
+    expect(res.status).toBe(404);
   });
 });

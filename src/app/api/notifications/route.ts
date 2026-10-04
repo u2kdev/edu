@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+// Reason: Exception: Notifications span across multiple centers for a specific user.
 // eslint-disable-next-line no-restricted-imports
 import { db } from "@/lib/db";
 import { getAuthSession } from "@/lib/auth";

@@ -1,23 +1,21 @@
 import { NextResponse } from "next/server";
+// Reason: Exception: Invite validation requires global search before center context is known.
 // eslint-disable-next-line no-restricted-imports
 import { db } from "@/lib/db";
 import { hashPassword, signJWT } from "@/lib/auth";
 import { getTenantDb } from "@/lib/db-tenant";
 import { logAuditEvent } from "@/lib/tenant";
 import { checkSubscriptionLimit } from "@/lib/limits";
-import crypto from "crypto";
+import { checkRateLimit } from "@/lib/rate-limit";
+import { apiError, handleApiError } from "@/lib/api-response";
 
-/**
- * POST /api/invites/redeem — Public endpoint for redeeming an invite code.
- * 
- * Two flows:
- * 1. New user: provides code + email + fullName + password → creates User + Membership + Enrollment
- * 2. Existing user (authenticated): provides code → creates Membership + Enrollment
- * 
- * This is the main entry point for students joining a center via invite link/code.
- */
 export async function POST(req: Request) {
   try {
+    const ip = req.headers.get("x-forwarded-for") || "unknown";
+    if (!checkRateLimit(ip)) {
+      return apiError("Too many attempts", "RATE_LIMITED", 429);
+    }
+
     const { code, email, fullName, phone, password } = await req.json();
 
     if (!code) {
@@ -39,23 +37,15 @@ export async function POST(req: Request) {
       },
     });
 
-    if (!invite || invite.isRevoked) {
+    if (
+      !invite || 
+      invite.isRevoked || 
+      (invite.expiresAt && new Date() > invite.expiresAt) || 
+      (invite.usesCount >= invite.maxUses)
+    ) {
+      // Neutral message to prevent leaking if code exists
       return NextResponse.json(
-        { error: "Invalid or revoked invite code" },
-        { status: 404 }
-      );
-    }
-
-    if (invite.expiresAt && new Date() > invite.expiresAt) {
-      return NextResponse.json(
-        { error: "Invite code has expired" },
-        { status: 400 }
-      );
-    }
-
-    if (invite.usesCount >= invite.maxUses) {
-      return NextResponse.json(
-        { error: "Invite code usage limit reached" },
+        { error: "Недействительный инвайт-код" },
         { status: 400 }
       );
     }
@@ -138,29 +128,31 @@ export async function POST(req: Request) {
 
       membership = await tenantDb.centerMembership.create({
         data: {
-          userId: user.id,
           centerId: invite.centerId,
+          userId: user.id,
           role: invite.targetRole,
           status: "ACTIVE",
         },
       });
     } else if (membership.status !== "ACTIVE") {
       // Re-activate if previously deactivated
-      membership = await tenantDb.centerMembership.update({
+      await tenantDb.centerMembership.updateMany({
         where: { id: membership.id },
         data: { status: "ACTIVE" },
+      });
+      membership = await tenantDb.centerMembership.findFirst({
+        where: { id: membership.id }
       });
     }
 
     // If invite is linked to a group, verify capacity and enroll student
-    if (invite.groupId && invite.targetRole === "STUDENT") {
-      const group = await db.group.findUnique({
+    if (invite.groupId && invite.targetRole === "STUDENT" && membership) {
+      const group = await tenantDb.group.findUnique({
         where: { id: invite.groupId },
         include: { _count: { select: { enrollments: true } } },
       });
 
       if (group) {
-        const tenantDb = getTenantDb(invite.centerId);
         const currentCount = group._count.enrollments;
         const existingEnrollment = await tenantDb.enrollment.findFirst({
           where: {
@@ -190,7 +182,7 @@ export async function POST(req: Request) {
     }
 
     // Increment invite usage
-    await db.inviteCode.update({
+    await tenantDb.inviteCode.updateMany({
       where: { id: invite.id },
       data: { usesCount: invite.usesCount + 1 },
     });

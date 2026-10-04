@@ -1,4 +1,6 @@
 import { z } from "zod";
+// Reason: Exception: Auth routes operate on platform models.
+// eslint-disable-next-line no-restricted-imports
 import { db } from "@/lib/db";
 import { comparePassword, signJWT, JWTPayload } from "@/lib/auth";
 import { checkRateLimit } from "@/lib/rate-limit";

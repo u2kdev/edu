@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { getTenantDb } from "@/lib/db-tenant";
 import { requireTenantAccess } from "@/lib/tenant";
+// Reason: Exception: Invite validation requires global search before center context is known.
 // eslint-disable-next-line no-restricted-imports
 import { db } from "@/lib/db"; // Required for cross-tenant unique check
 

@@ -1,0 +1,9 @@
+{
+  "auth.email.invalid": "Noto'g'ri email formati",
+  "auth.password.min_6": "Parol kamida 6 belgidan iborat bo'lishi kerak",
+  "auth.password.min_8": "Parol kamida 8 belgidan iborat bo'lishi kerak",
+  "auth.password.max_50": "Parol 50 belgidan oshmasligi kerak",
+  "auth.fullName.min_2": "Ism kamida 2 belgidan iborat bo'lishi kerak",
+  "auth.fullName.max_100": "Ism 100 belgidan oshmasligi kerak",
+  "auth.token.required": "Token kiritish majburiy"
+}

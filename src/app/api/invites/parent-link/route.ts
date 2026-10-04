@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+// Reason: Exception: Invite validation requires global search before center context is known.
 // eslint-disable-next-line no-restricted-imports
 import { db } from "@/lib/db";
 import { getAuthSession } from "@/lib/auth";
@@ -105,16 +106,27 @@ export async function POST(req: Request) {
                data: { status: "CONFIRMED", confirmedAt: new Date() }
              });
           } else {
-             await tenantDb.parentLink.create({
-               data: {
-                 parentMembershipId: parentMem.id,
-                 studentMembershipId: studentMem.id,
-                 status: "CONFIRMED",
-                 initiatedBy: "PARENT",
-                 inviteCodeUsed: inviteCode,
-                 confirmedAt: new Date(),
-               }
-             });
+            try {
+               await tenantDb.parentLink.create({
+                 data: {
+                   parentMembershipId: parentMem.id,
+                   studentMembershipId: studentMem.id,
+                   status: "CONFIRMED",
+                   initiatedBy: "PARENT",
+                   inviteCodeUsed: inviteCode,
+                   confirmedAt: new Date(),
+                 }
+               });
+            } catch (e: any) {
+              if (e.code === 'P2002') {
+                await tenantDb.parentLink.updateMany({
+                  where: { parentMembershipId: parentMem.id, studentMembershipId: studentMem.id },
+                  data: { status: "CONFIRMED", confirmedAt: new Date() }
+                });
+              } else {
+                throw e;
+              }
+            }
           }
         }
       }

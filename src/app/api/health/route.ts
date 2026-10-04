@@ -1,4 +1,6 @@
 import { NextResponse } from "next/server";
+// Reason: Exception: Health route operates globally.
+// eslint-disable-next-line no-restricted-imports
 import { db } from "@/lib/db";
 
 // GET /api/health — Health check endpoint

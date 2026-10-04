@@ -6,5 +6,9 @@ export default defineConfig({
     alias: {
       "@": path.resolve(__dirname, "./src"),
     },
+    globalSetup: "./tests/global-setup.ts",
+    env: {
+      DATABASE_URL: "file:./test.db"
+    }
   },
 });

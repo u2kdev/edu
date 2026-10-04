@@ -1,4 +1,6 @@
 import { NextResponse } from "next/server";
+// Reason: Exception: Auth routes operate on platform models.
+// eslint-disable-next-line no-restricted-imports
 import { db } from "@/lib/db";
 import { getAuthSession } from "@/lib/auth";
 import { isValidLocale } from "@/i18n";

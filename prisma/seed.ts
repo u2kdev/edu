@@ -4,6 +4,11 @@ import bcrypt from "bcryptjs";
 const prisma = new PrismaClient();
 
 async function main() {
+  if (process.env.NODE_ENV === "production") {
+    console.error("Seed aborted: Cannot run seed script in production!");
+    process.exit(1);
+  }
+
   console.log("🌱 Seeding database...");
 
   // 1. Create Default Subscription Plans

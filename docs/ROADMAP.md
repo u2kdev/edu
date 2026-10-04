@@ -6,15 +6,13 @@
 - [x] Составить `docs/ROADMAP.md` с разбивкой на задачи
 
 ## ЭТАП 1 — Фундамент
+- [x] Надёжная изоляция арендаторов: Prisma Client extension, добавление centerId в дочерние модели.
+  - [x] Переведены все роуты `src/app/api/**` на `getTenantDb(centerId)`.
+  - [x] Включено строгое ESLint правило `no-restricted-imports` (с точечными исключениями).
+  - [x] Переписаны тесты `tenant-isolation.test.ts` на реальной изолированной SQLite (`test.db`).
 - [ ] Миграция с SQLite на PostgreSQL (schema.prisma, миграции, docker-compose).
-- [x] Надёжная изоляция арендаторов: Prisma Client extension, добавление centerId в дочерние модели. (В ПРОЦЕССЕ СТАБИЛИЗАЦИИ)
-  - [x] Починка `tsc`: переведены на `getTenantDb` маршруты, дававшие ошибки компиляции (groups, homework, lessons, materials, modules, tests/attempt, invites). 
-  - [x] Восстановлены и проходят 100% (37 штук) Vitest-тестов.
-  - [ ] **ОСТАЛОСЬ**: Перевести оставшиеся ~16 роутов в `src/app/api/**` на `getTenantDb(centerId)`.
-  - [ ] **ОСТАЛОСЬ**: Включить обратно ESLint правило `no-restricted-imports` после завершения перевода всех роутов.
-  - [ ] **ОСТАЛОСЬ**: Переписать тесты `tenant-isolation.test.ts` на реальной тестовой SQLite (test.db, а не dev.db).
 - [ ] Индексы БД по centerId и частым фильтрам.
-- [ ] Слой валидации Zod + единый обработчик ошибок + rate limiting.
+- [x] Слой валидации Zod + rate limiting + API response (с поддержкой локализации ru/uz).
 - [ ] Полный auth-флоу: регистрация по инвайт-коду, сброс пароля по email, 2FA, список активных сессий.
 - [ ] Файловое хранилище через абстракцию StorageProvider (local/S3).
 - [ ] Реальные адаптеры уведомлений (Email/SMTP, SMS/Eskiz.uz).

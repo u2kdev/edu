@@ -1,5 +1,7 @@
 import { NextResponse } from "next/server";
 import { getAuthSession } from "@/lib/auth";
+// Reason: Exception: Auth routes operate on platform models.
+// eslint-disable-next-line no-restricted-imports
 import { db } from "@/lib/db";
 
 export async function POST(req: Request) {
