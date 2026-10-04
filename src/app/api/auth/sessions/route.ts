@@ -4,12 +4,24 @@ import { NextResponse } from "next/server";
 import { db } from "@/lib/db";
 import { getAuthSession } from "@/lib/auth";
 
+import { z } from "zod";
+import { checkRateLimit } from "@/lib/rate-limit";
+import { apiError, apiSuccess, handleApiError } from "@/lib/api-response";
+
+const deleteSessionSchema = z.object({
+  id: z.string().optional(),
+  allButCurrent: z.preprocess((v) => v === "true" || v === true, z.boolean().optional()),
+}).refine(data => data.id || data.allButCurrent, {
+  message: "Either id or allButCurrent must be provided",
+});
+
 export async function GET(req: Request) {
   try {
+    const ip = req.headers.get("x-forwarded-for") || "unknown";
+    if (!checkRateLimit(ip)) return apiError("Too many requests", "RATE_LIMITED", 429);
+
     const session = await getAuthSession();
-    if (!session) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-    }
+    if (!session) return apiError("Unauthorized", "UNAUTHORIZED", 401);
 
     const sessions = await db.userSession.findMany({
       where: { userId: session.user.id, revokedAt: null, expiresAt: { gt: new Date() } },
@@ -23,27 +35,28 @@ export async function GET(req: Request) {
       }
     });
 
-    return NextResponse.json({
+    return apiSuccess({
       sessions: sessions.map((s) => ({
         ...s,
         isCurrent: s.id === session.sessionId
       }))
     });
   } catch (err: any) {
-    return NextResponse.json({ error: "Server error" }, { status: 500 });
+    return handleApiError(err);
   }
 }
 
 export async function DELETE(req: Request) {
   try {
+    const ip = req.headers.get("x-forwarded-for") || "unknown";
+    if (!checkRateLimit(ip)) return apiError("Too many requests", "RATE_LIMITED", 429);
+
     const session = await getAuthSession();
-    if (!session) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-    }
+    if (!session) return apiError("Unauthorized", "UNAUTHORIZED", 401);
 
     const { searchParams } = new URL(req.url);
-    const id = searchParams.get("id");
-    const allButCurrent = searchParams.get("allButCurrent") === "true";
+    const parsed = deleteSessionSchema.parse(Object.fromEntries(searchParams.entries()));
+    const { id, allButCurrent } = parsed;
 
     if (allButCurrent && session.sessionId) {
       await db.userSession.updateMany({
@@ -54,29 +67,47 @@ export async function DELETE(req: Request) {
         },
         data: { revokedAt: new Date() }
       });
-      return NextResponse.json({ success: true });
+      
+      await db.auditLog.create({
+        data: {
+          actorUserId: session.user.id,
+          action: "LOGOUT_ALL",
+          resource: "PlatformUser",
+          resourceId: session.user.id,
+          ipAddress: ip,
+        }
+      });
+      
+      return apiSuccess({ success: true });
     }
 
     if (id) {
-      // Ensure we only revoke our own session
       const userSession = await db.userSession.findFirst({
         where: { id, userId: session.user.id }
       });
 
-      if (!userSession) {
-        return NextResponse.json({ error: "Session not found" }, { status: 404 });
-      }
+      if (!userSession) return apiError("Session not found", "NOT_FOUND", 404);
 
       await db.userSession.update({
         where: { id },
         data: { revokedAt: new Date() }
       });
 
-      return NextResponse.json({ success: true });
+      await db.auditLog.create({
+        data: {
+          actorUserId: session.user.id,
+          action: "SESSION_REVOKED",
+          resource: "UserSession",
+          resourceId: id,
+          ipAddress: ip,
+        }
+      });
+
+      return apiSuccess({ success: true });
     }
 
-    return NextResponse.json({ error: "Bad request" }, { status: 400 });
+    return apiError("Bad request", "BAD_REQUEST", 400);
   } catch (err: any) {
-    return NextResponse.json({ error: "Server error" }, { status: 500 });
+    return handleApiError(err);
   }
 }

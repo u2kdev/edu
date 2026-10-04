@@ -17,7 +17,17 @@ export const passwordResetRequestSchema = z.object({
   email: z.string().email("auth.email.invalid"),
 });
 
+const passwordPolicy = z
+  .string()
+  .min(8, "auth.password.min_8")
+  .max(50, "auth.password.max_50");
+
 export const passwordResetSubmitSchema = z.object({
   token: z.string().min(1, "auth.token.required"),
-  newPassword: z.string().min(8, "auth.password.min_8"),
+  newPassword: passwordPolicy,
+});
+
+export const passwordChangeSchema = z.object({
+  currentPassword: z.string().min(1, "auth.password.required"),
+  newPassword: passwordPolicy,
 });

@@ -8,7 +8,8 @@ export type ApiErrorCode =
   | "VALIDATION_ERROR" 
   | "INTERNAL_SERVER_ERROR"
   | "RATE_LIMITED"
-  | "TENANT_BLOCKED";
+  | "TENANT_BLOCKED"
+  | "BAD_REQUEST";
 
 export interface ApiErrorResponse {
   success: false;
