@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
-import { db } from "@/lib/db";
+import { getTenantDb } from "@/lib/db-tenant";
 import { requireTenantAccess } from "@/lib/tenant";
+import { db } from "@/lib/db"; // Required for cross-tenant unique check
 
 function generateRandomCode(length: number = 8): string {
   const chars = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
@@ -14,6 +15,7 @@ function generateRandomCode(length: number = 8): string {
 export async function POST(req: Request) {
   try {
     const tenantCtx = await requireTenantAccess();
+    const tenantDb = getTenantDb(tenantCtx.center.id);
     
     // Only Director and Center Admin can generate invite codes
     if (tenantCtx.role !== "DIRECTOR" && tenantCtx.role !== "CENTER_ADMIN") {
@@ -26,12 +28,14 @@ export async function POST(req: Request) {
       ? customCode.toUpperCase().trim()
       : `${tenantCtx.center.slug.toUpperCase()}-${generateRandomCode(6)}`;
 
+    // Invite code is globally unique across the platform
+    // eslint-disable-next-line no-restricted-imports
     const existing = await db.inviteCode.findUnique({ where: { code } });
     if (existing) {
       return NextResponse.json({ error: "Такой инвайт-код уже существует" }, { status: 400 });
     }
 
-    const invite = await db.inviteCode.create({
+    const invite = await tenantDb.inviteCode.create({
       data: {
         centerId: tenantCtx.center.id,
         code,

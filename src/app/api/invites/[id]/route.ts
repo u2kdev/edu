@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { db } from "@/lib/db";
+import { getTenantDb } from "@/lib/db-tenant";
 import { requireTenantAccess, logAuditEvent } from "@/lib/tenant";
 
 // PATCH /api/invites/[id] - Revoke an invite code
@@ -9,22 +9,26 @@ export async function PATCH(
 ) {
   try {
     const tenantCtx = await requireTenantAccess();
+    const tenantDb = getTenantDb(tenantCtx.center.id);
+
     if (tenantCtx.role !== "DIRECTOR" && tenantCtx.role !== "CENTER_ADMIN" && !tenantCtx.isPlatformStaff) {
       return NextResponse.json({ error: "Forbidden" }, { status: 403 });
     }
 
-    const invite = await db.inviteCode.findUnique({
+    const invite = await tenantDb.inviteCode.findFirst({
       where: { id: params.id },
     });
 
-    if (!invite || invite.centerId !== tenantCtx.center.id) {
+    if (!invite) {
       return NextResponse.json({ error: "Invite code not found" }, { status: 404 });
     }
 
-    const updated = await db.inviteCode.update({
+    await tenantDb.inviteCode.updateMany({
       where: { id: params.id },
       data: { isRevoked: true },
     });
+    
+    const updated = await tenantDb.inviteCode.findFirst({ where: { id: params.id } });
 
     await logAuditEvent({
       centerId: tenantCtx.center.id,
