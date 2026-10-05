@@ -41,6 +41,11 @@ export async function GET(req: Request) {
 export async function POST(req: Request) {
   try {
     const tenantCtx = await requireTenantAccess();
+    
+    if (!tenantCtx.session.user.emailVerified) {
+      return NextResponse.json({ error: "Email confirmation required for sensitive actions" }, { status: 403 });
+    }
+
     const tenantDb = getTenantDb(tenantCtx.center.id);
 
     if (tenantCtx.role !== "DIRECTOR" && tenantCtx.role !== "CENTER_ADMIN" && !tenantCtx.isPlatformStaff) {
@@ -101,6 +106,11 @@ export async function POST(req: Request) {
 export async function PATCH(req: Request) {
   try {
     const tenantCtx = await requireTenantAccess();
+
+    if (!tenantCtx.session.user.emailVerified) {
+      return NextResponse.json({ error: "Email confirmation required for sensitive actions" }, { status: 403 });
+    }
+
     const tenantDb = getTenantDb(tenantCtx.center.id);
 
     if (tenantCtx.role !== "DIRECTOR" && !tenantCtx.isPlatformStaff) {

@@ -20,6 +20,10 @@ export async function POST(req: Request) {
       return apiError("Unauthorized", "UNAUTHORIZED", 401);
     }
 
+    if (!session.user.emailVerified) {
+      return apiError("Email confirmation required for sensitive actions", "FORBIDDEN", 403);
+    }
+
     const body = await req.json();
     const parsed = passwordChangeSchema.parse(body);
     const { currentPassword, newPassword } = parsed;

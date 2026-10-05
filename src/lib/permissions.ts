@@ -4,6 +4,13 @@
 // UI visibility is UX only — real protection is here.
 // ============================================================
 
+export const SENSITIVE_ACTIONS = [
+  "settings.manage",
+  "payments.manage",
+  "payments.refund",
+  "users.block",
+];
+
 export type PlatformRole =
   | "NONE"
   | "DEVELOPER"       // Technical Super Admin — full system access

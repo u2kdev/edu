@@ -52,6 +52,7 @@ export async function getAuthSession(): Promise<{
     platformRole: PlatformRole | string;
     avatarUrl?: string | null;
     preferredLanguage: string;
+    emailVerified: Date | null;
   };
   activeCenterId?: string;
   activeCenterRole?: CenterRole | string;
@@ -156,6 +157,7 @@ export async function getAuthSession(): Promise<{
       platformRole: user.platformRole,
       avatarUrl: user.avatarUrl,
       preferredLanguage: user.preferredLanguage || "ru",
+      emailVerified: user.emailVerified,
     },
     activeCenterId,
     activeCenterRole,
