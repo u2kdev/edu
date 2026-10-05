@@ -7,6 +7,7 @@
     "build": "next build",
     "start": "next start",
     "lint": "next lint",
+    "verify": "node scripts/verify.mjs",
     "prisma:generate": "prisma generate",
     "prisma:db-push": "prisma db push",
     "prisma:seed": "node --import tsx/esm prisma/seed.ts"
