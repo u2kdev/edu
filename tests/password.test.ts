@@ -137,4 +137,34 @@ describe("Password Reset & Change API", () => {
     const s2Check = await db.userSession.findUnique({ where: { id: s2.id } });
     expect(s2Check?.revokedAt).not.toBeNull(); // Other sessions revoked
   });
+
+  it("reset password: password matching email is rejected", async () => {
+    const rawToken = crypto.randomBytes(32).toString("hex");
+    const tokenHash = crypto.createHash("sha256").update(rawToken).digest("hex");
+    
+    await db.passwordResetToken.create({
+      data: { userId: user, tokenHash, expiresAt: new Date(Date.now() + 100000) }
+    });
+
+    const userObj = await db.platformUser.findUnique({ where: { id: user } });
+    const res = await resetPassword(mockReq("/api/auth/password/reset", { token: rawToken, newPassword: userObj!.email }));
+    expect(res.status).toBe(400);
+  });
+
+  it("forgot password: rate limit", async () => {
+    const rateLimitIp = "9.9.9.9";
+    for (let i = 0; i < 10; i++) {
+      await forgotPassword(
+        new Request(`http://localhost/api/auth/password/forgot`, {
+          method: "POST", headers: { "x-forwarded-for": rateLimitIp }, body: JSON.stringify({ email: "test@test.com" })
+        })
+      );
+    }
+    const res = await forgotPassword(
+      new Request(`http://localhost/api/auth/password/forgot`, {
+        method: "POST", headers: { "x-forwarded-for": rateLimitIp }, body: JSON.stringify({ email: "test@test.com" })
+      })
+    );
+    expect(res.status).toBe(429);
+  });
 });
