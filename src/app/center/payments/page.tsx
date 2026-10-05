@@ -1,9 +1,12 @@
+import { requireTenantAccess } from "@/lib/tenant";
 import { getAuthSession } from "@/lib/auth";
-import { db } from "@/lib/db";
+import { getTenantDb } from "@/lib/db-tenant";
 import { redirect } from "next/navigation";
 import PaymentsManager from "@/components/PaymentsManager";
 
 export default async function CenterPaymentsPage() {
+  const tenantCtx = await requireTenantAccess();
+
   const session = await getAuthSession();
   if (!session) redirect("/login");
 
@@ -20,7 +23,7 @@ export default async function CenterPaymentsPage() {
     whereCondition.studentMembershipId = currentMembership.id;
     studentsWhereCondition.id = currentMembership.id;
   } else if (activeRole === "PARENT" && currentMembership) {
-    const childLinks = await db.parentLink.findMany({
+    const childLinks = await getTenantDb(tenantCtx.center.id).parentLink.findMany({
       where: { parentMembershipId: currentMembership.id, status: "CONFIRMED" },
       select: { studentMembershipId: true },
     });
@@ -32,7 +35,7 @@ export default async function CenterPaymentsPage() {
     redirect("/center");
   }
 
-  const payments = await db.centerPayment.findMany({
+  const payments = await getTenantDb(tenantCtx.center.id).centerPayment.findMany({
     where: whereCondition,
     include: {
       student: { include: { user: { select: { fullName: true, email: true } } } },
@@ -41,12 +44,12 @@ export default async function CenterPaymentsPage() {
     orderBy: { createdAt: "desc" },
   });
 
-  const students = await db.centerMembership.findMany({
+  const students = await getTenantDb(tenantCtx.center.id).centerMembership.findMany({
     where: studentsWhereCondition,
     include: { user: { select: { fullName: true, email: true } } },
   });
 
-  const groups = await db.group.findMany({
+  const groups = await getTenantDb(tenantCtx.center.id).group.findMany({
     where: { course: { centerId } },
     select: { id: true, name: true },
   });

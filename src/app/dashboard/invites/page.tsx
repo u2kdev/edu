@@ -1,9 +1,12 @@
+import { requireTenantAccess } from "@/lib/tenant";
 import { getAuthSession } from "@/lib/auth";
-import { db } from "@/lib/db";
+import { getTenantDb } from "@/lib/db-tenant";
 import { redirect } from "next/navigation";
 import InvitesManager from "@/components/InvitesManager";
 
 export default async function InvitesPage() {
+  const tenantCtx = await requireTenantAccess();
+
   const session = await getAuthSession();
   if (!session) redirect("/login");
 
@@ -18,7 +21,7 @@ export default async function InvitesPage() {
     );
   }
 
-  const inviteCodes = await db.inviteCode.findMany({
+  const inviteCodes = await getTenantDb(tenantCtx.center.id).inviteCode.findMany({
     where: { centerId: activeCenterId },
     include: {
       course: { select: { title: true } },
@@ -27,12 +30,12 @@ export default async function InvitesPage() {
     orderBy: { createdAt: "desc" },
   });
 
-  const courses = await db.course.findMany({
+  const courses = await getTenantDb(tenantCtx.center.id).course.findMany({
     where: { centerId: activeCenterId },
     select: { id: true, title: true },
   });
 
-  const groups = await db.group.findMany({
+  const groups = await getTenantDb(tenantCtx.center.id).group.findMany({
     where: { course: { centerId: activeCenterId } },
     select: { id: true, name: true, courseId: true },
   });

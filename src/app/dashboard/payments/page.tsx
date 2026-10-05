@@ -1,9 +1,12 @@
+import { requireTenantAccess } from "@/lib/tenant";
 import { getAuthSession } from "@/lib/auth";
-import { db } from "@/lib/db";
+import { getTenantDb } from "@/lib/db-tenant";
 import { redirect } from "next/navigation";
 import PaymentsManager from "@/components/PaymentsManager";
 
 export default async function PaymentsPage() {
+  const tenantCtx = await requireTenantAccess();
+
   const session = await getAuthSession();
   if (!session) redirect("/login");
 
@@ -18,7 +21,7 @@ export default async function PaymentsPage() {
     );
   }
 
-  const payments = await db.centerPayment.findMany({
+  const payments = await getTenantDb(tenantCtx.center.id).centerPayment.findMany({
     where: { centerId: activeCenterId },
     include: {
       student: { include: { user: { select: { fullName: true, email: true } } } },
@@ -27,7 +30,7 @@ export default async function PaymentsPage() {
     orderBy: { createdAt: "desc" },
   });
 
-  const students = await db.centerMembership.findMany({
+  const students = await getTenantDb(tenantCtx.center.id).centerMembership.findMany({
     where: { centerId: activeCenterId, role: "STUDENT" },
     include: { user: { select: { fullName: true } } },
   });

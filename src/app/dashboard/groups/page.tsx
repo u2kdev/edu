@@ -1,9 +1,12 @@
+import { requireTenantAccess } from "@/lib/tenant";
 import { getAuthSession } from "@/lib/auth";
-import { db } from "@/lib/db";
+import { getTenantDb } from "@/lib/db-tenant";
 import { redirect } from "next/navigation";
 import GroupsManager from "@/components/GroupsManager";
 
 export default async function GroupsPage() {
+  const tenantCtx = await requireTenantAccess();
+
   const session = await getAuthSession();
   if (!session) redirect("/login");
 
@@ -18,7 +21,7 @@ export default async function GroupsPage() {
     );
   }
 
-  const groups = await db.group.findMany({
+  const groups = await getTenantDb(tenantCtx.center.id).group.findMany({
     where: { course: { centerId: activeCenterId } },
     include: {
       course: { select: { title: true } },
@@ -32,12 +35,12 @@ export default async function GroupsPage() {
     orderBy: { createdAt: "desc" },
   });
 
-  const courses = await db.course.findMany({
+  const courses = await getTenantDb(tenantCtx.center.id).course.findMany({
     where: { centerId: activeCenterId },
     select: { id: true, title: true },
   });
 
-  const teachers = await db.centerMembership.findMany({
+  const teachers = await getTenantDb(tenantCtx.center.id).centerMembership.findMany({
     where: { centerId: activeCenterId, role: "TEACHER" },
     include: { user: { select: { fullName: true } } },
   });

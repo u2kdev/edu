@@ -3,8 +3,22 @@
   "overrides": [
     {
       "files": [
-        "src/app/api/**/*.ts",
-        "src/app/api/**/*.tsx"
+        "src/app/**/*.ts",
+        "src/app/**/*.tsx",
+        "src/lib/**/*.ts"
+      ],
+      "excludedFiles": [
+        "src/lib/db.ts",
+        "src/lib/db-tenant.ts",
+        "src/lib/auth.ts",
+        "src/lib/tenant.ts",
+        "src/lib/rate-limit.ts",
+        "src/lib/notifications.ts",
+        "src/app/api/auth/**/*.ts",
+        "src/app/api/developer/**/*.ts",
+        "src/app/api/platform/**/*.ts",
+        "src/app/api/tickets/**/*.ts",
+        "src/app/platform-admin/**/*.tsx"
       ],
       "rules": {
         "no-restricted-imports": [

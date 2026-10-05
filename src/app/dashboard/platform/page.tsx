@@ -1,15 +1,18 @@
+import { requireTenantAccess } from "@/lib/tenant";
 import { getAuthSession } from "@/lib/auth";
-import { db } from "@/lib/db";
+import { getTenantDb } from "@/lib/db-tenant";
 import { redirect } from "next/navigation";
 import PlatformAdminManager from "@/components/PlatformAdminManager";
 
 export default async function PlatformAdminPage() {
+  const tenantCtx = await requireTenantAccess();
+
   const session = await getAuthSession();
   if (!session || session.user.platformRole === "NONE") {
     redirect("/dashboard");
   }
 
-  const centers = await db.learningCenter.findMany({
+  const centers = await getTenantDb(tenantCtx.center.id).learningCenter.findMany({
     include: {
       owner: { select: { fullName: true, email: true } },
       subscriptions: { include: { plan: true }, orderBy: { createdAt: "desc" }, take: 1 },
@@ -18,7 +21,7 @@ export default async function PlatformAdminPage() {
     orderBy: { createdAt: "desc" },
   });
 
-  const plans = await db.subscriptionPlan.findMany({
+  const plans = await getTenantDb(tenantCtx.center.id).subscriptionPlan.findMany({
     orderBy: { priceMonthly: "asc" },
   });
 

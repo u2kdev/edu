@@ -1,5 +1,6 @@
+import { requireTenantAccess } from "@/lib/tenant";
 import { getAuthSession } from "@/lib/auth";
-import { db } from "@/lib/db";
+import { getTenantDb } from "@/lib/db-tenant";
 import { redirect } from "next/navigation";
 import Link from "next/link";
 import {
@@ -18,6 +19,8 @@ export default async function CenterLayout({
 }: {
   children: React.ReactNode;
 }) {
+  const tenantCtx = await requireTenantAccess();
+
   const session = await getAuthSession();
   if (!session) redirect("/login");
 
@@ -56,7 +59,7 @@ export default async function CenterLayout({
   }
 
   // Load center data
-  const center = await db.learningCenter.findUnique({
+  const center = await getTenantDb(tenantCtx.center.id).learningCenter.findUnique({
     where: { id: session.activeCenterId },
   });
 
@@ -65,7 +68,7 @@ export default async function CenterLayout({
   const activeRole = session.activeCenterRole || "";
 
   // Load unread notification count for the notification bell
-  const unreadNotifCount = await db.notification.count({
+  const unreadNotifCount = await getTenantDb(tenantCtx.center.id).notification.count({
     where: {
       userId: session.user.id,
       isRead: false,

@@ -1,10 +1,13 @@
+import { requireTenantAccess } from "@/lib/tenant";
 import { getAuthSession } from "@/lib/auth";
-import { db } from "@/lib/db";
+import { getTenantDb } from "@/lib/db-tenant";
 import { redirect } from "next/navigation";
 import { Megaphone, Pin, Clock, Users, BookOpen } from "lucide-react";
 import { t, formatDateLocalized } from "@/i18n";
 
 export default async function AnnouncementsPage() {
+  const tenantCtx = await requireTenantAccess();
+
   const session = await getAuthSession();
   if (!session) redirect("/login");
 
@@ -35,7 +38,7 @@ export default async function AnnouncementsPage() {
     ];
   }
 
-  const announcements = await db.announcement.findMany({
+  const announcements = await getTenantDb(tenantCtx.center.id).announcement.findMany({
     where: whereCondition,
     include: {
       author: { include: { user: { select: { fullName: true } } } },
