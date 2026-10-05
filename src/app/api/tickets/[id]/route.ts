@@ -31,7 +31,7 @@ export async function GET(req: Request, { params }: { params: { id: string } }) 
       (session.activeCenterRole === "DIRECTOR" || session.activeCenterRole === "CENTER_ADMIN");
 
     if (!isPlatformStaff && !isCreator && !isTenantAdmin) {
-      return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+      return NextResponse.json({ error: "Not found" }, { status: 404 });
     }
 
     return NextResponse.json({ ticket });
@@ -58,7 +58,7 @@ export async function PATCH(req: Request, { params }: { params: { id: string } }
       (session.activeCenterRole === "DIRECTOR" || session.activeCenterRole === "CENTER_ADMIN");
 
     if (!isPlatformStaff && !isCreator && !isTenantAdmin) {
-      return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+      return NextResponse.json({ error: "Not found" }, { status: 404 });
     }
 
     const { status } = await req.json();

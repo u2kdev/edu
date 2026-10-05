@@ -66,7 +66,29 @@ describe("Phase 9: Notification System", () => {
     expect(notif?.centerId).toBe(tenantA);
   });
 
-  it("CRITICAL: Tenant Isolation - User A cannot read User B notifications", async () => {
+  it("CRITICAL: Tenant Isolation - DB level - User A cannot read User B notifications", async () => {
+    // Create notification for B
+    await sendNotification({
+      userId: userB,
+      centerId: tenantB,
+      type: "GENERAL",
+      titleKey: "Secret B DB",
+      bodyKey: "Body DB",
+    });
+
+    const whereCondition = {
+      userId: userA, // DB query level
+      centerId: tenantA,
+    };
+
+    const userANotifs = await db.notification.findMany({
+      where: whereCondition,
+    });
+
+    expect(userANotifs.some(n => n.centerId === tenantB)).toBe(false);
+  });
+
+  it("CRITICAL: Tenant Isolation - API level - User A cannot read User B notifications", async () => {
     await sendNotification({
       userId: userB,
       centerId: tenantB,

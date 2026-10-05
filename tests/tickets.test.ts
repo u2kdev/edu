@@ -56,13 +56,13 @@ describe("Platform Support Tickets IDOR Check", () => {
   it("User A cannot view User B ticket by ID (GET)", async () => {
     mockToken = signJWT({ userId: userA, email: "a", platformRole: "NONE", activeCenterId: centerA, activeCenterRole: "DIRECTOR" });
     const res = await getTicketId(mockReq(`/api/tickets/${ticketB}`), { params: { id: ticketB } });
-    expect(res.status).toBe(403);
+    expect(res.status).toBe(404);
   });
 
   it("User A cannot modify User B ticket by ID (PATCH)", async () => {
     mockToken = signJWT({ userId: userA, email: "a", platformRole: "NONE", activeCenterId: centerA, activeCenterRole: "DIRECTOR" });
     const res = await patchTicketId(mockReq(`/api/tickets/${ticketB}`, "PATCH", { status: "CLOSED" }), { params: { id: ticketB } });
-    expect(res.status).toBe(403);
+    expect(res.status).toBe(404);
 
     // Verify it wasn't modified
     const check = await db.supportTicket.findUnique({ where: { id: ticketB } });

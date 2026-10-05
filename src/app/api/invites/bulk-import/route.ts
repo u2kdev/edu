@@ -1,7 +1,4 @@
 import { NextResponse } from "next/server";
-// Reason: Exception: Invite validation requires global search before center context is known.
-// eslint-disable-next-line no-restricted-imports
-import { db } from "@/lib/db";
 import { requireTenantAccess, logAuditEvent } from "@/lib/tenant";
 import { hashPassword } from "@/lib/auth";
 import { getTenantDb } from "@/lib/db-tenant";
@@ -27,6 +24,8 @@ export async function POST(req: Request) {
       errors: [] as string[],
     };
 
+    const tenantDb = getTenantDb(tenantCtx.center.id);
+
     for (const item of students) {
       const email = item.email?.toLowerCase().trim();
       const fullName = item.fullName?.trim();
@@ -37,11 +36,11 @@ export async function POST(req: Request) {
         continue;
       }
 
-      // Find or create User
-      let user = await db.platformUser.findUnique({ where: { email } });
+      // Find or create User using tenantDb (works because PlatformUser is not filtered by centerId)
+      let user = await tenantDb.platformUser.findUnique({ where: { email } });
       if (!user) {
         const tempPasswordHash = await hashPassword(crypto.randomBytes(10).toString("hex"));
-        user = await db.platformUser.create({
+        user = await tenantDb.platformUser.create({
           data: {
             email,
             fullName,
@@ -52,7 +51,6 @@ export async function POST(req: Request) {
         });
       }
 
-      const tenantDb = getTenantDb(tenantCtx.center.id);
       // Find or create Student Membership
       let membership = await tenantDb.centerMembership.findFirst({
         where: { userId: user.id, role: "STUDENT" },
@@ -74,7 +72,6 @@ export async function POST(req: Request) {
 
       // Enroll in group if specified
       if (groupId) {
-        const tenantDb = getTenantDb(tenantCtx.center.id);
         const existingEnrollment = await tenantDb.enrollment.findFirst({
           where: { studentMembershipId: membership.id, groupId },
         });
