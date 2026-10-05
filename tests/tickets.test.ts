@@ -70,7 +70,7 @@ describe("Platform Support Tickets IDOR Check", () => {
   });
 
   it("User A gets 400 for invalid status (Zod validation)", async () => {
-    mockToken = signJWT({ userId: userA, email: "a", platformRole: "SUPERADMIN" }); // Has access but bad status
+    mockToken = signJWT({ userId: userB, email: "b", platformRole: "NONE" }); // Creator has access
     const res = await patchTicketId(mockReq(`/api/tickets/${ticketB}`, "PATCH", { status: "INVALID_STATUS" }), { params: { id: ticketB } });
     expect(res.status).toBe(400);
   });
