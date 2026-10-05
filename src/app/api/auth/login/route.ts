@@ -9,6 +9,12 @@ import { loginSchema } from "@/lib/validation/auth";
 import { v4 as uuidv4 } from "uuid";
 import { cookies } from "next/headers";
 
+const LOCKOUT_CONFIG = [
+  { max: 15, delayMinutes: 60 },
+  { max: 10, delayMinutes: 15 },
+  { max: 5,  delayMinutes: 1  },
+];
+
 export async function POST(req: Request) {
   try {
     const ip = req.headers.get("x-forwarded-for") || "unknown";
@@ -20,43 +26,74 @@ export async function POST(req: Request) {
 
     const body = await req.json();
     const parsed = loginSchema.parse(body);
-    const { email, password, rememberMe } = parsed;
+    const { email: rawEmail, password, rememberMe } = parsed;
+    const email = rawEmail.toLowerCase().trim();
 
-    const user = await db.platformUser.findUnique({
-      where: { email: email.toLowerCase().trim() },
+    // 1. Check LoginAttempt (Brute-force protection)
+    let loginAttempt = await db.loginAttempt.findUnique({
+      where: { email_ip: { email, ip } }
     });
 
-    if (!user || !user.isActive) {
+    if (loginAttempt && loginAttempt.lockoutUntil) {
+      if (new Date() < loginAttempt.lockoutUntil) {
+        return apiError("auth.invalidCredentials", "UNAUTHORIZED", 401); // Generic message to hide existence
+      } else {
+        // Lockout expired, but we keep attempts count in case they fail again
+      }
+    }
+
+    const user = await db.platformUser.findUnique({
+      where: { email },
+    });
+
+    const handleFailure = async (reason: string, actorUserId: string | null = null) => {
+      let attempts = (loginAttempt?.attempts || 0) + 1;
+      let lockoutUntil: Date | null = null;
+
+      for (const config of LOCKOUT_CONFIG) {
+        if (attempts >= config.max) {
+          lockoutUntil = new Date(Date.now() + config.delayMinutes * 60000);
+          break;
+        }
+      }
+
+      await db.loginAttempt.upsert({
+        where: { email_ip: { email, ip } },
+        create: { email, ip, attempts, lockoutUntil },
+        update: { attempts, lockoutUntil },
+      });
+
       try {
         await db.auditLog.create({
           data: {
-            actorUserId: user?.id || null,
+            actorUserId,
             action: "LOGIN_FAILED",
             resource: "PlatformUser",
-            detailsJson: JSON.stringify({ email: email.toLowerCase().trim(), reason: "user_not_found_or_inactive", ip }),
+            detailsJson: JSON.stringify({ email, reason, ip, attempts, lockoutUntil }),
             ipAddress: ip,
           },
         });
       } catch (e) {}
+      
       return apiError("auth.invalidCredentials", "UNAUTHORIZED", 401);
+    };
+
+    if (!user || !user.isActive) {
+      return handleFailure("user_not_found_or_inactive");
     }
 
     const isMatch = await comparePassword(password, user.passwordHash);
 
     if (!isMatch) {
-      try {
-        await db.auditLog.create({
-          data: {
-            actorUserId: user.id,
-            action: "LOGIN_FAILED",
-            resource: "PlatformUser",
-            resourceId: user.id,
-            detailsJson: JSON.stringify({ reason: "invalid_password", ip }),
-            ipAddress: ip,
-          },
-        });
-      } catch (e) {}
-      return apiError("auth.invalidCredentials", "UNAUTHORIZED", 401);
+      return handleFailure("invalid_password", user.id);
+    }
+
+    // Success -> Reset attempts
+    if (loginAttempt && loginAttempt.attempts > 0) {
+      await db.loginAttempt.update({
+        where: { id: loginAttempt.id },
+        data: { attempts: 0, lockoutUntil: null }
+      });
     }
 
     const jti = uuidv4();
