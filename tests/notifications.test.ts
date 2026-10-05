@@ -67,7 +67,6 @@ describe("Phase 9: Notification System", () => {
   });
 
   it("CRITICAL: Tenant Isolation - User A cannot read User B notifications", async () => {
-    // Create notification for B
     await sendNotification({
       userId: userB,
       centerId: tenantB,
@@ -76,18 +75,15 @@ describe("Phase 9: Notification System", () => {
       bodyKey: "Body",
     });
 
-    // Simulate API query for User A
-    const whereCondition = {
-      userId: userA, // API enforces this
-      centerId: tenantA,
-    };
+    const { GET } = await import("../src/app/api/notifications/route");
+    const { signJWT } = await import("../src/lib/auth");
+    
+    mockToken = signJWT({ userId: userA, email: "a", platformRole: "NONE", activeCenterId: tenantA, activeCenterRole: "STUDENT" });
+    const req = new Request("http://localhost/api/notifications");
+    const res = await GET(req);
+    const data = await res.json();
 
-    const userANotifs = await db.notification.findMany({
-      where: whereCondition,
-    });
-
-    // User A should NOT see B's notification
-    expect(userANotifs.some(n => n.centerId === tenantB)).toBe(false);
+    expect(data.notifications.some((n: any) => n.centerId === tenantB)).toBe(false);
   });
 
   it("should mark notification as read and prevent unauthorized access via API", async () => {
