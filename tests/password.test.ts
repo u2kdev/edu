@@ -20,7 +20,7 @@ describe("Password Reset & Change API", () => {
   beforeAll(async () => {
     const pwHash = await hashPassword("OldPassword123");
     const u = await db.platformUser.create({ 
-      data: { email: `pwd-${Date.now()}@test.com`, passwordHash: pwHash, fullName: "Pwd User" } 
+      data: { email: `pwd-${Date.now()}@test.com`, passwordHash: pwHash, fullName: "Pwd User", emailVerified: new Date() } 
     });
     user = u.id;
     

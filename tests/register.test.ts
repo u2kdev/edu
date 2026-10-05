@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeAll, afterAll } from "vitest";
+import { describe, it, expect, beforeAll, afterAll, vi } from "vitest";
 import { POST as registerPost } from "../src/app/api/auth/register/route";
 import { db } from "../src/lib/db";
 
@@ -91,9 +91,10 @@ describe("Registration by Invite (POST /api/auth/register)", () => {
 
   it("Promise.all on code with limit 1 results in exactly 1 success", async () => {
     const promises = [];
+    const raceIp = "1.1.1.2";
     for (let i = 0; i < 5; i++) {
       promises.push(
-        registerPost(mockReq({ email: `racer-${i}@test.com`, password: "password123", fullName: `Racer ${i}`, inviteCode: code1Limit })).then(r => r.json())
+        registerPost(mockReq({ email: `racer-${i}@test.com`, password: "password123", fullName: `Racer ${i}`, inviteCode: code1Limit }, raceIp)).then(r => r.json())
       );
     }
 
@@ -103,7 +104,7 @@ describe("Registration by Invite (POST /api/auth/register)", () => {
     const errors = results.filter(r => r.error && r.error.message === "Invalid, expired, or exhausted invite code");
 
     expect(successes.length).toBe(1);
-    expect(errors.length).toBe(4);
+    if(errors.length !== 4) console.log(results); expect(errors.length).toBe(4);
 
     const check = await db.inviteCode.findUnique({ where: { code: code1Limit } });
     expect(check?.usesCount).toBe(1);
@@ -122,7 +123,7 @@ describe("Registration by Invite (POST /api/auth/register)", () => {
       data: { centerId, code: `EX-${Date.now()}`, targetRole: "STUDENT", maxUses: 1, createdByMembershipId: membershipOwner!.id }
     });
 
-    const res = await registerPost(mockReq({ email: existingEmail, password: "password123", fullName: "Exist", inviteCode: invite.code }));
+    const res = await registerPost(mockReq({ email: existingEmail, password: "password123", fullName: "Exist", inviteCode: invite.code }, "1.1.1.3"));
     const data = await res.json();
     
     expect(res.status).toBe(200);
@@ -138,7 +139,7 @@ describe("Registration by Invite (POST /api/auth/register)", () => {
     const invite = await db.inviteCode.create({
       data: { centerId, code: `DIR-${Date.now()}`, targetRole: "DIRECTOR", maxUses: 1, createdByMembershipId: membershipOwner!.id }
     });
-    const res = await registerPost(mockReq({ email: `dir-${Date.now()}@test.com`, password: "password123", fullName: "Dir", inviteCode: invite.code }));
+    const res = await registerPost(mockReq({ email: `dir-${Date.now()}@test.com`, password: "password123", fullName: "Dir", inviteCode: invite.code }, "1.1.1.4"));
     const data = await res.json();
     expect(res.status).toBe(400);
     expect(data.error.message).toBe("Invalid, expired, or exhausted invite code");
@@ -151,7 +152,7 @@ describe("Registration by Invite (POST /api/auth/register)", () => {
     });
 
     const newEmail = `new-${Date.now()}@test.com`;
-    const res = await registerPost(mockReq({ email: newEmail, password: "password123", fullName: "New User", inviteCode: invite.code }));
+    const res = await registerPost(mockReq({ email: newEmail, password: "password123", fullName: "New User", inviteCode: invite.code }, "1.1.1.5"));
     expect(res.status).toBe(200);
 
     const user = await db.platformUser.findUnique({ where: { email: newEmail }, include: { memberships: true } });
@@ -177,7 +178,7 @@ describe("Registration by Invite (POST /api/auth/register)", () => {
     process.env.NODE_ENV = "production";
     const consoleSpy = vi.spyOn(console, "log");
 
-    const res = await registerPost(mockReq({ email: `prod-${Date.now()}@test.com`, password: "password123", fullName: "Prod", inviteCode: invite.code }));
+    const res = await registerPost(mockReq({ email: `prod-${Date.now()}@test.com`, password: "password123", fullName: "Prod", inviteCode: invite.code }, "1.1.1.6"));
     expect(res.status).toBe(200);
     expect(consoleSpy).not.toHaveBeenCalledWith(expect.stringContaining("=== DEV EMAIL DRIVER ==="));
 
