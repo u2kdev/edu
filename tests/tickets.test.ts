@@ -68,4 +68,19 @@ describe("Platform Support Tickets IDOR Check", () => {
     const check = await db.supportTicket.findUnique({ where: { id: ticketB } });
     expect(check?.status).toBe("OPEN");
   });
+
+  it("User A gets 400 for invalid status (Zod validation)", async () => {
+    mockToken = signJWT({ userId: userA, email: "a", platformRole: "SUPERADMIN" }); // Has access but bad status
+    const res = await patchTicketId(mockReq(`/api/tickets/${ticketB}`, "PATCH", { status: "INVALID_STATUS" }), { params: { id: ticketB } });
+    expect(res.status).toBe(400);
+  });
+
+  it("Rate limit on ticket PATCH", async () => {
+    mockToken = signJWT({ userId: userB, email: "b", platformRole: "NONE" }); // Creator
+    for(let i=0; i<10; i++){
+      await patchTicketId(new Request(`http://localhost/api/tickets/${ticketB}`, { method: "PATCH", headers: { "x-forwarded-for": "8.8.8.8" }, body: JSON.stringify({ status: "CLOSED" }) }), { params: { id: ticketB } });
+    }
+    const res = await patchTicketId(new Request(`http://localhost/api/tickets/${ticketB}`, { method: "PATCH", headers: { "x-forwarded-for": "8.8.8.8" }, body: JSON.stringify({ status: "CLOSED" }) }), { params: { id: ticketB } });
+    expect(res.status).toBe(429);
+  });
 });
