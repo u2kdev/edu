@@ -25,6 +25,10 @@ model PlatformUser {
   twoFactorEnabled  Boolean  @default(false)
   twoFactorSecret   String? // TOTP secret (encrypted)
   createdAt         DateTime @default(now())
+  emailConfirmToken String?   @unique
+  emailConfirmExpires DateTime?
+  emailVerified     DateTime?
+  
   updatedAt         DateTime @updatedAt
 
   memberships         CenterMembership[]
@@ -901,4 +905,20 @@ model Holiday {
   center LearningCenter @relation(fields: [centerId], references: [id], onDelete: Cascade)
 
   @@index([centerId])
+}
+
+// ----------------------------------------------------
+// 21. Brute-force Account Lockout
+// ----------------------------------------------------
+
+model LoginAttempt {
+  id           String    @id @default(uuid())
+  email        String
+  ip           String
+  attempts     Int       @default(0)
+  lockoutUntil DateTime?
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+
+  @@unique([email, ip])
 }
