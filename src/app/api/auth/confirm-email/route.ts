@@ -46,7 +46,6 @@ export async function POST(req: Request) {
     });
 
     await logAuditEvent({
-      centerId: "PLATFORM",
       actorUserId: user.id,
       action: "EMAIL_CONFIRMED",
       resource: "PlatformUser",
