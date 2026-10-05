@@ -5,5 +5,17 @@
   "auth.password.max_50": "Parol 50 belgidan oshmasligi kerak",
   "auth.fullName.min_2": "Ism kamida 2 belgidan iborat bo'lishi kerak",
   "auth.fullName.max_100": "Ism 100 belgidan oshmasligi kerak",
-  "auth.token.required": "Token kiritish majburiy"
+  "auth.token.required": "Token kiritish majburiy",
+  "auth.register.title": "Taklifnoma orqali ro'yxatdan o'tish",
+  "auth.register.invite_code": "Taklifnoma kodi",
+  "auth.register.email": "Elektron pochta",
+  "auth.register.password": "Parol",
+  "auth.register.fullName": "To'liq ism",
+  "auth.register.submit": "Ro'yxatdan o'tish",
+  "auth.register.success": "Ro'yxatdan o'tish muvaffaqiyatli. Tasdiqlash uchun pochtangizni tekshiring.",
+  "auth.confirm.title": "Pochtani tasdiqlash",
+  "auth.confirm.loading": "Token tekshirilmoqda...",
+  "auth.confirm.success": "Pochta muvaffaqiyatli tasdiqlandi!",
+  "auth.confirm.error": "Noto'g'ri yoki muddati o'tgan token.",
+  "auth.confirm.login": "Kirish"
 }

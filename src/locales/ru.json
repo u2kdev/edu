@@ -1,9 +1,21 @@
 {
   "auth.email.invalid": "Неверный формат email",
-  "auth.password.min_6": "Пароль должен содержать минимум 6 символов",
-  "auth.password.min_8": "Пароль должен содержать минимум 8 символов",
+  "auth.password.min_6": "Пароль должен быть не короче 6 символов",
+  "auth.password.min_8": "Пароль должен быть не короче 8 символов",
   "auth.password.max_50": "Пароль не может быть длиннее 50 символов",
-  "auth.fullName.min_2": "Имя должно содержать минимум 2 символа",
+  "auth.fullName.min_2": "Имя должно быть не короче 2 символов",
   "auth.fullName.max_100": "Имя не может быть длиннее 100 символов",
-  "auth.token.required": "Токен обязателен"
+  "auth.token.required": "Токен обязателен",
+  "auth.register.title": "Регистрация по приглашению",
+  "auth.register.invite_code": "Инвайт-код",
+  "auth.register.email": "Электронная почта",
+  "auth.register.password": "Пароль",
+  "auth.register.fullName": "Полное имя",
+  "auth.register.submit": "Зарегистрироваться",
+  "auth.register.success": "Регистрация успешна. Проверьте почту для подтверждения.",
+  "auth.confirm.title": "Подтверждение почты",
+  "auth.confirm.loading": "Проверка токена...",
+  "auth.confirm.success": "Почта успешно подтверждена!",
+  "auth.confirm.error": "Неверный или просроченный токен.",
+  "auth.confirm.login": "Войти"
 }
