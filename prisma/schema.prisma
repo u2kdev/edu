@@ -243,6 +243,8 @@ model InviteCode {
   creator CenterMembership @relation("InviteCreator", fields: [createdByMembershipId], references: [id])
   course  Course?          @relation(fields: [courseId], references: [id], onDelete: SetNull)
   group   Group?           @relation(fields: [groupId], references: [id], onDelete: SetNull)
+  pendingInvites PendingInvite[]
+
 
   @@index([code])
   @@index([centerId])
@@ -579,6 +581,7 @@ model CenterPayment {
   center  LearningCenter   @relation(fields: [centerId], references: [id], onDelete: Cascade)
   student CenterMembership @relation("StudentPayments", fields: [studentMembershipId], references: [id], onDelete: Cascade)
   group   Group?           @relation(fields: [groupId], references: [id], onDelete: SetNull)
+
 
   @@index([centerId])
   @@index([studentMembershipId])
@@ -921,4 +924,16 @@ model LoginAttempt {
   updatedAt    DateTime  @updatedAt
 
   @@unique([email, ip])
+}
+
+model PendingInvite {
+  id           String       @id @default(uuid())
+  email        String
+  inviteCodeId String
+  status       String       @default("PENDING")
+  createdAt    DateTime     @default(now())
+
+  inviteCode   InviteCode   @relation(fields: [inviteCodeId], references: [id], onDelete: Cascade)
+
+  @@index([email])
 }
