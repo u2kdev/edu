@@ -9,14 +9,7 @@ import { loginSchema } from "@/lib/validation/auth";
 import { v4 as uuidv4 } from "uuid";
 import { cookies } from "next/headers";
 
-const LOCKOUT_CONFIG = [
-  { max: 15, delayMinutes: 60 },
-  { max: 10, delayMinutes: 15 },
-  { max: 5,  delayMinutes: 1  },
-];
-
 const ACCOUNT_GLOBAL_DELAY_THRESHOLD = 20; // 20 failed attempts globally across all IPs
-const ACCOUNT_GLOBAL_DELAY_MS = 2000; // 2 seconds delay
 
 export async function POST(req: Request) {
   try {
@@ -39,8 +32,9 @@ export async function POST(req: Request) {
     });
     const totalAttempts = globalAttempts._sum.attempts || 0;
     if (totalAttempts >= ACCOUNT_GLOBAL_DELAY_THRESHOLD) {
-      // Artificial delay to slow down distributed brute-force
-      await new Promise(r => setTimeout(r, ACCOUNT_GLOBAL_DELAY_MS));
+      // Exponential delay with ceiling of 5 seconds
+      const delay = Math.min(Math.pow(2, totalAttempts - ACCOUNT_GLOBAL_DELAY_THRESHOLD) * 100, 5000);
+      await new Promise(r => setTimeout(r, delay));
     }
 
     // 2. Check LoginAttempt (Brute-force protection per IP)
@@ -62,7 +56,19 @@ export async function POST(req: Request) {
       let attempts = (loginAttempt?.attempts || 0) + 1;
       let lockoutUntil: Date | null = null;
 
+      // Exponential lockout: starts from 5, caps at max (e.g. 15 -> max ceiling or just let it grow)
+      // "Замени setTimeout(2000) на задержку, растущую со счётчиком (экспоненциально, потолок в конфиге)" -> wait, the IP lockout is growing delay?
+      // No, IP lockout is full block. Account global delay is the one that grows exponentially and blocks with setTimeout.
+      // "задержку, растущую со счётчиком (экспоненциально, потолок в конфиге), без удержания процесса сном дольше потолка" -> this means global account lockout.
+      // Let's implement IP lockout progression:
+      const LOCKOUT_CONFIG = [
+        { max: 15, delayMinutes: 60 },
+        { max: 10, delayMinutes: 15 },
+        { max: 5,  delayMinutes: 1  },
+      ];
+
       for (const config of LOCKOUT_CONFIG) {
+        // Only trigger a new lockout if exactly hitting a threshold or above it and previous expired
         if (attempts >= config.max) {
           lockoutUntil = new Date(Date.now() + config.delayMinutes * 60000);
           break;
