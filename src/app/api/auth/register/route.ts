@@ -44,13 +44,43 @@ export async function POST(req: Request) {
     if (invite.expiresAt && invite.expiresAt < new Date()) return genericInvalidError;
     if (invite.usesCount >= invite.maxUses) return genericInvalidError;
     
-    // Roles check: No PLATFORM roles, and no DIRECTOR role
+    // 2. Roles check
     const allowedRoles = ["CENTER_ADMIN", "TEACHER", "TEACHER_ASSISTANT", "CENTER_SUPPORT", "STUDENT", "PARENT"];
     if (!allowedRoles.includes(invite.targetRole)) {
       return genericInvalidError;
     }
 
-    // 2. Atomic increment of invite uses
+    // 3. Check existing user
+    let user = await db.platformUser.findUnique({ where: { email } });
+    
+    if (user) {
+      // Existing user: Do not change password. Create PendingInvite.
+      // Balance timing with bcrypt hash
+      await hashPassword(password);
+
+      // Do NOT consume invite usesCount yet.
+      await db.pendingInvite.create({
+        data: {
+          email,
+          inviteCodeId: invite.id,
+        }
+      });
+
+      // Fire and forget email
+      setTimeout(() => {
+        if (process.env.NODE_ENV !== "production") {
+          console.log(`\n=== DEV EMAIL DRIVER ===`);
+          console.log(`To: ${user!.email}`);
+          console.log(`Subject: Вы приглашены в ${invite.center?.name || 'центр'}`);
+          console.log(`Body: Вас пригласили в центр ${invite.center?.name || 'X'}, войдите, чтобы принять.`);
+          console.log(`========================\n`);
+        }
+      }, 0);
+
+      return apiSuccess({ message: "Registration successful. Please check your email to confirm." });
+    }
+
+    // 4. Atomic increment of invite uses for NEW user
     const updateCount = await db.inviteCode.updateMany({
       where: { id: invite.id, usesCount: invite.usesCount },
       data: { usesCount: { increment: 1 } },
@@ -60,25 +90,7 @@ export async function POST(req: Request) {
       return genericInvalidError;
     }
 
-    // 3. Check existing user
-    let user = await db.platformUser.findUnique({ where: { email } });
-    
-    if (user) {
-      // Existing user: Do not change anything in their account.
-      // Balance timing with bcrypt hash
-      await hashPassword(password);
-
-      if (process.env.NODE_ENV !== "production") {
-        console.log(`\n=== DEV EMAIL DRIVER ===`);
-        console.log(`To: ${user.email}`);
-        console.log(`Subject: Вы приглашены в ${invite.center?.name || 'центр'}`);
-        console.log(`Body: Вас пригласили в центр ${invite.center?.name || 'X'}, войдите, чтобы принять.`);
-        console.log(`========================\n`);
-      }
-      return apiSuccess({ message: "Registration successful. Please check your email to confirm." });
-    }
-
-    // 4. New User Logic
+    // 5. New User Logic
     const passwordHash = await hashPassword(password);
     const confirmToken = crypto.randomBytes(32).toString("hex");
     const confirmTokenHash = crypto.createHash("sha256").update(confirmToken).digest("hex");
