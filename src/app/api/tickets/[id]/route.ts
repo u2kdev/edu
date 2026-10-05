@@ -4,11 +4,18 @@ import { NextResponse } from "next/server";
 import { db } from "@/lib/db";
 import { getAuthSession } from "@/lib/auth";
 import { logAuditEvent } from "@/lib/tenant";
+import { apiError, apiSuccess, handleApiError } from "@/lib/api-response";
+import { checkRateLimit } from "@/lib/rate-limit";
+import { z } from "zod";
+
+const ticketPatchSchema = z.object({
+  status: z.enum(["OPEN", "IN_PROGRESS", "RESOLVED", "CLOSED"]),
+});
 
 export async function GET(req: Request, { params }: { params: { id: string } }) {
   try {
     const session = await getAuthSession();
-    if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    if (!session) return apiError("Unauthorized", "UNAUTHORIZED", 401);
 
     const ticket = await db.supportTicket.findUnique({
       where: { id: params.id },
@@ -19,7 +26,7 @@ export async function GET(req: Request, { params }: { params: { id: string } }) 
       }
     });
 
-    if (!ticket) return NextResponse.json({ error: "Not found" }, { status: 404 });
+    if (!ticket) return apiError("Not found", "NOT_FOUND", 404);
 
     const isPlatformStaff =
       session.user.platformRole === "SUPERADMIN" ||
@@ -31,22 +38,27 @@ export async function GET(req: Request, { params }: { params: { id: string } }) 
       (session.activeCenterRole === "DIRECTOR" || session.activeCenterRole === "CENTER_ADMIN");
 
     if (!isPlatformStaff && !isCreator && !isTenantAdmin) {
-      return NextResponse.json({ error: "Not found" }, { status: 404 });
+      return apiError("Not found", "NOT_FOUND", 404);
     }
 
-    return NextResponse.json({ ticket });
+    return apiSuccess({ ticket });
   } catch (err: any) {
-    return NextResponse.json({ error: err.message || "Server error" }, { status: 500 });
+    return handleApiError(err);
   }
 }
 
 export async function PATCH(req: Request, { params }: { params: { id: string } }) {
   try {
+    const ip = req.headers.get("x-forwarded-for") || "unknown";
+    if (!checkRateLimit(ip + "_ticket_patch")) {
+      return apiError("Rate limited", "RATE_LIMITED", 429);
+    }
+
     const session = await getAuthSession();
-    if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    if (!session) return apiError("Unauthorized", "UNAUTHORIZED", 401);
 
     const ticket = await db.supportTicket.findUnique({ where: { id: params.id } });
-    if (!ticket) return NextResponse.json({ error: "Not found" }, { status: 404 });
+    if (!ticket) return apiError("Not found", "NOT_FOUND", 404);
 
     const isPlatformStaff =
       session.user.platformRole === "SUPERADMIN" ||
@@ -58,10 +70,11 @@ export async function PATCH(req: Request, { params }: { params: { id: string } }
       (session.activeCenterRole === "DIRECTOR" || session.activeCenterRole === "CENTER_ADMIN");
 
     if (!isPlatformStaff && !isCreator && !isTenantAdmin) {
-      return NextResponse.json({ error: "Not found" }, { status: 404 });
+      return apiError("Not found", "NOT_FOUND", 404);
     }
 
-    const { status } = await req.json();
+    const body = await req.json();
+    const { status } = ticketPatchSchema.parse(body);
 
     const updated = await db.supportTicket.update({
       where: { id: params.id },
@@ -77,8 +90,8 @@ export async function PATCH(req: Request, { params }: { params: { id: string } }
       details: { status },
     });
 
-    return NextResponse.json({ success: true, ticket: updated });
+    return apiSuccess({ ticket: updated });
   } catch (err: any) {
-    return NextResponse.json({ error: err.message || "Server error" }, { status: 500 });
+    return handleApiError(err);
   }
 }
