@@ -450,7 +450,7 @@ CREATE TABLE "UserSession" (
 CREATE TABLE "PasswordResetToken" (
     "id" TEXT NOT NULL PRIMARY KEY,
     "userId" TEXT NOT NULL,
-    "token" TEXT NOT NULL,
+    "tokenHash" TEXT NOT NULL,
     "expiresAt" DATETIME NOT NULL,
     "usedAt" DATETIME,
     "createdAt" DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
@@ -780,10 +780,10 @@ CREATE INDEX "UserSession_userId_idx" ON "UserSession"("userId");
 CREATE INDEX "UserSession_jtiHash_idx" ON "UserSession"("jtiHash");
 
 -- CreateIndex
-CREATE UNIQUE INDEX "PasswordResetToken_token_key" ON "PasswordResetToken"("token");
+CREATE UNIQUE INDEX "PasswordResetToken_tokenHash_key" ON "PasswordResetToken"("tokenHash");
 
 -- CreateIndex
-CREATE INDEX "PasswordResetToken_token_idx" ON "PasswordResetToken"("token");
+CREATE INDEX "PasswordResetToken_tokenHash_idx" ON "PasswordResetToken"("tokenHash");
 
 -- CreateIndex
 CREATE INDEX "PasswordResetToken_userId_idx" ON "PasswordResetToken"("userId");
@@ -847,3 +847,4 @@ CREATE INDEX "AcademicTerm_centerId_idx" ON "AcademicTerm"("centerId");
 
 -- CreateIndex
 CREATE INDEX "Holiday_centerId_idx" ON "Holiday"("centerId");
+
