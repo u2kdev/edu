@@ -384,3 +384,11 @@ export function hasResourcePermission(
   if (!mappedPermission) return false;
   return hasPermission(mappedPermission, platformRole, centerRole);
 }
+
+export const SENSITIVE_ACTIONS: string[] = [
+  "payments.manage",
+  "payments.refund",
+  "settings.manage",
+  "users.block",
+  "password.change"
+];
