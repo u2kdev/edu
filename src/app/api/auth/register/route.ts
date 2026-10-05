@@ -20,7 +20,7 @@ const registerSchema = z.object({
 export async function POST(req: Request) {
   try {
     const ip = req.headers.get("x-forwarded-for") || "unknown";
-    if (!checkRateLimit(ip + "_register", 5, 60 * 60 * 1000)) { // 5 attempts per hour
+    if (!checkRateLimit(ip + "_register", 5, 60 * 60 * 1000)) {
       return apiError("Too many registration attempts", "RATE_LIMITED", 429);
     }
 
@@ -35,83 +35,85 @@ export async function POST(req: Request) {
     // 1. Fetch invite code
     const invite = await db.inviteCode.findUnique({
       where: { code: inviteCode.toUpperCase().trim() },
+      include: { center: { select: { name: true } } },
     });
 
     const genericInvalidError = apiError("Invalid, expired, or exhausted invite code", "INVALID_INVITE", 400);
 
     if (!invite) return genericInvalidError;
     if (invite.expiresAt && invite.expiresAt < new Date()) return genericInvalidError;
-    if (invite.uses >= invite.maxUses) return genericInvalidError;
-
-    // 2. Atomic increment of invite uses (Optimistic Concurrency Control)
-    const updateCount = await db.inviteCode.updateMany({
-      where: { id: invite.id, uses: invite.uses },
-      data: { uses: { increment: 1 } },
-    });
-
-    if (updateCount.count === 0) {
-      // Race condition lost
+    if (invite.usesCount >= invite.maxUses) return genericInvalidError;
+    
+    // Roles check: No PLATFORM roles, and no DIRECTOR role
+    const allowedRoles = ["CENTER_ADMIN", "TEACHER", "TEACHER_ASSISTANT", "CENTER_SUPPORT", "STUDENT", "PARENT"];
+    if (!allowedRoles.includes(invite.targetRole)) {
       return genericInvalidError;
     }
 
-    // 3. User logic
+    // 2. Atomic increment of invite uses
+    const updateCount = await db.inviteCode.updateMany({
+      where: { id: invite.id, usesCount: invite.usesCount },
+      data: { usesCount: { increment: 1 } },
+    });
+
+    if (updateCount.count === 0) {
+      return genericInvalidError;
+    }
+
+    // 3. Check existing user
     let user = await db.platformUser.findUnique({ where: { email } });
-    let createdNewUser = false;
     
-    // We create a one-time token
+    if (user) {
+      // Existing user: Do not change anything in their account.
+      // Balance timing with bcrypt hash
+      await hashPassword(password);
+
+      if (process.env.NODE_ENV !== "production") {
+        console.log(`\n=== DEV EMAIL DRIVER ===`);
+        console.log(`To: ${user.email}`);
+        console.log(`Subject: Вы приглашены в ${invite.center?.name || 'центр'}`);
+        console.log(`Body: Вас пригласили в центр ${invite.center?.name || 'X'}, войдите, чтобы принять.`);
+        console.log(`========================\n`);
+      }
+      return apiSuccess({ message: "Registration successful. Please check your email to confirm." });
+    }
+
+    // 4. New User Logic
+    const passwordHash = await hashPassword(password);
     const confirmToken = crypto.randomBytes(32).toString("hex");
     const confirmTokenHash = crypto.createHash("sha256").update(confirmToken).digest("hex");
     const confirmExpires = new Date(Date.now() + 24 * 60 * 60 * 1000); // 24h
 
-    if (!user) {
-      const passwordHash = await hashPassword(password);
-      user = await db.platformUser.create({
-        data: {
-          email,
-          passwordHash,
-          fullName,
-          phone,
-          emailConfirmToken: confirmTokenHash,
-          emailConfirmExpires: confirmExpires,
-        },
-      });
-      createdNewUser = true;
-    } else {
-      // If user exists, we do NOT change password or reset emailVerified to avoid breaking their account.
-      // We still pretend to send a confirmation link, but the existing user can just log in.
-    }
-
-    // 4. Create membership
-    // Check if membership already exists
-    let membership = await db.centerMembership.findFirst({
-      where: { userId: user.id, centerId: invite.centerId },
+    user = await db.platformUser.create({
+      data: {
+        email,
+        passwordHash,
+        fullName,
+        phone,
+        emailConfirmToken: confirmTokenHash,
+        emailConfirmExpires: confirmExpires,
+      },
     });
 
-    if (!membership) {
-      membership = await db.centerMembership.create({
-        data: {
-          userId: user.id,
-          centerId: invite.centerId,
-          role: invite.targetRole,
-          status: "ACTIVE", // Or PENDING depending on rules, but prompt doesn't specify.
-        }
-      });
-    }
+    // Create membership only for new users
+    const membership = await db.centerMembership.create({
+      data: {
+        userId: user.id,
+        centerId: invite.centerId,
+        role: invite.targetRole,
+        status: "ACTIVE",
+      }
+    });
 
     if (invite.groupId) {
-      const existingEnrollment = await db.enrollment.findFirst({
-        where: { studentMembershipId: membership.id, groupId: invite.groupId },
+      await db.enrollment.create({
+        data: {
+          centerId: invite.centerId,
+          studentMembershipId: membership.id,
+          groupId: invite.groupId,
+          status: "ACTIVE"
+        }
       });
-      if (!existingEnrollment) {
-        await db.enrollment.create({
-          data: {
-            centerId: invite.centerId,
-            studentMembershipId: membership.id,
-            groupId: invite.groupId,
-            status: "ACTIVE"
-          }
-        });
-      }
     }
 
     await logAuditEvent({
@@ -120,19 +122,17 @@ export async function POST(req: Request) {
       action: "REGISTERED_VIA_INVITE",
       resource: "PlatformUser",
       resourceId: user.id,
-      details: { inviteCode: invite.code, isNewUser: createdNewUser },
+      details: { inviteCode: invite.code, isNewUser: true },
     });
 
-    // 5. Send confirmation email (Dev driver)
-    console.log(`\n=== DEV EMAIL DRIVER ===`);
-    console.log(`To: ${user.email}`);
-    console.log(`Subject: Confirm your email (LMS)`);
-    console.log(`Link: http://localhost:3000/confirm-email?token=${confirmToken}`);
-    console.log(`========================\n`);
+    if (process.env.NODE_ENV !== "production") {
+      console.log(`\n=== DEV EMAIL DRIVER ===`);
+      console.log(`To: ${user.email}`);
+      console.log(`Subject: Confirm your email (LMS)`);
+      console.log(`Link: http://localhost:3000/confirm-email?token=${confirmToken}`);
+      console.log(`========================\n`);
+    }
 
-    // Generic success response, does not reveal if email existed or not.
-    // We do NOT log them in automatically because they haven't verified the email!
-    // Returning 200 OK without a cookie.
     return apiSuccess({ message: "Registration successful. Please check your email to confirm." });
   } catch (err: any) {
     return handleApiError(err);

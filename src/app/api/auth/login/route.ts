@@ -15,6 +15,9 @@ const LOCKOUT_CONFIG = [
   { max: 5,  delayMinutes: 1  },
 ];
 
+const ACCOUNT_GLOBAL_DELAY_THRESHOLD = 20; // 20 failed attempts globally across all IPs
+const ACCOUNT_GLOBAL_DELAY_MS = 2000; // 2 seconds delay
+
 export async function POST(req: Request) {
   try {
     const ip = req.headers.get("x-forwarded-for") || "unknown";
@@ -29,16 +32,25 @@ export async function POST(req: Request) {
     const { email: rawEmail, password, rememberMe } = parsed;
     const email = rawEmail.toLowerCase().trim();
 
-    // 1. Check LoginAttempt (Brute-force protection)
+    // 1. Global account delay check
+    const globalAttempts = await db.loginAttempt.aggregate({
+      where: { email },
+      _sum: { attempts: true }
+    });
+    const totalAttempts = globalAttempts._sum.attempts || 0;
+    if (totalAttempts >= ACCOUNT_GLOBAL_DELAY_THRESHOLD) {
+      // Artificial delay to slow down distributed brute-force
+      await new Promise(r => setTimeout(r, ACCOUNT_GLOBAL_DELAY_MS));
+    }
+
+    // 2. Check LoginAttempt (Brute-force protection per IP)
     let loginAttempt = await db.loginAttempt.findUnique({
       where: { email_ip: { email, ip } }
     });
 
     if (loginAttempt && loginAttempt.lockoutUntil) {
       if (new Date() < loginAttempt.lockoutUntil) {
-        return apiError("auth.invalidCredentials", "UNAUTHORIZED", 401); // Generic message to hide existence
-      } else {
-        // Lockout expired, but we keep attempts count in case they fail again
+        return apiError("auth.invalidCredentials", "UNAUTHORIZED", 401);
       }
     }
 
@@ -88,13 +100,10 @@ export async function POST(req: Request) {
       return handleFailure("invalid_password", user.id);
     }
 
-    // Success -> Reset attempts
-    if (loginAttempt && loginAttempt.attempts > 0) {
-      await db.loginAttempt.update({
-        where: { id: loginAttempt.id },
-        data: { attempts: 0, lockoutUntil: null }
-      });
-    }
+    // Success -> Reset ALL attempts for this email
+    await db.loginAttempt.deleteMany({
+      where: { email }
+    });
 
     const jti = uuidv4();
     const expiresIn = rememberMe ? "30d" : "1d";

@@ -2,6 +2,8 @@ import { describe, it, expect, beforeAll, afterAll } from "vitest";
 import { POST as confirmPost } from "../src/app/api/auth/confirm-email/route";
 import { db } from "../src/lib/db";
 import crypto from "crypto";
+import * as auth from "../src/lib/auth";
+import { vi } from "vitest";
 
 describe("Email Confirmation API", () => {
   let validToken: string;
@@ -66,7 +68,7 @@ describe("Email Confirmation API", () => {
     const data = await res.json();
     
     expect(res.status).toBe(400);
-    expect(data.error).toBe("Invalid or expired token");
+    expect(data.error.message).toBe("Invalid or expired token");
   });
 
   it("Expired token gives error", async () => {
@@ -74,6 +76,47 @@ describe("Email Confirmation API", () => {
     const data = await res.json();
     
     expect(res.status).toBe(400);
-    expect(data.error).toBe("Invalid or expired token");
+    expect(data.error.message).toBe("Invalid or expired token");
+  });
+});
+
+import { POST as resendPost } from "../src/app/api/auth/resend-confirm/route";
+import { POST as changePwdPost } from "../src/app/api/auth/password/change/route";
+
+describe("Email Resend and Sensitive Actions", () => {
+  it("Resend email has rate limit of 3 per hour", async () => {
+    const mockResendReq = (ip: string) => new Request(`http://localhost/api/auth/resend-confirm`, {
+      method: "POST", headers: { "x-forwarded-for": ip }, body: JSON.stringify({ email: "any@test.com" }),
+    });
+
+    const ip = "4.4.4.4";
+    for(let i=0; i<3; i++) {
+      const r = await resendPost(mockResendReq(ip));
+      expect(r.status).toBe(200);
+    }
+    const r4 = await resendPost(mockResendReq(ip));
+    expect(r4.status).toBe(429);
+  });
+
+  it("Sensitive actions rejected before confirmation", async () => {
+    // Mock getAuthSession
+    vi.spyOn(auth, "getAuthSession").mockResolvedValue({
+      user: {
+        id: "mock-id", email: "mock@test.com", fullName: "Mock", platformRole: "NONE", preferredLanguage: "ru", emailVerified: null,
+      },
+      sessionId: "mock-session-id",
+      memberships: []
+    } as any);
+
+    const req = new Request(`http://localhost/api/auth/password/change`, {
+      method: "POST", headers: { "x-forwarded-for": "1.1.1.1" }, body: JSON.stringify({ currentPassword: "pwd", newPassword: "pwd2" })
+    });
+    
+    const res = await changePwdPost(req);
+    expect(res.status).toBe(403);
+    const data = await res.json();
+    expect(data.error.message).toBe("Email confirmation required for sensitive actions");
+
+    vi.restoreAllMocks();
   });
 });

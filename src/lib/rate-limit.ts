@@ -7,14 +7,14 @@ export function getClientIp(req: Request): string {
   return forwarded ? forwarded.split(",")[0].trim() : "unknown";
 }
 
-export function checkRateLimit(ip: string): boolean {
+export function checkRateLimit(ip: string, maxAttempts: number = MAX_ATTEMPTS, windowMs: number = WINDOW_MS): boolean {
   const now = Date.now();
   const record = loginAttempts.get(ip);
-  if (!record || now - record.lastAttempt > WINDOW_MS) {
+  if (!record || now - record.lastAttempt > windowMs) {
     loginAttempts.set(ip, { count: 1, lastAttempt: now });
     return true; // allowed
   }
-  if (record.count >= MAX_ATTEMPTS) {
+  if (record.count >= maxAttempts) {
     return false; // rate limited
   }
   record.count++;
