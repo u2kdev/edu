@@ -18,7 +18,8 @@
         "src/app/api/developer/**/*.ts",
         "src/app/api/platform/**/*.ts",
         "src/app/api/tickets/**/*.ts",
-        "src/app/platform-admin/**/*.tsx"
+        "src/app/platform-admin/**/*.tsx",
+        "src/app/dashboard/platform/**/*.tsx"
       ],
       "rules": {
         "no-restricted-imports": [
