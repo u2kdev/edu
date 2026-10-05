@@ -1,18 +1,15 @@
-import { requireTenantAccess } from "@/lib/tenant";
 import { getAuthSession } from "@/lib/auth";
-import { getTenantDb } from "@/lib/db-tenant";
+import { db } from "@/lib/db";
 import { redirect } from "next/navigation";
 import PlatformAdminManager from "@/components/PlatformAdminManager";
 
 export default async function PlatformAdminPage() {
-  const tenantCtx = await requireTenantAccess();
-
   const session = await getAuthSession();
   if (!session || session.user.platformRole === "NONE") {
     redirect("/dashboard");
   }
 
-  const centers = await getTenantDb(tenantCtx.center.id).learningCenter.findMany({
+  const centers = await db.learningCenter.findMany({
     include: {
       owner: { select: { fullName: true, email: true } },
       subscriptions: { include: { plan: true }, orderBy: { createdAt: "desc" }, take: 1 },
@@ -21,7 +18,7 @@ export default async function PlatformAdminPage() {
     orderBy: { createdAt: "desc" },
   });
 
-  const plans = await getTenantDb(tenantCtx.center.id).subscriptionPlan.findMany({
+  const plans = await db.subscriptionPlan.findMany({
     orderBy: { priceMonthly: "asc" },
   });
 
@@ -33,11 +30,11 @@ export default async function PlatformAdminPage() {
     <div className="space-y-6">
       <div>
         <span className="px-3 py-1 bg-purple-500/10 border border-purple-500/30 text-purple-400 text-xs font-bold uppercase tracking-wider rounded-full">
-          Владелец SaaS / Администратор Платформы
+          Блок SaaS / Суперменеджер платформы
         </span>
-        <h1 className="text-2xl font-bold text-white mt-2">Панель Управления Платформой</h1>
+        <h1 className="text-2xl font-bold text-white mt-2">Обзор учебных центров</h1>
         <p className="text-sm text-slate-400 mt-1">
-          Мониторинг всех зарегистрированных учебных центров, управление подписками и статусами
+          Управление всеми зарегистрированными учебными центрами, планами подписок и биллингом
         </p>
       </div>
 
