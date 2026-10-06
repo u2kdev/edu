@@ -47,17 +47,14 @@ describe("Registration Rate Limits", () => {
       body: JSON.stringify(body),
     });
 
-  it("Allows 30 registrations from same IP using different codes (classroom scenario)", async () => {
+  it("Allows 30 registrations from same IP using ONE code with sufficient limit (classroom scenario)", async () => {
     const ip = "4.4.4.4";
     const promises = [];
     
-    // Create 30 different codes
+    // Use code10Limit which has maxUses 100
     for (let i = 0; i < 30; i++) {
-      await db.inviteCode.create({
-        data: { centerId, code: `${codeBase}-${i}`, targetRole: "STUDENT", maxUses: 1, createdByMembershipId: await db.centerMembership.findFirst({where:{centerId}}).then(m=>m!.id) }
-      });
       promises.push(
-        registerPost(mockReq({ email: `reglim-diff-${i}@test.com`, password: "password123", fullName: `Class ${i}`, inviteCode: `${codeBase}-${i}` }, ip)).then(r => r.json())
+        registerPost(mockReq({ email: `reglim-samecode-${i}@test.com`, password: "password123", fullName: `Class ${i}`, inviteCode: code10Limit }, ip)).then(r => r.json())
       );
     }
     
@@ -66,20 +63,20 @@ describe("Registration Rate Limits", () => {
     expect(successes.length).toBe(30);
   }, 15000);
 
-  it("Blocks single code brute-force from same IP after 10 attempts", async () => {
+  it("Blocks single code brute-force from same IP after 10 failed attempts", async () => {
     const ip = "4.4.4.5";
-    const promises = [];
-    for (let i = 0; i < 10; i++) {
-      promises.push(
-        registerPost(mockReq({ email: `reglim-same-${i}@test.com`, password: "password123", fullName: `Spam`, inviteCode: code10Limit }, ip))
-      );
+    const responses = [];
+    for (let i = 0; i < 15; i++) {
+      const res = await registerPost(mockReq({ email: `reglim-bad-${i}@test.com`, password: "password123", fullName: `Spam`, inviteCode: "INVALIDCODE999" }, ip));
+      responses.push(res);
     }
-    await Promise.all(promises);
-
-    const res11 = await registerPost(mockReq({ email: `reglim-same-11@test.com`, password: "password123", fullName: `Spam`, inviteCode: code10Limit }, ip));
-    expect(res11.status).toBe(429);
-    const data = await res11.json();
-    expect(data.error.code).toBe("RATE_LIMITED");
-    expect(data.error.message).toContain("Too many registration attempts for this code from this IP");
+    
+    // First 10 should be 400 Invalid Invite
+    const badRequests = responses.filter(r => r.status === 400);
+    // The rest (5) should be 429 Rate Limited
+    const rateLimitedRequests = responses.filter(r => r.status === 429);
+    
+    expect(badRequests.length).toBe(10);
+    expect(rateLimitedRequests.length).toBe(5);
   });
 });

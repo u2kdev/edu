@@ -23,23 +23,26 @@ export async function POST(req: Request) {
   try {
     const ip = req.headers.get("x-forwarded-for") || "unknown";
 
-    const body = await req.json();
-    const parsed = registerSchema.safeParse(body);
-    if (!parsed.success) {
-      return apiError("Invalid data", "BAD_REQUEST", 400);
-    }
-    const { email: rawEmail, password, fullName, phone, inviteCode } = parsed.data;
-    const cleanCode = inviteCode.toUpperCase().trim();
+    const body = await req.json().catch(() => ({}));
+    const rawCode = typeof body.inviteCode === "string" ? body.inviteCode.toUpperCase().trim() : "UNKNOWN";
 
     if (!checkRateLimit(ip + "_register", REGISTER_CONFIG.IP_HOURLY_LIMIT, 3600000)) {
       return apiError("Too many registration attempts from this IP", "RATE_LIMITED", 429);
     }
-    if (!checkRateLimit(cleanCode + "_register", REGISTER_CONFIG.CODE_HOURLY_LIMIT, 3600000)) {
+    if (!checkRateLimit(rawCode + "_register", REGISTER_CONFIG.CODE_HOURLY_LIMIT, 3600000)) {
       return apiError("Too many registrations for this code", "RATE_LIMITED", 429);
     }
-    if (!checkRateLimit(ip + "_" + cleanCode + "_register", REGISTER_CONFIG.CODE_IP_HOURLY_LIMIT, 3600000)) {
+    if (!checkRateLimit(ip + "_" + rawCode + "_register", REGISTER_CONFIG.CODE_IP_HOURLY_LIMIT, 3600000, false)) {
       return apiError("Too many registration attempts for this code from this IP", "RATE_LIMITED", 429);
     }
+
+    const parsed = registerSchema.safeParse(body);
+    if (!parsed.success) {
+      checkRateLimit(ip + "_" + rawCode + "_register", REGISTER_CONFIG.CODE_IP_HOURLY_LIMIT, 3600000, true);
+      return apiError("Invalid data", "BAD_REQUEST", 400);
+    }
+    const { email: rawEmail, password, fullName, phone, inviteCode } = parsed.data;
+    const cleanCode = inviteCode.toUpperCase().trim();
     const email = rawEmail.toLowerCase().trim();
 
     // 1. Fetch invite code
@@ -48,16 +51,19 @@ export async function POST(req: Request) {
       include: { center: { select: { name: true } } },
     });
 
-    const genericInvalidError = apiError("Invalid, expired, or exhausted invite code", "INVALID_INVITE", 400);
+    const consumeAndReturnInvalidError = () => {
+      checkRateLimit(ip + "_" + rawCode + "_register", REGISTER_CONFIG.CODE_IP_HOURLY_LIMIT, 3600000, true);
+      return apiError("Invalid, expired, or exhausted invite code", "INVALID_INVITE", 400);
+    };
 
-    if (!invite) return genericInvalidError;
-    if (invite.expiresAt && invite.expiresAt < new Date()) return genericInvalidError;
-    if (invite.maxUses !== null && invite.usesCount >= invite.maxUses) return genericInvalidError;
+    if (!invite) return consumeAndReturnInvalidError();
+    if (invite.expiresAt && invite.expiresAt < new Date()) return consumeAndReturnInvalidError();
+    if (invite.maxUses !== null && invite.usesCount >= invite.maxUses) return consumeAndReturnInvalidError();
     
     // 2. Roles check
     const allowedRoles = ["CENTER_ADMIN", "TEACHER", "TEACHER_ASSISTANT", "CENTER_SUPPORT", "STUDENT", "PARENT"];
     if (!allowedRoles.includes(invite.targetRole)) {
-      return genericInvalidError;
+      return consumeAndReturnInvalidError();
     }
 
     // 3. Check existing user
