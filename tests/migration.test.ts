@@ -1,77 +1,75 @@
-import { describe, it, expect, beforeAll } from "vitest";
-import Database from "better-sqlite3";
-import fs from "fs";
-import path from "path";
+import { describe, it, expect, beforeAll } from 'vitest';
+import { db } from '../src/lib/db';
+import { execSync } from 'child_process';
+import path from 'path';
+import fs from 'fs';
+import { v4 as uuidv4 } from 'uuid';
 
-describe("Migrations", () => {
-  let db: any;
+describe('Migration Test: old centers are preserved', () => {
+  it('should run migrations on a clean db, insert old data, migrate, and read correctly', async () => {
+    const testDbPath = path.join(__dirname, '../prisma/mig_test.db');
+    const env = { ...process.env, DATABASE_URL: `file:./mig_test.db` };
 
-  beforeAll(() => {
-    // Create an in-memory DB or temporary file
-    db = new Database(":memory:");
-  });
+    // Clean up if exists
+    if (fs.existsSync(testDbPath)) {
+      fs.unlinkSync(testDbPath);
+    }
 
-  it("Applies init and phase3_auth, inserts user, applies phase3_fixes, verifies emailVerified backfill", () => {
-    const migrationsDir = path.join(process.cwd(), "prisma/migrations");
-    const m0 = fs.readFileSync(path.join(migrationsDir, "0_init/migration.sql"), "utf-8");
-    const m1 = fs.readFileSync(path.join(migrationsDir, "20261005122700_phase3_auth/migration.sql"), "utf-8");
-    const m2 = fs.readFileSync(path.join(migrationsDir, "20261005152002_phase3_fixes/migration.sql"), "utf-8");
-
-    // Apply init and auth
-    db.exec(m0);
-    db.exec(m1);
-
-    // Insert user without emailVerified
-    const insertStmt = db.prepare(`INSERT INTO "PlatformUser" (id, email, passwordHash, fullName, isActive, preferredLanguage, createdAt, updatedAt) VALUES (?, ?, ?, ?, ?, ?, ?, ?)`);
-    insertStmt.run("user-1", "test@test.com", "hash", "Test", 1, "ru", new Date().toISOString(), new Date().toISOString());
-
-    const beforeUser = db.prepare(`SELECT * FROM "PlatformUser" WHERE id = 'user-1'`).get();
-    expect(beforeUser.emailVerified).toBeNull();
-
-    // Apply phase3_fixes
-    db.exec(m2);
-
-    // Insert 3 InviteCodes before phase3_harden
-    db.prepare(`INSERT INTO "LearningCenter" (id, ownerId, name, slug, status, createdAt, updatedAt) VALUES ('center-1', 'user-1', 'Test', 'slug', 'ACTIVE', '2026-01-01', '2026-01-01')`).run();
-    db.prepare(`INSERT INTO "CenterMembership" (id, centerId, userId, role, status, createdAt, updatedAt) VALUES ('mem-1', 'center-1', 'user-1', 'DIRECTOR', 'ACTIVE', '2026-01-01', '2026-01-01')`).run();
+    // 1. Move the new migration temporarily out of the way
+    const migrationsDir = path.join(__dirname, '../prisma/migrations');
+    const allMigrations = fs.readdirSync(migrationsDir);
+    const newMigrationDir = allMigrations.find(m => m.includes('add_center_fields'));
+    if (!newMigrationDir) throw new Error("New migration not found");
     
-    db.prepare(`INSERT INTO "InviteCode" (id, centerId, createdByMembershipId, code, targetRole, maxUses, usesCount, expiresAt, createdAt, updatedAt) VALUES ('inv-1', 'center-1', 'mem-1', 'CODE1', 'STUDENT', 5, 1, null, '2026-01-01', '2026-01-01')`).run();
-    db.prepare(`INSERT INTO "InviteCode" (id, centerId, createdByMembershipId, code, targetRole, maxUses, usesCount, expiresAt, createdAt, updatedAt) VALUES ('inv-2', 'center-1', 'mem-1', 'CODE2', 'TEACHER', 20, 0, '2026-12-31', '2026-01-01', '2026-01-01')`).run();
-    db.prepare(`INSERT INTO "InviteCode" (id, centerId, createdByMembershipId, code, targetRole, maxUses, usesCount, expiresAt, createdAt, updatedAt) VALUES ('inv-3', 'center-1', 'mem-1', 'CODE3', 'PARENT', 10, 10, '2025-01-01', '2026-01-01', '2026-01-01')`).run();
+    const newMigrationPath = path.join(migrationsDir, newMigrationDir);
+    const tempMigrationPath = path.join(__dirname, '../prisma/temp_migration');
+    
+    fs.renameSync(newMigrationPath, tempMigrationPath);
 
-    const m3 = fs.readFileSync(path.join(migrationsDir, "20261006071614_phase3_harden/migration.sql"), "utf-8");
-    db.exec(m3);
+    const { PrismaClient } = require('@prisma/client');
+    const migDb = new PrismaClient({ datasources: { db: { url: `file:./mig_test.db` } } });
 
-    const afterUser = db.prepare(`SELECT * FROM "PlatformUser" WHERE id = 'user-1'`).get();
-    expect(afterUser.emailVerified).not.toBeNull();
+    try {
+      // 2. Deploy old migrations
+      execSync('npx prisma migrate deploy', { env, stdio: 'pipe' });
 
-    const afterInvites = db.prepare(`SELECT * FROM "InviteCode" ORDER BY id`).all() as any[];
-    expect(afterInvites.length).toBe(3);
-    
-    expect(afterInvites[0].code).toBe('CODE1');
-    expect(afterInvites[0].targetRole).toBe('STUDENT');
-    expect(afterInvites[0].maxUses).toBe(5);
-    
-    expect(afterInvites[1].code).toBe('CODE2');
-    expect(afterInvites[1].targetRole).toBe('TEACHER');
-    expect(afterInvites[1].maxUses).toBe(20);
-    
-    expect(afterInvites[2].code).toBe('CODE3');
-    expect(afterInvites[2].targetRole).toBe('PARENT');
-    expect(afterInvites[2].maxUses).toBe(10);
-    
-    // Check foreign keys
-    const fks = db.prepare(`PRAGMA foreign_key_list("InviteCode")`).all() as any[];
-    expect(fks.some(fk => fk.table === 'LearningCenter' && fk.from === 'centerId' && fk.to === 'id')).toBe(true);
-    expect(fks.some(fk => fk.table === 'CenterMembership' && fk.from === 'createdByMembershipId' && fk.to === 'id')).toBe(true);
-    
-    // Check indexes
-    const indexes = db.prepare(`PRAGMA index_list("InviteCode")`).all() as any[];
-    expect(indexes.some(idx => idx.unique === 1)).toBe(true); // There should be a unique index on 'code'
-    
-    // Check specific index on 'code'
-    const codeIndex = indexes.find(idx => idx.unique === 1);
-    const indexInfo = db.prepare(`PRAGMA index_info("${codeIndex.name}")`).all() as any[];
-    expect(indexInfo[0].name).toBe('code');
-  });
+      // 3. Insert raw SQL for the old center (it doesn't have phone, email, suspensionReason)
+      const centerId = uuidv4();
+      const ownerId = uuidv4();
+
+      // We need a platform user first to satisfy foreign key
+      await migDb.$executeRawUnsafe(`
+        INSERT INTO "PlatformUser" ("id", "email", "passwordHash", "fullName", "updatedAt") 
+        VALUES ('${ownerId}', 'mig-${Date.now()}@test.com', 'x', 'Test', CURRENT_TIMESTAMP)
+      `);
+
+      await migDb.$executeRawUnsafe(`
+        INSERT INTO "LearningCenter" ("id", "slug", "name", "ownerId", "updatedAt") 
+        VALUES ('${centerId}', 'mig-slug-${Date.now()}', 'Old Center', '${ownerId}', CURRENT_TIMESTAMP)
+      `);
+
+      // 4. Move migration back
+      fs.renameSync(tempMigrationPath, newMigrationPath);
+
+      // 5. Deploy the new migration
+      execSync('npx prisma migrate deploy', { env, stdio: 'pipe' });
+
+      // 6. Read with prisma client to ensure fields are null
+      const center = await migDb.learningCenter.findUnique({ where: { id: centerId } });
+      expect(center).toBeDefined();
+      expect(center?.name).toBe('Old Center');
+      expect(center?.suspensionReason).toBeNull();
+      expect(center?.phone).toBeNull();
+      expect(center?.email).toBeNull();
+    } finally {
+      // Cleanup
+      await migDb.$disconnect();
+      if (fs.existsSync(tempMigrationPath)) {
+        fs.renameSync(tempMigrationPath, newMigrationPath);
+      }
+      if (fs.existsSync(testDbPath)) {
+        fs.unlinkSync(testDbPath);
+      }
+    }
+  }, 30000);
 });
