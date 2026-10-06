@@ -1,4 +1,6 @@
 import { NextResponse } from "next/server";
+// Reason: Exception: Dev logins are global
+// eslint-disable-next-line no-restricted-imports
 import { db } from "@/lib/db";
 import { signJWT, hashJti, JWTPayload } from "@/lib/auth";
 import { v4 as uuidv4 } from "uuid";

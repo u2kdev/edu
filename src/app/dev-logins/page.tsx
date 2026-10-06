@@ -1,3 +1,5 @@
+// Reason: Exception: Dev logins are global
+// eslint-disable-next-line no-restricted-imports
 import { db } from "@/lib/db";
 import { DevLoginButton } from "./DevLoginButton";
 
