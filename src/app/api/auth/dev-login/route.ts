@@ -7,8 +7,8 @@ import { v4 as uuidv4 } from "uuid";
 
 export async function POST(req: Request) {
   // Only allow in development mode or if explicitly enabled
-  if (process.env.NODE_ENV === "production" && process.env.ENABLE_DEV_LOGINS !== "true") {
-    return NextResponse.json({ error: "Forbidden in production" }, { status: 403 });
+  if (process.env.NODE_ENV === "production" || process.env.DEV_LOGIN !== "true") {
+    return NextResponse.json({ error: "Not Found" }, { status: 404 });
   }
 
   try {

@@ -3,11 +3,13 @@
 import { db } from "@/lib/db";
 import { DevLoginButton } from "./DevLoginButton";
 
+import { notFound } from "next/navigation";
+
 export const dynamic = 'force-dynamic';
 
 export default async function DevLoginsPage() {
-  if (process.env.NODE_ENV === "production" && process.env.ENABLE_DEV_LOGINS !== "true") {
-    return <div className="p-10 text-red-500">Forbidden in production.</div>;
+  if (process.env.NODE_ENV === "production" || process.env.DEV_LOGIN !== "true") {
+    notFound();
   }
 
   // Fetch all users
