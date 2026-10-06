@@ -4,6 +4,7 @@ import { z } from "zod";
 import { db } from "@/lib/db";
 import { comparePassword, signJWT, JWTPayload } from "@/lib/auth";
 import { checkRateLimit } from "@/lib/rate-limit";
+import { sendEmail } from '@/lib/email';
 import { apiError, apiSuccess, handleApiError } from "@/lib/api-response";
 import { loginSchema } from "@/lib/validation/auth";
 import { v4 as uuidv4 } from "uuid";
@@ -87,12 +88,16 @@ export async function POST(req: Request) {
       });
 
       if (newGlobal.attempts >= ACCOUNT_GLOBAL_DELAY_THRESHOLD) {
-        // Exponential delay with ceiling of 5 seconds (5000ms)
-        const delayMs = Math.min(Math.pow(2, newGlobal.attempts - ACCOUNT_GLOBAL_DELAY_THRESHOLD) * 100, 5000);
+        const delayMs = Math.min(Math.pow(2, newGlobal.attempts - ACCOUNT_GLOBAL_DELAY_THRESHOLD) * 1000, 15 * 60 * 1000); // 15 mins ceiling
         await db.loginAttempt.update({
           where: { email_ip: { email, ip: "GLOBAL" } },
           data: { lockoutUntil: new Date(Date.now() + delayMs) }
         });
+        
+        // Send email only when ceiling is reached (or on first hit)
+        if (delayMs >= 15 * 60 * 1000 && newGlobal.attempts === ACCOUNT_GLOBAL_DELAY_THRESHOLD + 10) {
+          void sendEmail(email, "Account Locked", "Your account is locked for 15 minutes due to multiple failed login attempts.").catch(() => {});
+        }
       }
 
       try {

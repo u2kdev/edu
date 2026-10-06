@@ -1,4 +1,4 @@
-const loginAttempts = new Map<string, { count: number; lastAttempt: number }>();
+export const rateLimits = new Map<string, { count: number; lastAttempt: number }>();
 const MAX_ATTEMPTS = 10;
 const WINDOW_MS = 15 * 60 * 1000; // 15 minutes
 
@@ -9,9 +9,9 @@ export function getClientIp(req: Request): string {
 
 export function checkRateLimit(ip: string, maxAttempts: number = MAX_ATTEMPTS, windowMs: number = WINDOW_MS): boolean {
   const now = Date.now();
-  const record = loginAttempts.get(ip);
+  const record = rateLimits.get(ip);
   if (!record || now - record.lastAttempt > windowMs) {
-    loginAttempts.set(ip, { count: 1, lastAttempt: now });
+    rateLimits.set(ip, { count: 1, lastAttempt: now });
     return true; // allowed
   }
   if (record.count >= maxAttempts) {
@@ -23,5 +23,5 @@ export function checkRateLimit(ip: string, maxAttempts: number = MAX_ATTEMPTS, w
 }
 
 export function clearRateLimit(ip: string) {
-  loginAttempts.delete(ip);
+  rateLimits.delete(ip);
 }

@@ -30,6 +30,9 @@ describe("Migrations", () => {
 
     // Apply phase3_fixes
     db.exec(m2);
+    
+    const m3 = fs.readFileSync(path.join(migrationsDir, "20261006071614_phase3_harden/migration.sql"), "utf-8");
+    db.exec(m3);
 
     const afterUser = db.prepare(`SELECT * FROM "PlatformUser" WHERE id = 'user-1'`).get();
     expect(afterUser.emailVerified).not.toBeNull();
