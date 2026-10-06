@@ -100,7 +100,7 @@ describe("Registration by Invite (POST /api/auth/register)", () => {
 
     const results = await Promise.all(promises);
     
-    const successes = results.filter(r => r.message === "Registration successful. Please check your email to confirm.");
+    const successes = results.filter((r: any) => r.message === "Registration successful. Please check your email to confirm.");
 
     expect(successes.length).toBe(5); // all 5 create pending invites
 
@@ -199,18 +199,28 @@ describe("Registration by Invite (POST /api/auth/register)", () => {
     expect(audit!.centerId).toBe(centerId);
   });
 
-  it("Dev email driver does not log in production", async () => {
+  it("Dev email driver logs in development and does not log in production", async () => {
     const membershipOwner = await db.centerMembership.findFirst({ where: { centerId } });
-    const invite = await db.inviteCode.create({
+    const inviteDev = await db.inviteCode.create({
+      data: { centerId, code: `DEV-${Date.now()}`, targetRole: "STUDENT", maxUses: 1, createdByMembershipId: membershipOwner!.id }
+    });
+    const inviteProd = await db.inviteCode.create({
       data: { centerId, code: `PROD-${Date.now()}`, targetRole: "STUDENT", maxUses: 1, createdByMembershipId: membershipOwner!.id }
     });
 
-    const originalEnv = process.env.NODE_ENV;
-    vi.stubEnv("NODE_ENV", "production");
     const consoleSpy = vi.spyOn(console, "log");
 
-    const res = await registerPost(mockReq({ email: `prod-${Date.now()}@test.com`, password: "password123", fullName: "Prod", inviteCode: invite.code }, "1.1.1.6"));
-    expect(res.status).toBe(200);
+    // 1. Test development mode (default in vitest)
+    const resDev = await registerPost(mockReq({ email: `dev-${Date.now()}@test.com`, password: "password123", fullName: "Dev", inviteCode: inviteDev.code }, "1.1.1.6"));
+    expect(resDev.status).toBe(200);
+    expect(consoleSpy).toHaveBeenCalledWith(expect.stringContaining("=== DEV EMAIL DRIVER ==="));
+
+    consoleSpy.mockClear();
+
+    // 2. Test production mode
+    vi.stubEnv("NODE_ENV", "production");
+    const resProd = await registerPost(mockReq({ email: `prod-${Date.now()}@test.com`, password: "password123", fullName: "Prod", inviteCode: inviteProd.code }, "1.1.1.6"));
+    expect(resProd.status).toBe(200);
     expect(consoleSpy).not.toHaveBeenCalledWith(expect.stringContaining("=== DEV EMAIL DRIVER ==="));
 
     vi.unstubAllEnvs();
