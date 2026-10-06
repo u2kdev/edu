@@ -42,7 +42,7 @@ export async function POST(req: Request) {
 
     if (!invite) return genericInvalidError;
     if (invite.expiresAt && invite.expiresAt < new Date()) return genericInvalidError;
-    if (invite.usesCount >= invite.maxUses) return genericInvalidError;
+    if (invite.maxUses !== null && invite.usesCount >= invite.maxUses) return genericInvalidError;
     
     // 2. Roles check
     const allowedRoles = ["CENTER_ADMIN", "TEACHER", "TEACHER_ASSISTANT", "CENTER_SUPPORT", "STUDENT", "PARENT"];
@@ -58,24 +58,41 @@ export async function POST(req: Request) {
       // Balance timing with bcrypt hash
       await hashPassword(password);
 
+      const pendingCount = await db.pendingInvite.count({
+        where: { email, inviteCode: { centerId: invite.centerId }, status: "PENDING" }
+      });
+      if (pendingCount >= 10) {
+        return apiError("Too many pending invites for this center", "RATE_LIMITED", 429);
+      }
+      
+      const ip = req.headers.get("x-forwarded-for") || "unknown";
+      const pendingCountIp = await db.pendingInvite.count({
+        where: { ipAddress: ip, status: "PENDING", createdAt: { gte: new Date(Date.now() - 3600000) } }
+      });
+      if (pendingCountIp >= 20) {
+        return apiError("Too many pending invites from this IP", "RATE_LIMITED", 429);
+      }
+
       // Do NOT consume invite usesCount yet.
       await db.pendingInvite.create({
         data: {
           email,
           inviteCodeId: invite.id,
+          ipAddress: ip,
+          expiresAt: new Date(Date.now() + 7 * 24 * 3600 * 1000)
         }
       });
 
-      // Fire and forget email
-      setTimeout(() => {
-        if (process.env.NODE_ENV !== "production") {
-          console.log(`\n=== DEV EMAIL DRIVER ===`);
-          console.log(`To: ${user!.email}`);
-          console.log(`Subject: Вы приглашены в ${invite.center?.name || 'центр'}`);
-          console.log(`Body: Вас пригласили в центр ${invite.center?.name || 'X'}, войдите, чтобы принять.`);
-          console.log(`========================\n`);
-        }
-      }, 0);
+      // Fire and forget email safely
+      void sendEmail(user!.email, "Invited", "Please check").catch(err => {
+        db.auditLog.create({
+          data: {
+            action: "EMAIL_FAILED",
+            resource: "PlatformUser",
+            detailsJson: JSON.stringify({ error: err.message, email })
+          }
+        }).catch(() => {});
+      });
 
       return apiSuccess({ message: "Registration successful. Please check your email to confirm." });
     }
@@ -137,13 +154,30 @@ export async function POST(req: Request) {
       details: { inviteCode: invite.code, isNewUser: true },
     });
 
-    if (process.env.NODE_ENV !== "production") {
-      console.log(`\n=== DEV EMAIL DRIVER ===`);
-      console.log(`To: ${user.email}`);
-      console.log(`Subject: Confirm your email (LMS)`);
-      console.log(`Link: http://localhost:3000/confirm-email?token=${confirmToken}`);
-      console.log(`========================\n`);
-    }
+    new Promise<void>((resolve, reject) => {
+      setTimeout(() => {
+        if (process.env.TEST_EMAIL_FAIL === "true") {
+          reject(new Error("Simulated email driver failure"));
+          return;
+        }
+        if (process.env.NODE_ENV !== "production") {
+          console.log(`\n=== DEV EMAIL DRIVER ===`);
+          console.log(`To: ${user.email}`);
+          console.log(`Subject: Confirm your email (LMS)`);
+          console.log(`Link: http://localhost:3000/confirm-email?token=${confirmToken}`);
+          console.log(`========================\n`);
+        }
+        resolve();
+      }, 0);
+    }).catch(err => {
+      db.auditLog.create({
+        data: {
+          action: "EMAIL_FAILED",
+          resource: "PlatformUser",
+          detailsJson: JSON.stringify({ error: err.message, email: user.email })
+        }
+      }).catch(() => {});
+    });
 
     return apiSuccess({ message: "Registration successful. Please check your email to confirm." });
   } catch (err: any) {

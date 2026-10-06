@@ -9,7 +9,9 @@ export type ApiErrorCode =
   | "INTERNAL_SERVER_ERROR"
   | "RATE_LIMITED"
   | "TENANT_BLOCKED"
-  | "BAD_REQUEST";
+  | "BAD_REQUEST"
+  | "INVALID_TOKEN"
+  | "INVALID_INVITE";
 
 export interface ApiErrorResponse {
   success: false;

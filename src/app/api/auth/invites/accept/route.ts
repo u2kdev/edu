@@ -37,20 +37,32 @@ export async function POST(req: Request) {
       return apiError("Invite already processed", "BAD_REQUEST", 400);
     }
 
+    if (pendingInvite.expiresAt < new Date()) {
+      return apiError("Invite expired", "BAD_REQUEST", 400);
+    }
+
     const invite = pendingInvite.inviteCode;
 
     if (invite.expiresAt && invite.expiresAt < new Date()) {
       return apiError("Invite expired", "BAD_REQUEST", 400);
     }
-    if (invite.usesCount >= invite.maxUses) {
+    if (invite.maxUses !== null && invite.usesCount >= invite.maxUses) {
       return apiError("Invite exhausted", "BAD_REQUEST", 400);
     }
 
-    // Atomic increment
-    const updateCount = await db.inviteCode.updateMany({
-      where: { id: invite.id, usesCount: invite.usesCount },
-      data: { usesCount: { increment: 1 } },
-    });
+    // Atomic increment with threshold check
+    let updateCount;
+    if (invite.maxUses !== null) {
+      updateCount = await db.inviteCode.updateMany({
+        where: { id: invite.id, usesCount: { lt: invite.maxUses } },
+        data: { usesCount: { increment: 1 } },
+      });
+    } else {
+      updateCount = await db.inviteCode.updateMany({
+        where: { id: invite.id },
+        data: { usesCount: { increment: 1 } },
+      });
+    }
 
     if (updateCount.count === 0) {
       return apiError("Invite exhausted or race condition", "BAD_REQUEST", 400);

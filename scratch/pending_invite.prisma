@@ -1,0 +1,12 @@
+
+model PendingInvite {
+  id           String       @id @default(uuid())
+  email        String
+  inviteCodeId String
+  status       String       @default("PENDING")
+  createdAt    DateTime     @default(now())
+
+  inviteCode   InviteCode   @relation(fields: [inviteCodeId], references: [id], onDelete: Cascade)
+
+  @@index([email])
+}

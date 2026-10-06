@@ -9,6 +9,7 @@ export const SENSITIVE_ACTIONS = [
   "payments.manage",
   "payments.refund",
   "users.block",
+  "password.change"
 ];
 
 export type PlatformRole =
@@ -385,10 +386,3 @@ export function hasResourcePermission(
   return hasPermission(mappedPermission, platformRole, centerRole);
 }
 
-export const SENSITIVE_ACTIONS: string[] = [
-  "payments.manage",
-  "payments.refund",
-  "settings.manage",
-  "users.block",
-  "password.change"
-];

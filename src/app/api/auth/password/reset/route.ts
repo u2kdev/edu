@@ -45,9 +45,14 @@ export async function POST(req: Request) {
       });
 
       // Update password
+      const updateData: any = { passwordHash: hashedPassword };
+      if (!resetToken.user.emailVerified) {
+        updateData.emailVerified = new Date();
+      }
+
       await tx.platformUser.update({
         where: { id: resetToken.userId },
-        data: { passwordHash: hashedPassword },
+        data: updateData,
       });
 
       // Revoke all sessions for this user

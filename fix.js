@@ -1,0 +1,1 @@
+const fs = require('fs'); let c = fs.readFileSync('src/app/api/auth/register/route.ts', 'utf8'); c = c.replace(/void sendEmail[\)]+\)/s, 'void sendEmail(user!.email, \" "Invited\, \Please" "check\)'); fs.writeFileSync('src/app/api/auth/register/route.ts', c);  

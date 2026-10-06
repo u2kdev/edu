@@ -231,7 +231,7 @@ model InviteCode {
   targetRole            String    @default("STUDENT")
   courseId              String?
   groupId               String?
-  maxUses               Int       @default(1)
+  maxUses               Int?
   usesCount             Int       @default(0)
   expiresAt             DateTime?
   createdByMembershipId String
@@ -929,8 +929,10 @@ model LoginAttempt {
 model PendingInvite {
   id           String       @id @default(uuid())
   email        String
+  ipAddress    String?
   inviteCodeId String
   status       String       @default("PENDING")
+  expiresAt    DateTime
   createdAt    DateTime     @default(now())
 
   inviteCode   InviteCode   @relation(fields: [inviteCodeId], references: [id], onDelete: Cascade)

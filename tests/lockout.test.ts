@@ -1,5 +1,17 @@
 import { describe, it, expect, beforeAll, afterAll, vi } from "vitest";
 import { POST as loginPost } from "../src/app/api/auth/login/route";
+
+const mockSet = vi.fn();
+const mockDelete = vi.fn();
+const mockGet = vi.fn();
+
+vi.mock("next/headers", () => ({
+  cookies: () => ({
+    set: mockSet,
+    get: mockGet,
+    delete: mockDelete,
+  }),
+}));
 import { db } from "../src/lib/db";
 import { hashPassword } from "../src/lib/auth";
 
@@ -60,7 +72,7 @@ describe("Brute-force Lockout API", () => {
     // 1.2.3.1 is already locked out
     const resOther = await loginPost(mockReq(testEmail, "1.2.3.2", "correctpassword"));
     // Wait, let's use a wrong password first to verify it's not locked out, it just fails normally
-    const resFail = await loginPost(mockReq(testEmail, "1.2.3.3", "wrong"));
+    const resFail = await loginPost(mockReq(testEmail, "1.2.3.3", "wrongpass"));
     expect(resFail.status).toBe(401);
     const attemptOther = await db.loginAttempt.findUnique({ where: { email_ip: { email: testEmail, ip: "1.2.3.3" } } });
     expect(attemptOther?.attempts).toBe(1);
@@ -137,22 +149,53 @@ describe("Brute-force Lockout API", () => {
     expect(details.attempts).toBe(1);
   });
 
-  it("порог аккаунта срабатывает при попытках с разных IP", async () => {
-    // Generate 20 failures across 20 IPs
+  it("порог аккаунта срабатывает при попытках с разных IP и атомарно (20 параллельных)", async () => {
+    await db.loginAttempt.deleteMany({ where: { email: testEmail } });
     for (let i = 0; i < 20; i++) {
       await loginPost(mockReq(testEmail, `2.0.0.${i}`));
     }
+    const globalAttempt = await db.loginAttempt.findUnique({ where: { email_ip: { email: testEmail, ip: "GLOBAL" } } });
+    expect(globalAttempt?.attempts).toBe(20);
+
+    const res21 = await loginPost(mockReq(testEmail, "2.0.0.99"));
+    expect(res21.status).toBe(429); 
+    const res21Headers = Object.fromEntries(res21.headers);
+    expect(res21Headers["retry-after"]).toBeDefined();
+  });
+
+  it("Счетчик увеличивается атомарно (20 параллельных) и не держит соединение долго", async () => {
+    await db.loginAttempt.deleteMany({ where: { email: testEmail } });
+    vi.useRealTimers();
+    const promises = [];
+    for (let i = 0; i < 20; i++) {
+      promises.push(loginPost(mockReq(testEmail, `3.0.0.${i}`)));
+    }
+    await Promise.all(promises);
+    vi.useFakeTimers();
+
+    const globalAttempt = await db.loginAttempt.findUnique({ where: { email_ip: { email: testEmail, ip: "GLOBAL" } } });
+    expect(globalAttempt?.attempts).toBe(20);
+
+    const start21 = Date.now();
+    const res21 = await loginPost(mockReq(testEmail, "3.0.0.99"));
+    const end21 = Date.now();
     
-    // Now global attempts = 20
-    const promise = loginPost(mockReq(testEmail, "2.0.0.99"));
-    vi.advanceTimersByTime(200); // Advance enough to clear 100ms delay
-    const res = await promise;
-    expect(res.status).toBe(401);
-    
-    // Check 22nd attempt (attempts = 21)
-    const promise2 = loginPost(mockReq(testEmail, "2.0.0.100"));
-    vi.advanceTimersByTime(300); // 200ms delay
-    const res2 = await promise2;
-    expect(res2.status).toBe(401);
+    expect(res21.status).toBe(429);
+    expect(end21 - start21).toBeLessThan(100);
+  });
+
+  it("Сброс пароля работает при заблокированном аккаунте", async () => {
+    // Already locked out from previous test
+    const globalAttempt = await db.loginAttempt.findUnique({ where: { email_ip: { email: testEmail, ip: "GLOBAL" } } });
+    expect(globalAttempt?.lockoutUntil?.getTime()).toBeGreaterThan(Date.now());
+
+    const { POST: requestReset } = await import("../src/app/api/auth/password/forgot/route");
+    const mockResetReq = new Request("http://localhost/api/auth/password/forgot", {
+      method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ email: testEmail })
+    });
+    const res = await requestReset(mockResetReq);
+    expect(res.status).toBe(200);
+    const data = await res.json();
+    expect(data.message).toBe("If the email exists, a password reset link has been sent.");
   });
 });

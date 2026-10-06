@@ -89,7 +89,7 @@ describe("Registration by Invite (POST /api/auth/register)", () => {
     expect(data2.error.message).toBe("Invalid, expired, or exhausted invite code");
   });
 
-  it("Promise.all on code with limit 1 results in exactly 1 success", async () => {
+  it("Promise.all on code with limit 1 results in 5 pending invites (usesCount is not consumed yet)", async () => {
     const promises = [];
     const raceIp = "1.1.1.2";
     for (let i = 0; i < 5; i++) {
@@ -101,13 +101,44 @@ describe("Registration by Invite (POST /api/auth/register)", () => {
     const results = await Promise.all(promises);
     
     const successes = results.filter(r => r.message === "Registration successful. Please check your email to confirm.");
-    const errors = results.filter(r => r.error && r.error.message === "Invalid, expired, or exhausted invite code");
 
-    expect(successes.length).toBe(1);
-    if(errors.length !== 4) console.log(results); expect(errors.length).toBe(4);
+    expect(successes.length).toBe(5); // all 5 create pending invites
 
     const check = await db.inviteCode.findUnique({ where: { code: code1Limit } });
-    expect(check?.usesCount).toBe(1);
+    expect(check?.usesCount).toBe(0); // usesCount is not incremented at registration!
+  });
+
+  it("IP Limit: 21st registration from same IP in 1 hour returns 429", async () => {
+    const spamIp = "1.2.3.4";
+    // Send 20 requests
+    const promises = [];
+    for (let i = 0; i < 20; i++) {
+      promises.push(
+        registerPost(mockReq({ email: `spam-${i}@test.com`, password: "password123", fullName: `Spam`, inviteCode: code1Limit }, spamIp))
+      );
+    }
+    await Promise.all(promises);
+
+    const res21 = await registerPost(mockReq({ email: `spam-21@test.com`, password: "password123", fullName: `Spam`, inviteCode: code1Limit }, spamIp));
+    expect(res21.status).toBe(429);
+    const data = await res21.json();
+    expect(data.error.message).toBe("Too many pending invites from this IP");
+  });
+
+  it("Email/Center Limit: 11th registration for same email and center returns 429", async () => {
+    const spamEmail = "limit@test.com";
+    const promises = [];
+    for (let i = 0; i < 10; i++) {
+      promises.push(
+        registerPost(mockReq({ email: spamEmail, password: "password123", fullName: `Spam`, inviteCode: code1Limit }, `2.2.2.${i}`))
+      );
+    }
+    await Promise.all(promises);
+
+    const res11 = await registerPost(mockReq({ email: spamEmail, password: "password123", fullName: `Spam`, inviteCode: code1Limit }, "2.2.2.99"));
+    expect(res11.status).toBe(429);
+    const data = await res11.json();
+    expect(data.error.message).toBe("Too many pending invites for this center");
   });
 
   it("Existing email gets same response, no membership added, receives login email", async () => {
@@ -175,14 +206,45 @@ describe("Registration by Invite (POST /api/auth/register)", () => {
     });
 
     const originalEnv = process.env.NODE_ENV;
-    process.env.NODE_ENV = "production";
+    vi.stubEnv("NODE_ENV", "production");
     const consoleSpy = vi.spyOn(console, "log");
 
     const res = await registerPost(mockReq({ email: `prod-${Date.now()}@test.com`, password: "password123", fullName: "Prod", inviteCode: invite.code }, "1.1.1.6"));
     expect(res.status).toBe(200);
     expect(consoleSpy).not.toHaveBeenCalledWith(expect.stringContaining("=== DEV EMAIL DRIVER ==="));
 
-    process.env.NODE_ENV = originalEnv;
+    vi.unstubAllEnvs();
     consoleSpy.mockRestore();
+  });
+
+  it("Failing email driver does not change response and logs to audit", async () => {
+    const membershipOwner = await db.centerMembership.findFirst({ where: { centerId } });
+    const invite = await db.inviteCode.create({
+      data: { centerId, code: `FAIL-${Date.now()}`, targetRole: "STUDENT", maxUses: 1, createdByMembershipId: membershipOwner!.id }
+    });
+
+    vi.stubEnv("TEST_EMAIL_FAIL", "true");
+    const targetEmail = `fail-${Date.now()}@test.com`;
+
+    // First register target
+    await db.platformUser.create({
+      data: { email: targetEmail, passwordHash: "hash", fullName: "Fail" }
+    });
+
+    const res = await registerPost(mockReq({ email: targetEmail, password: "password123", fullName: "Fail", inviteCode: invite.code }, "1.1.1.7"));
+    expect(res.status).toBe(200);
+
+    // Fire and forget, wait a tick
+    await new Promise(r => setTimeout(r, 50));
+
+    const audit = await db.auditLog.findFirst({
+      where: { action: "EMAIL_FAILED" },
+      orderBy: { createdAt: "desc" }
+    });
+    
+    expect(audit).not.toBeNull();
+    expect(audit!.detailsJson).toContain("Simulated email driver failure");
+
+    vi.unstubAllEnvs();
   });
 });

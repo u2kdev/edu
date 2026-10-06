@@ -9,7 +9,7 @@ import { loginSchema } from "@/lib/validation/auth";
 import { v4 as uuidv4 } from "uuid";
 import { cookies } from "next/headers";
 
-const ACCOUNT_GLOBAL_DELAY_THRESHOLD = 20; // 20 failed attempts globally across all IPs
+const ACCOUNT_GLOBAL_DELAY_THRESHOLD = 20;
 
 export async function POST(req: Request) {
   try {
@@ -25,27 +25,32 @@ export async function POST(req: Request) {
     const { email: rawEmail, password, rememberMe } = parsed;
     const email = rawEmail.toLowerCase().trim();
 
-    // 1. Global account delay check
-    const globalAttempts = await db.loginAttempt.aggregate({
-      where: { email },
-      _sum: { attempts: true }
+    // 1. Check LoginAttempt (Brute-force protection per IP & GLOBAL)
+    const attempts = await db.loginAttempt.findMany({
+      where: { email, ip: { in: [ip, "GLOBAL"] } }
     });
-    const totalAttempts = globalAttempts._sum.attempts || 0;
-    if (totalAttempts >= ACCOUNT_GLOBAL_DELAY_THRESHOLD) {
-      // Exponential delay with ceiling of 5 seconds
-      const delay = Math.min(Math.pow(2, totalAttempts - ACCOUNT_GLOBAL_DELAY_THRESHOLD) * 100, 5000);
-      await new Promise(r => setTimeout(r, delay));
+
+    const globalAttempt = attempts.find(a => a.ip === "GLOBAL");
+    const ipAttempt = attempts.find(a => a.ip === ip);
+
+    // Global threshold check
+    if (globalAttempt && globalAttempt.lockoutUntil && new Date() < globalAttempt.lockoutUntil) {
+      const waitMs = globalAttempt.lockoutUntil.getTime() - Date.now();
+      return new Response(
+        JSON.stringify({ error: { message: "auth.rate_limited", code: "RATE_LIMITED" } }),
+        { 
+          status: 429, 
+          headers: { 
+            "Content-Type": "application/json",
+            "Retry-After": Math.ceil(waitMs / 1000).toString() 
+          } 
+        }
+      );
     }
 
-    // 2. Check LoginAttempt (Brute-force protection per IP)
-    let loginAttempt = await db.loginAttempt.findUnique({
-      where: { email_ip: { email, ip } }
-    });
-
-    if (loginAttempt && loginAttempt.lockoutUntil) {
-      if (new Date() < loginAttempt.lockoutUntil) {
-        return apiError("auth.invalidCredentials", "UNAUTHORIZED", 401);
-      }
+    // IP lockout check
+    if (ipAttempt && ipAttempt.lockoutUntil && new Date() < ipAttempt.lockoutUntil) {
+      return apiError("auth.invalidCredentials", "UNAUTHORIZED", 401);
     }
 
     const user = await db.platformUser.findUnique({
@@ -53,33 +58,42 @@ export async function POST(req: Request) {
     });
 
     const handleFailure = async (reason: string, actorUserId: string | null = null) => {
-      let attempts = (loginAttempt?.attempts || 0) + 1;
-      let lockoutUntil: Date | null = null;
-
-      // Exponential lockout: starts from 5, caps at max (e.g. 15 -> max ceiling or just let it grow)
-      // "Замени setTimeout(2000) на задержку, растущую со счётчиком (экспоненциально, потолок в конфиге)" -> wait, the IP lockout is growing delay?
-      // No, IP lockout is full block. Account global delay is the one that grows exponentially and blocks with setTimeout.
-      // "задержку, растущую со счётчиком (экспоненциально, потолок в конфиге), без удержания процесса сном дольше потолка" -> this means global account lockout.
-      // Let's implement IP lockout progression:
+      // 1. IP Attempt Logic
+      let ipAttemptsCount = (ipAttempt?.attempts || 0) + 1;
+      let ipLockoutUntil: Date | null = null;
       const LOCKOUT_CONFIG = [
         { max: 15, delayMinutes: 60 },
         { max: 10, delayMinutes: 15 },
         { max: 5,  delayMinutes: 1  },
       ];
-
       for (const config of LOCKOUT_CONFIG) {
-        // Only trigger a new lockout if exactly hitting a threshold or above it and previous expired
-        if (attempts >= config.max) {
-          lockoutUntil = new Date(Date.now() + config.delayMinutes * 60000);
+        if (ipAttemptsCount >= config.max) {
+          ipLockoutUntil = new Date(Date.now() + config.delayMinutes * 60000);
           break;
         }
       }
 
       await db.loginAttempt.upsert({
         where: { email_ip: { email, ip } },
-        create: { email, ip, attempts, lockoutUntil },
-        update: { attempts, lockoutUntil },
+        create: { email, ip, attempts: ipAttemptsCount, lockoutUntil: ipLockoutUntil },
+        update: { attempts: ipAttemptsCount, lockoutUntil: ipLockoutUntil },
       });
+
+      // 2. Global Attempt Logic (Atomic Increment)
+      const newGlobal = await db.loginAttempt.upsert({
+        where: { email_ip: { email, ip: "GLOBAL" } },
+        create: { email, ip: "GLOBAL", attempts: 1 },
+        update: { attempts: { increment: 1 } },
+      });
+
+      if (newGlobal.attempts >= ACCOUNT_GLOBAL_DELAY_THRESHOLD) {
+        // Exponential delay with ceiling of 5 seconds (5000ms)
+        const delayMs = Math.min(Math.pow(2, newGlobal.attempts - ACCOUNT_GLOBAL_DELAY_THRESHOLD) * 100, 5000);
+        await db.loginAttempt.update({
+          where: { email_ip: { email, ip: "GLOBAL" } },
+          data: { lockoutUntil: new Date(Date.now() + delayMs) }
+        });
+      }
 
       try {
         await db.auditLog.create({
@@ -87,7 +101,7 @@ export async function POST(req: Request) {
             actorUserId,
             action: "LOGIN_FAILED",
             resource: "PlatformUser",
-            detailsJson: JSON.stringify({ email, reason, ip, attempts, lockoutUntil }),
+            detailsJson: JSON.stringify({ email, reason, ip, attempts: ipAttemptsCount, lockoutUntil: ipLockoutUntil }),
             ipAddress: ip,
           },
         });
