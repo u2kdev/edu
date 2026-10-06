@@ -17,5 +17,7 @@
   "auth.confirm.loading": "Token tekshirilmoqda...",
   "auth.confirm.success": "Pochta muvaffaqiyatli tasdiqlandi!",
   "auth.confirm.error": "Noto'g'ri yoki muddati o'tgan token.",
-  "auth.confirm.login": "Kirish"
+  "auth.confirm.login": "Kirish",
+  "platform.centers.title": "Tashkilotlar",
+  "platform.centers.create": "Yaratish"
 }

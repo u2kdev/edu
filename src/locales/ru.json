@@ -17,5 +17,7 @@
   "auth.confirm.loading": "Проверка токена...",
   "auth.confirm.success": "Почта успешно подтверждена!",
   "auth.confirm.error": "Неверный или просроченный токен.",
-  "auth.confirm.login": "Войти"
+  "auth.confirm.login": "Войти",
+  "platform.centers.title": "Организации",
+  "platform.centers.create": "Создать"
 }

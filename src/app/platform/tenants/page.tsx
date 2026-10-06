@@ -3,6 +3,7 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
+import { t } from '@/lib/i18n';
 
 export default function TenantsPage() {
   const [centers, setCenters] = useState<any[]>([]);
@@ -52,7 +53,7 @@ export default function TenantsPage() {
   return (
     <div className="p-6 max-w-7xl mx-auto">
       <div className="flex justify-between items-center mb-6">
-        <h1 className="text-2xl font-bold text-gray-900">Organizations (RU: Организации / UZ: Tashkilotlar)</h1>
+        <h1 className="text-2xl font-bold text-gray-900">{t("platform.centers.title")}</h1>
         <Link 
           href="/platform/tenants/create"
           className="bg-blue-600 text-white px-4 py-2 rounded-md hover:bg-blue-700 transition"
