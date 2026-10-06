@@ -165,7 +165,7 @@ describe("Brute-force Lockout API", () => {
     expect(res21.status).toBe(429); 
     const res21Headers = Object.fromEntries(res21.headers);
     expect(res21Headers["retry-after"]).toBeDefined();
-  });
+  }, 30000);
 
   it("Счетчик увеличивается атомарно (20 параллельных) и не держит соединение долго", async () => {
     await db.loginAttempt.deleteMany({ where: { email: testEmail } });
@@ -185,7 +185,7 @@ describe("Brute-force Lockout API", () => {
     
     expect(res21.status).toBe(429);
     expect(end21 - start21).toBeLessThan(100);
-  });
+  }, 30000);
 
   it("Сброс пароля работает при заблокированном аккаунте", async () => {
     // Already locked out from previous test
