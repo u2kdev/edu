@@ -257,3 +257,30 @@ describe("Platform Organizations (Real DB)", () => {
     });
   });
 });
+
+describe("Rate Limit on change director", () => {
+    it("rate limit on change director", async () => {
+      // need to setup center and change director
+      const ip = `192.168.2.${Date.now() % 255}`;
+      
+      const reqCenter = new Request(`http://localhost/api/platform/centers`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", "x-forwarded-for": ip },
+        body: JSON.stringify({
+          name: "Center Name", slug: `rldir-${Date.now()}`, directorEmail: `d1-rldir-${Date.now()}@x.com`, directorFullName: "Dir Name", timeZone: "Asia/Tashkent"
+        }),
+      });
+      const res1 = await createCenter(reqCenter);
+      const centerId = (await res1.json()).center.id;
+      
+      for (let i = 0; i < 4; i++) {
+        await changeDirector(new Request(`http://localhost/api/platform/centers/${centerId}/director`, {
+            method: "POST", headers: { "Content-Type": "application/json", "x-forwarded-for": ip }, body: JSON.stringify({ email: `x${i}@x.com` })
+        }), { params: { id: centerId }});
+      }
+      const res2 = await changeDirector(new Request(`http://localhost/api/platform/centers/${centerId}/director`, {
+            method: "POST", headers: { "Content-Type": "application/json", "x-forwarded-for": ip }, body: JSON.stringify({ email: `x6@x.com` })
+      }), { params: { id: centerId }});
+      expect(res2.status).toBe(429);
+    });
+});
