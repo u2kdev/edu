@@ -14,7 +14,7 @@ export default async function DevLoginsPage() {
   const users = await db.platformUser.findMany({
     orderBy: { createdAt: "desc" },
     include: {
-      centerMemberships: {
+      memberships: {
         include: {
           center: true,
         }
@@ -24,10 +24,10 @@ export default async function DevLoginsPage() {
 
   // Group by roles
   const superadmins = users.filter(u => ["SUPERADMIN", "DEVELOPER", "PLATFORM_ADMIN"].includes(u.platformRole));
-  const centerOwners = users.filter(u => u.centerMemberships.some(m => m.role === "DIRECTOR"));
-  const teachers = users.filter(u => u.centerMemberships.some(m => m.role === "TEACHER"));
-  const students = users.filter(u => u.centerMemberships.some(m => m.role === "STUDENT"));
-  const parents = users.filter(u => u.centerMemberships.some(m => m.role === "PARENT"));
+  const centerOwners = users.filter(u => u.memberships.some(m => m.role === "DIRECTOR"));
+  const teachers = users.filter(u => u.memberships.some(m => m.role === "TEACHER"));
+  const students = users.filter(u => u.memberships.some(m => m.role === "STUDENT"));
+  const parents = users.filter(u => u.memberships.some(m => m.role === "PARENT"));
 
   const renderUserGroup = (title: string, group: typeof users) => (
     <div className="mb-8">
@@ -38,7 +38,7 @@ export default async function DevLoginsPage() {
             <div className="font-semibold">{u.fullName}</div>
             <div className="text-sm text-gray-500">{u.email}</div>
             <div className="text-xs text-gray-400">Role: {u.platformRole}</div>
-            {u.centerMemberships.map(m => (
+            {u.memberships.map(m => (
               <div key={m.id} className="text-xs bg-gray-100 p-1 rounded">
                 {m.center.name} - {m.role}
               </div>
