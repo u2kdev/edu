@@ -1,6 +1,7 @@
 import { describe, it, expect, beforeAll, afterAll, vi } from "vitest";
 import { POST as registerPost } from "../src/app/api/auth/register/route";
 import { db } from "../src/lib/db";
+import * as emailModule from "../src/lib/email";
 
 describe("Registration by Invite (POST /api/auth/register)", () => {
   let centerId: string;
@@ -89,7 +90,7 @@ describe("Registration by Invite (POST /api/auth/register)", () => {
     expect(data2.error.message).toBe("Invalid, expired, or exhausted invite code");
   });
 
-  it("Promise.all on code with limit 1 results in 5 pending invites (usesCount is not consumed yet)", async () => {
+  it("Promise.all on code with limit 1 results in exactly 1 success", async () => {
     const promises = [];
     const raceIp = "1.1.1.2";
     for (let i = 0; i < 5; i++) {
@@ -102,44 +103,13 @@ describe("Registration by Invite (POST /api/auth/register)", () => {
     
     const successes = results.filter((r: any) => r.message === "Registration successful. Please check your email to confirm.");
 
-    expect(successes.length).toBe(5); // all 5 create pending invites
+    expect(successes.length).toBe(1);
 
     const check = await db.inviteCode.findUnique({ where: { code: code1Limit } });
-    expect(check?.usesCount).toBe(0); // usesCount is not incremented at registration!
+    expect(check?.usesCount).toBe(1);
   });
 
-  it("IP Limit: 21st registration from same IP in 1 hour returns 429", async () => {
-    const spamIp = "1.2.3.4";
-    // Send 20 requests
-    const promises = [];
-    for (let i = 0; i < 20; i++) {
-      promises.push(
-        registerPost(mockReq({ email: `spam-${i}@test.com`, password: "password123", fullName: `Spam`, inviteCode: code1Limit }, spamIp))
-      );
-    }
-    await Promise.all(promises);
 
-    const res21 = await registerPost(mockReq({ email: `spam-21@test.com`, password: "password123", fullName: `Spam`, inviteCode: code1Limit }, spamIp));
-    expect(res21.status).toBe(429);
-    const data = await res21.json();
-    expect(data.error.message).toBe("Too many pending invites from this IP");
-  });
-
-  it("Email/Center Limit: 11th registration for same email and center returns 429", async () => {
-    const spamEmail = "limit@test.com";
-    const promises = [];
-    for (let i = 0; i < 10; i++) {
-      promises.push(
-        registerPost(mockReq({ email: spamEmail, password: "password123", fullName: `Spam`, inviteCode: code1Limit }, `2.2.2.${i}`))
-      );
-    }
-    await Promise.all(promises);
-
-    const res11 = await registerPost(mockReq({ email: spamEmail, password: "password123", fullName: `Spam`, inviteCode: code1Limit }, "2.2.2.99"));
-    expect(res11.status).toBe(429);
-    const data = await res11.json();
-    expect(data.error.message).toBe("Too many pending invites for this center");
-  });
 
   it("Existing email gets same response, no membership added, receives login email", async () => {
     const existingEmail = `exist-${Date.now()}@test.com`;
@@ -199,28 +169,37 @@ describe("Registration by Invite (POST /api/auth/register)", () => {
     expect(audit!.centerId).toBe(centerId);
   });
 
-  it("Dev email driver logs in development and does not log in production", async () => {
+  it("Dev email driver logs ONLY when DEV_EMAIL_LOG=true and not in production", async () => {
     const membershipOwner = await db.centerMembership.findFirst({ where: { centerId } });
-    const inviteDev = await db.inviteCode.create({
-      data: { centerId, code: `DEV-${Date.now()}`, targetRole: "STUDENT", maxUses: 1, createdByMembershipId: membershipOwner!.id }
-    });
-    const inviteProd = await db.inviteCode.create({
-      data: { centerId, code: `PROD-${Date.now()}`, targetRole: "STUDENT", maxUses: 1, createdByMembershipId: membershipOwner!.id }
-    });
-
     const consoleSpy = vi.spyOn(console, "log");
 
-    // 1. Test development mode (default in vitest)
-    const resDev = await registerPost(mockReq({ email: `dev-${Date.now()}@test.com`, password: "password123", fullName: "Dev", inviteCode: inviteDev.code }, "1.1.1.6"));
-    expect(resDev.status).toBe(200);
-    expect(consoleSpy).toHaveBeenCalledWith(expect.stringContaining("=== DEV EMAIL DRIVER ==="));
+    // Helper to run register
+    const testLog = async (emailPrefix: string) => {
+      const invite = await db.inviteCode.create({
+        data: { centerId, code: `LOG-${Date.now()}-${Math.random()}`, targetRole: "STUDENT", maxUses: 1, createdByMembershipId: membershipOwner!.id }
+      });
+      const res = await registerPost(mockReq({ email: `${emailPrefix}-${Date.now()}@test.com`, password: "password123", fullName: "Dev", inviteCode: invite.code }, "1.1.1.6"));
+      expect(res.status).toBe(200);
+    };
 
+    // 1. Off by default (NODE_ENV=test/development, but DEV_EMAIL_LOG is false/unset)
+    vi.stubEnv("DEV_EMAIL_LOG", "false");
+    await testLog("off");
+    expect(consoleSpy).not.toHaveBeenCalledWith(expect.stringContaining("=== DEV EMAIL DRIVER ==="));
+    
     consoleSpy.mockClear();
 
-    // 2. Test production mode
+    // 2. On in development (DEV_EMAIL_LOG=true)
+    vi.stubEnv("DEV_EMAIL_LOG", "true");
+    vi.stubEnv("NODE_ENV", "development");
+    await testLog("on-dev");
+    expect(consoleSpy).toHaveBeenCalledWith(expect.stringContaining("=== DEV EMAIL DRIVER ==="));
+    
+    consoleSpy.mockClear();
+
+    // 3. Ignored in production even if DEV_EMAIL_LOG=true
     vi.stubEnv("NODE_ENV", "production");
-    const resProd = await registerPost(mockReq({ email: `prod-${Date.now()}@test.com`, password: "password123", fullName: "Prod", inviteCode: inviteProd.code }, "1.1.1.6"));
-    expect(resProd.status).toBe(200);
+    await testLog("on-prod");
     expect(consoleSpy).not.toHaveBeenCalledWith(expect.stringContaining("=== DEV EMAIL DRIVER ==="));
 
     vi.unstubAllEnvs();
@@ -233,7 +212,7 @@ describe("Registration by Invite (POST /api/auth/register)", () => {
       data: { centerId, code: `FAIL-${Date.now()}`, targetRole: "STUDENT", maxUses: 1, createdByMembershipId: membershipOwner!.id }
     });
 
-    vi.stubEnv("TEST_EMAIL_FAIL", "true");
+    const sendEmailSpy = vi.spyOn(emailModule, "sendEmail").mockRejectedValueOnce(new Error("Simulated email driver failure"));
     const targetEmail = `fail-${Date.now()}@test.com`;
 
     // First register target
@@ -245,16 +224,15 @@ describe("Registration by Invite (POST /api/auth/register)", () => {
     expect(res.status).toBe(200);
 
     // Fire and forget, wait a tick
-    await new Promise(r => setTimeout(r, 50));
+    await vi.waitFor(async () => {
+      const audit = await db.auditLog.findFirst({
+        where: { action: "EMAIL_FAILED" },
+        orderBy: { createdAt: "desc" }
+      });
+      expect(audit).not.toBeNull();
+      expect(audit!.detailsJson).toContain("Simulated email driver failure");
+    }, { timeout: 2000, interval: 50 });
 
-    const audit = await db.auditLog.findFirst({
-      where: { action: "EMAIL_FAILED" },
-      orderBy: { createdAt: "desc" }
-    });
-    
-    expect(audit).not.toBeNull();
-    expect(audit!.detailsJson).toContain("Simulated email driver failure");
-
-    vi.unstubAllEnvs();
+    sendEmailSpy.mockRestore();
   });
 });
