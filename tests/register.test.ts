@@ -203,13 +203,14 @@ describe("Registration by Invite (POST /api/auth/register)", () => {
     const res = await registerPost(mockReq({ email: targetEmail, password: "password123", fullName: "Fail", inviteCode: invite.code }, "1.1.1.7"));
     expect(res.status).toBe(200);
 
-    // Fire and forget, wait a tick
-    await new Promise(r => setTimeout(r, 50));
-
-    const audit = await db.auditLog.findFirst({
-      where: { action: "EMAIL_FAILED" },
-      orderBy: { createdAt: "desc" }
-    });
+    // Wait for the fire-and-forget to execute and log to audit
+    let audit;
+    await vi.waitFor(async () => {
+      audit = await db.auditLog.findFirst({
+        where: { action: "EMAIL_FAILED", detailsJson: { contains: "Simulated email driver failure" } }
+      });
+      if (!audit) throw new Error("Audit log not found yet");
+    }, { timeout: 1000, interval: 50 });
     
     expect(audit).not.toBeNull();
     expect(audit!.detailsJson).toContain("Simulated email driver failure");
