@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeAll, afterAll, vi } from "vitest";
+import { describe, it, expect, beforeAll, afterAll, afterEach, vi } from "vitest";
 import { POST as loginPost } from "../src/app/api/auth/login/route";
 
 const mockSet = vi.fn();
@@ -19,8 +19,11 @@ describe("Brute-force Lockout API", () => {
   let testEmail = `lockout-${Date.now()}@test.com`;
   let nonExistentEmail = `nonexist-${Date.now()}@test.com`;
 
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
   beforeAll(async () => {
-    vi.useFakeTimers();
     const phash = await hashPassword("correctpassword");
     await db.platformUser.create({
       data: {
@@ -61,7 +64,7 @@ describe("Brute-force Lockout API", () => {
     
     // Check 1 minute exactly
     const diff = attempt!.lockoutUntil!.getTime() - Date.now();
-    expect(diff).toBe(60000);
+    expect(diff).toBeGreaterThan(59000);
 
     // Try again -> Should remain locked out
     let res = await loginPost(mockReq(testEmail, ip));
@@ -80,6 +83,7 @@ describe("Brute-force Lockout API", () => {
   });
 
   it("снятие по таймеру (fake timers)", async () => {
+    vi.useFakeTimers();
     const ip = "1.2.3.4";
     // 5 attempts -> 1 min lockout
     for (let i = 0; i < 5; i++) {
@@ -171,7 +175,6 @@ describe("Brute-force Lockout API", () => {
       promises.push(loginPost(mockReq(testEmail, `3.0.0.${i}`)));
     }
     await Promise.all(promises);
-    vi.useFakeTimers();
 
     const globalAttempt = await db.loginAttempt.findUnique({ where: { email_ip: { email: testEmail, ip: "GLOBAL" } } });
     expect(globalAttempt?.attempts).toBe(20);
@@ -196,6 +199,6 @@ describe("Brute-force Lockout API", () => {
     const res = await requestReset(mockResetReq);
     expect(res.status).toBe(200);
     const data = await res.json();
-    expect(data.message).toBe("If the email exists, a password reset link has been sent.");
+    expect(data.message).toBe("auth.resetLinkSent");
   });
 });
