@@ -56,7 +56,10 @@ model LearningCenter {
   name            String
   centerType      String   @default("HYBRID")
   status          String   @default("TRIAL") // TRIAL, ACTIVE, PAUSED, OVERDUE, BLOCKED, CANCELLED
+  suspensionReason String?
   logoUrl         String?
+  phone           String?
+  email           String?
   brandingConfig  String? // JSON: colors, custom subtitle, etc.
   defaultLanguage String   @default("ru")
   timeZone        String   @default("Asia/Tashkent")

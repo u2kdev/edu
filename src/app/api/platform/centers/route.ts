@@ -1,175 +1,207 @@
 import { NextResponse } from "next/server";
-// Reason: Exception: Platform routes manage global models.
 // eslint-disable-next-line no-restricted-imports
 import { db } from "@/lib/db";
-import { getAuthSession, hashPassword } from "@/lib/auth";
-import { logAuditEvent } from "@/lib/tenant";
+import { getAuthSession } from "@/lib/auth";
+import { hasPermission } from "@/lib/permissions";
+import { checkRateLimit, getClientIp } from "@/lib/rate-limit";
+import { z } from "zod";
+import crypto from "crypto";
 
-// GET /api/platform/centers - List all centers for Platform Admins
-export async function GET() {
+const getQuerySchema = z.object({
+  page: z.coerce.number().min(1).default(1),
+  pageSize: z.coerce.number().min(1).max(100).default(10),
+  q: z.string().optional(),
+  status: z.string().optional(),
+  sortBy: z.enum(["createdAt", "name"]).default("createdAt"),
+});
+
+export async function GET(req: Request) {
   try {
     const session = await getAuthSession();
-    if (!session || (session.user.platformRole !== "SUPERADMIN" && session.user.platformRole !== "PLATFORM_ADMIN")) {
-      return NextResponse.json({ error: "Forbidden: Only platform admins can list all centers" }, { status: 403 });
+    if (!session || !hasPermission("platform.centers.read", session.user.platformRole)) {
+      return NextResponse.json({ error: "Forbidden" }, { status: 403 });
     }
 
-    const centers = await db.learningCenter.findMany({
-      include: {
-        owner: { select: { id: true, fullName: true, email: true, phone: true } },
-        subscriptions: { include: { plan: true }, orderBy: { createdAt: "desc" }, take: 1 },
-        memberships: { select: { id: true, role: true } },
-      },
-      orderBy: { createdAt: "desc" },
-    });
+    const { searchParams } = new URL(req.url);
+    const parsedParams = getQuerySchema.safeParse(Object.fromEntries(searchParams));
 
-    return NextResponse.json({ centers });
+    if (!parsedParams.success) {
+      return NextResponse.json({ error: "Invalid query parameters" }, { status: 400 });
+    }
+
+    const { page, pageSize, q, status, sortBy } = parsedParams.data;
+
+    const where: any = {};
+    if (q) {
+      where.OR = [
+        { name: { contains: q } },
+        { slug: { contains: q } },
+        { owner: { email: { contains: q } } },
+      ];
+    }
+    if (status) {
+      where.status = status;
+    }
+
+    const [items, total] = await Promise.all([
+      db.learningCenter.findMany({
+        where,
+        skip: (page - 1) * pageSize,
+        take: pageSize,
+        orderBy: { [sortBy]: "desc" },
+        include: {
+          owner: { select: { id: true, email: true, fullName: true } }
+        }
+      }),
+      db.learningCenter.count({ where }),
+    ]);
+
+    return NextResponse.json({ items, total });
   } catch (err: any) {
-    return NextResponse.json({ error: err.message || "Ошибка сервера" }, { status: 500 });
+    return NextResponse.json({ error: err.message || "Internal Error" }, { status: 500 });
   }
 }
 
-// POST /api/platform/centers - Exclusively for Superadmin / Platform Admin to create a new LearningCenter
+const postBodySchema = z.object({
+  name: z.string().min(2),
+  slug: z.string().min(2).regex(/^[a-z0-9-]+$/),
+  contacts: z.object({
+    phone: z.string().optional(),
+    email: z.string().email().optional(),
+  }).optional(),
+  timeZone: z.string().default("Asia/Tashkent"),
+  status: z.string().default("TRIAL"),
+  trialEndsAt: z.string().optional(),
+  directorEmail: z.string().email(),
+  directorFullName: z.string().min(2),
+});
+
+const RESERVED_SLUGS = ["admin", "api", "platform", "login", "auth", "system"];
+
 export async function POST(req: Request) {
   try {
     const session = await getAuthSession();
-    if (!session || (session.user.platformRole !== "SUPERADMIN" && session.user.platformRole !== "PLATFORM_ADMIN")) {
-      return NextResponse.json(
-        { error: "Forbidden: Только Суперадмин или Админ платформы может создавать учебные центры" },
-        { status: 403 }
-      );
+    if (!session || !hasPermission("platform.centers.write", session.user.platformRole)) {
+      return NextResponse.json({ error: "Forbidden" }, { status: 403 });
     }
 
-    const { name, slug, centerType, planId, directorEmail, directorFullName, directorPhone } = await req.json();
-
-    if (!name || !slug || !directorEmail || !directorFullName) {
-      return NextResponse.json(
-        { error: "Заполните все обязательные поля: название центра, slug, email директора и ФИО директора" },
-        { status: 400 }
-      );
+    const ip = getClientIp(req);
+    if (!checkRateLimit(ip, 5, 60000)) {
+      return NextResponse.json({ error: "Too many requests" }, { status: 429 });
     }
 
-    const cleanSlug = slug.toLowerCase().replace(/[^a-z0-9-]/g, "-");
+    const body = await req.json();
+    const parsedBody = postBodySchema.safeParse(body);
+
+    if (!parsedBody.success) {
+      return NextResponse.json({ error: parsedBody.error.issues }, { status: 400 });
+    }
+
+    const data = parsedBody.data;
+
+    if (RESERVED_SLUGS.includes(data.slug.toLowerCase())) {
+      return NextResponse.json({ error: "Reserved slug" }, { status: 400 });
+    }
 
     const existingSlug = await db.learningCenter.findUnique({
-      where: { slug: cleanSlug },
+      where: { slug: data.slug.toLowerCase() },
     });
 
     if (existingSlug) {
-      return NextResponse.json({ error: "Этот slug уже занят другим учебным центром" }, { status: 400 });
+      return NextResponse.json({ error: "Slug already in use" }, { status: 400 });
     }
 
-    // 1. Find or create Director User
-    let directorUser = await db.platformUser.findUnique({
-      where: { email: directorEmail.toLowerCase().trim() },
-    });
+    const result = await db.$transaction(async (tx) => {
+      let user = await tx.platformUser.findUnique({
+        where: { email: data.directorEmail.toLowerCase().trim() },
+      });
 
-    if (!directorUser) {
-      const tempPasswordHash = await hashPassword("Password123!");
-      directorUser = await db.platformUser.create({
+      if (!user) {
+        const randomPassword = crypto.randomBytes(16).toString("hex");
+        user = await tx.platformUser.create({
+          data: {
+            email: data.directorEmail.toLowerCase().trim(),
+            fullName: data.directorFullName,
+            passwordHash: randomPassword,
+            emailVerified: new Date(),
+          },
+        });
+      }
+
+      const center = await tx.learningCenter.create({
         data: {
-          email: directorEmail.toLowerCase().trim(),
-          fullName: directorFullName,
-          phone: directorPhone || null,
-          passwordHash: tempPasswordHash,
+          name: data.name,
+          slug: data.slug.toLowerCase(),
+          email: data.contacts?.email,
+          phone: data.contacts?.phone,
+          timeZone: data.timeZone,
+          status: data.status,
+          ownerId: user.id,
         },
       });
-    }
 
-    // 2. Create Learning Center
-    const center = await db.learningCenter.create({
-      data: {
-        name,
-        slug: cleanSlug,
-        centerType: centerType || "HYBRID",
-        status: "ACTIVE",
-        ownerId: directorUser.id,
-      },
-    });
+      let plan = null;
+      if ((body as any).planId) {
+        plan = await tx.subscriptionPlan.findUnique({ where: { id: (body as any).planId } });
+      } else {
+        plan = await tx.subscriptionPlan.findFirst({ where: { isActive: true } });
+      }
 
-    // 3. Create Subscription
-    const selectedPlan = planId
-      ? await db.subscriptionPlan.findUnique({ where: { id: planId } })
-      : await db.subscriptionPlan.findFirst({ where: { isActive: true } });
+      if (plan) {
+        await tx.subscription.create({
+          data: {
+            centerId: center.id,
+            planId: plan.id,
+            status: "TRIAL",
+            trialEndsAt: data.trialEndsAt ? new Date(data.trialEndsAt) : new Date(Date.now() + 14 * 24 * 60 * 60 * 1000),
+            currentPeriodStartsAt: new Date(),
+            currentPeriodEndsAt: data.trialEndsAt ? new Date(data.trialEndsAt) : new Date(Date.now() + 14 * 24 * 60 * 60 * 1000),
+          }
+        });
+      }
 
-    if (selectedPlan) {
-      const periodEndsAt = new Date();
-      periodEndsAt.setDate(periodEndsAt.getDate() + 30);
+      const membership = await tx.centerMembership.create({
+        data: {
+          userId: user.id,
+          centerId: center.id,
+          role: "DIRECTOR",
+        },
+      });
 
-      await db.subscription.create({
+      const resetToken = crypto.randomBytes(32).toString("hex");
+      const hashedToken = crypto.createHash("sha256").update(resetToken).digest("hex");
+      
+      await tx.passwordResetToken.create({
+        data: {
+          userId: user.id,
+          tokenHash: hashedToken,
+          expiresAt: new Date(Date.now() + 72 * 60 * 60 * 1000), // 72 hours
+        },
+      });
+
+      // Mock sending email
+      console.log(`Sending email to ${user.email} with reset token`);
+
+      await tx.auditLog.create({
         data: {
           centerId: center.id,
-          planId: selectedPlan.id,
-          status: "ACTIVE",
-          currentPeriodStartsAt: new Date(),
-          currentPeriodEndsAt: periodEndsAt,
+          actorUserId: session.user.id,
+          action: "PLATFORM_CREATE_LEARNING_CENTER",
+          resource: "LearningCenter",
+          detailsJson: JSON.stringify({ slug: center.slug }),
         },
       });
-    }
 
-    // 4. Create Director CenterMembership
-    const membership = await db.centerMembership.create({
-      data: {
-        userId: directorUser.id,
-        centerId: center.id,
-        role: "DIRECTOR",
-      },
+      return { center, user, membership };
     });
 
-    await logAuditEvent({
-      centerId: center.id,
-      actorUserId: session.user.id,
-      action: "PLATFORM_CREATE_LEARNING_CENTER",
-      resource: "LearningCenter",
-      resourceId: center.id,
-      details: { name: center.name, slug: center.slug, directorEmail: directorUser.email },
-    });
-
-    return NextResponse.json({
-      success: true,
-      center,
-      director: {
-        id: directorUser.id,
-        email: directorUser.email,
-        fullName: directorUser.fullName,
-      },
-      membership,
+    return NextResponse.json({ 
+      success: true, 
+      center: result.center, 
+      director: { id: result.user.id, email: result.user.email, fullName: result.user.fullName },
+      membership: result.membership 
     });
   } catch (err: any) {
-    console.error("Platform Center Creation Error:", err);
-    return NextResponse.json({ error: err.message || "Ошибка при создании центра" }, { status: 500 });
-  }
-}
-
-// PATCH /api/platform/centers - Change Center Status (ACTIVE, FROZEN, BLOCKED)
-export async function PATCH(req: Request) {
-  try {
-    const session = await getAuthSession();
-    if (!session || (session.user.platformRole !== "SUPERADMIN" && session.user.platformRole !== "PLATFORM_ADMIN")) {
-      return NextResponse.json({ error: "Forbidden: Platform admin privileges required" }, { status: 403 });
-    }
-
-    const { centerId, status } = await req.json();
-
-    if (!centerId || !status) {
-      return NextResponse.json({ error: "Center ID and status required" }, { status: 400 });
-    }
-
-    const center = await db.learningCenter.update({
-      where: { id: centerId },
-      data: { status },
-    });
-
-    await logAuditEvent({
-      centerId: center.id,
-      actorUserId: session.user.id,
-      action: "PLATFORM_CHANGE_CENTER_STATUS",
-      resource: "LearningCenter",
-      resourceId: center.id,
-      details: { newStatus: status },
-    });
-
-    return NextResponse.json({ success: true, center });
-  } catch (err: any) {
-    return NextResponse.json({ error: err.message || "Ошибка сервера" }, { status: 500 });
+    return NextResponse.json({ error: err.message || "Internal error" }, { status: 500 });
   }
 }

@@ -59,7 +59,7 @@ describe("Registration Rate Limits", () => {
     }
     
     const results = await Promise.all(promises);
-    const successes = results.filter(r => r.message === "Registration successful. Please check your email to confirm.");
+    const successes = results.filter((r: any) => r.message === "Registration successful. Please check your email to confirm.");
     expect(successes.length).toBe(30);
   }, 15000);
 
@@ -72,9 +72,9 @@ describe("Registration Rate Limits", () => {
     }
     
     // First 10 should be 400 Invalid Invite
-    const badRequests = responses.filter(r => r.status === 400);
+    const badRequests = responses.filter((r: any) => r.status === 400);
     // The rest (5) should be 429 Rate Limited
-    const rateLimitedRequests = responses.filter(r => r.status === 429);
+    const rateLimitedRequests = responses.filter((r: any) => r.status === 429);
     
     expect(badRequests.length).toBe(10);
     expect(rateLimitedRequests.length).toBe(5);

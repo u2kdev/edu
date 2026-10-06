@@ -6,7 +6,7 @@ export async function checkSubscriptionLimit(
   incrementAmount: number = 1
 ): Promise<boolean> {
   const subscription = await db.subscription.findFirst({
-    where: { centerId, status: "ACTIVE" },
+    where: { centerId, status: { in: ["ACTIVE", "TRIAL"] } },
     include: { plan: true },
     orderBy: { createdAt: "desc" },
   });

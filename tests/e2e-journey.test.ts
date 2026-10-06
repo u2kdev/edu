@@ -104,7 +104,6 @@ describe("Phase 12: Real-World E2E Validation Journey", () => {
 
     const res = await createStaff(req);
     const data = await res.json();
-
     expect(res.status).toBe(200);
     expect(data.success).toBe(true);
     expect(data.membership.userId).toBeDefined();

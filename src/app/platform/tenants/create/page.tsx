@@ -1,199 +1,223 @@
 "use client";
 
-import { useState, useEffect } from "react";
-import { Building2, Mail, User, Phone, CheckCircle2, AlertCircle, ArrowLeft } from "lucide-react";
-import Link from "next/link";
-import { useRouter } from "next/navigation";
+import React, { useState } from 'react';
+import { useRouter } from 'next/navigation';
+import { z } from 'zod';
+import Link from 'next/link';
+
+const schemaStep1 = z.object({
+  name: z.string().min(2, "Name must be at least 2 characters"),
+  slug: z.string().min(2, "Slug must be at least 2 characters").regex(/^[a-z0-9-]+$/, "Slug must contain only lowercase letters, numbers, and hyphens"),
+  phone: z.string().min(5, "Phone is required"),
+  email: z.string().email("Invalid email"),
+  timeZone: z.string().min(1, "Time zone is required"),
+});
+
+const schemaStep2 = z.object({
+  status: z.enum(["TRIAL", "ACTIVE", "PAUSED", "OVERDUE", "BLOCKED", "CANCELLED"]),
+  trialEndsAt: z.string().optional(),
+});
+
+const schemaStep3 = z.object({
+  directorEmail: z.string().email("Invalid email"),
+  directorFullName: z.string().min(2, "Full name is required"),
+  directorPhone: z.string().min(5, "Phone is required"),
+});
 
 export default function CreateTenantPage() {
   const router = useRouter();
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState("");
-  const [success, setSuccess] = useState(false);
-  const [plans, setPlans] = useState<any[]>([]);
-
+  const [step, setStep] = useState(1);
   const [formData, setFormData] = useState({
-    name: "",
-    slug: "",
-    directorEmail: "",
-    directorFullName: "",
-    directorPhone: "",
-    planId: "",
+    name: '', slug: '', phone: '', email: '', timeZone: 'Asia/Tashkent',
+    status: 'TRIAL', trialEndsAt: '',
+    directorEmail: '', directorFullName: '', directorPhone: ''
   });
-
-  useEffect(() => {
-    fetch("/api/platform/plans")
-      .then(res => res.json())
-      .then(data => setPlans(data.plans || []));
-  }, []);
+  const [errors, setErrors] = useState<Record<string, string>>({});
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [submitError, setSubmitError] = useState<string | null>(null);
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {
     setFormData({ ...formData, [e.target.name]: e.target.value });
+    setErrors({ ...errors, [e.target.name]: '' });
+  };
+
+  const handleNext = () => {
+    let result;
+    if (step === 1) result = schemaStep1.safeParse(formData);
+    else if (step === 2) result = schemaStep2.safeParse(formData);
+    else if (step === 3) result = schemaStep3.safeParse(formData);
     
-    // Auto-generate slug from name if slug is empty or user is typing name
-    if (e.target.name === "name" && !formData.slug) {
-      setFormData(prev => ({
-        ...prev,
-        slug: e.target.value.toLowerCase().replace(/[^a-z0-9-]/g, "-"),
-      }));
-    }
-  };
-
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setLoading(true);
-    setError("");
-
-    try {
-      const res = await fetch("/api/platform/centers", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(formData),
+    if (result && !result.success) {
+      const formattedErrors: Record<string, string> = {};
+      result.error.issues.forEach(issue => {
+        if (issue.path[0] !== undefined) {
+          formattedErrors[String(issue.path[0])] = issue.message;
+        }
       });
-
-      const data = await res.json();
-
-      if (!res.ok) {
-        throw new Error(data.error || "Ошибка при создании центра");
-      }
-
-      setSuccess(true);
-      setTimeout(() => {
-        router.push(`/platform/tenants/${data.center.id}`);
-      }, 2000);
-    } catch (err: any) {
-      setError(err.message);
-    } finally {
-      setLoading(false);
+      setErrors(formattedErrors);
+      return;
     }
+    
+    setStep(s => s + 1);
   };
 
-  if (success) {
-    return (
-      <div className="flex flex-col items-center justify-center min-h-[400px] text-center">
-        <div className="w-16 h-16 bg-emerald-500/20 text-emerald-400 rounded-full flex items-center justify-center mb-6">
-          <CheckCircle2 className="w-8 h-8" />
-        </div>
-        <h2 className="text-2xl font-bold text-white mb-2">Учебный центр успешно создан!</h2>
-        <p className="text-slate-400">Воркспейс, профиль владельца и начальная подписка инициализированы.</p>
-        <p className="text-sm text-slate-500 mt-4">Перенаправление...</p>
-      </div>
-    );
-  }
+  const handleSubmit = async () => {
+    setIsSubmitting(true);
+    setSubmitError(null);
+    try {
+      const res = await fetch('/api/platform/centers', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(formData)
+      });
+      if (!res.ok) {
+        const errorData = await res.json();
+        throw new Error(errorData.message || 'Failed to create center');
+      }
+      const data = await res.json();
+      const newId = data.center?.id || data.data?.id;
+      if (newId) {
+        router.push(`/platform/tenants/${newId}`);
+      } else {
+        router.push('/platform/tenants');
+      }
+    } catch (error: any) {
+      setSubmitError(error.message);
+      setIsSubmitting(false);
+    }
+  };
 
   return (
-    <div className="max-w-2xl mx-auto space-y-6">
-      <div className="flex items-center gap-4 mb-8">
-        <Link href="/platform/tenants" className="w-10 h-10 rounded-full bg-slate-800 flex items-center justify-center text-slate-400 hover:text-white transition-colors">
-          <ArrowLeft className="w-5 h-5" />
-        </Link>
-        <div>
-          <h1 className="text-2xl font-bold text-white">Создать новый учебный центр</h1>
-          <p className="text-slate-400 text-sm">Добавление нового клиента (Tenant) на платформу</p>
-        </div>
+    <div className="p-6 max-w-3xl mx-auto">
+      <div className="mb-6 flex items-center justify-between">
+        <h1 className="text-2xl font-bold">Create Organization</h1>
+        <Link href="/platform/tenants" className="text-blue-600 hover:underline">Cancel</Link>
       </div>
 
-      {error && (
-        <div className="p-4 bg-rose-500/10 border border-rose-500/20 rounded-xl flex items-center gap-3 text-rose-400">
-          <AlertCircle className="w-5 h-5 flex-shrink-0" />
-          <p className="text-sm">{error}</p>
-        </div>
-      )}
+      <div className="mb-8 flex justify-between items-center relative">
+        <div className="absolute left-0 top-1/2 w-full h-1 bg-gray-200 -z-10 transform -translate-y-1/2"></div>
+        {[1, 2, 3, 4].map(i => (
+          <div key={i} className={`w-8 h-8 rounded-full flex items-center justify-center font-bold border-4 border-white ${step >= i ? 'bg-blue-600 text-white' : 'bg-gray-300 text-gray-600'}`}>
+            {i}
+          </div>
+        ))}
+      </div>
 
-      <form onSubmit={handleSubmit} className="glass-panel p-8 rounded-2xl border border-slate-800 space-y-6">
-        <div className="space-y-4">
-          <h3 className="text-lg font-semibold text-white border-b border-slate-800 pb-2">Общая информация</h3>
-          
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+      <div className="bg-white p-6 rounded-lg shadow-sm border border-gray-200">
+        {step === 1 && (
+          <div className="space-y-4">
+            <h2 className="text-xl font-semibold mb-4">Step 1: Center Data</h2>
             <div>
-              <label className="block text-xs font-semibold text-slate-400 uppercase tracking-wider mb-2">Название центра *</label>
-              <div className="relative">
-                <Building2 className="w-5 h-5 text-slate-500 absolute left-3 top-1/2 -translate-y-1/2" />
-                <input 
-                  required name="name" value={formData.name} onChange={handleChange}
-                  placeholder="e.g. Школа Кодинга"
-                  className="w-full bg-slate-900 border border-slate-700 text-white rounded-xl pl-10 pr-4 py-3 text-sm focus:outline-none focus:border-brand-500"
-                />
-              </div>
+              <label className="block text-sm font-medium text-gray-700">Name</label>
+              <input type="text" name="name" value={formData.name} onChange={handleChange} className="mt-1 block w-full border border-gray-300 rounded-md p-2" />
+              {errors.name && <p className="text-red-500 text-xs mt-1">{errors.name}</p>}
             </div>
             <div>
-              <label className="block text-xs font-semibold text-slate-400 uppercase tracking-wider mb-2">System Slug *</label>
-              <input 
-                required name="slug" value={formData.slug} onChange={handleChange}
-                placeholder="e.g. coding-school"
-                className="w-full bg-slate-900 border border-slate-700 text-white rounded-xl px-4 py-3 text-sm focus:outline-none focus:border-brand-500"
-              />
+              <label className="block text-sm font-medium text-gray-700">Slug</label>
+              <input type="text" name="slug" value={formData.slug} onChange={handleChange} className="mt-1 block w-full border border-gray-300 rounded-md p-2" />
+              {errors.slug && <p className="text-red-500 text-xs mt-1">{errors.slug}</p>}
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-gray-700">Phone</label>
+              <input type="text" name="phone" value={formData.phone} onChange={handleChange} className="mt-1 block w-full border border-gray-300 rounded-md p-2" />
+              {errors.phone && <p className="text-red-500 text-xs mt-1">{errors.phone}</p>}
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-gray-700">Email</label>
+              <input type="email" name="email" value={formData.email} onChange={handleChange} className="mt-1 block w-full border border-gray-300 rounded-md p-2" />
+              {errors.email && <p className="text-red-500 text-xs mt-1">{errors.email}</p>}
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-gray-700">Time Zone</label>
+              <select name="timeZone" value={formData.timeZone} onChange={handleChange} className="mt-1 block w-full border border-gray-300 rounded-md p-2">
+                <option value="Asia/Tashkent">Asia/Tashkent</option>
+                <option value="Europe/Moscow">Europe/Moscow</option>
+              </select>
+              {errors.timeZone && <p className="text-red-500 text-xs mt-1">{errors.timeZone}</p>}
             </div>
           </div>
-        </div>
+        )}
 
-        <div className="space-y-4">
-          <h3 className="text-lg font-semibold text-white border-b border-slate-800 pb-2">Владелец (Директор)</h3>
-          
-          <div>
-            <label className="block text-xs font-semibold text-slate-400 uppercase tracking-wider mb-2">Email владельца *</label>
-            <div className="relative">
-              <Mail className="w-5 h-5 text-slate-500 absolute left-3 top-1/2 -translate-y-1/2" />
-              <input 
-                required type="email" name="directorEmail" value={formData.directorEmail} onChange={handleChange}
-                placeholder="director@example.com"
-                className="w-full bg-slate-900 border border-slate-700 text-white rounded-xl pl-10 pr-4 py-3 text-sm focus:outline-none focus:border-brand-500"
-              />
+        {step === 2 && (
+          <div className="space-y-4">
+            <h2 className="text-xl font-semibold mb-4">Step 2: Status</h2>
+            <div>
+              <label className="block text-sm font-medium text-gray-700">Status</label>
+              <select name="status" value={formData.status} onChange={handleChange} className="mt-1 block w-full border border-gray-300 rounded-md p-2">
+                <option value="TRIAL">TRIAL</option>
+                <option value="ACTIVE">ACTIVE</option>
+              </select>
             </div>
-            <p className="text-xs text-slate-500 mt-1">Если пользователь с таким email уже существует, он будет назначен владельцем. Иначе будет создан новый аккаунт с паролем Password123!</p>
+            {formData.status === 'TRIAL' && (
+              <div>
+                <label className="block text-sm font-medium text-gray-700">Trial Ends At</label>
+                <input type="date" name="trialEndsAt" value={formData.trialEndsAt} onChange={handleChange} className="mt-1 block w-full border border-gray-300 rounded-md p-2" />
+              </div>
+            )}
           </div>
+        )}
 
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+        {step === 3 && (
+          <div className="space-y-4">
+            <h2 className="text-xl font-semibold mb-4">Step 3: Administrator</h2>
             <div>
-              <label className="block text-xs font-semibold text-slate-400 uppercase tracking-wider mb-2">ФИО владельца *</label>
-              <div className="relative">
-                <User className="w-5 h-5 text-slate-500 absolute left-3 top-1/2 -translate-y-1/2" />
-                <input 
-                  required name="directorFullName" value={formData.directorFullName} onChange={handleChange}
-                  placeholder="Иван Иванов"
-                  className="w-full bg-slate-900 border border-slate-700 text-white rounded-xl pl-10 pr-4 py-3 text-sm focus:outline-none focus:border-brand-500"
-                />
-              </div>
+              <label className="block text-sm font-medium text-gray-700">Director Full Name</label>
+              <input type="text" name="directorFullName" value={formData.directorFullName} onChange={handleChange} className="mt-1 block w-full border border-gray-300 rounded-md p-2" />
+              {errors.directorFullName && <p className="text-red-500 text-xs mt-1">{errors.directorFullName}</p>}
             </div>
             <div>
-              <label className="block text-xs font-semibold text-slate-400 uppercase tracking-wider mb-2">Телефон</label>
-              <div className="relative">
-                <Phone className="w-5 h-5 text-slate-500 absolute left-3 top-1/2 -translate-y-1/2" />
-                <input 
-                  name="directorPhone" value={formData.directorPhone} onChange={handleChange}
-                  placeholder="+998901234567"
-                  className="w-full bg-slate-900 border border-slate-700 text-white rounded-xl pl-10 pr-4 py-3 text-sm focus:outline-none focus:border-brand-500"
-                />
-              </div>
+              <label className="block text-sm font-medium text-gray-700">Director Email</label>
+              <input type="email" name="directorEmail" value={formData.directorEmail} onChange={handleChange} className="mt-1 block w-full border border-gray-300 rounded-md p-2" />
+              {errors.directorEmail && <p className="text-red-500 text-xs mt-1">{errors.directorEmail}</p>}
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-gray-700">Director Phone</label>
+              <input type="text" name="directorPhone" value={formData.directorPhone} onChange={handleChange} className="mt-1 block w-full border border-gray-300 rounded-md p-2" />
+              {errors.directorPhone && <p className="text-red-500 text-xs mt-1">{errors.directorPhone}</p>}
             </div>
           </div>
-        </div>
+        )}
 
-        <div className="space-y-4">
-          <h3 className="text-lg font-semibold text-white border-b border-slate-800 pb-2">Тарифный план</h3>
+        {step === 4 && (
+          <div className="space-y-4">
+            <h2 className="text-xl font-semibold mb-4">Step 4: Confirm</h2>
+            <div className="grid grid-cols-2 gap-4 text-sm">
+              <div><strong className="text-gray-500 block">Name:</strong> {formData.name}</div>
+              <div><strong className="text-gray-500 block">Slug:</strong> {formData.slug}</div>
+              <div><strong className="text-gray-500 block">Status:</strong> {formData.status}</div>
+              <div><strong className="text-gray-500 block">Director:</strong> {formData.directorFullName} ({formData.directorEmail})</div>
+            </div>
+            {submitError && <div className="p-3 bg-red-100 text-red-700 rounded-md">{submitError}</div>}
+          </div>
+        )}
+
+        <div className="mt-8 flex justify-between">
+          <button
+            onClick={() => setStep(s => Math.max(1, s - 1))}
+            disabled={step === 1 || isSubmitting}
+            className="px-4 py-2 border border-gray-300 rounded-md disabled:opacity-50 hover:bg-gray-50"
+          >
+            Back
+          </button>
           
-          <div>
-            <label className="block text-xs font-semibold text-slate-400 uppercase tracking-wider mb-2">Начальный тариф *</label>
-            <select 
-              name="planId" value={formData.planId} onChange={handleChange}
-              className="w-full bg-slate-900 border border-slate-700 text-white rounded-xl px-4 py-3 text-sm focus:outline-none focus:border-brand-500"
+          {step < 4 ? (
+            <button
+              onClick={handleNext}
+              className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700"
             >
-              <option value="">Выберите тариф (по умолчанию Trial)</option>
-              {plans.map(p => (
-                <option key={p.id} value={p.id}>{p.name} (${p.priceMonthly}/mo)</option>
-              ))}
-            </select>
-          </div>
+              Next
+            </button>
+          ) : (
+            <button
+              onClick={handleSubmit}
+              disabled={isSubmitting}
+              className="px-4 py-2 bg-green-600 text-white rounded-md disabled:opacity-50 hover:bg-green-700 flex items-center"
+            >
+              {isSubmitting ? 'Creating...' : 'Confirm & Create'}
+            </button>
+          )}
         </div>
-
-        <button 
-          type="submit" 
-          disabled={loading}
-          className="w-full py-4 bg-gradient-to-r from-brand-600 to-indigo-600 hover:from-brand-500 hover:to-indigo-500 text-white font-bold rounded-xl shadow-lg shadow-brand-500/20 transition-all disabled:opacity-50"
-        >
-          {loading ? "Создание инфраструктуры..." : "Создать Tenant"}
-        </button>
-      </form>
+      </div>
     </div>
   );
 }

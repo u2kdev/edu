@@ -122,7 +122,7 @@ export async function POST(req: Request) {
     }
 
     if (updateCount.count === 0) {
-      return genericInvalidError;
+      return consumeAndReturnInvalidError();
     }
 
     // 5. New User Logic

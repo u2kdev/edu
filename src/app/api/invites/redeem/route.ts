@@ -41,7 +41,7 @@ export async function POST(req: Request) {
       !invite || 
       invite.isRevoked || 
       (invite.expiresAt && new Date() > invite.expiresAt) || 
-      (invite.usesCount >= invite.maxUses)
+      (invite.maxUses !== null && invite.usesCount >= invite.maxUses)
     ) {
       // Neutral message to prevent leaking if code exists
       return NextResponse.json(
