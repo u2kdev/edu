@@ -30,11 +30,20 @@ describe("Migrations", () => {
 
     // Apply phase3_fixes
     db.exec(m2);
-    
+
+    // Insert InviteCode before phase3_harden
+    db.prepare(`INSERT INTO "LearningCenter" (id, ownerId, name, slug, status, createdAt, updatedAt) VALUES ('center-1', 'user-1', 'Test', 'slug', 'ACTIVE', '2026-01-01', '2026-01-01')`).run();
+    db.prepare(`INSERT INTO "CenterMembership" (id, centerId, userId, role, status, createdAt, updatedAt) VALUES ('mem-1', 'center-1', 'user-1', 'DIRECTOR', 'ACTIVE', '2026-01-01', '2026-01-01')`).run();
+    db.prepare(`INSERT INTO "InviteCode" (id, centerId, createdByMembershipId, code, targetRole, maxUses, usesCount, expiresAt, createdAt, updatedAt) VALUES ('inv-1', 'center-1', 'mem-1', 'TESTCODE', 'STUDENT', 5, 1, null, '2026-01-01', '2026-01-01')`).run();
+
     const m3 = fs.readFileSync(path.join(migrationsDir, "20261006071614_phase3_harden/migration.sql"), "utf-8");
     db.exec(m3);
 
     const afterUser = db.prepare(`SELECT * FROM "PlatformUser" WHERE id = 'user-1'`).get();
     expect(afterUser.emailVerified).not.toBeNull();
+
+    const afterInvite = db.prepare(`SELECT * FROM "InviteCode" WHERE id = 'inv-1'`).get();
+    expect(afterInvite.code).toBe('TESTCODE');
+    expect(afterInvite.maxUses).toBe(5);
   });
 });
