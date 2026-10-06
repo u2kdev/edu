@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { db } from "@/lib/db";
-import { signJWT } from "@/lib/auth";
+import { signJWT, hashJti, JWTPayload } from "@/lib/auth";
+import { v4 as uuidv4 } from "uuid";
 
 export async function POST(req: Request) {
   // Only allow in development mode or if explicitly enabled
@@ -24,10 +25,31 @@ export async function POST(req: Request) {
     }
 
     // Create session token
-    const token = await signJWT({
-      id: user.id,
+    const jti = uuidv4();
+    const expiresIn = "30d";
+    const expiresAt = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000);
+
+    const payload = {
+      userId: user.id,
       email: user.email,
       platformRole: user.platformRole,
+      jti,
+    } as JWTPayload;
+
+    const token = signJWT(payload, expiresIn);
+
+    const ip = req.headers.get("x-forwarded-for") || "127.0.0.1";
+
+    // Create session in DB
+    await db.userSession.create({
+      data: {
+        userId: user.id,
+        jtiHash: hashJti(jti),
+        expiresAt,
+        ipAddress: ip,
+        userAgent: req.headers.get("user-agent") || "DevLogin",
+        lastSeenAt: new Date(),
+      }
     });
 
     const response = NextResponse.json({ success: true, user });
