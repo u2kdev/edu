@@ -5,7 +5,7 @@ CREATE TABLE "PendingInvite" (
     "inviteCodeId" TEXT NOT NULL,
     "status" TEXT NOT NULL DEFAULT 'PENDING',
     "createdAt" DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    CONSTRAINT "PendingInvite_inviteCodeId_fkey" FOREIGN KEY ("inviteCodeId") REFERENCES "InviteCode" ("id") ON DELETE CASCADE ON UPDATE "PlatformUser" SET "emailVerified" = CURRENT_TIMESTAMP WHERE "emailVerified" IS NULL;
+    CONSTRAINT "PendingInvite_inviteCodeId_fkey" FOREIGN KEY ("inviteCodeId") REFERENCES "InviteCode" ("id") ON DELETE CASCADE ON UPDATE CASCADE
 );
 
 -- CreateIndex
