@@ -9,6 +9,7 @@ import { logAuditEvent } from "@/lib/tenant";
 import { sendEmail } from "@/lib/email";
 import { z } from "zod";
 import crypto from "crypto";
+import { REGISTER_CONFIG } from "@/lib/config";
 
 const registerSchema = z.object({
   email: z.string().email(),
@@ -21,9 +22,6 @@ const registerSchema = z.object({
 export async function POST(req: Request) {
   try {
     const ip = req.headers.get("x-forwarded-for") || "unknown";
-    if (!checkRateLimit(ip + "_register", 5, 60 * 60 * 1000)) {
-      return apiError("Too many registration attempts", "RATE_LIMITED", 429);
-    }
 
     const body = await req.json();
     const parsed = registerSchema.safeParse(body);
@@ -31,6 +29,17 @@ export async function POST(req: Request) {
       return apiError("Invalid data", "BAD_REQUEST", 400);
     }
     const { email: rawEmail, password, fullName, phone, inviteCode } = parsed.data;
+    const cleanCode = inviteCode.toUpperCase().trim();
+
+    if (!checkRateLimit(ip + "_register", REGISTER_CONFIG.IP_HOURLY_LIMIT, 3600000)) {
+      return apiError("Too many registration attempts from this IP", "RATE_LIMITED", 429);
+    }
+    if (!checkRateLimit(cleanCode + "_register", REGISTER_CONFIG.CODE_HOURLY_LIMIT, 3600000)) {
+      return apiError("Too many registrations for this code", "RATE_LIMITED", 429);
+    }
+    if (!checkRateLimit(ip + "_" + cleanCode + "_register", REGISTER_CONFIG.CODE_IP_HOURLY_LIMIT, 3600000)) {
+      return apiError("Too many registration attempts for this code from this IP", "RATE_LIMITED", 429);
+    }
     const email = rawEmail.toLowerCase().trim();
 
     // 1. Fetch invite code
