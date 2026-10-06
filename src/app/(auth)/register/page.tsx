@@ -1,11 +1,10 @@
 "use client";
 
 import { useState, Suspense } from "react";
-import { useTranslation } from "react-i18next";
+import { t } from "@/lib/i18n";
 import { useRouter, useSearchParams } from "next/navigation";
 
 function RegisterContent() {
-  const { t } = useTranslation();
   const router = useRouter();
   const searchParams = useSearchParams();
   const initialCode = searchParams?.get("code") || "";

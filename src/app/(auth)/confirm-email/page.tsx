@@ -1,12 +1,11 @@
 "use client";
 
 import { useEffect, useState, Suspense } from "react";
-import { useTranslation } from "react-i18next";
+import { t } from "@/lib/i18n";
 import { useRouter, useSearchParams } from "next/navigation";
 
 function ConfirmEmailContent() {
-  const { t } = useTranslation();
-  const router = useRouter();
+    const router = useRouter();
   const searchParams = useSearchParams();
   const token = searchParams?.get("token") || "";
 

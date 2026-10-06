@@ -8,7 +8,7 @@ import { notFound } from "next/navigation";
 export const dynamic = 'force-dynamic';
 
 export default async function DevLoginsPage() {
-  if (process.env.NODE_ENV === "production" || process.env.DEV_LOGIN !== "true") {
+  if ((process.env.NODE_ENV as string) === "production" || process.env.DEV_LOGIN !== "true") {
     notFound();
   }
 
