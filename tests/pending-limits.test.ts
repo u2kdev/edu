@@ -72,7 +72,7 @@ describe("PendingInvite Limits (POST /api/auth/register)", () => {
     const res21 = await registerPost(mockReq({ email: testEmail, password: "password123", fullName: `Spam`, inviteCode: code1Limit }, spamIp));
     expect(res21.status).toBe(429);
     const data = await res21.json();
-    expect(data.error.message).toBe("Too many pending invites from this IP");
+    expect(data.error.code).toBe("RATE_LIMITED");
   });
 
   it("Email/Center Limit: 11th registration for same center returns 429", async () => {
@@ -89,7 +89,7 @@ describe("PendingInvite Limits (POST /api/auth/register)", () => {
     rateLimits.delete(spamIp + "_register");
     const res11 = await registerPost(mockReq({ email: testEmail, password: "password123", fullName: `Spam`, inviteCode: code1Limit }, spamIp));
     expect(res11.status).toBe(429);
-    const data = await res11.json();
-    expect(data.error.message).toBe("Too many pending invites for this center");
+    const data11 = await res11.json();
+    expect(data11.error.code).toBe("RATE_LIMITED");
   });
 });
