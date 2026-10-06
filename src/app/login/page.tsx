@@ -158,6 +158,9 @@ export default function LoginPage() {
             >
               Директор Центра
             </button>
+            <Link href="/dev-logins" className="col-span-2 py-2 text-xs font-semibold rounded-lg bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 hover:bg-emerald-500/20 transition-all text-center flex items-center justify-center gap-2">
+              🚀 Полная админка Dev Входов
+            </Link>
           </div>
         </div>
 
