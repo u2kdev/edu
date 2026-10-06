@@ -78,7 +78,7 @@ export async function requireTenantAccess(expectedCenterId?: string) {
         (membership.role === "DIRECTOR" || membership.role === "CENTER_ADMIN")) {
       // allow
     } else {
-      const err: any = new Error(`Tenant suspended: ${center.status}`);
+      const err: any = new Error(`Forbidden: Tenant suspended: ${center.status}`);
       err.status = 403;
       err.code = "CENTER_SUSPENDED";
       throw err;

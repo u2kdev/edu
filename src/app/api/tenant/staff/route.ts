@@ -47,8 +47,8 @@ export async function GET() {
     return NextResponse.json({ staff: staffMembers });
   } catch (err: any) {
     return NextResponse.json(
-      { error: err.message || "Server error" },
-      { status: err.message?.includes("Forbidden") ? 403 : 500 }
+      { error: err.message || "Server error", code: err.code },
+      { status: err.status || (err.message?.includes("Forbidden") ? 403 : 500) }
     );
   }
 }
