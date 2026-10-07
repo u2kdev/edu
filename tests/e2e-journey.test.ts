@@ -63,7 +63,10 @@ describe("Phase 12: Real-World E2E Validation Journey", () => {
   });
 
   afterAll(async () => {
-    if (centerId) await db.learningCenter.delete({ where: { id: centerId } });
+    if (centerId) {
+      await db.subscription.deleteMany({ where: { centerId } });
+      await db.learningCenter.delete({ where: { id: centerId } });
+    }
     await db.subscriptionPlan.delete({ where: { id: planId } });
     await db.platformUser.delete({ where: { id: platformOwnerId } });
   });
@@ -104,6 +107,7 @@ describe("Phase 12: Real-World E2E Validation Journey", () => {
 
     const res = await createStaff(req);
     const data = await res.json();
+
     expect(res.status).toBe(200);
     expect(data.success).toBe(true);
     expect(data.membership.userId).toBeDefined();
