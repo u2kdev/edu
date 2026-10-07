@@ -49,19 +49,19 @@ describe("Registration by Invite (POST /api/auth/register)", () => {
   });
 
   afterAll(async () => {
-    try { await db.inviteCode.deleteMany({ where: { centerId } }); } catch (e) {}
-    try { await db.centerMembership.deleteMany({ where: { centerId } }); } catch (e) {}
-    try { await db.learningCenter.delete({ where: { id: centerId } }); } catch (e) {}
-    try { try { await db.course.deleteMany({ where: { center: { owner: { email: { startsWith: "reg" } } } } }); } catch (e) {} } catch (e) {}
-    try { try { await db.centerMembership.deleteMany({ where: { user: { email: { startsWith: "reg" } } } }); } catch (e) {} } catch (e) {}
-    try { await db.subscription.deleteMany({ where: { center: { owner: { email: { startsWith: "reg" } } } } }); } catch (e) {}
-    try { await db.learningCenter.deleteMany({ where: { owner: { email: { startsWith: "reg" } } } }); } catch (e) {}
-    try { await db.platformUser.deleteMany({ where: { email: { startsWith: "regowner-" } } }); } catch (e) {}
-    try { await db.platformUser.deleteMany({ where: { email: { startsWith: "racer-" } } }); } catch (e) {}
-    try { await db.platformUser.deleteMany({ where: { email: { startsWith: "invalid-" } } }); } catch (e) {}
-    try { await db.platformUser.deleteMany({ where: { email: { startsWith: "exist-" } } }); } catch (e) {}
-    try { await db.platformUser.deleteMany({ where: { email: { startsWith: "dir-" } } }); } catch (e) {}
-    try { await db.platformUser.deleteMany({ where: { email: { startsWith: "new-" } } }); } catch (e) {}
+    await db.inviteCode.deleteMany({ where: { centerId } });
+    await db.centerMembership.deleteMany({ where: { centerId } });
+    await db.learningCenter.delete({ where: { id: centerId } });
+    await db.course.deleteMany({ where: { center: { owner: { email: { startsWith: "reg" } } } } });
+    await db.centerMembership.deleteMany({ where: { user: { email: { startsWith: "reg" } } } });
+    await db.subscription.deleteMany({ where: { center: { owner: { email: { startsWith: "reg" } } } } });
+    await db.learningCenter.deleteMany({ where: { owner: { email: { startsWith: "reg" } } } });
+    await db.platformUser.deleteMany({ where: { email: { startsWith: "regowner-" } } });
+    await db.platformUser.deleteMany({ where: { email: { startsWith: "racer-" } } });
+    await db.platformUser.deleteMany({ where: { email: { startsWith: "invalid-" } } });
+    await db.platformUser.deleteMany({ where: { email: { startsWith: "exist-" } } });
+    await db.platformUser.deleteMany({ where: { email: { startsWith: "dir-" } } });
+    await db.platformUser.deleteMany({ where: { email: { startsWith: "new-" } } });
   });
 
   const mockReq = (body: any, ip: string = "1.1.1.1") =>

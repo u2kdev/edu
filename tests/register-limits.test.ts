@@ -32,7 +32,7 @@ describe("Registration Rate Limits", () => {
   afterAll(async () => {
     await db.inviteCode.deleteMany({ where: { centerId } });
     await db.centerMembership.deleteMany({ where: { centerId } });
-    try { await db.learningCenter.delete({ where: { id: centerId } }); } catch (e) {}
+    await db.learningCenter.delete({ where: { id: centerId } });
     await db.platformUser.deleteMany({ where: { email: { contains: "reglim" } } });
   });
 
@@ -49,16 +49,11 @@ describe("Registration Rate Limits", () => {
 
   it("Allows 30 registrations from same IP using ONE code with sufficient limit (classroom scenario)", async () => {
     const ip = "4.4.4.4";
-    const promises = [];
-    
-    // Use code10Limit which has maxUses 100
+    const results = [];
     for (let i = 0; i < 30; i++) {
-      promises.push(
-        registerPost(mockReq({ email: `reglim-samecode-${i}@test.com`, password: "password123", fullName: `Class ${i}`, inviteCode: code10Limit }, ip)).then(r => r.json())
-      );
+      const res = await registerPost(mockReq({ email: `reglim-samecode-${i}@test.com`, password: "password123", fullName: `Class ${i}`, inviteCode: code10Limit }, ip));
+      results.push(await res.json());
     }
-    
-    const results = await Promise.all(promises);
     const successes = results.filter((r: any) => r.message === "Registration successful. Please check your email to confirm.");
     expect(successes.length).toBe(30);
   }, 15000);
