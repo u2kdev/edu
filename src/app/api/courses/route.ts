@@ -32,7 +32,7 @@ export async function GET(req: Request) {
 
     return NextResponse.json({ courses });
   } catch (err: any) {
-    return NextResponse.json({ error: err.message || "Ошибка загрузки курсов" }, { status: 400 });
+    return NextResponse.json({ error: err.message || "Ошибка загрузки курсов" }, { status: err.status || 400 });
   }
 }
 
@@ -48,7 +48,7 @@ export async function POST(req: Request) {
     const { title, description, coverImage, isPublished } = await req.json();
 
     if (!title) {
-      return NextResponse.json({ error: "Укажите название курса" }, { status: 400 });
+      return NextResponse.json({ error: "Укажите название курса" }, { status: err.status || 400 });
     }
 
     if (!tenantCtx.membership?.id) {
@@ -75,6 +75,6 @@ export async function POST(req: Request) {
 
     return NextResponse.json({ success: true, course });
   } catch (err: any) {
-    return NextResponse.json({ error: err.message || "Ошибка создания курса" }, { status: 400 });
+    return NextResponse.json({ error: err.message || "Ошибка создания курса" }, { status: err.status || 400 });
   }
 }
