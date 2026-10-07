@@ -48,7 +48,7 @@ export async function POST(req: Request) {
     const { title, description, coverImage, isPublished } = await req.json();
 
     if (!title) {
-      return NextResponse.json({ error: "Укажите название курса" }, { status: err.status || 400 });
+      return NextResponse.json({ error: "Укажите название курса" }, { status: 400 });
     }
 
     if (!tenantCtx.membership?.id) {

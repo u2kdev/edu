@@ -1,26 +1,43 @@
 import { describe, it, expect, vi, beforeAll, afterAll } from 'vitest';
 import { POST } from '../src/app/api/auth/dev-login/route';
 
-describe('Dev Login in Production', () => {
+describe('Dev Login API Env Protection', () => {
   const originalEnv = process.env.NODE_ENV;
   const originalDevLogin = process.env.DEV_LOGIN;
-
-  beforeAll(() => {
-    process.env.NODE_ENV = 'production';
-    process.env.DEV_LOGIN = 'true';
-  });
 
   afterAll(() => {
     process.env.NODE_ENV = originalEnv;
     process.env.DEV_LOGIN = originalDevLogin;
   });
 
-  it('should return 404 in production even if DEV_LOGIN=true', async () => {
-    const req = new Request('http://localhost/api/auth/dev-login', {
-      method: 'POST',
-      body: JSON.stringify({ userId: '123' })
+  const testCases = [
+    { env: 'production', devLogin: 'true', expectAccess: false },
+    { env: 'production', devLogin: 'false', expectAccess: false },
+    { env: 'development', devLogin: 'false', expectAccess: false },
+    { env: 'development', devLogin: 'true', expectAccess: true },
+  ];
+
+  describe('API: /api/auth/dev-login', () => {
+    testCases.forEach(({ env, devLogin, expectAccess }) => {
+      it(`env=${env}, DEV_LOGIN=${devLogin} -> ${expectAccess ? 'ALLOW' : '404'}`, async () => {
+        process.env.NODE_ENV = env as any;
+        process.env.DEV_LOGIN = devLogin;
+
+        const req = new Request('http://localhost/api/auth/dev-login', {
+          method: 'POST',
+          body: JSON.stringify({ userId: '123' })
+        });
+        const res = await POST(req);
+        const data = await res.json();
+        
+        if (expectAccess) {
+          // It should NOT be the env 404 error
+          expect(data.error).not.toBe('Not Found');
+        } else {
+          expect(res.status).toBe(404);
+          expect(data.error).toBe('Not Found');
+        }
+      });
     });
-    const res = await POST(req);
-    expect(res.status).toBe(404);
   });
 });
