@@ -1,11 +1,23 @@
-import { describe, it, expect, vi, beforeAll, afterAll } from 'vitest';
+import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import { POST } from '../src/app/api/auth/dev-login/route';
+import { db } from '../src/lib/db';
 
 describe('Dev Login API Env Protection', () => {
   const originalEnv = process.env.NODE_ENV;
   const originalDevLogin = process.env.DEV_LOGIN;
 
-  afterAll(() => {
+  let testUserId = "";
+
+  beforeAll(async () => {
+    const user = await db.platformUser.create({
+      data: { email: `devtest-${Date.now()}@x.com`, passwordHash: "x", fullName: "Dev Test" }
+    });
+    testUserId = user.id;
+  });
+
+  afterAll(async () => {
+    await db.userSession.deleteMany({ where: { userId: testUserId } });
+    await db.platformUser.delete({ where: { id: testUserId } });
     process.env.NODE_ENV = originalEnv;
     process.env.DEV_LOGIN = originalDevLogin;
   });
@@ -25,14 +37,14 @@ describe('Dev Login API Env Protection', () => {
 
         const req = new Request('http://localhost/api/auth/dev-login', {
           method: 'POST',
-          body: JSON.stringify({ userId: '123' })
+          body: JSON.stringify({ userId: testUserId })
         });
         const res = await POST(req);
         const data = await res.json();
         
         if (expectAccess) {
-          // It should NOT be the env 404 error
           expect(data.error).not.toBe('Not Found');
+          expect(res.status).toBe(200);
         } else {
           expect(res.status).toBe(404);
           expect(data.error).toBe('Not Found');
