@@ -52,6 +52,9 @@ describe("Registration by Invite (POST /api/auth/register)", () => {
     await db.inviteCode.deleteMany({ where: { centerId } });
     await db.centerMembership.deleteMany({ where: { centerId } });
     await db.learningCenter.delete({ where: { id: centerId } });
+    await db.centerMembership.deleteMany({ where: { user: { email: { startsWith: "reg" } } } });
+    await db.subscription.deleteMany({ where: { center: { owner: { email: { startsWith: "reg" } } } } });
+    await db.learningCenter.deleteMany({ where: { owner: { email: { startsWith: "reg" } } } });
     await db.platformUser.deleteMany({ where: { email: { startsWith: "regowner-" } } });
     await db.platformUser.deleteMany({ where: { email: { startsWith: "racer-" } } });
     await db.platformUser.deleteMany({ where: { email: { startsWith: "invalid-" } } });
