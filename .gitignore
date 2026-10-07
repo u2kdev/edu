@@ -40,3 +40,7 @@ reports/
 *.db  
 *.db-journal  
 reports/ 
+
+build.log
+reports/
+scratch/
