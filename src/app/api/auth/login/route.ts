@@ -139,7 +139,7 @@ export async function POST(req: Request) {
       email: user.email,
       platformRole: user.platformRole,
       jti,
-    } as any;
+    };
 
     const token = signJWT(payload, expiresIn);
 

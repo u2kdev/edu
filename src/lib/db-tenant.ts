@@ -52,24 +52,30 @@ export function getTenantDb(centerId: string) {
               // We'll add centerId to where. If Prisma complains about invalid fields for findUnique,
               // we can rewrite findUnique to findFirst.
               
+              const delegate = (db as unknown as Record<string, {
+                findFirst: (a: unknown) => Promise<unknown>;
+                updateMany: (a: unknown) => Promise<{ count: number }>;
+                deleteMany: (a: unknown) => Promise<{ count: number }>;
+              }>)[model];
+
               if (operation === "findUnique") {
                 operation = "findFirst";
                 args.where = { ...args.where, centerId };
-                return (db as any)[model].findFirst(args);
+                return delegate.findFirst(args);
               }
               
               if (operation === "update") {
                 operation = "updateMany";
                 args.where = { ...args.where, centerId };
-                const res = await (db as any)[model].updateMany(args);
+                const res = await delegate.updateMany(args);
                 if (res.count === 0) throw new Error("Record not found or access denied");
-                return (db as any)[model].findFirst({ where: args.where });
+                return delegate.findFirst({ where: args.where });
               }
 
               if (operation === "delete") {
                 operation = "deleteMany";
                 args.where = { ...args.where, centerId };
-                const res = await (db as any)[model].deleteMany(args);
+                const res = await delegate.deleteMany(args);
                 if (res.count === 0) throw new Error("Record not found or access denied");
                 return { ...args.where, _deleted: true };
               }

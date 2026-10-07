@@ -26,8 +26,8 @@ export async function comparePassword(password: string, hash: string): Promise<b
 
 import crypto from "crypto";
 
-export function signJWT(payload: JWTPayload, expiresIn: string = "7d", jwtId?: string): string {
-  const options: jwt.SignOptions = { expiresIn: expiresIn as any };
+export function signJWT(payload: JWTPayload, expiresIn: jwt.SignOptions["expiresIn"] = "7d", jwtId?: string): string {
+  const options: jwt.SignOptions = { expiresIn };
   if (jwtId) options.jwtid = jwtId;
   return jwt.sign(payload, JWT_SECRET, options);
 }

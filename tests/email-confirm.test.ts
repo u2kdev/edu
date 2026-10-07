@@ -106,7 +106,7 @@ describe("Email Resend and Sensitive Actions", () => {
       },
       sessionId: "mock-session-id",
       memberships: []
-    } as any);
+    } as unknown as Awaited<ReturnType<typeof auth.getAuthSession>>);
 
     const req = new Request(`http://localhost/api/auth/password/change`, {
       method: "POST", headers: { "x-forwarded-for": "1.1.1.1" }, body: JSON.stringify({ currentPassword: "pwd", newPassword: "pwd2" })
