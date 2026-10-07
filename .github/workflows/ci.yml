@@ -1,0 +1,54 @@
+name: CI
+
+on:
+  push:
+    branches:
+      - feature/lms-upgrade
+      - main
+  pull_request:
+    branches:
+      - feature/lms-upgrade
+      - main
+
+jobs:
+  verify:
+    name: Lint, Test & Build
+    runs-on: ubuntu-latest
+
+    env:
+      DATABASE_URL: "file:./dev.db"
+      JWT_SECRET: "ci-dummy-jwt-secret-key-32-chars-long!"
+      DEV_LOGIN: "false"
+      DEV_EMAIL_LOG: "false"
+      NEXT_TELEMETRY_DISABLED: "1"
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version-file: ".nvmrc"
+          cache: "npm"
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Generate Prisma Client
+        run: npx prisma generate
+
+      - name: Initialize Database
+        run: npx prisma db push --accept-data-loss
+
+      - name: Typecheck (tsc)
+        run: npx tsc --noEmit
+
+      - name: Lint
+        run: npx next lint
+
+      - name: Run Tests (vitest)
+        run: npx vitest run
+
+      - name: Build Application
+        run: npx next build
