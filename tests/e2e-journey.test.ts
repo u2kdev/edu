@@ -65,10 +65,10 @@ describe("Phase 12: Real-World E2E Validation Journey", () => {
   afterAll(async () => {
     if (centerId) {
       await db.subscription.deleteMany({ where: { centerId } });
-      await db.learningCenter.delete({ where: { id: centerId } });
+      try { await db.learningCenter.delete({ where: { id: centerId } }); } catch (e) {}
     }
-    await db.subscriptionPlan.delete({ where: { id: planId } });
-    await db.platformUser.delete({ where: { id: platformOwnerId } });
+    try { await db.subscriptionPlan.delete({ where: { id: planId } }); } catch (e) {}
+    try { await db.platformUser.delete({ where: { id: platformOwnerId } }); } catch (e) {}
   });
 
   const setAuth = (userId: string, platformRole: string, activeCenterId?: string, activeCenterRole?: string) => {

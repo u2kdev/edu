@@ -32,7 +32,7 @@ describe("Registration Rate Limits", () => {
   afterAll(async () => {
     await db.inviteCode.deleteMany({ where: { centerId } });
     await db.centerMembership.deleteMany({ where: { centerId } });
-    await db.learningCenter.delete({ where: { id: centerId } });
+    try { await db.learningCenter.delete({ where: { id: centerId } }); } catch (e) {}
     await db.platformUser.deleteMany({ where: { email: { contains: "reglim" } } });
   });
 
