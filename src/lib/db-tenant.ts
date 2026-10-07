@@ -44,6 +44,17 @@ export function getTenantDb(centerId: string) {
               args.where = { ...args.where, centerId };
             }
 
+            if (operation === "upsert") {
+              const delegate = (db as unknown as Record<string, {
+                findFirst: (a: unknown) => Promise<{ centerId?: string } | null>;
+              }>)[model];
+              const target = await delegate.findFirst({ where: args.where });
+              if (target && target.centerId !== centerId) {
+                throw new Error("Record not found or access denied");
+              }
+              args.create = { ...args.create, centerId };
+            }
+
             if (operation === "findUnique" || operation === "update" || operation === "delete") {
               // Prisma requires findUnique/update/delete to only use unique fields.
               // To safely scope them, we intercept and convert to findFirst/updateMany/deleteMany, 
