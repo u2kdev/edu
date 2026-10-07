@@ -72,27 +72,18 @@ export async function requireTenantAccess(expectedCenterId?: string) {
   }
 
   // Check center status
-  if (center.status === "BLOCKED") {
-    throw new Error("Tenant Blocked: Learning center has been suspended by platform administration.");
+  if (["BLOCKED", "CANCELLED", "PAUSED", "OVERDUE", "FROZEN"].includes(center.status)) {
+    // If it's a specific status that some roles can still access, allow them
+    if ((center.status === "PAUSED" || center.status === "OVERDUE" || center.status === "FROZEN") && 
+        (membership.role === "DIRECTOR" || membership.role === "CENTER_ADMIN")) {
+      // allow
+    } else {
+      const err: any = new Error(`Forbidden: Tenant suspended: ${center.status}`);
+      err.status = 403;
+      err.code = "CENTER_SUSPENDED";
+      throw err;
+    }
   }
-
-  if (center.status === "CANCELLED") {
-    throw new Error("Tenant Cancelled: Learning center subscription has been cancelled.");
-  }
-
-  if (center.status === "PAUSED" && membership.role !== "DIRECTOR" && membership.role !== "CENTER_ADMIN") {
-    throw new Error("Tenant Paused: Learning center is temporarily paused. Please contact your administrator.");
-  }
-
-  if (center.status === "OVERDUE" && membership.role !== "DIRECTOR" && membership.role !== "CENTER_ADMIN") {
-    throw new Error("Payment Overdue: Learning center has overdue payments. Please contact your administrator.");
-  }
-
-  // Legacy: FROZEN status (maps to PAUSED behavior)
-  if (center.status === "FROZEN" && membership.role !== "DIRECTOR") {
-    throw new Error("Tenant Frozen: Learning center subscription has expired. Please contact center administration.");
-  }
-
 
   return {
     session,

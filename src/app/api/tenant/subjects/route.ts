@@ -1,14 +1,14 @@
 import { NextResponse } from "next/server";
-import { db } from "@/lib/db";
+import { getTenantDb } from "@/lib/db-tenant";
 import { requireTenantAccess, logAuditEvent } from "@/lib/tenant";
 
 // GET /api/tenant/subjects
 export async function GET(req: Request) {
   try {
     const tenantCtx = await requireTenantAccess();
+    const tenantDb = getTenantDb(tenantCtx.center.id);
 
-    const subjects = await db.subject.findMany({
-      where: { centerId: tenantCtx.center.id },
+    const subjects = await tenantDb.subject.findMany({
       include: { _count: { select: { courses: true, groups: true } } },
       orderBy: { name: "asc" },
     });
@@ -23,6 +23,7 @@ export async function GET(req: Request) {
 export async function POST(req: Request) {
   try {
     const tenantCtx = await requireTenantAccess();
+    const tenantDb = getTenantDb(tenantCtx.center.id);
 
     if (tenantCtx.role !== "DIRECTOR" && tenantCtx.role !== "CENTER_ADMIN" && !tenantCtx.isPlatformStaff) {
       return NextResponse.json({ error: "Forbidden" }, { status: 403 });
@@ -33,7 +34,7 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: "Subject name is required" }, { status: 400 });
     }
 
-    const subject = await db.subject.create({
+    const subject = await tenantDb.subject.create({
       data: {
         centerId: tenantCtx.center.id,
         name: name.trim(),
@@ -51,6 +52,7 @@ export async function POST(req: Request) {
 export async function PATCH(req: Request) {
   try {
     const tenantCtx = await requireTenantAccess();
+    const tenantDb = getTenantDb(tenantCtx.center.id);
 
     if (tenantCtx.role !== "DIRECTOR" && tenantCtx.role !== "CENTER_ADMIN" && !tenantCtx.isPlatformStaff) {
       return NextResponse.json({ error: "Forbidden" }, { status: 403 });
@@ -59,17 +61,17 @@ export async function PATCH(req: Request) {
     const { id, name, color } = await req.json();
     if (!id) return NextResponse.json({ error: "Subject ID required" }, { status: 400 });
 
-    // SECURITY: Tenant scope check
-    const existing = await db.subject.findFirst({ where: { id, centerId: tenantCtx.center.id } });
+    const existing = await tenantDb.subject.findFirst({ where: { id } });
     if (!existing) return NextResponse.json({ error: "Subject not found" }, { status: 404 });
 
-    const subject = await db.subject.update({
+    await tenantDb.subject.updateMany({
       where: { id },
       data: {
         name: name?.trim() || existing.name,
         color: color !== undefined ? color?.trim() || null : existing.color,
       },
     });
+    const subject = await tenantDb.subject.findFirst({ where: { id } });
 
     return NextResponse.json({ success: true, subject });
   } catch (err: any) {
@@ -81,6 +83,7 @@ export async function PATCH(req: Request) {
 export async function DELETE(req: Request) {
   try {
     const tenantCtx = await requireTenantAccess();
+    const tenantDb = getTenantDb(tenantCtx.center.id);
 
     if (tenantCtx.role !== "DIRECTOR" && !tenantCtx.isPlatformStaff) {
       return NextResponse.json({ error: "Only directors can delete subjects" }, { status: 403 });
@@ -89,8 +92,8 @@ export async function DELETE(req: Request) {
     const { id } = await req.json();
     if (!id) return NextResponse.json({ error: "Subject ID required" }, { status: 400 });
 
-    const existing = await db.subject.findFirst({
-      where: { id, centerId: tenantCtx.center.id },
+    const existing = await tenantDb.subject.findFirst({
+      where: { id },
       include: { _count: { select: { courses: true, groups: true } } },
     });
     if (!existing) return NextResponse.json({ error: "Subject not found" }, { status: 404 });
@@ -101,7 +104,7 @@ export async function DELETE(req: Request) {
       }, { status: 409 });
     }
 
-    await db.subject.delete({ where: { id } });
+    await tenantDb.subject.deleteMany({ where: { id } });
 
     await logAuditEvent({
       centerId: tenantCtx.center.id,

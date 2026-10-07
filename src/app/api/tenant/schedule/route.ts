@@ -1,12 +1,12 @@
 import { NextResponse } from "next/server";
-import { db } from "@/lib/db";
+import { getTenantDb } from "@/lib/db-tenant";
 import { requireTenantAccess, logAuditEvent } from "@/lib/tenant";
 import { sendNotification } from "@/lib/notifications";
 
 // ─── Conflict Detection Helper ───────────────────────────────────────────────
 
 interface ConflictCheckParams {
-  centerId: string;
+  tenantDb: any;
   groupId: string;
   teacherMembershipId: string;
   branchId?: string | null;
@@ -22,7 +22,6 @@ async function detectConflicts(params: ConflictCheckParams) {
 
   // Build base query for same day/time overlap
   const timeConflictWhere = {
-    centerId: params.centerId,
     dayOfWeek: params.dayOfWeek,
     status: "ACTIVE",
     id: params.excludeSlotId ? { not: params.excludeSlotId } : undefined,
@@ -34,7 +33,7 @@ async function detectConflicts(params: ConflictCheckParams) {
   };
 
   // 1. Check teacher conflict — same teacher at the same time
-  const teacherConflict = await db.scheduleSlot.findFirst({
+  const teacherConflict = await params.tenantDb.scheduleSlot.findFirst({
     where: {
       ...timeConflictWhere,
       teacherMembershipId: params.teacherMembershipId,
@@ -46,7 +45,7 @@ async function detectConflicts(params: ConflictCheckParams) {
   }
 
   // 2. Check group conflict — same group at the same time
-  const groupConflict = await db.scheduleSlot.findFirst({
+  const groupConflict = await params.tenantDb.scheduleSlot.findFirst({
     where: {
       ...timeConflictWhere,
       groupId: params.groupId,
@@ -58,7 +57,7 @@ async function detectConflicts(params: ConflictCheckParams) {
 
   // 3. Check room conflict — same room/branch at the same time
   if (params.roomName && params.branchId) {
-    const roomConflict = await db.scheduleSlot.findFirst({
+    const roomConflict = await params.tenantDb.scheduleSlot.findFirst({
       where: {
         ...timeConflictWhere,
         branchId: params.branchId,
@@ -79,17 +78,17 @@ async function detectConflicts(params: ConflictCheckParams) {
 export async function GET(req: Request) {
   try {
     const tenantCtx = await requireTenantAccess();
+    const tenantDb = getTenantDb(tenantCtx.center.id);
     const { searchParams } = new URL(req.url);
     const groupId = searchParams.get("groupId");
     const branchId = searchParams.get("branchId");
     const dayOfWeek = searchParams.get("dayOfWeek");
 
-    let whereCondition: any = { centerId: tenantCtx.center.id, status: "ACTIVE" };
+    let whereCondition: any = { status: "ACTIVE" };
 
     if (groupId) {
-      // SECURITY: Validate group belongs to this tenant
-      const group = await db.group.findFirst({
-        where: { id: groupId, course: { centerId: tenantCtx.center.id } },
+      const group = await tenantDb.group.findFirst({
+        where: { id: groupId },
       });
       if (!group) return NextResponse.json({ error: "Group not found" }, { status: 404 });
       whereCondition.groupId = groupId;
@@ -110,7 +109,7 @@ export async function GET(req: Request) {
 
     // STUDENT role: only see schedule for their enrolled groups
     if (tenantCtx.role === "STUDENT" && tenantCtx.membership) {
-      const enrollments = await db.enrollment.findMany({
+      const enrollments = await tenantDb.enrollment.findMany({
         where: { studentMembershipId: tenantCtx.membership.id },
         select: { groupId: true },
       });
@@ -119,18 +118,18 @@ export async function GET(req: Request) {
 
     // PARENT role: see schedule for children's groups
     if (tenantCtx.role === "PARENT" && tenantCtx.membership) {
-      const childLinks = await db.parentLink.findMany({
+      const childLinks = await tenantDb.parentLink.findMany({
         where: { parentMembershipId: tenantCtx.membership.id, status: "CONFIRMED" },
         select: { studentMembershipId: true },
       });
-      const childEnrollments = await db.enrollment.findMany({
+      const childEnrollments = await tenantDb.enrollment.findMany({
         where: { studentMembershipId: { in: childLinks.map((l) => l.studentMembershipId) } },
         select: { groupId: true },
       });
       whereCondition.groupId = { in: childEnrollments.map((e) => e.groupId) };
     }
 
-    const slots = await db.scheduleSlot.findMany({
+    const slots = await tenantDb.scheduleSlot.findMany({
       where: whereCondition,
       include: {
         group: { include: { course: { select: { title: true } }, subject: true } },
@@ -151,6 +150,7 @@ export async function GET(req: Request) {
 export async function POST(req: Request) {
   try {
     const tenantCtx = await requireTenantAccess();
+    const tenantDb = getTenantDb(tenantCtx.center.id);
 
     if (
       tenantCtx.role !== "DIRECTOR" &&
@@ -171,21 +171,19 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: "dayOfWeek must be 1-7 (Mon-Sun)" }, { status: 400 });
     }
 
-    // SECURITY: Validate group belongs to this tenant
-    const group = await db.group.findFirst({
-      where: { id: groupId, course: { centerId: tenantCtx.center.id } },
+    const group = await tenantDb.group.findFirst({
+      where: { id: groupId },
     });
     if (!group) return NextResponse.json({ error: "Group not found in this center" }, { status: 404 });
 
-    // SECURITY: Validate teacher belongs to this tenant
-    const teacher = await db.centerMembership.findFirst({
-      where: { id: teacherMembershipId, centerId: tenantCtx.center.id },
+    const teacher = await tenantDb.centerMembership.findFirst({
+      where: { id: teacherMembershipId },
     });
     if (!teacher) return NextResponse.json({ error: "Teacher not found in this center" }, { status: 404 });
 
     // Conflict detection
     const conflicts = await detectConflicts({
-      centerId: tenantCtx.center.id,
+      tenantDb,
       groupId,
       teacherMembershipId,
       branchId,
@@ -199,7 +197,7 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: "Schedule conflicts detected", conflicts }, { status: 409 });
     }
 
-    const slot = await db.scheduleSlot.create({
+    const slot = await tenantDb.scheduleSlot.create({
       data: {
         centerId: tenantCtx.center.id,
         groupId,
@@ -234,6 +232,7 @@ export async function POST(req: Request) {
 export async function PATCH(req: Request) {
   try {
     const tenantCtx = await requireTenantAccess();
+    const tenantDb = getTenantDb(tenantCtx.center.id);
 
     if (
       tenantCtx.role !== "DIRECTOR" &&
@@ -248,9 +247,8 @@ export async function PATCH(req: Request) {
 
     if (!id) return NextResponse.json({ error: "Slot ID required" }, { status: 400 });
 
-    // SECURITY: Verify slot belongs to this tenant
-    const existing = await db.scheduleSlot.findFirst({
-      where: { id, centerId: tenantCtx.center.id },
+    const existing = await tenantDb.scheduleSlot.findFirst({
+      where: { id },
     });
     if (!existing) return NextResponse.json({ error: "Schedule slot not found" }, { status: 404 });
 
@@ -260,34 +258,30 @@ export async function PATCH(req: Request) {
     const updatedStart = startTime || existing.startTime;
     const updatedEnd = endTime || existing.endTime;
 
-    // SECURITY: Validate new group belongs to tenant
     if (groupId && groupId !== existing.groupId) {
-      const group = await db.group.findFirst({
-        where: { id: groupId, course: { centerId: tenantCtx.center.id } },
+      const group = await tenantDb.group.findFirst({
+        where: { id: groupId },
       });
       if (!group) return NextResponse.json({ error: "Group not found in this center" }, { status: 404 });
     }
 
-    // SECURITY: Validate new teacher belongs to tenant
     if (teacherMembershipId && teacherMembershipId !== existing.teacherMembershipId) {
-      const teacher = await db.centerMembership.findFirst({
-        where: { id: teacherMembershipId, centerId: tenantCtx.center.id },
+      const teacher = await tenantDb.centerMembership.findFirst({
+        where: { id: teacherMembershipId },
       });
       if (!teacher) return NextResponse.json({ error: "Teacher not found in this center" }, { status: 404 });
     }
 
-    // SECURITY: Validate new branch belongs to tenant
     if (branchId && branchId !== existing.branchId) {
-      const branch = await db.branch.findFirst({
-        where: { id: branchId, centerId: tenantCtx.center.id },
+      const branch = await tenantDb.branch.findFirst({
+        where: { id: branchId },
       });
       if (!branch) return NextResponse.json({ error: "Branch not found in this center" }, { status: 404 });
     }
 
-    // Run conflict detection if timing changed
     if (groupId || teacherMembershipId || dayOfWeek || startTime || endTime) {
       const conflicts = await detectConflicts({
-        centerId: tenantCtx.center.id,
+        tenantDb,
         groupId: updatedGroupId,
         teacherMembershipId: updatedTeacherId,
         branchId: branchId ?? existing.branchId,
@@ -303,7 +297,7 @@ export async function PATCH(req: Request) {
       }
     }
 
-    const slot = await db.scheduleSlot.update({
+    await tenantDb.scheduleSlot.updateMany({
       where: { id },
       data: {
         groupId: updatedGroupId,
@@ -317,6 +311,7 @@ export async function PATCH(req: Request) {
         cancelledReason: cancelledReason || existing.cancelledReason,
       },
     });
+    const slot = await tenantDb.scheduleSlot.findFirst({ where: { id } });
 
     await logAuditEvent({
       centerId: tenantCtx.center.id,
@@ -327,13 +322,12 @@ export async function PATCH(req: Request) {
       details: { status, dayOfWeek },
     });
 
-    // NOTIFICATION: Schedule changed
     if (status === "CANCELLED" || existing.dayOfWeek !== updatedDay || existing.startTime !== updatedStart) {
-      const groupEnrollments = await db.enrollment.findMany({
+      const groupEnrollments = await tenantDb.enrollment.findMany({
         where: { groupId: updatedGroupId, status: "ACTIVE" },
         include: { student: true },
       });
-      const group = await db.group.findUnique({ where: { id: updatedGroupId }, select: { name: true } });
+      const group = await tenantDb.group.findFirst({ where: { id: updatedGroupId }, select: { name: true } });
       
       const notifType = status === "CANCELLED" ? "SCHEDULE_CANCELLED" : "SCHEDULE_CHANGE";
       const titleKey = status === "CANCELLED" ? "notifications.scheduleCancelled" : "notifications.scheduleChanged";
@@ -363,6 +357,7 @@ export async function PATCH(req: Request) {
 export async function DELETE(req: Request) {
   try {
     const tenantCtx = await requireTenantAccess();
+    const tenantDb = getTenantDb(tenantCtx.center.id);
 
     if (tenantCtx.role !== "DIRECTOR" && tenantCtx.role !== "CENTER_ADMIN" && !tenantCtx.isPlatformStaff) {
       return NextResponse.json({ error: "Forbidden" }, { status: 403 });
@@ -371,13 +366,12 @@ export async function DELETE(req: Request) {
     const { id } = await req.json();
     if (!id) return NextResponse.json({ error: "Slot ID required" }, { status: 400 });
 
-    // SECURITY: Tenant scope check
-    const existing = await db.scheduleSlot.findFirst({
-      where: { id, centerId: tenantCtx.center.id },
+    const existing = await tenantDb.scheduleSlot.findFirst({
+      where: { id },
     });
     if (!existing) return NextResponse.json({ error: "Schedule slot not found" }, { status: 404 });
 
-    await db.scheduleSlot.delete({ where: { id } });
+    await tenantDb.scheduleSlot.deleteMany({ where: { id } });
 
     await logAuditEvent({
       centerId: tenantCtx.center.id,

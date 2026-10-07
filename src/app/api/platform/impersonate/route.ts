@@ -1,4 +1,6 @@
 import { NextResponse } from "next/server";
+// Reason: Exception: Platform routes manage global models.
+// eslint-disable-next-line no-restricted-imports
 import { db } from "@/lib/db";
 import { getAuthSession, signJWT } from "@/lib/auth";
 import { logAuditEvent } from "@/lib/tenant";

@@ -1,0 +1,17 @@
+## Правила БД
+- Строго запрещено использовать `$queryRaw` и `$executeRaw` на рабочих таблицах (tenant-таблицах), так как они обходят Prisma-перехватчики, изолирующие данные. Если это абсолютно необходимо для производительности, вы должны написать хелпер, который принудительно добавляет проверку `centerId`.
+
+## Rate Limiting
+Currently, the rate limiter uses an in-memory Map. Limitation: In a multi-instance deployment, rate limits will not be shared globally. Plan: Migrate to Redis (e.g., Upstash) for distributed rate limiting before production deployment.
+
+### Базовая миграция (0_init)
+Мы схлопнули историю в единственную базовую миграцию `0_init`. При развертывании с нуля эта миграция применяется как стартовая точка.
+
+### Переход существующих БД (dev) на baseline
+Если у вас были применены старые миграции (например, `2026*`), их нужно пометить как resolved, чтобы Prisma не пыталась применить `0_init` заново (база уже содержит эти таблицы).
+Выполните:
+```bash
+npx prisma migrate resolve --applied 0_init
+```
+
+> **ВНИМАНИЕ**: Никогда не редактируйте системную таблицу `_prisma_migrations` вручную, особенно на production-базах! Это может нарушить целостность отслеживания миграций. Исключительно используйте `prisma migrate resolve`.

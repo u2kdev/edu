@@ -1,11 +1,12 @@
 import { NextResponse } from "next/server";
-import { db } from "@/lib/db";
+import { getTenantDb } from "@/lib/db-tenant";
 import { requireTenantAccess, logAuditEvent } from "@/lib/tenant";
 
 // POST /api/attendance/bulk - Mark attendance for all students in a group for a lesson in one batch
 export async function POST(req: Request) {
   try {
     const tenantCtx = await requireTenantAccess();
+    const tenantDb = getTenantDb(tenantCtx.center.id);
     if (tenantCtx.role !== "DIRECTOR" && tenantCtx.role !== "CENTER_ADMIN" && tenantCtx.role !== "TEACHER" && !tenantCtx.isPlatformStaff) {
       return NextResponse.json({ error: "Forbidden" }, { status: 403 });
     }
@@ -17,39 +18,58 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: "lessonId and groupId are required" }, { status: 400 });
     }
 
-    const enrollments = await db.enrollment.findMany({
+    const enrollments = await tenantDb.enrollment.findMany({
       where: { groupId, status: "ACTIVE" },
       select: { studentMembershipId: true },
     });
 
     const markerId = tenantCtx.membership?.id || tenantCtx.center.ownerId;
 
-    const upserts = enrollments.map((en) => {
+    // Use updateMany for UPSERT simulation with getTenantDb because prisma extension doesn't fully intercept compound where upserts well yet.
+    for (const en of enrollments) {
       const status = studentStatusMap?.[en.studentMembershipId] || defaultStatus || "PRESENT";
-      return db.attendance.upsert({
-        where: {
-          lessonId_studentMembershipId: {
-            lessonId,
-            studentMembershipId: en.studentMembershipId,
-          },
-        },
-        update: {
-          groupId,
-          status,
-          markedByMembershipId: markerId,
-          markedAt: new Date(),
-        },
-        create: {
-          lessonId,
-          studentMembershipId: en.studentMembershipId,
-          groupId,
-          status,
-          markedByMembershipId: markerId,
-        },
+      const existing = await tenantDb.attendance.findFirst({
+        where: { lessonId, studentMembershipId: en.studentMembershipId }
       });
-    });
 
-    await db.$transaction(upserts);
+      if (existing) {
+        await tenantDb.attendance.updateMany({
+           where: { lessonId, studentMembershipId: en.studentMembershipId },
+           data: {
+             groupId,
+             status,
+             markedByMembershipId: markerId,
+             markedAt: new Date(),
+           }
+        });
+      } else {
+        try {
+          await tenantDb.attendance.create({
+             data: {
+               lessonId,
+               studentMembershipId: en.studentMembershipId,
+               groupId,
+               status,
+               markedByMembershipId: markerId,
+             }
+          });
+        } catch (e: any) {
+          if (e.code === 'P2002') {
+            await tenantDb.attendance.updateMany({
+               where: { lessonId, studentMembershipId: en.studentMembershipId },
+               data: {
+                 groupId,
+                 status,
+                 markedByMembershipId: markerId,
+                 markedAt: new Date(),
+               }
+            });
+          } else {
+            throw e;
+          }
+        }
+      }
+    }
 
     await logAuditEvent({
       centerId: tenantCtx.center.id,

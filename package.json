@@ -7,13 +7,13 @@
     "build": "next build",
     "start": "next start",
     "lint": "next lint",
+    "verify": "node scripts/verify.mjs",
     "prisma:generate": "prisma generate",
     "prisma:db-push": "prisma db push",
     "prisma:seed": "node --import tsx/esm prisma/seed.ts"
   },
   "dependencies": {
     "@prisma/client": "^5.21.0",
-    "bcryptjs": "^2.4.3",
     "clsx": "^2.1.1",
     "framer-motion": "^11.11.10",
     "jsonwebtoken": "^9.0.2",
@@ -21,23 +21,29 @@
     "next": "^14.2.15",
     "react": "^18.3.1",
     "react-dom": "^18.3.1",
-    "tailwind-merge": "^2.5.4"
+    "tailwind-merge": "^2.5.4",
+    "uuid": "^14.0.2",
+    "zod": "^4.6.5"
   },
   "devDependencies": {
     "@types/bcryptjs": "^2.4.6",
+    "@types/better-sqlite3": "^9.6.0",
     "@types/jsonwebtoken": "^9.0.7",
     "@types/node": "^20.17.0",
     "@types/react": "^18.3.11",
     "@types/react-dom": "^18.3.1",
+    "@types/uuid": "^10.0.0",
     "@vitest/ui": "^4.1.10",
     "autoprefixer": "^10.4.20",
+    "bcryptjs": "^3.0.3",
+    "better-sqlite3": "^13.0.3",
     "eslint": "^8.57.1",
     "eslint-config-next": "^14.2.15",
     "postcss": "^8.4.47",
     "prisma": "^5.21.0",
     "tailwindcss": "^3.4.14",
     "tsx": "^4.23.12",
-    "typescript": "^5.6.3",
+    "typescript": "^5.9.3",
     "vitest": "^4.1.10"
   }
 }

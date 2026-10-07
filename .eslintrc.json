@@ -1,0 +1,46 @@
+{
+  "extends": "next/core-web-vitals",
+  "overrides": [
+    {
+      "files": [
+        "src/app/**/*.ts",
+        "src/app/**/*.tsx",
+        "src/lib/**/*.ts"
+      ],
+      "excludedFiles": [
+        "src/lib/db.ts",
+        "src/lib/db-tenant.ts",
+        "src/lib/auth.ts",
+        "src/lib/tenant.ts",
+        "src/lib/rate-limit.ts",
+        "src/lib/notifications.ts",
+        "src/app/api/auth/**/*.ts",
+        "src/app/api/developer/**/*.ts",
+        "src/app/api/platform/**/*.ts",
+        "src/app/api/tickets/**/*.ts",
+        "src/app/platform-admin/**/*.tsx",
+        "src/app/dashboard/platform/**/*.tsx"
+      ],
+      "rules": {
+        "no-restricted-imports": [
+          "error",
+          {
+            "patterns": [
+              {
+                "group": ["@/lib/db", "*/lib/db", "../**/lib/db", "**/lib/db"],
+                "message": "Use getTenantDb(centerId) instead of raw db for tenant routes. Raw db is only allowed with explicit inline disable."
+              }
+            ]
+          }
+        ],
+        "no-restricted-syntax": [
+          "error",
+          {
+            "selector": "NewExpression[callee.name='PrismaClient']",
+            "message": "Do not instantiate PrismaClient directly in API routes."
+          }
+        ]
+      }
+    }
+  ]
+}

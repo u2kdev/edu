@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { db } from "@/lib/db";
+import { getTenantDb } from "@/lib/db-tenant";
 import { requireTenantAccess, logAuditEvent } from "@/lib/tenant";
 import { sendNotification } from "@/lib/notifications";
 
@@ -7,6 +7,7 @@ import { sendNotification } from "@/lib/notifications";
 export async function GET(req: Request) {
   try {
     const tenantCtx = await requireTenantAccess();
+    const tenantDb = getTenantDb(tenantCtx.center.id);
     const { searchParams } = new URL(req.url);
     const lessonId = searchParams.get("lessonId");
 
@@ -16,8 +17,8 @@ export async function GET(req: Request) {
 
     if (lessonId) {
       // SECURITY: Verify lesson belongs to tenant before filtering by it
-      const lesson = await db.lesson.findFirst({
-        where: { id: lessonId, module: { course: { centerId: tenantCtx.center.id } } },
+      const lesson = await tenantDb.lesson.findFirst({
+        where: { id: lessonId },
       });
       if (!lesson) {
         return NextResponse.json({ error: "Lesson not found or access denied" }, { status: 404 });
@@ -27,7 +28,7 @@ export async function GET(req: Request) {
 
     // For STUDENT role: only return homeworks for groups they're enrolled in
     if (tenantCtx.role === "STUDENT" && tenantCtx.membership) {
-      const enrollments = await db.enrollment.findMany({
+      const enrollments = await tenantDb.enrollment.findMany({
         where: { studentMembershipId: tenantCtx.membership.id },
         select: { group: { select: { course: { select: { modules: { select: { lessons: { select: { id: true } } } } } } } } },
       });
@@ -42,7 +43,7 @@ export async function GET(req: Request) {
       whereCondition = { lessonId: { in: lessonIds } };
     }
 
-    const homeworks = await db.homework.findMany({
+    const homeworks = await tenantDb.homework.findMany({
       where: whereCondition,
       include: {
         materials: { include: { material: true } },
@@ -72,6 +73,8 @@ export async function GET(req: Request) {
 export async function POST(req: Request) {
   try {
     const tenantCtx = await requireTenantAccess();
+    const tenantDb = getTenantDb(tenantCtx.center.id);
+
     if (
       tenantCtx.role !== "DIRECTOR" &&
       tenantCtx.role !== "CENTER_ADMIN" &&
@@ -88,8 +91,8 @@ export async function POST(req: Request) {
     }
 
     // SECURITY: Verify lesson belongs to this tenant
-    const lesson = await db.lesson.findFirst({
-      where: { id: lessonId, module: { course: { centerId: tenantCtx.center.id } } },
+    const lesson = await tenantDb.lesson.findFirst({
+      where: { id: lessonId },
     });
     if (!lesson) {
       return NextResponse.json({ error: "Lesson not found or access denied" }, { status: 404 });
@@ -97,7 +100,7 @@ export async function POST(req: Request) {
 
     // SECURITY: For TEACHER role, verify they are assigned to the group that owns this lesson
     if (tenantCtx.role === "TEACHER" && tenantCtx.membership) {
-      const lessonWithCourse = await db.lesson.findFirst({
+      const lessonWithCourse = await tenantDb.lesson.findFirst({
         where: { id: lessonId },
         include: { module: { include: { course: { include: { groups: true } } } } },
       });
@@ -109,8 +112,9 @@ export async function POST(req: Request) {
       }
     }
 
-    const homework = await db.homework.create({
+    const homework = await tenantDb.homework.create({
       data: {
+        centerId: tenantCtx.center.id,
         lessonId,
         title,
         description: description || null,
@@ -121,15 +125,15 @@ export async function POST(req: Request) {
     // Link materials if provided
     if (Array.isArray(materialIds) && materialIds.length > 0) {
       // Validate all materialIds belong to this tenant
-      const validMaterials = await db.material.findMany({
-        where: { id: { in: materialIds }, centerId: tenantCtx.center.id },
+      const validMaterials = await tenantDb.material.findMany({
+        where: { id: { in: materialIds } },
         select: { id: true },
       });
       const validMatIds = new Set(validMaterials.map((m) => m.id));
 
       for (const matId of materialIds) {
         if (!validMatIds.has(matId)) continue; // Skip cross-tenant material IDs silently
-        await db.homeworkMaterial.create({
+        await tenantDb.homeworkMaterial.create({
           data: { homeworkId: homework.id, materialId: matId },
         });
       }
@@ -145,7 +149,7 @@ export async function POST(req: Request) {
     });
 
     // NOTIFICATION: Notify all students enrolled in the lesson's group
-    const enrollments = await db.enrollment.findMany({
+    const enrollments = await tenantDb.enrollment.findMany({
       where: {
         group: {
           course: {
@@ -186,16 +190,16 @@ export async function POST(req: Request) {
 export async function PATCH(req: Request) {
   try {
     const tenantCtx = await requireTenantAccess();
-    const { action, homeworkId, submissionText, filesJson, grade, feedback, studentMembershipId } =
-      await req.json();
+    const tenantDb = getTenantDb(tenantCtx.center.id);
+    const { action, homeworkId, submissionText, filesJson, grade, feedback, studentMembershipId } = await req.json();
 
     if (!homeworkId) {
       return NextResponse.json({ error: "homeworkId required" }, { status: 400 });
     }
 
     // SECURITY: Verify homework belongs to this tenant
-    const homework = await db.homework.findFirst({
-      where: { id: homeworkId, lesson: { module: { course: { centerId: tenantCtx.center.id } } } },
+    const homework = await tenantDb.homework.findFirst({
+      where: { id: homeworkId },
     });
     if (!homework) {
       return NextResponse.json({ error: "Homework not found or access denied" }, { status: 404 });
@@ -207,28 +211,39 @@ export async function PATCH(req: Request) {
         return NextResponse.json({ error: "Only students can submit homework" }, { status: 403 });
       }
 
-      const submission = await db.homeworkSubmission.upsert({
-        where: {
-          homeworkId_studentMembershipId: {
-            homeworkId,
-            studentMembershipId: tenantCtx.membership.id,
-          },
-        },
-        update: {
-          submissionText: submissionText || null,
-          filesJson: filesJson ? JSON.stringify(filesJson) : null,
-          submittedAt: new Date(),
-        },
-        create: {
-          homeworkId,
-          studentMembershipId: tenantCtx.membership.id,
-          submissionText: submissionText || null,
-          filesJson: filesJson ? JSON.stringify(filesJson) : null,
-        },
+      // We cannot use upsert because db-tenant intercepts findUnique but homeworkId_studentMembershipId is compound.
+      // We'll manually findFirst and create or update.
+      const existing = await tenantDb.homeworkSubmission.findFirst({
+        where: { homeworkId, studentMembershipId: tenantCtx.membership.id },
       });
 
+      let submission;
+      if (existing) {
+        submission = await tenantDb.homeworkSubmission.updateMany({
+          where: { homeworkId, studentMembershipId: tenantCtx.membership.id },
+          data: {
+            submissionText: submissionText || null,
+            filesJson: filesJson ? JSON.stringify(filesJson) : null,
+            submittedAt: new Date(),
+          },
+        });
+        submission = await tenantDb.homeworkSubmission.findFirst({
+           where: { homeworkId, studentMembershipId: tenantCtx.membership.id }
+        });
+      } else {
+        submission = await tenantDb.homeworkSubmission.create({
+          data: {
+            centerId: tenantCtx.center.id,
+            homeworkId,
+            studentMembershipId: tenantCtx.membership.id,
+            submissionText: submissionText || null,
+            filesJson: filesJson ? JSON.stringify(filesJson) : null,
+          },
+        });
+      }
+
       // Log activity
-      await db.activityLog.create({
+      await tenantDb.activityLog.create({
         data: {
           userMembershipId: tenantCtx.membership.id,
           centerId: tenantCtx.center.id,
@@ -256,11 +271,10 @@ export async function PATCH(req: Request) {
         return NextResponse.json({ error: "studentMembershipId required" }, { status: 400 });
       }
 
-      // SECURITY: Verify the studentMembershipId belongs to this tenant (prevents cross-tenant grade injection)
-      const studentMem = await db.centerMembership.findFirst({
+      // SECURITY: Verify the studentMembershipId belongs to this tenant
+      const studentMem = await tenantDb.centerMembership.findFirst({
         where: {
           id: studentMembershipId,
-          centerId: tenantCtx.center.id,
           role: "STUDENT",
         },
       });
@@ -270,7 +284,7 @@ export async function PATCH(req: Request) {
 
       // SECURITY: TEACHER can only grade students in their own groups
       if (tenantCtx.role === "TEACHER" && tenantCtx.membership) {
-        const isInTeacherGroup = await db.enrollment.findFirst({
+        const isInTeacherGroup = await tenantDb.enrollment.findFirst({
           where: {
             studentMembershipId,
             group: { teacherMembershipId: tenantCtx.membership.id },
@@ -281,12 +295,11 @@ export async function PATCH(req: Request) {
         }
       }
 
-      const submission = await db.homeworkSubmission.update({
+      // We use updateMany for composite unique keys because db-tenant doesn't support compound unique updates yet natively without error
+      await tenantDb.homeworkSubmission.updateMany({
         where: {
-          homeworkId_studentMembershipId: {
-            homeworkId,
-            studentMembershipId,
-          },
+          homeworkId,
+          studentMembershipId,
         },
         data: {
           grade: grade !== undefined ? parseInt(grade) : null,
@@ -296,12 +309,16 @@ export async function PATCH(req: Request) {
         },
       });
 
+      const submission = await tenantDb.homeworkSubmission.findFirst({
+        where: { homeworkId, studentMembershipId }
+      });
+
       await logAuditEvent({
         centerId: tenantCtx.center.id,
         actorUserId: tenantCtx.session.user.id,
         action: "HOMEWORK_GRADED",
         resource: "HomeworkSubmission",
-        resourceId: submission.id,
+        resourceId: submission?.id,
         details: { grade, studentMembershipId, homeworkId },
       });
 

@@ -1,162 +1,190 @@
-import { NextResponse } from "next/server";
+import { z } from "zod";
+// Reason: Exception: Auth routes operate on platform models.
+// eslint-disable-next-line no-restricted-imports
 import { db } from "@/lib/db";
-import { comparePassword, signJWT } from "@/lib/auth";
+import { comparePassword, signJWT, JWTPayload } from "@/lib/auth";
+import { checkRateLimit } from "@/lib/rate-limit";
+import { sendEmail } from '@/lib/email';
+import { apiError, apiSuccess, handleApiError } from "@/lib/api-response";
+import { loginSchema } from "@/lib/validation/auth";
+import { v4 as uuidv4 } from "uuid";
+import { cookies } from "next/headers";
 
-// Simple in-memory rate limiter (per IP, resets on server restart)
-// In production: replace with Redis-based rate limiter
-const loginAttempts = new Map<string, { count: number; lastAttempt: number }>();
-const MAX_ATTEMPTS = 10;
-const WINDOW_MS = 15 * 60 * 1000; // 15 minutes
-
-function getClientIp(req: Request): string {
-  const forwarded = req.headers.get("x-forwarded-for");
-  return forwarded ? forwarded.split(",")[0].trim() : "unknown";
-}
-
-function checkRateLimit(ip: string): boolean {
-  const now = Date.now();
-  const record = loginAttempts.get(ip);
-  if (!record || now - record.lastAttempt > WINDOW_MS) {
-    loginAttempts.set(ip, { count: 1, lastAttempt: now });
-    return true; // allowed
-  }
-  if (record.count >= MAX_ATTEMPTS) {
-    return false; // rate limited
-  }
-  record.count++;
-  record.lastAttempt = now;
-  return true; // allowed
-}
-
-function clearRateLimit(ip: string) {
-  loginAttempts.delete(ip);
-}
+const ACCOUNT_GLOBAL_DELAY_THRESHOLD = 20;
 
 export async function POST(req: Request) {
-  const ip = getClientIp(req);
-
   try {
-    // Rate limit check
+    const ip = req.headers.get("x-forwarded-for") || "unknown";
+    const userAgent = req.headers.get("user-agent") || "unknown";
+
     if (!checkRateLimit(ip)) {
-      return NextResponse.json(
-        { error: "Слишком много попыток входа. Попробуйте через 15 минут." },
-        { status: 429 }
+      return apiError("Too many attempts", "RATE_LIMITED", 429);
+    }
+
+    const body = await req.json();
+    const parsed = loginSchema.parse(body);
+    const { email: rawEmail, password, rememberMe } = parsed;
+    const email = rawEmail.toLowerCase().trim();
+
+    // 1. Check LoginAttempt (Brute-force protection per IP & GLOBAL)
+    const attempts = await db.loginAttempt.findMany({
+      where: { email, ip: { in: [ip, "GLOBAL"] } }
+    });
+
+    const globalAttempt = attempts.find(a => a.ip === "GLOBAL");
+    const ipAttempt = attempts.find(a => a.ip === ip);
+
+    // Global threshold check
+    if (globalAttempt && globalAttempt.lockoutUntil && new Date() < globalAttempt.lockoutUntil) {
+      const waitMs = globalAttempt.lockoutUntil.getTime() - Date.now();
+      return new Response(
+        JSON.stringify({ error: { message: "auth.rate_limited", code: "RATE_LIMITED" } }),
+        { 
+          status: 429, 
+          headers: { 
+            "Content-Type": "application/json",
+            "Retry-After": Math.ceil(waitMs / 1000).toString() 
+          } 
+        }
       );
     }
 
-    const { email, password } = await req.json();
-
-    if (!email || !password) {
-      return NextResponse.json(
-        { error: "Введите email и пароль" },
-        { status: 400 }
-      );
+    // IP lockout check
+    if (ipAttempt && ipAttempt.lockoutUntil && new Date() < ipAttempt.lockoutUntil) {
+      return apiError("auth.invalidCredentials", "UNAUTHORIZED", 401);
     }
 
     const user = await db.platformUser.findUnique({
-      where: { email: email.toLowerCase().trim() },
-      include: {
-        memberships: {
-          where: { status: "ACTIVE" },
-        },
-      },
+      where: { email },
     });
 
-    if (!user || !user.isActive) {
-      // Log failed attempt (don't reveal whether email exists)
+    const handleFailure = async (reason: string, actorUserId: string | null = null) => {
+      // 1. IP Attempt Logic
+      let ipAttemptsCount = (ipAttempt?.attempts || 0) + 1;
+      let ipLockoutUntil: Date | null = null;
+      const LOCKOUT_CONFIG = [
+        { max: 15, delayMinutes: 60 },
+        { max: 10, delayMinutes: 15 },
+        { max: 5,  delayMinutes: 1  },
+      ];
+      for (const config of LOCKOUT_CONFIG) {
+        if (ipAttemptsCount >= config.max) {
+          ipLockoutUntil = new Date(Date.now() + config.delayMinutes * 60000);
+          break;
+        }
+      }
+
+      await db.loginAttempt.upsert({
+        where: { email_ip: { email, ip } },
+        create: { email, ip, attempts: ipAttemptsCount, lockoutUntil: ipLockoutUntil },
+        update: { attempts: ipAttemptsCount, lockoutUntil: ipLockoutUntil },
+      });
+
+      // 2. Global Attempt Logic (Atomic Increment)
+      const newGlobal = await db.loginAttempt.upsert({
+        where: { email_ip: { email, ip: "GLOBAL" } },
+        create: { email, ip: "GLOBAL", attempts: 1 },
+        update: { attempts: { increment: 1 } },
+      });
+
+      if (newGlobal.attempts >= ACCOUNT_GLOBAL_DELAY_THRESHOLD) {
+        const delayMs = Math.min(Math.pow(2, newGlobal.attempts - ACCOUNT_GLOBAL_DELAY_THRESHOLD) * 1000, 15 * 60 * 1000); // 15 mins ceiling
+        await db.loginAttempt.update({
+          where: { email_ip: { email, ip: "GLOBAL" } },
+          data: { lockoutUntil: new Date(Date.now() + delayMs) }
+        });
+        
+        // Send email only when ceiling is reached (or on first hit)
+        if (delayMs >= 15 * 60 * 1000 && newGlobal.attempts === ACCOUNT_GLOBAL_DELAY_THRESHOLD + 10) {
+          void sendEmail(email, "Account Locked", "Your account is locked for 15 minutes due to multiple failed login attempts.").catch(() => {});
+        }
+      }
+
       try {
         await db.auditLog.create({
           data: {
-            actorUserId: user?.id || "unknown",
+            actorUserId,
             action: "LOGIN_FAILED",
             resource: "PlatformUser",
-            detailsJson: JSON.stringify({ email: email.toLowerCase().trim(), reason: "user_not_found_or_inactive", ip }),
+            detailsJson: JSON.stringify({ email, reason, ip, attempts: ipAttemptsCount, lockoutUntil: ipLockoutUntil }),
             ipAddress: ip,
           },
         });
-      } catch { /* ignore audit log failure for login */ }
-      return NextResponse.json(
-        { error: "Неверный email или пароль" },
-        { status: 401 }
-      );
+      } catch (e) {}
+      
+      return apiError("auth.invalidCredentials", "UNAUTHORIZED", 401);
+    };
+
+    if (!user || !user.isActive) {
+      return handleFailure("user_not_found_or_inactive");
     }
 
     const isMatch = await comparePassword(password, user.passwordHash);
+
     if (!isMatch) {
-      // Log failed password attempt
-      try {
-        await db.auditLog.create({
-          data: {
-            actorUserId: user.id,
-            action: "LOGIN_FAILED",
-            resource: "PlatformUser",
-            resourceId: user.id,
-            detailsJson: JSON.stringify({ reason: "wrong_password", ip }),
-            ipAddress: ip,
-          },
-        });
-      } catch { /* ignore audit log failure */ }
-      return NextResponse.json(
-        { error: "Неверный email или пароль" },
-        { status: 401 }
-      );
+      return handleFailure("invalid_password", user.id);
     }
 
-    // Successful login — clear rate limit
-    clearRateLimit(ip);
+    // Success -> Reset ALL attempts for this email
+    await db.loginAttempt.deleteMany({
+      where: { email }
+    });
 
-    const activeMembership = user.memberships[0];
+    const jti = uuidv4();
+    const expiresIn = rememberMe ? "30d" : "1d";
+    const expiresAt = new Date(Date.now() + (rememberMe ? 30 : 1) * 24 * 60 * 60 * 1000);
 
-    const token = signJWT({
+    const payload: JWTPayload & { jti: string } = {
       userId: user.id,
       email: user.email,
       platformRole: user.platformRole,
-      activeCenterId: activeMembership?.centerId,
-      activeCenterRole: activeMembership?.role,
+      jti,
+    } as any;
+
+    const token = signJWT(payload, expiresIn);
+
+    const { hashJti } = await import("@/lib/auth");
+    
+    // Create session in DB
+    await db.userSession.create({
+      data: {
+        userId: user.id,
+        jtiHash: hashJti(jti),
+        expiresAt,
+        ipAddress: ip,
+        userAgent,
+      }
     });
 
-    // Log successful login to audit log
     try {
       await db.auditLog.create({
         data: {
-          centerId: activeMembership?.centerId || null,
           actorUserId: user.id,
           action: "LOGIN_SUCCESS",
           resource: "PlatformUser",
           resourceId: user.id,
-          detailsJson: JSON.stringify({
-            email: user.email,
-            platformRole: user.platformRole,
-            activeCenterRole: activeMembership?.role || null,
-            ip,
-          }),
           ipAddress: ip,
         },
       });
-    } catch { /* ignore audit log failure */ }
+    } catch (e) {}
 
-    const response = NextResponse.json({
-      success: true,
+    cookies().set("auth_token", token, {
+      httpOnly: true,
+      secure: process.env.NODE_ENV === "production",
+      sameSite: "lax",
+      path: "/",
+      maxAge: rememberMe ? 30 * 24 * 60 * 60 : 24 * 60 * 60,
+    });
+
+    return apiSuccess({
       user: {
         id: user.id,
         email: user.email,
         fullName: user.fullName,
-        platformRole: user.platformRole,
-      },
-      activeCenterId: activeMembership?.centerId,
+        role: user.platformRole,
+      }
     });
-
-    response.cookies.set("auth_token", token, {
-      httpOnly: true,
-      secure: process.env.NODE_ENV === "production",
-      sameSite: "lax",
-      maxAge: 7 * 24 * 60 * 60,
-      path: "/",
-    });
-
-    return response;
-  } catch (err: any) {
-    console.error("Login Error:", err);
-    return NextResponse.json({ error: "Внутренняя ошибка сервера" }, { status: 500 });
+  } catch (error: any) {
+    return handleApiError(error);
   }
 }

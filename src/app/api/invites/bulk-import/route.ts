@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
-import { db } from "@/lib/db";
 import { requireTenantAccess, logAuditEvent } from "@/lib/tenant";
 import { hashPassword } from "@/lib/auth";
+import { getTenantDb } from "@/lib/db-tenant";
 import crypto from "crypto";
 
 // POST /api/invites/bulk-import - Bulk import students from CSV data (fullName, email, phone)
@@ -24,6 +24,8 @@ export async function POST(req: Request) {
       errors: [] as string[],
     };
 
+    const tenantDb = getTenantDb(tenantCtx.center.id);
+
     for (const item of students) {
       const email = item.email?.toLowerCase().trim();
       const fullName = item.fullName?.trim();
@@ -34,11 +36,11 @@ export async function POST(req: Request) {
         continue;
       }
 
-      // Find or create User
-      let user = await db.platformUser.findUnique({ where: { email } });
+      // Find or create User using tenantDb (works because PlatformUser is not filtered by centerId)
+      let user = await tenantDb.platformUser.findUnique({ where: { email } });
       if (!user) {
         const tempPasswordHash = await hashPassword(crypto.randomBytes(10).toString("hex"));
-        user = await db.platformUser.create({
+        user = await tenantDb.platformUser.create({
           data: {
             email,
             fullName,
@@ -50,15 +52,15 @@ export async function POST(req: Request) {
       }
 
       // Find or create Student Membership
-      let membership = await db.centerMembership.findFirst({
-        where: { userId: user.id, centerId: tenantCtx.center.id, role: "STUDENT" },
+      let membership = await tenantDb.centerMembership.findFirst({
+        where: { userId: user.id, role: "STUDENT" },
       });
 
       if (!membership) {
-        membership = await db.centerMembership.create({
+        membership = await tenantDb.centerMembership.create({
           data: {
-            userId: user.id,
             centerId: tenantCtx.center.id,
+            userId: user.id,
             role: "STUDENT",
             status: "ACTIVE",
           },
@@ -70,12 +72,13 @@ export async function POST(req: Request) {
 
       // Enroll in group if specified
       if (groupId) {
-        const existingEnrollment = await db.enrollment.findFirst({
+        const existingEnrollment = await tenantDb.enrollment.findFirst({
           where: { studentMembershipId: membership.id, groupId },
         });
         if (!existingEnrollment) {
-          await db.enrollment.create({
+          await tenantDb.enrollment.create({
             data: {
+              centerId: tenantCtx.center.id,
               studentMembershipId: membership.id,
               groupId,
               status: "ACTIVE",

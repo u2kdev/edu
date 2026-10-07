@@ -4,6 +4,14 @@
 // UI visibility is UX only — real protection is here.
 // ============================================================
 
+export const SENSITIVE_ACTIONS = [
+  "settings.manage",
+  "payments.manage",
+  "payments.refund",
+  "users.block",
+  "password.change"
+];
+
 export type PlatformRole =
   | "NONE"
   | "DEVELOPER"       // Technical Super Admin — full system access
@@ -93,6 +101,9 @@ export type Permission =
   | "support.create"
   // Platform-level
   | "platform.dashboard"
+  | "platform.centers.read"
+  | "platform.centers.write"
+  | "platform.centers.block"
   | "platform.tenants.read"
   | "platform.tenants.manage"
   | "platform.plans.manage"
@@ -113,6 +124,9 @@ const PLATFORM_ROLE_PERMISSIONS: Record<PlatformRole, Permission[]> = {
   DEVELOPER: [
     // Full access to everything — including infrastructure
     "platform.dashboard",
+    "platform.centers.read",
+    "platform.centers.write",
+    "platform.centers.block",
     "platform.tenants.read",
     "platform.tenants.manage",
     "platform.plans.manage",
@@ -147,6 +161,9 @@ const PLATFORM_ROLE_PERMISSIONS: Record<PlatformRole, Permission[]> = {
   SUPERADMIN: [
     // Platform Owner — commercial side only (NOT infrastructure/database/server)
     "platform.dashboard",
+    "platform.centers.read",
+    "platform.centers.write",
+    "platform.centers.block",
     "platform.tenants.read",
     "platform.tenants.manage",
     "platform.plans.manage",
@@ -160,6 +177,9 @@ const PLATFORM_ROLE_PERMISSIONS: Record<PlatformRole, Permission[]> = {
   ],
   PLATFORM_ADMIN: [
     "platform.dashboard",
+    "platform.centers.read",
+    "platform.centers.write",
+    "platform.centers.block",
     "platform.tenants.read",
     "platform.plans.manage",
     "platform.billing.read",
@@ -178,6 +198,7 @@ const PLATFORM_ROLE_PERMISSIONS: Record<PlatformRole, Permission[]> = {
   ],
   PLATFORM_SUPPORT: [
     "platform.dashboard",
+    "platform.centers.read",
     "platform.tenants.read",
     "platform.impersonation",
     "platform.support",
@@ -377,3 +398,4 @@ export function hasResourcePermission(
   if (!mappedPermission) return false;
   return hasPermission(mappedPermission, platformRole, centerRole);
 }
+

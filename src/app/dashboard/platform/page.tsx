@@ -30,11 +30,11 @@ export default async function PlatformAdminPage() {
     <div className="space-y-6">
       <div>
         <span className="px-3 py-1 bg-purple-500/10 border border-purple-500/30 text-purple-400 text-xs font-bold uppercase tracking-wider rounded-full">
-          Владелец SaaS / Администратор Платформы
+          Блок SaaS / Суперменеджер платформы
         </span>
-        <h1 className="text-2xl font-bold text-white mt-2">Панель Управления Платформой</h1>
+        <h1 className="text-2xl font-bold text-white mt-2">Обзор учебных центров</h1>
         <p className="text-sm text-slate-400 mt-1">
-          Мониторинг всех зарегистрированных учебных центров, управление подписками и статусами
+          Управление всеми зарегистрированными учебными центрами, планами подписок и биллингом
         </p>
       </div>
 

@@ -85,4 +85,31 @@ describe("Phase 11: Platform & Developer Access Security", () => {
     const res = await getHealth();
     expect(res.status).toBe(200);
   });
+
+  it("CRITICAL: Tenant Isolation - Center Owner cannot see another center's tickets", async () => {
+    // Create a mock GET function for tickets
+    const { GET: getTickets } = await import("../src/app/api/tickets/route");
+    
+    // Create a ticket for a completely different user/center
+    const otherUser = await db.platformUser.create({ data: { email: `other-${Date.now()}@test.com`, passwordHash: "x", fullName: "Other" } });
+    const otherCenter = await db.learningCenter.create({ data: { name: "Other Center", slug: `oc-${Date.now()}`, ownerId: otherUser.id, status: "ACTIVE" } });
+    const ticket = await db.supportTicket.create({
+      data: {
+        creatorUserId: otherUser.id,
+        centerId: otherCenter.id,
+        subject: "Secret Ticket",
+        status: "OPEN",
+        scope: "TENANT",
+      }
+    });
+
+    // Owner tries to fetch their tickets
+    setAuth(ownerUserId, "NONE");
+    const res = await getTickets(mockRequest(`/api/tickets`));
+    const json = await res.json();
+    
+    // Should not contain the other ticket
+    const found = json.tickets?.some((t: any) => t.id === ticket.id);
+    expect(found).toBe(false);
+  });
 });

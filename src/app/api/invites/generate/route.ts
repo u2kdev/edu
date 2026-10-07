@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { db } from "@/lib/db";
+import { getTenantDb } from "@/lib/db-tenant";
 import { requireTenantAccess } from "@/lib/tenant";
 
 function generateRandomCode(length: number = 8): string {
@@ -14,10 +14,11 @@ function generateRandomCode(length: number = 8): string {
 export async function POST(req: Request) {
   try {
     const tenantCtx = await requireTenantAccess();
+    const tenantDb = getTenantDb(tenantCtx.center.id);
     
     // Only Director and Center Admin can generate invite codes
     if (tenantCtx.role !== "DIRECTOR" && tenantCtx.role !== "CENTER_ADMIN") {
-      return NextResponse.json({ error: "Недостаточно прав для создания инвайт-кода" }, { status: 403 });
+      return NextResponse.json({ error: "Forbidden" }, { status: 403 });
     }
 
     const { targetRole, courseId, groupId, maxUses, customCode } = await req.json();
@@ -26,12 +27,7 @@ export async function POST(req: Request) {
       ? customCode.toUpperCase().trim()
       : `${tenantCtx.center.slug.toUpperCase()}-${generateRandomCode(6)}`;
 
-    const existing = await db.inviteCode.findUnique({ where: { code } });
-    if (existing) {
-      return NextResponse.json({ error: "Такой инвайт-код уже существует" }, { status: 400 });
-    }
-
-    const invite = await db.inviteCode.create({
+    const invite = await tenantDb.inviteCode.create({
       data: {
         centerId: tenantCtx.center.id,
         code,
@@ -49,6 +45,9 @@ export async function POST(req: Request) {
 
     return NextResponse.json({ success: true, invite });
   } catch (err: any) {
-    return NextResponse.json({ error: err.message || "Ошибка при генерации инвайта" }, { status: 400 });
+    if (err.code === "P2002") {
+      return NextResponse.json({ error: "This code is already in use" }, { status: 400 });
+    }
+    return NextResponse.json({ error: err.message || "Server error" }, { status: 400 });
   }
 }

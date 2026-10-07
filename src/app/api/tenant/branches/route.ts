@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { db } from "@/lib/db";
+import { getTenantDb } from "@/lib/db-tenant";
 import { requireTenantAccess, logAuditEvent } from "@/lib/tenant";
 import { checkSubscriptionLimit } from "@/lib/limits";
 
@@ -7,9 +7,9 @@ import { checkSubscriptionLimit } from "@/lib/limits";
 export async function GET(req: Request) {
   try {
     const tenantCtx = await requireTenantAccess();
+    const tenantDb = getTenantDb(tenantCtx.center.id);
 
-    const branches = await db.branch.findMany({
-      where: { centerId: tenantCtx.center.id },
+    const branches = await tenantDb.branch.findMany({
       include: {
         _count: { select: { groups: true } },
       },
@@ -26,6 +26,7 @@ export async function GET(req: Request) {
 export async function POST(req: Request) {
   try {
     const tenantCtx = await requireTenantAccess();
+    const tenantDb = getTenantDb(tenantCtx.center.id);
 
     if (tenantCtx.role !== "DIRECTOR" && tenantCtx.role !== "CENTER_ADMIN" && !tenantCtx.isPlatformStaff) {
       return NextResponse.json({ error: "Forbidden: Only directors or admins can create branches" }, { status: 403 });
@@ -42,7 +43,7 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: "PLAN_LIMIT_REACHED: Вы достигли лимита филиалов по вашему тарифу." }, { status: 403 });
     }
 
-    const branch = await db.branch.create({
+    const branch = await tenantDb.branch.create({
       data: {
         centerId: tenantCtx.center.id,
         name: name.trim(),
@@ -71,6 +72,7 @@ export async function POST(req: Request) {
 export async function PATCH(req: Request) {
   try {
     const tenantCtx = await requireTenantAccess();
+    const tenantDb = getTenantDb(tenantCtx.center.id);
 
     if (tenantCtx.role !== "DIRECTOR" && tenantCtx.role !== "CENTER_ADMIN" && !tenantCtx.isPlatformStaff) {
       return NextResponse.json({ error: "Forbidden" }, { status: 403 });
@@ -80,11 +82,10 @@ export async function PATCH(req: Request) {
 
     if (!id) return NextResponse.json({ error: "Branch ID required" }, { status: 400 });
 
-    // SECURITY: Verify branch belongs to this tenant
-    const existing = await db.branch.findFirst({ where: { id, centerId: tenantCtx.center.id } });
+    const existing = await tenantDb.branch.findFirst({ where: { id } });
     if (!existing) return NextResponse.json({ error: "Branch not found" }, { status: 404 });
 
-    const branch = await db.branch.update({
+    await tenantDb.branch.updateMany({
       where: { id },
       data: {
         name: name?.trim() || existing.name,
@@ -94,13 +95,14 @@ export async function PATCH(req: Request) {
         isActive: isActive !== undefined ? isActive : existing.isActive,
       },
     });
+    const branch = await tenantDb.branch.findFirst({ where: { id } });
 
     await logAuditEvent({
       centerId: tenantCtx.center.id,
       actorUserId: tenantCtx.session.user.id,
       action: "BRANCH_UPDATED",
       resource: "Branch",
-      resourceId: branch.id,
+      resourceId: branch?.id,
     });
 
     return NextResponse.json({ success: true, branch });
@@ -113,6 +115,7 @@ export async function PATCH(req: Request) {
 export async function DELETE(req: Request) {
   try {
     const tenantCtx = await requireTenantAccess();
+    const tenantDb = getTenantDb(tenantCtx.center.id);
 
     if (tenantCtx.role !== "DIRECTOR" && !tenantCtx.isPlatformStaff) {
       return NextResponse.json({ error: "Only directors can delete branches" }, { status: 403 });
@@ -121,9 +124,8 @@ export async function DELETE(req: Request) {
     const { id } = await req.json();
     if (!id) return NextResponse.json({ error: "Branch ID required" }, { status: 400 });
 
-    // SECURITY: Verify branch belongs to this tenant
-    const existing = await db.branch.findFirst({
-      where: { id, centerId: tenantCtx.center.id },
+    const existing = await tenantDb.branch.findFirst({
+      where: { id },
       include: { _count: { select: { groups: true } } },
     });
     if (!existing) return NextResponse.json({ error: "Branch not found" }, { status: 404 });
@@ -134,7 +136,7 @@ export async function DELETE(req: Request) {
       }, { status: 409 });
     }
 
-    await db.branch.delete({ where: { id } });
+    await tenantDb.branch.deleteMany({ where: { id } });
 
     await logAuditEvent({
       centerId: tenantCtx.center.id,

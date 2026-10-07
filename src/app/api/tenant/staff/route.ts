@@ -1,5 +1,8 @@
 import { NextResponse } from "next/server";
+// Reason: Exception: Creation of platform-level models.
+// eslint-disable-next-line no-restricted-imports
 import { db } from "@/lib/db";
+import { getTenantDb } from "@/lib/db-tenant";
 import { getAuthSession, hashPassword } from "@/lib/auth";
 import { requireTenantAccess, logAuditEvent } from "@/lib/tenant";
 import { hasPermission } from "@/lib/permissions";
@@ -7,10 +10,11 @@ import { checkSubscriptionLimit } from "@/lib/limits";
 import crypto from "crypto";
 
 // GET /api/tenant/staff — List all staff members of the active center
-export async function GET() {
+export async function GET(req: Request) {
   try {
     const tenantCtx = await requireTenantAccess();
     const { session, center, role } = tenantCtx;
+    const tenantDb = getTenantDb(center.id);
 
     // Only Director and Center Admin can view staff list
     if (role !== "DIRECTOR" && role !== "CENTER_ADMIN" && !tenantCtx.isPlatformStaff) {
@@ -20,9 +24,8 @@ export async function GET() {
       );
     }
 
-    const staffMembers = await db.centerMembership.findMany({
+    const staffMembers = await tenantDb.centerMembership.findMany({
       where: {
-        centerId: center.id,
         role: { in: ["DIRECTOR", "CENTER_ADMIN", "TEACHER", "CENTER_SUPPORT"] },
       },
       include: {
@@ -44,8 +47,8 @@ export async function GET() {
     return NextResponse.json({ staff: staffMembers });
   } catch (err: any) {
     return NextResponse.json(
-      { error: err.message || "Server error" },
-      { status: err.message?.includes("Forbidden") ? 403 : 500 }
+      { error: err.message || "Server error", code: err.code },
+      { status: err.status || (err.message?.includes("Forbidden") ? 403 : 500) }
     );
   }
 }
@@ -56,6 +59,7 @@ export async function POST(req: Request) {
   try {
     const tenantCtx = await requireTenantAccess();
     const { session, center, role } = tenantCtx;
+    const tenantDb = getTenantDb(center.id);
 
     // Only Director can add staff. CENTER_ADMIN can too if delegated (we'll allow it by default for MVP)
     if (role !== "DIRECTOR" && role !== "CENTER_ADMIN" && !tenantCtx.isPlatformStaff) {
@@ -95,9 +99,8 @@ export async function POST(req: Request) {
     const cleanEmail = email.toLowerCase().trim();
 
     // Check if user already has this role in this center
-    const existingMembership = await db.centerMembership.findFirst({
+    const existingMembership = await tenantDb.centerMembership.findFirst({
       where: {
-        centerId: center.id,
         role: staffRole,
         user: { email: cleanEmail },
       },
@@ -110,7 +113,7 @@ export async function POST(req: Request) {
       );
     }
 
-    // Find or create the user
+    // Find or create the user (Platform Level)
     let user = await db.platformUser.findUnique({
       where: { email: cleanEmail },
     });
@@ -139,10 +142,10 @@ export async function POST(req: Request) {
     }
 
     // Create CenterMembership
-    const membership = await db.centerMembership.create({
+    const membership = await tenantDb.centerMembership.create({
       data: {
-        userId: user.id,
         centerId: center.id,
+        userId: user.id,
         role: staffRole,
         status: "ACTIVE",
       },
@@ -194,6 +197,7 @@ export async function PATCH(req: Request) {
   try {
     const tenantCtx = await requireTenantAccess();
     const { session, center, role } = tenantCtx;
+    const tenantDb = getTenantDb(center.id);
 
     if (role !== "DIRECTOR" && role !== "CENTER_ADMIN" && !tenantCtx.isPlatformStaff) {
       return NextResponse.json(
@@ -212,8 +216,8 @@ export async function PATCH(req: Request) {
     }
 
     // Verify the membership belongs to this center
-    const membership = await db.centerMembership.findFirst({
-      where: { id: membershipId, centerId: center.id },
+    const membership = await tenantDb.centerMembership.findFirst({
+      where: { id: membershipId },
       include: { user: { select: { email: true, fullName: true } } },
     });
 
@@ -258,9 +262,13 @@ export async function PATCH(req: Request) {
       updateData.role = newRole;
     }
 
-    const updated = await db.centerMembership.update({
+    await tenantDb.centerMembership.updateMany({
       where: { id: membershipId },
       data: updateData,
+    });
+    
+    const updated = await tenantDb.centerMembership.findFirst({
+      where: { id: membershipId },
       include: {
         user: { select: { id: true, email: true, fullName: true } },
       },

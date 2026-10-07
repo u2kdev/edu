@@ -1,15 +1,12 @@
 import { NextResponse } from "next/server";
-import { db } from "@/lib/db";
+import { getTenantDb } from "@/lib/db-tenant";
 import { requireTenantAccess, logAuditEvent } from "@/lib/tenant";
 import { sendNotification } from "@/lib/notifications";
 
-// Grade lifecycle: DRAFT → SUBMITTED → FINAL
-// Once FINAL, only DIRECTOR can modify (with audit trail)
-
-// GET /api/grades
 export async function GET(req: Request) {
   try {
     const tenantCtx = await requireTenantAccess();
+    const tenantDb = getTenantDb(tenantCtx.center.id);
     const { searchParams } = new URL(req.url);
     const groupId = searchParams.get("groupId");
     const studentId = searchParams.get("studentMembershipId");
@@ -18,7 +15,6 @@ export async function GET(req: Request) {
     const pageSize = Math.min(100, parseInt(searchParams.get("pageSize") || "50"));
 
     let whereCondition: any = {
-      centerId: tenantCtx.center.id,
       deletedAt: null, // exclude soft-deleted
     };
 
@@ -31,33 +27,31 @@ export async function GET(req: Request) {
       whereCondition.studentMembershipId = tenantCtx.membership.id;
     } else if (tenantCtx.role === "PARENT" && tenantCtx.membership) {
       // Parent only sees their children's grades
-      const childLinks = await db.parentLink.findMany({
+      const childLinks = await tenantDb.parentLink.findMany({
         where: { parentMembershipId: tenantCtx.membership.id, status: "CONFIRMED" },
         select: { studentMembershipId: true },
       });
       whereCondition.studentMembershipId = { in: childLinks.map((l) => l.studentMembershipId) };
     } else if (tenantCtx.role === "TEACHER_ASSISTANT" && tenantCtx.membership) {
       // Assistant can only read grades (not create) — scope to their groups
-      const groups = await db.group.findMany({
-        where: { assistantMembershipId: tenantCtx.membership.id, course: { centerId: tenantCtx.center.id } },
+      const groups = await tenantDb.group.findMany({
+        where: { assistantMembershipId: tenantCtx.membership.id },
         select: { id: true },
       });
       whereCondition.groupId = { in: groups.map((g) => g.id) };
     }
 
     if (groupId) {
-      // SECURITY: Validate group belongs to tenant
-      const group = await db.group.findFirst({
-        where: { id: groupId, course: { centerId: tenantCtx.center.id } },
+      const group = await tenantDb.group.findFirst({
+        where: { id: groupId },
       });
       if (!group) return NextResponse.json({ error: "Group not found" }, { status: 404 });
       whereCondition.groupId = groupId;
     }
 
     if (studentId) {
-      // SECURITY: Only allow if user has access to this student
-      const studentMem = await db.centerMembership.findFirst({
-        where: { id: studentId, centerId: tenantCtx.center.id },
+      const studentMem = await tenantDb.centerMembership.findFirst({
+        where: { id: studentId },
       });
       if (!studentMem) return NextResponse.json({ error: "Student not found" }, { status: 404 });
       whereCondition.studentMembershipId = studentId;
@@ -67,8 +61,8 @@ export async function GET(req: Request) {
       whereCondition.gradeType = gradeType;
     }
 
-    const [grades, total] = await db.$transaction([
-      db.grade.findMany({
+    const [grades, total] = await tenantDb.$transaction([
+      tenantDb.grade.findMany({
         where: whereCondition,
         include: {
           student: { include: { user: { select: { fullName: true, email: true } } } },
@@ -80,7 +74,7 @@ export async function GET(req: Request) {
         skip: (page - 1) * pageSize,
         take: pageSize,
       }),
-      db.grade.count({ where: whereCondition }),
+      tenantDb.grade.count({ where: whereCondition }),
     ]);
 
     return NextResponse.json({ grades, total, page, pageSize });
@@ -89,12 +83,11 @@ export async function GET(req: Request) {
   }
 }
 
-// POST /api/grades — Create a grade
 export async function POST(req: Request) {
   try {
     const tenantCtx = await requireTenantAccess();
+    const tenantDb = getTenantDb(tenantCtx.center.id);
 
-    // Only teachers, admins, directors can create grades
     if (
       tenantCtx.role !== "DIRECTOR" &&
       tenantCtx.role !== "CENTER_ADMIN" &&
@@ -110,16 +103,14 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: "studentMembershipId, gradeType, value are required" }, { status: 400 });
     }
 
-    // SECURITY: Validate student belongs to this tenant
-    const student = await db.centerMembership.findFirst({
-      where: { id: studentMembershipId, centerId: tenantCtx.center.id, role: "STUDENT" },
+    const student = await tenantDb.centerMembership.findFirst({
+      where: { id: studentMembershipId, role: "STUDENT" },
     });
     if (!student) return NextResponse.json({ error: "Student not found in this center" }, { status: 404 });
 
-    // SECURITY: TEACHER can only grade students in their own groups
     if (tenantCtx.role === "TEACHER" && tenantCtx.membership) {
       if (!groupId) return NextResponse.json({ error: "groupId required for teacher grading" }, { status: 400 });
-      const isInTeacherGroup = await db.enrollment.findFirst({
+      const isInTeacherGroup = await tenantDb.enrollment.findFirst({
         where: {
           studentMembershipId,
           groupId,
@@ -131,10 +122,9 @@ export async function POST(req: Request) {
       }
     }
 
-    // Validate group belongs to this tenant
     if (groupId) {
-      const group = await db.group.findFirst({
-        where: { id: groupId, course: { centerId: tenantCtx.center.id } },
+      const group = await tenantDb.group.findFirst({
+        where: { id: groupId },
       });
       if (!group) return NextResponse.json({ error: "Group not found" }, { status: 404 });
     }
@@ -146,7 +136,7 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: `Grade value must be between 0 and ${numericMax}` }, { status: 400 });
     }
 
-    const grade = await db.grade.create({
+    const grade = await tenantDb.grade.create({
       data: {
         centerId: tenantCtx.center.id,
         studentMembershipId,
@@ -176,23 +166,19 @@ export async function POST(req: Request) {
   }
 }
 
-// PATCH /api/grades — Update or finalize a grade
 export async function PATCH(req: Request) {
   try {
     const tenantCtx = await requireTenantAccess();
+    const tenantDb = getTenantDb(tenantCtx.center.id);
     const { id, value, maxValue, comment, lifecycle } = await req.json();
 
     if (!id) return NextResponse.json({ error: "Grade ID required" }, { status: 400 });
 
-    // SECURITY: Fetch grade and verify it belongs to this tenant
-    const existing = await db.grade.findFirst({
-      where: { id, centerId: tenantCtx.center.id, deletedAt: null },
+    const existing = await tenantDb.grade.findFirst({
+      where: { id, deletedAt: null },
     });
     if (!existing) return NextResponse.json({ error: "Grade not found" }, { status: 404 });
 
-    // FINALIZATION rules:
-    // - FINAL grades can only be modified by DIRECTOR (with audit trail)
-    // - TEACHER can only update DRAFT/SUBMITTED grades they created
     if (existing.lifecycle === "FINAL") {
       if (tenantCtx.role !== "DIRECTOR" && !tenantCtx.isPlatformStaff) {
         return NextResponse.json({
@@ -201,24 +187,21 @@ export async function PATCH(req: Request) {
       }
     }
 
-    // TEACHER can only edit their own grades
     if (tenantCtx.role === "TEACHER" && tenantCtx.membership) {
       if (existing.teacherMembershipId !== tenantCtx.membership.id) {
         return NextResponse.json({ error: "You can only edit grades you created" }, { status: 403 });
       }
     }
 
-    // Cannot go back from FINAL
     if (existing.lifecycle === "FINAL" && lifecycle && lifecycle !== "FINAL") {
       return NextResponse.json({ error: "Cannot revert a finalized grade" }, { status: 400 });
     }
 
-    // Validate new lifecycle transitions
     if (lifecycle) {
       const validTransitions: Record<string, string[]> = {
         DRAFT: ["SUBMITTED", "FINAL"],
         SUBMITTED: ["FINAL"],
-        FINAL: ["FINAL"], // only DIRECTOR can keep it final
+        FINAL: ["FINAL"],
       };
       if (!validTransitions[existing.lifecycle]?.includes(lifecycle)) {
         return NextResponse.json({
@@ -239,7 +222,8 @@ export async function PATCH(req: Request) {
       updateData.finalizedById = tenantCtx.membership?.id || null;
     }
 
-    const grade = await db.grade.update({ where: { id }, data: updateData });
+    await tenantDb.grade.updateMany({ where: { id }, data: updateData });
+    const grade = await tenantDb.grade.findFirst({ where: { id } });
 
     await logAuditEvent({
       centerId: tenantCtx.center.id,
@@ -249,14 +233,14 @@ export async function PATCH(req: Request) {
       resourceId: id,
       details: {
         oldLifecycle: existing.lifecycle,
-        newLifecycle: grade.lifecycle,
+        newLifecycle: grade?.lifecycle ?? "",
         oldValue: existing.value,
-        newValue: grade.value,
+        newValue: grade?.value ?? 0,
       },
     });
 
     if (lifecycle === "FINAL" && existing.lifecycle !== "FINAL") {
-      const studentMembership = await db.centerMembership.findUnique({
+      const studentMembership = await tenantDb.centerMembership.findFirst({
         where: { id: existing.studentMembershipId },
         select: { userId: true },
       });
@@ -267,7 +251,7 @@ export async function PATCH(req: Request) {
           type: "GRADE_POSTED",
           titleKey: "notifications.gradePosted",
           bodyKey: "notifications.gradePostedBody",
-          bodyParams: { value: grade.value, maxValue: grade.maxValue },
+          bodyParams: { value: grade?.value ?? 0, maxValue: grade?.maxValue ?? 100 },
         });
       }
     }
@@ -278,10 +262,10 @@ export async function PATCH(req: Request) {
   }
 }
 
-// DELETE /api/grades — Soft delete a grade
 export async function DELETE(req: Request) {
   try {
     const tenantCtx = await requireTenantAccess();
+    const tenantDb = getTenantDb(tenantCtx.center.id);
 
     if (tenantCtx.role !== "DIRECTOR" && !tenantCtx.isPlatformStaff) {
       return NextResponse.json({ error: "Only directors can delete grades" }, { status: 403 });
@@ -290,20 +274,18 @@ export async function DELETE(req: Request) {
     const { id } = await req.json();
     if (!id) return NextResponse.json({ error: "Grade ID required" }, { status: 400 });
 
-    const existing = await db.grade.findFirst({
-      where: { id, centerId: tenantCtx.center.id, deletedAt: null },
+    const existing = await tenantDb.grade.findFirst({
+      where: { id, deletedAt: null },
     });
     if (!existing) return NextResponse.json({ error: "Grade not found" }, { status: 404 });
 
-    // FINALIZED grades require extra confirmation (check lifecycle)
     if (existing.lifecycle === "FINAL") {
       return NextResponse.json({
         error: "Cannot delete a finalized grade. Unfinalize it first if you have permission.",
       }, { status: 403 });
     }
 
-    // Soft delete
-    await db.grade.update({
+    await tenantDb.grade.updateMany({
       where: { id },
       data: { deletedAt: new Date(), deletedById: tenantCtx.membership?.id || null },
     });

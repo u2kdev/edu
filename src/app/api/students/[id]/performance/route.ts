@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { db } from "@/lib/db";
+import { getTenantDb } from "@/lib/db-tenant";
 import { requireTenantAccess } from "@/lib/tenant";
 
 // GET /api/students/[id]/performance - Get aggregated performance report for student
@@ -9,13 +9,13 @@ export async function GET(
 ) {
   try {
     const tenantCtx = await requireTenantAccess();
+    const tenantDb = getTenantDb(tenantCtx.center.id);
     const studentMembershipId = params.id;
-    const currentUserId = tenantCtx.session.user.id;
     const currentRole = tenantCtx.role;
 
     // Check target student membership exists in this center
-    const targetStudent = await db.centerMembership.findFirst({
-      where: { id: studentMembershipId, centerId: tenantCtx.center.id, role: "STUDENT" },
+    const targetStudent = await tenantDb.centerMembership.findFirst({
+      where: { id: studentMembershipId, role: "STUDENT" },
     });
 
     if (!targetStudent) {
@@ -32,7 +32,7 @@ export async function GET(
 
     // 2. PARENT role can ONLY view their CONFIRMED linked child
     if (currentRole === "PARENT") {
-      const parentLink = await db.parentLink.findFirst({
+      const parentLink = await tenantDb.parentLink.findFirst({
         where: {
           parentMembershipId: tenantCtx.membership?.id,
           studentMembershipId: studentMembershipId,
@@ -47,7 +47,7 @@ export async function GET(
 
     // 3. TEACHER role can ONLY view students in groups assigned to this teacher
     if (currentRole === "TEACHER") {
-      const teacherEnrolled = await db.enrollment.findFirst({
+      const teacherEnrolled = await tenantDb.enrollment.findFirst({
         where: {
           studentMembershipId: studentMembershipId,
           group: { teacherMembershipId: tenantCtx.membership?.id },
@@ -60,7 +60,7 @@ export async function GET(
     }
 
     // Load student attendances
-    const attendances = await db.attendance.findMany({
+    const attendances = await tenantDb.attendance.findMany({
       where: { studentMembershipId },
     });
 
@@ -72,7 +72,7 @@ export async function GET(
       totalAttendanceCount > 0 ? Math.round((presentCount / totalAttendanceCount) * 100) : 100;
 
     // Load student homework submissions
-    const submissions = await db.homeworkSubmission.findMany({
+    const submissions = await tenantDb.homeworkSubmission.findMany({
       where: { studentMembershipId },
     });
 
@@ -84,12 +84,12 @@ export async function GET(
         : null;
 
     // Load test attempts
-    const testAttempts = await db.testAttempt.findMany({
+    const testAttempts = await tenantDb.testAttempt.findMany({
       where: { studentMembershipId },
     });
 
     // Activity log counts
-    const activityLogs = await db.activityLog.findMany({
+    const activityLogs = await tenantDb.activityLog.findMany({
       where: { userMembershipId: studentMembershipId },
       orderBy: { createdAt: "desc" },
       take: 20,

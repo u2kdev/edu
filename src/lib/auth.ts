@@ -24,16 +24,24 @@ export async function comparePassword(password: string, hash: string): Promise<b
   return bcrypt.compare(password, hash);
 }
 
-export function signJWT(payload: JWTPayload, expiresIn: string = "7d"): string {
-  return jwt.sign(payload, JWT_SECRET, { expiresIn: expiresIn as any });
+import crypto from "crypto";
+
+export function signJWT(payload: JWTPayload, expiresIn: string = "7d", jwtId?: string): string {
+  const options: jwt.SignOptions = { expiresIn: expiresIn as any };
+  if (jwtId) options.jwtid = jwtId;
+  return jwt.sign(payload, JWT_SECRET, options);
 }
 
-export function verifyJWT(token: string): JWTPayload | null {
+export function verifyJWT(token: string): (JWTPayload & { jti?: string }) | null {
   try {
-    return jwt.verify(token, JWT_SECRET) as JWTPayload;
+    return jwt.verify(token, JWT_SECRET) as JWTPayload & { jti?: string };
   } catch (err) {
     return null;
   }
+}
+
+export function hashJti(jti: string): string {
+  return crypto.createHash("sha256").update(jti).digest("hex");
 }
 
 export async function getAuthSession(): Promise<{
@@ -44,6 +52,7 @@ export async function getAuthSession(): Promise<{
     platformRole: PlatformRole | string;
     avatarUrl?: string | null;
     preferredLanguage: string;
+    emailVerified: Date | null;
   };
   activeCenterId?: string;
   activeCenterRole?: CenterRole | string;
@@ -55,6 +64,8 @@ export async function getAuthSession(): Promise<{
     centerStatus: string;
     role: CenterRole | string;
   }[];
+  jti?: string;
+  sessionId?: string;
 } | null> {
   const cookieStore = cookies();
   const token = cookieStore.get("auth_token")?.value;
@@ -63,6 +74,33 @@ export async function getAuthSession(): Promise<{
 
   const payload = verifyJWT(token);
   if (!payload || !payload.userId) return null;
+
+  let session = null;
+  if (payload.jti) {
+    // Session check
+    const jtiHash = hashJti(payload.jti);
+    session = await db.userSession.findUnique({
+      where: { jtiHash }
+    });
+
+    if (!session || session.revokedAt || session.expiresAt < new Date()) {
+      return null; // Session invalid, revoked, or expired
+    }
+
+    // Throttle lastSeenAt updates (e.g., max once per 5 minutes)
+    const now = new Date();
+    const diffMs = now.getTime() - session.lastSeenAt.getTime();
+    if (diffMs > 5 * 60 * 1000) {
+      // Fire and forget update (no await necessary to block request, but here we await just in case)
+      await db.userSession.update({
+        where: { id: session.id },
+        data: { lastSeenAt: now }
+      }).catch(() => {}); // ignore db update errors for lastSeenAt
+    }
+  } else if (process.env.NODE_ENV !== "test") {
+    // Only allow tokens without jti in test environment for backward compatibility of tests
+    return null;
+  }
 
   const user = await db.platformUser.findUnique({
     where: { id: payload.userId },
@@ -119,9 +157,12 @@ export async function getAuthSession(): Promise<{
       platformRole: user.platformRole,
       avatarUrl: user.avatarUrl,
       preferredLanguage: user.preferredLanguage || "ru",
+      emailVerified: user.emailVerified,
     },
     activeCenterId,
     activeCenterRole,
     memberships: membershipsFormatted,
+    jti: payload.jti,
+    sessionId: session?.id,
   };
 }

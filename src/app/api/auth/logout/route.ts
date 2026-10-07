@@ -1,5 +1,7 @@
 import { NextResponse } from "next/server";
 import { getAuthSession } from "@/lib/auth";
+// Reason: Exception: Auth routes operate on platform models.
+// eslint-disable-next-line no-restricted-imports
 import { db } from "@/lib/db";
 
 export async function POST(req: Request) {
@@ -9,6 +11,12 @@ export async function POST(req: Request) {
     if (session) {
       const ip = req.headers.get("x-forwarded-for")?.split(",")[0].trim() || "unknown";
       try {
+        if (session.sessionId) {
+          await db.userSession.update({
+            where: { id: session.sessionId },
+            data: { revokedAt: new Date() }
+          });
+        }
         await db.auditLog.create({
           data: {
             centerId: session.activeCenterId || null,

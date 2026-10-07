@@ -1,11 +1,14 @@
+import { requireTenantAccess } from "@/lib/tenant";
 import { getAuthSession } from "@/lib/auth";
-import { db } from "@/lib/db";
+import { getTenantDb } from "@/lib/db-tenant";
 import { redirect } from "next/navigation";
 import Link from "next/link";
 import { GraduationCap, Award, CheckCircle2, AlertCircle, Users } from "lucide-react";
 import { t, formatDateLocalized } from "@/i18n";
 
 export default async function CenterGradesPage() {
+  const tenantCtx = await requireTenantAccess();
+
   const session = await getAuthSession();
   if (!session) redirect("/login");
 
@@ -66,7 +69,7 @@ export default async function CenterGradesPage() {
     };
   } else if (activeRole === "PARENT" && currentMembership) {
     // Parents see grades for their confirmed children
-    const childLinks = await db.parentLink.findMany({
+    const childLinks = await getTenantDb(tenantCtx.center.id).parentLink.findMany({
       where: { parentMembershipId: currentMembership.id, status: "CONFIRMED" },
       select: { studentMembershipId: true },
     });
@@ -82,7 +85,7 @@ export default async function CenterGradesPage() {
     };
   }
 
-  const submissions = await db.homeworkSubmission.findMany({
+  const submissions = await getTenantDb(tenantCtx.center.id).homeworkSubmission.findMany({
     where: submissionsWhere,
     include: {
       homework: { select: { title: true } },
@@ -92,7 +95,7 @@ export default async function CenterGradesPage() {
     take: 50,
   });
 
-  const testAttempts = await db.testAttempt.findMany({
+  const testAttempts = await getTenantDb(tenantCtx.center.id).testAttempt.findMany({
     where: testAttemptsWhere,
     include: {
       test: { include: { material: { select: { title: true } } } },

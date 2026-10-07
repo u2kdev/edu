@@ -1,9 +1,19 @@
 import { NextResponse } from "next/server";
+// Reason: Exception: Invite validation requires global search before center context is known.
+// eslint-disable-next-line no-restricted-imports
 import { db } from "@/lib/db";
 import { getAuthSession, signJWT } from "@/lib/auth";
+import { getTenantDb } from "@/lib/db-tenant";
+import { checkRateLimit } from "@/lib/rate-limit";
+import { apiError, handleApiError } from "@/lib/api-response";
 
 export async function POST(req: Request) {
   try {
+    const ip = req.headers.get("x-forwarded-for") || "unknown";
+    if (!checkRateLimit(ip)) {
+      return apiError("Too many attempts", "RATE_LIMITED", 429);
+    }
+
     const session = await getAuthSession();
     if (!session) {
       return NextResponse.json({ error: "Для погашения инвайта войдите в аккаунт" }, { status: 401 });
@@ -23,31 +33,28 @@ export async function POST(req: Request) {
       },
     });
 
-    if (!invite || invite.isRevoked) {
-      return NextResponse.json({ error: "Недействительный или отмененный инвайт-код" }, { status: 404 });
+    if (
+      !invite || 
+      invite.isRevoked || 
+      (invite.expiresAt && new Date() > invite.expiresAt) || 
+      (invite.maxUses !== null && invite.usesCount >= invite.maxUses)
+    ) {
+      // Neutral message to prevent leaking if code exists
+      return NextResponse.json({ error: "Недействительный инвайт-код" }, { status: 400 });
     }
 
-    if (invite.expiresAt && new Date() > invite.expiresAt) {
-      return NextResponse.json({ error: "Срок действия инвайт-кода истек" }, { status: 400 });
-    }
-
-    if (invite.usesCount >= invite.maxUses) {
-      return NextResponse.json({ error: "Лимит активаций для данного инвайт-кода исчерпан" }, { status: 400 });
-    }
+    const tenantDb = getTenantDb(invite.centerId);
 
     // Check if user is already a member with this role
-    const existingMem = await db.centerMembership.findFirst({
+    let membership = await tenantDb.centerMembership.findFirst({
       where: {
         userId: session.user.id,
-        centerId: invite.centerId,
         role: invite.targetRole,
       },
     });
 
-    let membership = existingMem;
-
     if (!membership) {
-      membership = await db.centerMembership.create({
+      membership = await tenantDb.centerMembership.create({
         data: {
           userId: session.user.id,
           centerId: invite.centerId,
@@ -58,14 +65,14 @@ export async function POST(req: Request) {
 
     // If invite is linked to a group, verify capacity and enroll student
     if (invite.groupId && invite.targetRole === "STUDENT") {
-      const group = await db.group.findUnique({
+      const group = await tenantDb.group.findUnique({
         where: { id: invite.groupId },
         include: { _count: { select: { enrollments: true } } },
       });
 
       if (group) {
         const currentCount = group._count.enrollments;
-        const existingEnrollment = await db.enrollment.findFirst({
+        const existingEnrollment = await tenantDb.enrollment.findFirst({
           where: {
             studentMembershipId: membership.id,
             groupId: invite.groupId,
@@ -80,8 +87,9 @@ export async function POST(req: Request) {
             );
           }
 
-          await db.enrollment.create({
+          await tenantDb.enrollment.create({
             data: {
+              centerId: invite.centerId,
               studentMembershipId: membership.id,
               groupId: invite.groupId,
               status: "ACTIVE",
@@ -92,7 +100,7 @@ export async function POST(req: Request) {
     }
 
     // Increment invite usage
-    await db.inviteCode.update({
+    await tenantDb.inviteCode.updateMany({
       where: { id: invite.id },
       data: {
         usesCount: invite.usesCount + 1,

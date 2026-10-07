@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { db } from "@/lib/db";
+import { getTenantDb } from "@/lib/db-tenant";
 import { requireTenantAccess, logAuditEvent } from "@/lib/tenant";
 import { sendNotification } from "@/lib/notifications";
 
@@ -7,6 +7,7 @@ import { sendNotification } from "@/lib/notifications";
 export async function GET(req: Request) {
   try {
     const tenantCtx = await requireTenantAccess();
+    const tenantDb = getTenantDb(tenantCtx.center.id);
     const { searchParams } = new URL(req.url);
     const lessonId = searchParams.get("lessonId");
 
@@ -15,14 +16,9 @@ export async function GET(req: Request) {
     }
 
     // SECURITY: Verify the lesson belongs to this tenant before returning data (IDOR fix)
-    const lesson = await db.lesson.findFirst({
+    const lesson = await tenantDb.lesson.findFirst({
       where: {
         id: lessonId,
-        module: {
-          course: {
-            centerId: tenantCtx.center.id,
-          },
-        },
       },
     });
 
@@ -30,7 +26,7 @@ export async function GET(req: Request) {
       return NextResponse.json({ error: "Lesson not found or access denied" }, { status: 404 });
     }
 
-    const attendances = await db.attendance.findMany({
+    const attendances = await tenantDb.attendance.findMany({
       where: { lessonId },
       include: {
         student: {
@@ -51,6 +47,7 @@ export async function GET(req: Request) {
 export async function POST(req: Request) {
   try {
     const tenantCtx = await requireTenantAccess();
+    const tenantDb = getTenantDb(tenantCtx.center.id);
     if (
       tenantCtx.role !== "DIRECTOR" &&
       tenantCtx.role !== "CENTER_ADMIN" &&
@@ -68,10 +65,9 @@ export async function POST(req: Request) {
     }
 
     // SECURITY: Verify the lesson belongs to this tenant (IDOR fix)
-    const lesson = await db.lesson.findFirst({
+    const lesson = await tenantDb.lesson.findFirst({
       where: {
         id: lessonId,
-        module: { course: { centerId: tenantCtx.center.id } },
       },
     });
 
@@ -82,15 +78,14 @@ export async function POST(req: Request) {
     // SECURITY: Verify all studentMembershipIds belong to this tenant
     if (records.length > 0) {
       const membershipIds = records.map((r: any) => r.studentMembershipId);
-      const validMemberships = await db.centerMembership.findMany({
+      const validMemberships = await tenantDb.centerMembership.findMany({
         where: {
           id: { in: membershipIds },
-          centerId: tenantCtx.center.id,
           role: "STUDENT",
         },
         select: { id: true },
       });
-      const validIds = new Set(validMemberships.map((m) => m.id));
+      const validIds = new Set(validMemberships.map((m: any) => m.id));
       const invalidRecord = records.find((r: any) => !validIds.has(r.studentMembershipId));
       if (invalidRecord) {
         return NextResponse.json({ error: "One or more student memberships are invalid or cross-tenant" }, { status: 403 });
@@ -103,34 +98,51 @@ export async function POST(req: Request) {
     }
     const markerId = tenantCtx.membership.id;
 
-    const upserts = records.map((r: any) =>
-      db.attendance.upsert({
-        where: {
-          lessonId_studentMembershipId: {
-            lessonId,
-            studentMembershipId: r.studentMembershipId,
-          },
-        },
-        update: {
-          status: r.status,
-          markedByMembershipId: markerId,
-          markedAt: new Date(),
-        },
-        create: {
-          lessonId,
-          studentMembershipId: r.studentMembershipId,
-          status: r.status,
-          markedByMembershipId: markerId,
-        },
-      })
-    );
-
-    await db.$transaction(upserts);
+    // Use updateMany for UPSERT simulation with getTenantDb because prisma extension doesn't fully intercept compound where upserts well yet.
+    for (const r of records) {
+      const existing = await tenantDb.attendance.findFirst({
+        where: { lessonId, studentMembershipId: r.studentMembershipId }
+      });
+      if (existing) {
+        await tenantDb.attendance.updateMany({
+           where: { lessonId, studentMembershipId: r.studentMembershipId },
+           data: {
+             status: r.status,
+             markedByMembershipId: markerId,
+             markedAt: new Date(),
+           }
+        });
+      } else {
+        try {
+          await tenantDb.attendance.create({
+             data: {
+               lessonId,
+               studentMembershipId: r.studentMembershipId,
+               status: r.status,
+               markedByMembershipId: markerId,
+             }
+          });
+        } catch (e: any) {
+          if (e.code === 'P2002') {
+            await tenantDb.attendance.updateMany({
+               where: { lessonId, studentMembershipId: r.studentMembershipId },
+               data: {
+                 status: r.status,
+                 markedByMembershipId: markerId,
+                 markedAt: new Date(),
+               }
+            });
+          } else {
+            throw e;
+          }
+        }
+      }
+    }
 
     // Auto notification for ABSENT or LATE students to Parents
     for (const r of records) {
       if (r.status === "ABSENT" || r.status === "LATE") {
-        const parentLinks = await db.parentLink.findMany({
+        const parentLinks = await tenantDb.parentLink.findMany({
           where: { studentMembershipId: r.studentMembershipId, status: "CONFIRMED" },
           include: { parent: { include: { user: true } }, student: { include: { user: true } } },
         });

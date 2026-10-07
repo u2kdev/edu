@@ -1,4 +1,6 @@
 import { NextResponse } from "next/server";
+// Reason: Exception: Support tickets are platform-level models.
+// eslint-disable-next-line no-restricted-imports
 import { db } from "@/lib/db";
 import { getAuthSession } from "@/lib/auth";
 import { logAuditEvent } from "@/lib/tenant";

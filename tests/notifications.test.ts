@@ -1,6 +1,13 @@
-import { describe, it, expect, beforeAll, afterAll } from "vitest";
+import { describe, it, expect, beforeAll, afterAll, vi } from "vitest";
 import { db } from "../src/lib/db";
 import { sendNotification } from "../src/lib/notifications";
+
+let mockToken = "";
+vi.mock("next/headers", () => ({
+  cookies: () => ({
+    get: (name: string) => (name === "auth_token" ? { value: mockToken } : undefined),
+  }),
+}));
 
 describe("Phase 9: Notification System", () => {
   let tenantA: string;
@@ -59,8 +66,29 @@ describe("Phase 9: Notification System", () => {
     expect(notif?.centerId).toBe(tenantA);
   });
 
-  it("CRITICAL: Tenant Isolation - User A cannot read User B notifications", async () => {
+  it("CRITICAL: Tenant Isolation - DB level - User A cannot read User B notifications", async () => {
     // Create notification for B
+    await sendNotification({
+      userId: userB,
+      centerId: tenantB,
+      type: "GENERAL",
+      titleKey: "Secret B DB",
+      bodyKey: "Body DB",
+    });
+
+    const whereCondition = {
+      userId: userA, // DB query level
+      centerId: tenantA,
+    };
+
+    const userANotifs = await db.notification.findMany({
+      where: whereCondition,
+    });
+
+    expect(userANotifs.some(n => n.centerId === tenantB)).toBe(false);
+  });
+
+  it("CRITICAL: Tenant Isolation - API level - User A cannot read User B notifications", async () => {
     await sendNotification({
       userId: userB,
       centerId: tenantB,
@@ -69,21 +97,18 @@ describe("Phase 9: Notification System", () => {
       bodyKey: "Body",
     });
 
-    // Simulate API query for User A
-    const whereCondition = {
-      userId: userA, // API enforces this
-      centerId: tenantA,
-    };
+    const { GET } = await import("../src/app/api/notifications/route");
+    const { signJWT } = await import("../src/lib/auth");
+    
+    mockToken = signJWT({ userId: userA, email: "a", platformRole: "NONE", activeCenterId: tenantA, activeCenterRole: "STUDENT" });
+    const req = new Request("http://localhost/api/notifications");
+    const res = await GET(req);
+    const data = await res.json();
 
-    const userANotifs = await db.notification.findMany({
-      where: whereCondition,
-    });
-
-    // User A should NOT see B's notification
-    expect(userANotifs.some(n => n.centerId === tenantB)).toBe(false);
+    expect(data.notifications.some((n: any) => n.centerId === tenantB)).toBe(false);
   });
 
-  it("should mark notification as read and prevent unauthorized access", async () => {
+  it("should mark notification as read and prevent unauthorized access via API", async () => {
     const notif = await sendNotification({
       userId: userA,
       centerId: tenantA,
@@ -92,25 +117,21 @@ describe("Phase 9: Notification System", () => {
       bodyKey: "Body",
     });
 
-    // Simulate unauthorized access (User B trying to mark User A's notification)
-    const unauthorizedQuery = await db.notification.findFirst({
-      where: { id: notif!.id, userId: userB },
-    });
-    expect(unauthorizedQuery).toBeNull(); // Fails gracefully
-
-    // Simulate authorized access
-    const authorizedQuery = await db.notification.findFirst({
-      where: { id: notif!.id, userId: userA },
-    });
-    expect(authorizedQuery).toBeDefined();
-
-    await db.notification.update({
-      where: { id: authorizedQuery!.id },
-      data: { isRead: true },
+    const { PATCH } = await import("../src/app/api/notifications/route");
+    const { signJWT } = await import("../src/lib/auth");
+    
+    mockToken = signJWT({ userId: userB, email: "b", platformRole: "NONE", activeCenterId: tenantB, activeCenterRole: "STUDENT" });
+    
+    const req = new Request("http://localhost/api/notifications", {
+      method: "PATCH",
+      body: JSON.stringify({ notificationId: notif!.id })
     });
 
-    const updated = await db.notification.findUnique({ where: { id: notif!.id } });
-    expect(updated?.isRead).toBe(true);
+    const res = await PATCH(req);
+    expect(res.status).toBe(404);
+
+    const check = await db.notification.findUnique({ where: { id: notif!.id } });
+    expect(check?.isRead).toBe(false);
   });
 
   it("should track unread count accurately", async () => {

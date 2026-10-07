@@ -1,5 +1,6 @@
+import { requireTenantAccess } from "@/lib/tenant";
 import { getAuthSession } from "@/lib/auth";
-import { db } from "@/lib/db";
+import { getTenantDb } from "@/lib/db-tenant";
 import { redirect } from "next/navigation";
 import { CalendarDays, Clock, MapPin, Video, UserCheck, Building2, BookOpen } from "lucide-react";
 import { t } from "@/i18n";
@@ -8,6 +9,8 @@ const DAY_NAMES_RU = ["", "Пн", "Вт", "Ср", "Чт", "Пт", "Сб", "Вс"
 const DAY_NAMES_FULL = ["", "Понедельник", "Вторник", "Среда", "Четверг", "Пятница", "Суббота", "Воскресенье"];
 
 export default async function CenterSchedulePage() {
+  const tenantCtx = await requireTenantAccess();
+
   const session = await getAuthSession();
   if (!session) redirect("/login");
 
@@ -24,30 +27,30 @@ export default async function CenterSchedulePage() {
   if (activeRole === "TEACHER" && currentMembership) {
     whereCondition.teacherMembershipId = currentMembership.id;
   } else if (activeRole === "TEACHER_ASSISTANT" && currentMembership) {
-    const assistedGroups = await db.group.findMany({
+    const assistedGroups = await getTenantDb(tenantCtx.center.id).group.findMany({
       where: { assistantMembershipId: currentMembership.id, course: { centerId } },
       select: { id: true },
     });
     whereCondition.groupId = { in: assistedGroups.map((g) => g.id) };
   } else if (activeRole === "STUDENT" && currentMembership) {
-    const enrollments = await db.enrollment.findMany({
+    const enrollments = await getTenantDb(tenantCtx.center.id).enrollment.findMany({
       where: { studentMembershipId: currentMembership.id },
       select: { groupId: true },
     });
     whereCondition.groupId = { in: enrollments.map((e) => e.groupId) };
   } else if (activeRole === "PARENT" && currentMembership) {
-    const childLinks = await db.parentLink.findMany({
+    const childLinks = await getTenantDb(tenantCtx.center.id).parentLink.findMany({
       where: { parentMembershipId: currentMembership.id, status: "CONFIRMED" },
       select: { studentMembershipId: true },
     });
-    const childEnrollments = await db.enrollment.findMany({
+    const childEnrollments = await getTenantDb(tenantCtx.center.id).enrollment.findMany({
       where: { studentMembershipId: { in: childLinks.map((l) => l.studentMembershipId) } },
       select: { groupId: true },
     });
     whereCondition.groupId = { in: childEnrollments.map((e) => e.groupId) };
   }
 
-  const slots = await db.scheduleSlot.findMany({
+  const slots = await getTenantDb(tenantCtx.center.id).scheduleSlot.findMany({
     where: whereCondition,
     include: {
       group: {
@@ -64,7 +67,7 @@ export default async function CenterSchedulePage() {
 
   // Also fetch one-time scheduled lessons for the next 7 days
   const nextWeek = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000);
-  const upcomingLessons = await db.lesson.findMany({
+  const upcomingLessons = await getTenantDb(tenantCtx.center.id).lesson.findMany({
     where: {
       module: { course: { centerId } },
       status: "ACTIVE",

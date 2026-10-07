@@ -1,17 +1,18 @@
 import { NextResponse } from "next/server";
-import { db } from "@/lib/db";
+import { getTenantDb } from "@/lib/db-tenant";
 import { requireTenantAccess, logAuditEvent } from "@/lib/tenant";
 
 export async function GET(req: Request) {
   try {
     const tenantCtx = await requireTenantAccess();
+    const tenantDb = getTenantDb(tenantCtx.center.id);
 
-    let whereCondition: any = { centerId: tenantCtx.center.id };
+    let whereCondition: any = {};
 
     if (tenantCtx.role === "STUDENT" && tenantCtx.membership) {
       whereCondition.studentMembershipId = tenantCtx.membership.id;
     } else if (tenantCtx.role === "PARENT" && tenantCtx.membership) {
-      const parentLinks = await db.parentLink.findMany({
+      const parentLinks = await tenantDb.parentLink.findMany({
         where: { parentMembershipId: tenantCtx.membership.id, status: "CONFIRMED" },
         select: { studentMembershipId: true },
       });
@@ -19,7 +20,7 @@ export async function GET(req: Request) {
       whereCondition.studentMembershipId = { in: studentIds };
     }
 
-    const payments = await db.centerPayment.findMany({
+    const payments = await tenantDb.centerPayment.findMany({
       where: whereCondition,
       include: {
         student: {
@@ -40,6 +41,12 @@ export async function GET(req: Request) {
 export async function POST(req: Request) {
   try {
     const tenantCtx = await requireTenantAccess();
+    
+    if (!tenantCtx.session.user.emailVerified) {
+      return NextResponse.json({ error: "Email confirmation required for sensitive actions" }, { status: 403 });
+    }
+
+    const tenantDb = getTenantDb(tenantCtx.center.id);
 
     if (tenantCtx.role !== "DIRECTOR" && tenantCtx.role !== "CENTER_ADMIN" && !tenantCtx.isPlatformStaff) {
       return NextResponse.json({ error: "Forbidden: Only Director or Center Admin can process payments" }, { status: 403 });
@@ -61,7 +68,7 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: "Student and amount are required" }, { status: 400 });
     }
 
-    const payment = await db.centerPayment.create({
+    const payment = await tenantDb.centerPayment.create({
       data: {
         centerId: tenantCtx.center.id,
         studentMembershipId,
@@ -100,6 +107,12 @@ export async function PATCH(req: Request) {
   try {
     const tenantCtx = await requireTenantAccess();
 
+    if (!tenantCtx.session.user.emailVerified) {
+      return NextResponse.json({ error: "Email confirmation required for sensitive actions" }, { status: 403 });
+    }
+
+    const tenantDb = getTenantDb(tenantCtx.center.id);
+
     if (tenantCtx.role !== "DIRECTOR" && !tenantCtx.isPlatformStaff) {
       return NextResponse.json({ error: "Forbidden: Only Director can process refunds" }, { status: 403 });
     }
@@ -110,21 +123,22 @@ export async function PATCH(req: Request) {
       return NextResponse.json({ error: "paymentId is required" }, { status: 400 });
     }
 
-    const payment = await db.centerPayment.update({
+    await tenantDb.centerPayment.updateMany({
       where: { id: paymentId },
       data: {
         status: status || "REFUNDED",
         refundedAt: new Date(),
       },
     });
+    const payment = await tenantDb.centerPayment.findFirst({ where: { id: paymentId } });
 
     await logAuditEvent({
       centerId: tenantCtx.center.id,
       actorUserId: tenantCtx.session.user.id,
       action: "STUDENT_PAYMENT_REFUNDED",
       resource: "CenterPayment",
-      resourceId: payment.id,
-      details: { amount: payment.amount },
+      resourceId: payment?.id,
+      details: { amount: payment?.amount },
     });
 
     return NextResponse.json({ success: true, payment });

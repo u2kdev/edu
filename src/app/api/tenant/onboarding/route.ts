@@ -1,5 +1,8 @@
 import { NextResponse } from "next/server";
+// Reason: Exception: Creation of platform-level models.
+// eslint-disable-next-line no-restricted-imports
 import { db } from "@/lib/db";
+import { getTenantDb } from "@/lib/db-tenant";
 import { getAuthSession, signJWT } from "@/lib/auth";
 
 export async function POST(req: Request) {
@@ -34,7 +37,7 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: "Тарифные планы еще не настроены платформой" }, { status: 500 });
     }
 
-    // Create center
+    // Create center (Platform level)
     const center = await db.learningCenter.create({
       data: {
         name,
@@ -60,11 +63,12 @@ export async function POST(req: Request) {
       },
     });
 
-    // Create Director membership
-    const membership = await db.centerMembership.create({
+    // Create Director membership (Tenant level)
+    const tenantDb = getTenantDb(center.id);
+    const membership = await tenantDb.centerMembership.create({
       data: {
-        userId: session.user.id,
         centerId: center.id,
+        userId: session.user.id,
         role: "DIRECTOR",
       },
     });
