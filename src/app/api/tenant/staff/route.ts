@@ -10,7 +10,7 @@ import { checkSubscriptionLimit } from "@/lib/limits";
 import crypto from "crypto";
 
 // GET /api/tenant/staff — List all staff members of the active center
-export async function GET() {
+export async function GET(req: Request) {
   try {
     const tenantCtx = await requireTenantAccess();
     const { session, center, role } = tenantCtx;

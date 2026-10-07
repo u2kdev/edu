@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeAll, afterAll } from 'vitest';
+import { describe, it, expect, beforeAll, afterAll, vi } from 'vitest';
 import { POST } from '../src/app/api/auth/dev-login/route';
 import { db } from '../src/lib/db';
 
@@ -18,8 +18,8 @@ describe('Dev Login API Env Protection', () => {
   afterAll(async () => {
     await db.userSession.deleteMany({ where: { userId: testUserId } });
     await db.platformUser.delete({ where: { id: testUserId } });
-    process.env.NODE_ENV = originalEnv;
-    process.env.DEV_LOGIN = originalDevLogin;
+    if (originalEnv) vi.stubEnv('NODE_ENV', originalEnv); else vi.unstubAllEnvs();
+    
   });
 
   const testCases = [
@@ -32,8 +32,8 @@ describe('Dev Login API Env Protection', () => {
   describe('API: /api/auth/dev-login', () => {
     testCases.forEach(({ env, devLogin, expectAccess }) => {
       it(`env=${env}, DEV_LOGIN=${devLogin} -> ${expectAccess ? 'ALLOW' : '404'}`, async () => {
-        process.env.NODE_ENV = env as any;
-        process.env.DEV_LOGIN = devLogin;
+        vi.stubEnv('NODE_ENV', env);
+        vi.stubEnv('DEV_LOGIN', devLogin);
 
         const req = new Request('http://localhost/api/auth/dev-login', {
           method: 'POST',
