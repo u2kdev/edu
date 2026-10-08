@@ -6,7 +6,7 @@
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "lint": "next lint",
+    "lint": "next lint && eslint tests --ext .ts,.tsx",
     "verify": "node scripts/verify.mjs",
     "prisma:generate": "prisma generate",
     "prisma:db-push": "prisma db push",

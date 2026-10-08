@@ -18,7 +18,7 @@ vi.mock("next/headers", () => ({
   }),
 }));
 
-const mockReq = (url: string, body: any) =>
+const mockReq = (url: string, body: unknown) =>
   new Request(`http://localhost${url}`, {
     method: "POST",
     headers: {
@@ -73,7 +73,7 @@ describe("EmailVerified & Sensitive Actions", () => {
     await db.platformUser.deleteMany({ where: { id: { in: [verifiedUserId, unverifiedUserId] } } });
   });
 
-  const mockCenterReq = (url: string, body: any) =>
+  const mockCenterReq = (url: string, body: unknown) =>
     new Request(`http://localhost${url}`, {
       method: "POST",
       headers: {

@@ -28,7 +28,17 @@ export function getTenantDb(centerId: string) {
   return db.$extends({
     query: {
       $allModels: {
-        async $allOperations({ model, operation, args, query }: any) {
+        async $allOperations({
+          model,
+          operation,
+          args,
+          query,
+        }: {
+          model: string;
+          operation: string;
+          args: Record<string, unknown>;
+          query: (args: unknown) => Promise<unknown>;
+        }) {
           if (TENANT_MODELS.includes(model)) {
             if (
               [
@@ -41,7 +51,7 @@ export function getTenantDb(centerId: string) {
                 "groupBy",
               ].includes(operation)
             ) {
-              args.where = { ...args.where, centerId };
+              args.where = { ...((args.where as Record<string, unknown> | null | undefined) || {}), centerId };
             }
 
             if (operation === "upsert") {
@@ -52,7 +62,7 @@ export function getTenantDb(centerId: string) {
               if (target && target.centerId !== centerId) {
                 throw new Error("Record not found or access denied");
               }
-              args.create = { ...args.create, centerId };
+              args.create = { ...((args.create as Record<string, unknown> | null | undefined) || {}), centerId };
             }
 
             if (operation === "findUnique" || operation === "update" || operation === "delete") {
@@ -71,13 +81,13 @@ export function getTenantDb(centerId: string) {
 
               if (operation === "findUnique") {
                 operation = "findFirst";
-                args.where = { ...args.where, centerId };
+                args.where = { ...((args.where as Record<string, unknown> | null | undefined) || {}), centerId };
                 return delegate.findFirst(args);
               }
               
               if (operation === "update") {
                 operation = "updateMany";
-                args.where = { ...args.where, centerId };
+                args.where = { ...((args.where as Record<string, unknown> | null | undefined) || {}), centerId };
                 const res = await delegate.updateMany(args);
                 if (res.count === 0) throw new Error("Record not found or access denied");
                 return delegate.findFirst({ where: args.where });
@@ -85,22 +95,22 @@ export function getTenantDb(centerId: string) {
 
               if (operation === "delete") {
                 operation = "deleteMany";
-                args.where = { ...args.where, centerId };
+                args.where = { ...((args.where as Record<string, unknown> | null | undefined) || {}), centerId };
                 const res = await delegate.deleteMany(args);
                 if (res.count === 0) throw new Error("Record not found or access denied");
-                return { ...args.where, _deleted: true };
+                return { ...((args.where as Record<string, unknown> | null | undefined) || {}), _deleted: true };
               }
             }
 
             if (operation === "create") {
-              args.data = { ...args.data, centerId };
+              args.data = { ...((args.data as Record<string, unknown> | null | undefined) || {}), centerId };
             }
 
             if (operation === "createMany") {
               if (Array.isArray(args.data)) {
-                args.data = args.data.map((d: any) => ({ ...d, centerId }));
+                args.data = (args.data as Record<string, unknown>[]).map((d) => ({ ...d, centerId }));
               } else {
-                args.data = { ...args.data, centerId };
+                args.data = { ...((args.data as Record<string, unknown> | null | undefined) || {}), centerId };
               }
             }
           }

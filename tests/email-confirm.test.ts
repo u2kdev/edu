@@ -44,7 +44,7 @@ describe("Email Confirmation API", () => {
     await db.platformUser.deleteMany({ where: { email: { startsWith: "expired-" } } });
   });
 
-  const mockReq = (body: any) =>
+  const mockReq = (body: unknown) =>
     new Request(`http://localhost/api/auth/confirm-email`, {
       method: "POST",
       headers: { "x-forwarded-for": "1.1.1.1" },

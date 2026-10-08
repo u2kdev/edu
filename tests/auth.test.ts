@@ -16,7 +16,7 @@ vi.mock("next/headers", () => ({
   }),
 }));
 
-const mockRequest = (body: any, ip: string = "127.0.0.1") => {
+const mockRequest = (body: unknown, ip: string = "127.0.0.1") => {
   const req = new Request("http://localhost/api/auth/login", {
     method: "POST",
     headers: {

@@ -103,9 +103,9 @@ describe("Phase 9: Notification System", () => {
     mockToken = signJWT({ userId: userA, email: "a", platformRole: "NONE", activeCenterId: tenantA, activeCenterRole: "STUDENT" });
     const req = new Request("http://localhost/api/notifications");
     const res = await GET(req);
-    const data = await res.json();
+    const data = (await res.json()) as { notifications: { centerId: string }[] };
 
-    expect(data.notifications.some((n: any) => n.centerId === tenantB)).toBe(false);
+    expect(data.notifications.some((n: { centerId: string }) => n.centerId === tenantB)).toBe(false);
   });
 
   it("should mark notification as read and prevent unauthorized access via API", async () => {

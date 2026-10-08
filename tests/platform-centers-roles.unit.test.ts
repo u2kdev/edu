@@ -38,7 +38,7 @@ describe("Organizations Role Matrix", () => {
     mockToken = signJWT({ userId, email: "test@test.com", platformRole });
   };
 
-  const mockRequest = (url: string, method = "GET", body?: any) => {
+  const mockRequest = (url: string, method = "GET", body?: unknown) => {
     return new Request(`http://localhost${url}`, {
       method,
       headers: body ? { "Content-Type": "application/json" } : undefined,

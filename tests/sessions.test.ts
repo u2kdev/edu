@@ -41,13 +41,13 @@ describe("User Sessions API", () => {
   it("should list active sessions", async () => {
     mockToken = signJWT({ userId: user, email: "test", platformRole: "NONE" }, "7d", "jti1");
     const res = await getSessions(mockReq("/api/auth/sessions"));
-    const data = await res.json();
+    const data = (await res.json()) as { sessions: { id: string; isCurrent: boolean }[] };
     
     expect(res.status).toBe(200);
     expect(data.sessions.length).toBe(2);
     
-    const curr = data.sessions.find((s: any) => s.isCurrent);
-    expect(curr.id).toBe(session1);
+    const curr = data.sessions.find((s: { isCurrent: boolean }) => s.isCurrent);
+    expect(curr?.id).toBe(session1);
   });
 
   it("should revoke a specific session", async () => {

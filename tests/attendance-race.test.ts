@@ -18,9 +18,9 @@ describe("Concurrency Race Condition: Upsert Attendance", () => {
   let moduleIdA: string;
   let groupIdA: string;
   let membershipA: string;
-  let user: any;
+  let user: { id: string; email: string };
   let studentA: string;
-  let mockRequest: (body: any) => Request;
+  let mockRequest: (body: unknown) => Request;
 
   beforeAll(async () => {
     // Setup
@@ -35,9 +35,9 @@ describe("Concurrency Race Condition: Upsert Attendance", () => {
     studentA = sMem.id;
 
     const course = await db.course.create({ data: { centerId: centerA, title: "Course", createdByMembershipId: mem.id } });
-    const module = await db.courseModule.create({ data: { centerId: centerA, courseId: course.id, title: "Mod", orderIndex: 1 } });
-    moduleIdA = module.id;
-    const lesson = await db.lesson.create({ data: { centerId: centerA, moduleId: module.id, title: "Lesson", orderIndex: 1 } });
+    const cModule = await db.courseModule.create({ data: { centerId: centerA, courseId: course.id, title: "Mod", orderIndex: 1 } });
+    moduleIdA = cModule.id;
+    const lesson = await db.lesson.create({ data: { centerId: centerA, moduleId: cModule.id, title: "Lesson", orderIndex: 1 } });
     lessonA = lesson.id;
 
     const group = await db.group.create({ data: { centerId: centerA, name: "Race Group", courseId: course.id } });
@@ -50,7 +50,7 @@ describe("Concurrency Race Condition: Upsert Attendance", () => {
     });
     mockToken = signJWT({ userId: user.id, email: user.email, platformRole: "NONE", activeCenterId: centerA, activeCenterRole: "DIRECTOR" }, "7d", "jti_race");
 
-    mockRequest = (body: any) => new Request("http://localhost/api/attendance", {
+    mockRequest = (body: unknown) => new Request("http://localhost/api/attendance", {
       method: "POST",
       body: JSON.stringify(body)
     });

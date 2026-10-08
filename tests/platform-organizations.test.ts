@@ -26,14 +26,14 @@ declare global {
   var mockToken: string;
 }
 
-const mockRequest = (url: string, body?: any, ip?: string) =>
+const mockRequest = (url: string, body?: unknown, ip?: string) =>
   new Request(`http://localhost${url}`, {
     method: body ? (url.includes('PATCH') ? 'PATCH' : 'POST') : 'GET',
     headers: { "Content-Type": "application/json", "x-forwarded-for": ip || `127.0.0.${Math.floor(Math.random() * 255)}` },
     body: body ? JSON.stringify(body) : undefined,
   });
 
-const mockPatchRequest = (url: string, body?: any) =>
+const mockPatchRequest = (url: string, body?: unknown) =>
   new Request(`http://localhost${url}`, {
     method: 'PATCH',
     headers: { "Content-Type": "application/json" },

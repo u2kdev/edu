@@ -7,7 +7,7 @@ import { signJWT } from "../src/lib/auth";
 import * as authObj from "../src/lib/auth";
 import { vi } from "vitest";
 
-const mockRequest = (url: string, body?: any) => {
+const mockRequest = (url: string, body?: unknown) => {
   return new Request(`http://localhost${url}`, {
     method: body ? "POST" : "GET",
     headers: { "Content-Type": "application/json" },

@@ -7,7 +7,7 @@ export async function logAuditEvent(params: {
   action: string;
   resource: string;
   resourceId?: string;
-  details?: Record<string, any>;
+  details?: Record<string, unknown>;
   ipAddress?: string;
 }) {
   try {
@@ -78,9 +78,10 @@ export async function requireTenantAccess(expectedCenterId?: string) {
         (membership.role === "DIRECTOR" || membership.role === "CENTER_ADMIN")) {
       // allow
     } else {
-      const err: any = new Error(`Forbidden: Tenant suspended: ${center.status}`);
-      err.status = 403;
-      err.code = "CENTER_SUSPENDED";
+      const err = Object.assign(new Error(`Forbidden: Tenant suspended: ${center.status}`), {
+        status: 403,
+        code: "CENTER_SUSPENDED",
+      });
       throw err;
     }
   }
