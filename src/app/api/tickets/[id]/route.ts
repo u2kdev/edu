@@ -6,6 +6,7 @@ import { getAuthSession } from "@/lib/auth";
 import { logAuditEvent } from "@/lib/tenant";
 import { apiError, apiSuccess, handleApiError } from "@/lib/api-response";
 import { checkRateLimit } from "@/lib/rate-limit";
+import { getClientIp } from "@/lib/ip";
 import { z } from "zod";
 
 const ticketPatchSchema = z.object({
@@ -42,14 +43,14 @@ export async function GET(req: Request, { params }: { params: { id: string } }) 
     }
 
     return apiSuccess({ ticket });
-  } catch (err: any) {
+  } catch (err: unknown) {
     return handleApiError(err);
   }
 }
 
 export async function PATCH(req: Request, { params }: { params: { id: string } }) {
   try {
-    const ip = req.headers.get("x-forwarded-for") || "unknown";
+    const ip = getClientIp(req);
     if (!checkRateLimit(ip + "_ticket_patch")) {
       return apiError("Rate limited", "RATE_LIMITED", 429);
     }

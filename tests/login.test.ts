@@ -41,7 +41,7 @@ describe("Login API", () => {
     await db.platformUser.delete({ where: { id: user } });
   });
 
-  const mockReq = (body: any, ip: string = "127.0.0.1") => {
+  const mockReq = (body: unknown, ip: string = "127.0.0.1") => {
     return new Request("http://localhost/api/auth/login", {
       method: "POST",
       headers: { "x-forwarded-for": ip },

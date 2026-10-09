@@ -106,10 +106,10 @@ describe("Phase 11: Platform & Developer Access Security", () => {
     // Owner tries to fetch their tickets
     setAuth(ownerUserId, "NONE");
     const res = await getTickets(mockRequest(`/api/tickets`));
-    const json = await res.json();
+    const json = (await res.json()) as { tickets?: { id: string }[] };
     
     // Should not contain the other ticket
-    const found = json.tickets?.some((t: any) => t.id === ticket.id);
+    const found = json.tickets?.some((t: { id: string }) => t.id === ticket.id);
     expect(found).toBe(false);
   });
 });

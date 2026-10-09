@@ -37,12 +37,14 @@ export async function requireDeveloper() {
   return session;
 }
 
-export function handlePlatformError(err: any) {
-  if (err.message === "Unauthorized") {
+export function handlePlatformError(err: unknown) {
+  const errorObj = err as { message?: string } | null | undefined;
+  const msg = errorObj?.message || "";
+  if (msg === "Unauthorized") {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
-  if (err.message.startsWith("Forbidden")) {
-    return NextResponse.json({ error: err.message }, { status: 403 });
+  if (msg.startsWith("Forbidden")) {
+    return NextResponse.json({ error: msg }, { status: 403 });
   }
-  return NextResponse.json({ error: err.message || "Internal Server Error" }, { status: 500 });
+  return NextResponse.json({ error: msg || "Internal Server Error" }, { status: 500 });
 }

@@ -48,7 +48,7 @@ describe("Invite Security", () => {
     const mem = await tenantDb.centerMembership.create({ data: { userId: user, centerId: tenant, role: "DIRECTOR" } });
     
     const invite = await tenantDb.inviteCode.create({
-      data: { centerId: tenant, code: "EXPIRED_123", targetRole: "STUDENT", expiresAt: new Date(Date.now() - 10000), maxUses: 1, usesCount: 0, createdByMembershipId: mem.id } as any
+      data: { centerId: tenant, code: "EXPIRED_123", targetRole: "STUDENT", expiresAt: new Date(Date.now() - 10000), maxUses: 1, usesCount: 0, createdByMembershipId: mem.id }
     });
     
     const res = await acceptInvite(mockReq("EXPIRED_123", "10.0.0.2"));
@@ -62,7 +62,7 @@ describe("Invite Security", () => {
     const tenantDb = getTenantDb(tenant);
     const mem = await tenantDb.centerMembership.findFirst({ where: { userId: user } });
     const invite = await tenantDb.inviteCode.create({
-      data: { centerId: tenant, code: "USED_123", targetRole: "STUDENT", expiresAt: new Date(Date.now() + 100000), maxUses: 1, usesCount: 1, createdByMembershipId: mem!.id } as any
+      data: { centerId: tenant, code: "USED_123", targetRole: "STUDENT", expiresAt: new Date(Date.now() + 100000), maxUses: 1, usesCount: 1, createdByMembershipId: mem!.id }
     });
     
     const res = await acceptInvite(mockReq("USED_123", "10.0.0.3"));

@@ -1,3 +1,5 @@
+import { z } from "zod";
+
 // ============================================================
 // Centralized RBAC + Granular Permissions System
 // Security principle: Backend is the ONLY source of truth.
@@ -319,12 +321,13 @@ export function hasPermission(
   // DEVELOPER always has full access
   if (platformRole === "DEVELOPER") return true;
 
-  // SUPERADMIN has full platform access (not infrastructure)
+  // SUPERADMIN has full platform commercial management & center impersonation (not technical infrastructure)
   if (platformRole === "SUPERADMIN") {
     const platformPerms = PLATFORM_ROLE_PERMISSIONS["SUPERADMIN"];
     if (platformPerms.includes(permission as Permission)) return true;
-    // SUPERADMIN gets center permissions too (for impersonation management)
-    return true; // SUPERADMIN is effectively full access at center level
+    // SUPERADMIN gets center permissions for impersonation management
+    if (CENTER_ROLE_PERMISSIONS["DIRECTOR"].includes(permission as Permission)) return true;
+    return false;
   }
 
   // Check platform role permissions
@@ -335,11 +338,11 @@ export function hasPermission(
   if (centerRole) {
     // Check for granular membership-level overrides
     if (membershipPermissions) {
-      try {
-        const overrides: { granted?: Permission[]; denied?: Permission[] } = JSON.parse(membershipPermissions);
+      const overrides = parseMembershipPermissions(membershipPermissions);
+      if (overrides) {
         if (overrides.denied?.includes(permission as Permission)) return false;
         if (overrides.granted?.includes(permission as Permission)) return true;
-      } catch { /* ignore malformed JSON */ }
+      }
     }
 
     const centerPerms = CENTER_ROLE_PERMISSIONS[centerRole as CenterRole] || [];
@@ -347,6 +350,48 @@ export function hasPermission(
   }
 
   return false;
+}
+
+export const CENTER_PERMISSIONS = [
+  "students.read", "students.create", "students.update", "students.delete",
+  "grades.read", "grades.create", "grades.update", "grades.finalize", "grades.delete",
+  "attendance.read", "attendance.mark", "attendance.update",
+  "assignments.read", "assignments.create", "assignments.review", "assignments.grade",
+  "groups.read", "groups.create", "groups.manage",
+  "courses.read", "courses.create", "courses.manage",
+  "schedule.read", "schedule.create", "schedule.manage",
+  "payments.read", "payments.manage", "payments.refund",
+  "reports.read", "reports.export",
+  "users.read", "users.create", "users.manage", "users.block",
+  "announcements.read", "announcements.create", "announcements.manage",
+  "materials.read", "materials.upload", "materials.manage",
+  "branches.read", "branches.manage",
+  "settings.read", "settings.manage",
+  "audit.read",
+  "invites.read", "invites.create", "invites.manage",
+  "support.read", "support.create",
+] as const;
+
+export const centerPermissionSchema = z.enum(CENTER_PERMISSIONS);
+
+export const membershipPermissionsSchema = z.object({
+  granted: z.array(centerPermissionSchema).optional(),
+  denied: z.array(centerPermissionSchema).optional(),
+}).strict();
+
+export function parseMembershipPermissions(jsonString: string | null | undefined): {
+  granted?: Permission[];
+  denied?: Permission[];
+} | null {
+  if (!jsonString) return null;
+  try {
+    const raw = JSON.parse(jsonString);
+    const parsed = membershipPermissionsSchema.safeParse(raw);
+    if (!parsed.success) return null;
+    return parsed.data as { granted?: Permission[]; denied?: Permission[] };
+  } catch {
+    return null;
+  }
 }
 
 // -----------------------------------------------------------------------

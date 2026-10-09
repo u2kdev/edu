@@ -140,9 +140,9 @@ describe("Phase C & E: IDOR / Privilege Escalation Tests", () => {
     // For grades GET with studentId, it either returns 404/403 or silently ignores and scopes to self
     // Let's check response
     if (res.status === 200) {
-      const data = await res.json();
+      const data = (await res.json()) as { grades: { studentMembershipId: string }[] };
       // If it succeeds, it MUST ONLY contain grades for Student A, not B
-      expect(data.grades.every((g: any) => g.studentMembershipId === studentAMemId)).toBe(true);
+      expect(data.grades.every((g: { studentMembershipId: string }) => g.studentMembershipId === studentAMemId)).toBe(true);
     } else {
       expect(res.status).toBe(404); // "Student not found" or "Forbidden"
     }
@@ -165,30 +165,30 @@ describe("Phase C & E: IDOR / Privilege Escalation Tests", () => {
     // Let's try to fetch all grades globally (only DIRECTOR can do this without scoping)
     const req = mockRequest(`/api/grades`);
     const res = await getGrades(req);
-    const data = await res.json();
+    const data = (await res.json()) as { grades: { teacherMembershipId: string }[] };
     
     // Since they are evaluated as TEACHER, the query is scoped to their groups
     // If the privilege escalation succeeded, they would see all grades.
     expect(res.status).toBe(200);
-    expect(data.grades.every((g: any) => g.teacherMembershipId === teacherAMemId)).toBe(true);
+    expect(data.grades.every((g: { teacherMembershipId: string }) => g.teacherMembershipId === teacherAMemId)).toBe(true);
   });
 
   it("CRITICAL: Tenant A user tries to read Tenant B courses", async () => {
     setAuth(directorA, tenantA, "DIRECTOR");
     const req = mockRequest(`/api/courses?id=${courseB}`);
     const res = await getCourses(req);
-    const data = await res.json();
+    const data = (await res.json()) as { courses: { id: string }[] };
     expect(res.status).toBe(200);
-    expect(data.courses.some((c: any) => c.id === courseB)).toBe(false);
+    expect(data.courses.some((c: { id: string }) => c.id === courseB)).toBe(false);
   });
 
   it("CRITICAL: Tenant A user tries to read Tenant B groups", async () => {
     setAuth(directorA, tenantA, "DIRECTOR");
     const req = mockRequest(`/api/groups`);
     const res = await getGroups(req);
-    const data = await res.json();
+    const data = (await res.json()) as { groups: { id: string }[] };
     // Should not include group B
-    expect(data.groups.some((g: any) => g.id === groupB)).toBe(false);
+    expect(data.groups.some((g: { id: string }) => g.id === groupB)).toBe(false);
   });
 
   it("CRITICAL: Tenant A user tries to read Tenant B homework", async () => {

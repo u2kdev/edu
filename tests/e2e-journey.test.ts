@@ -25,7 +25,7 @@ vi.mock("next/headers", () => ({
   }),
 }));
 
-const mockRequest = (url: string, body?: any) =>
+const mockRequest = (url: string, body?: unknown) =>
   new Request(`http://localhost${url}`, {
     method: body ? "POST" : "GET",
     headers: { "Content-Type": "application/json" },
@@ -168,10 +168,10 @@ describe("Phase 12: Real-World E2E Validation Journey", () => {
       maxStudents: 10,
       teacherMembershipId: teacherMembershipId,
     });
-    let res: any = await createGroup(grpReq);
-    let data: any = await res.json();
-    expect(res.status).toBe(200);
-    groupId = data.group.id;
+    const createGrpRes = await createGroup(grpReq);
+    const grpData = (await createGrpRes.json()) as { group: { id: string } };
+    expect(createGrpRes.status).toBe(200);
+    groupId = grpData.group.id;
 
     // Generate Invite
     const invReq = mockRequest("/api/invites/generate", {
@@ -180,10 +180,10 @@ describe("Phase 12: Real-World E2E Validation Journey", () => {
       groupId: groupId,
       maxUses: 1,
     });
-    res = await generateInvite(invReq);
-    data = await res.json();
-    expect(res.status).toBe(200);
-    studentInviteCode = data.invite.code;
+    const invRes = await generateInvite(invReq);
+    const invData = (await invRes.json()) as { invite: { code: string } };
+    expect(invRes.status).toBe(200);
+    studentInviteCode = invData.invite.code;
 
   });
 
@@ -224,10 +224,10 @@ describe("Phase 12: Real-World E2E Validation Journey", () => {
       courseId: courseId,
       title: "E2E Module 1",
     });
-    let res: any = await createModule(modReq);
-    let data: any = await res.json();
-    expect(res.status).toBe(200);
-    moduleId = data.module.id;
+    const modRes = await createModule(modReq);
+    const modData = (await modRes.json()) as { module: { id: string } };
+    expect(modRes.status).toBe(200);
+    moduleId = modData.module.id;
 
     // Create Lesson
     const lessonReq = mockRequest("/api/lessons", {
@@ -236,25 +236,25 @@ describe("Phase 12: Real-World E2E Validation Journey", () => {
       scheduledAt: new Date().toISOString(),
       lessonType: "REGULAR",
     });
-    res = await createLesson(lessonReq);
-    data = await res.json();
-    if(res.status !== 200) console.log("Lesson Error:", data.error);
-    expect(res.status).toBe(200);
-    lessonId = data.lesson.id;
+    const lessonRes = await createLesson(lessonReq);
+    const lessonData = (await lessonRes.json()) as { lesson?: { id: string }; error?: unknown };
+    if (lessonRes.status !== 200) console.log("Lesson Error:", lessonData.error);
+    expect(lessonRes.status).toBe(200);
+    lessonId = lessonData.lesson!.id;
 
     // Create Homework
-    const req = mockRequest("/api/homework", {
+    const hwReq = mockRequest("/api/homework", {
       lessonId: lessonId,
       title: "E2E Build an App",
       description: "Use App Router",
       dueDate: new Date(Date.now() + 86400000).toISOString(),
     });
 
-    res = await createHomework(req);
-    data = await res.json();
-    if(res.status !== 200) console.log("Homework Error:", data.error);
-    expect(res.status).toBe(200);
-    homeworkId = data.homework.id;
+    const hwRes = await createHomework(hwReq);
+    const hwData = (await hwRes.json()) as { homework?: { id: string }; error?: unknown };
+    if (hwRes.status !== 200) console.log("Homework Error:", hwData.error);
+    expect(hwRes.status).toBe(200);
+    homeworkId = hwData.homework!.id;
   });
 
   it("9. Teacher assigns Grade", async () => {

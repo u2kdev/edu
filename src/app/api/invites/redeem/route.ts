@@ -7,11 +7,12 @@ import { getTenantDb } from "@/lib/db-tenant";
 import { logAuditEvent } from "@/lib/tenant";
 import { checkSubscriptionLimit } from "@/lib/limits";
 import { checkRateLimit } from "@/lib/rate-limit";
+import { getClientIp } from "@/lib/ip";
 import { apiError, handleApiError } from "@/lib/api-response";
 
 export async function POST(req: Request) {
   try {
-    const ip = req.headers.get("x-forwarded-for") || "unknown";
+    const ip = getClientIp(req);
     if (!checkRateLimit(ip)) {
       return apiError("Too many attempts", "RATE_LIMITED", 429);
     }

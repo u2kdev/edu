@@ -3,12 +3,13 @@ import { NextResponse } from "next/server";
 // eslint-disable-next-line no-restricted-imports
 import { db } from "@/lib/db";
 import { checkRateLimit } from "@/lib/rate-limit";
+import { getClientIp } from "@/lib/ip";
 import { apiError, apiSuccess, handleApiError } from "@/lib/api-response";
 import crypto from "crypto";
 
 export async function POST(req: Request) {
   try {
-    const ip = req.headers.get("x-forwarded-for") || "unknown";
+    const ip = getClientIp(req);
     
     // Strict rate limit for resending emails
     if (!checkRateLimit(ip + "_resend_email", 3, 60 * 60 * 1000)) {

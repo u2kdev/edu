@@ -64,7 +64,7 @@ describe("Registration by Invite (POST /api/auth/register)", () => {
     await db.platformUser.deleteMany({ where: { email: { startsWith: "new-" } } });
   });
 
-  const mockReq = (body: any, ip: string = "1.1.1.1") =>
+  const mockReq = (body: unknown, ip: string = "1.1.1.1") =>
     new Request(`http://localhost/api/auth/register`, {
       method: "POST",
       headers: { "x-forwarded-for": ip },
@@ -99,13 +99,13 @@ describe("Registration by Invite (POST /api/auth/register)", () => {
     const raceIp = "1.1.1.2";
     for (let i = 0; i < 5; i++) {
       promises.push(
-        registerPost(mockReq({ email: `racer-${i}@test.com`, password: "password123", fullName: `Racer ${i}`, inviteCode: code1Limit }, raceIp)).then(r => r.json())
+        registerPost(mockReq({ email: `racer-${i}@test.com`, password: "password123", fullName: `Racer ${i}`, inviteCode: code1Limit }, raceIp)).then(r => r.json() as Promise<{ message?: string }>)
       );
     }
 
     const results = await Promise.all(promises);
     
-    const successes = results.filter((r: any) => r.message === "Registration successful. Please check your email to confirm.");
+    const successes = results.filter((r) => r.message === "Registration successful. Please check your email to confirm.");
 
     expect(successes.length).toBe(1);
 

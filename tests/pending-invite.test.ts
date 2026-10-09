@@ -14,7 +14,7 @@ vi.mock("next/headers", () => ({
   }),
 }));
 
-const mockReq = (body: any) =>
+const mockReq = (body: unknown) =>
   new Request(`http://localhost/api/auth/invites/accept`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },

@@ -40,7 +40,7 @@ describe("Registration Rate Limits", () => {
     rateLimits.clear();
   });
 
-  const mockReq = (body: any, ip: string = "1.1.1.1") =>
+  const mockReq = (body: unknown, ip: string = "1.1.1.1") =>
     new Request(`http://localhost/api/auth/register`, {
       method: "POST",
       headers: { "x-forwarded-for": ip },
@@ -49,27 +49,27 @@ describe("Registration Rate Limits", () => {
 
   it("Allows 30 registrations from same IP using ONE code with sufficient limit (classroom scenario)", async () => {
     const ip = "4.4.4.4";
-    const results = [];
+    const results: { message?: string }[] = [];
     for (let i = 0; i < 30; i++) {
       const res = await registerPost(mockReq({ email: `reglim-samecode-${i}@test.com`, password: "password123", fullName: `Class ${i}`, inviteCode: code10Limit }, ip));
-      results.push(await res.json());
+      results.push((await res.json()) as { message?: string });
     }
-    const successes = results.filter((r: any) => r.message === "Registration successful. Please check your email to confirm.");
+    const successes = results.filter((r) => r.message === "Registration successful. Please check your email to confirm.");
     expect(successes.length).toBe(30);
   }, 15000);
 
   it("Blocks single code brute-force from same IP after 10 failed attempts", async () => {
     const ip = "4.4.4.5";
-    const responses = [];
+    const responses: Response[] = [];
     for (let i = 0; i < 15; i++) {
       const res = await registerPost(mockReq({ email: `reglim-bad-${i}@test.com`, password: "password123", fullName: `Spam`, inviteCode: "INVALIDCODE999" }, ip));
       responses.push(res);
     }
     
     // First 10 should be 400 Invalid Invite
-    const badRequests = responses.filter((r: any) => r.status === 400);
+    const badRequests = responses.filter((r) => r.status === 400);
     // The rest (5) should be 429 Rate Limited
-    const rateLimitedRequests = responses.filter((r: any) => r.status === 429);
+    const rateLimitedRequests = responses.filter((r) => r.status === 429);
     
     expect(badRequests.length).toBe(10);
     expect(rateLimitedRequests.length).toBe(5);

@@ -2,6 +2,7 @@ import { describe, it, expect, beforeAll, afterAll, vi } from "vitest";
 import { db } from "../src/lib/db";
 import { getTenantDb } from "../src/lib/db-tenant";
 import { POST } from "../src/app/api/attendance/route";
+import { POST as postBulk } from "../src/app/api/attendance/bulk/route";
 import { signJWT, hashJti } from "../src/lib/auth";
 
 let mockToken = "";
@@ -14,10 +15,12 @@ vi.mock("next/headers", () => ({
 describe("Concurrency Race Condition: Upsert Attendance", () => {
   let centerA: string;
   let lessonA: string;
+  let moduleIdA: string;
+  let groupIdA: string;
   let membershipA: string;
-  let user: any;
+  let user: { id: string; email: string };
   let studentA: string;
-  let mockRequest: (body: any) => Request;
+  let mockRequest: (body: unknown) => Request;
 
   beforeAll(async () => {
     // Setup
@@ -32,9 +35,14 @@ describe("Concurrency Race Condition: Upsert Attendance", () => {
     studentA = sMem.id;
 
     const course = await db.course.create({ data: { centerId: centerA, title: "Course", createdByMembershipId: mem.id } });
-    const module = await db.courseModule.create({ data: { centerId: centerA, courseId: course.id, title: "Mod", orderIndex: 1 } });
-    const lesson = await db.lesson.create({ data: { centerId: centerA, moduleId: module.id, title: "Lesson", orderIndex: 1 } });
+    const cModule = await db.courseModule.create({ data: { centerId: centerA, courseId: course.id, title: "Mod", orderIndex: 1 } });
+    moduleIdA = cModule.id;
+    const lesson = await db.lesson.create({ data: { centerId: centerA, moduleId: cModule.id, title: "Lesson", orderIndex: 1 } });
     lessonA = lesson.id;
+
+    const group = await db.group.create({ data: { centerId: centerA, name: "Race Group", courseId: course.id } });
+    groupIdA = group.id;
+    await db.enrollment.create({ data: { centerId: centerA, groupId: groupIdA, studentMembershipId: studentA, status: "ACTIVE" } });
 
     // Create session in DB and token
     await db.userSession.create({
@@ -42,7 +50,7 @@ describe("Concurrency Race Condition: Upsert Attendance", () => {
     });
     mockToken = signJWT({ userId: user.id, email: user.email, platformRole: "NONE", activeCenterId: centerA, activeCenterRole: "DIRECTOR" }, "7d", "jti_race");
 
-    mockRequest = (body: any) => new Request("http://localhost/api/attendance", {
+    mockRequest = (body: unknown) => new Request("http://localhost/api/attendance", {
       method: "POST",
       body: JSON.stringify(body)
     });
@@ -52,6 +60,8 @@ describe("Concurrency Race Condition: Upsert Attendance", () => {
     await db.attendance.deleteMany({
       where: { lesson: { centerId: centerA } }
     });
+    await db.enrollment.deleteMany({ where: { centerId: centerA } });
+    await db.group.deleteMany({ where: { centerId: centerA } });
     await db.course.deleteMany({ where: { centerId: centerA } });
     await db.learningCenter.deleteMany({ where: { id: centerA } });
     await db.platformUser.deleteMany({ where: { id: user.id } });
@@ -76,6 +86,30 @@ describe("Concurrency Race Condition: Upsert Attendance", () => {
     // Check exactly 1 record in DB
     const tenantDb = getTenantDb(centerA);
     const records = await tenantDb.attendance.findMany({ where: { lessonId: lessonA, studentMembershipId: studentA } });
+    expect(records.length).toBe(1);
+  });
+
+  it("should handle 10 parallel bulk requests without 500 error and result in exactly 1 record", async () => {
+    const lessonBulk = await db.lesson.create({ data: { centerId: centerA, moduleId: moduleIdA, title: "Lesson Bulk", orderIndex: 2 } });
+    const promises = [];
+    for (let i = 0; i < 10; i++) {
+      promises.push(postBulk(new Request("http://localhost/api/attendance/bulk", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          lessonId: lessonBulk.id,
+          groupId: groupIdA,
+        })
+      })));
+    }
+
+    const results = await Promise.all(promises);
+    for (const res of results) {
+      expect(res.status).toBe(200);
+    }
+
+    const tenantDb = getTenantDb(centerA);
+    const records = await tenantDb.attendance.findMany({ where: { lessonId: lessonBulk.id, studentMembershipId: studentA } });
     expect(records.length).toBe(1);
   });
 });

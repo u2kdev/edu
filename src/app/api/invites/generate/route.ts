@@ -2,14 +2,7 @@ import { NextResponse } from "next/server";
 import { getTenantDb } from "@/lib/db-tenant";
 import { requireTenantAccess } from "@/lib/tenant";
 
-function generateRandomCode(length: number = 8): string {
-  const chars = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
-  let result = "";
-  for (let i = 0; i < length; i++) {
-    result += chars.charAt(Math.floor(Math.random() * chars.length));
-  }
-  return result;
-}
+import { generateSecureInviteCode } from "@/lib/invites";
 
 export async function POST(req: Request) {
   try {
@@ -25,7 +18,7 @@ export async function POST(req: Request) {
 
     const code = customCode
       ? customCode.toUpperCase().trim()
-      : `${tenantCtx.center.slug.toUpperCase()}-${generateRandomCode(6)}`;
+      : `${tenantCtx.center.slug.toUpperCase()}-${generateSecureInviteCode(12)}`;
 
     const invite = await tenantDb.inviteCode.create({
       data: {

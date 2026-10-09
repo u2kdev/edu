@@ -74,6 +74,7 @@ const postBodySchema = z.object({
   trialEndsAt: z.string().optional(),
   directorEmail: z.string().email(),
   directorFullName: z.string().min(2),
+  planId: z.string().optional(),
 });
 
 const RESERVED_SLUGS = ["admin", "api", "platform", "login", "auth", "system"];
@@ -141,8 +142,8 @@ export async function POST(req: Request) {
       });
 
       let plan = null;
-      if ((body as any).planId) {
-        plan = await tx.subscriptionPlan.findUnique({ where: { id: (body as any).planId } });
+      if (data.planId) {
+        plan = await tx.subscriptionPlan.findUnique({ where: { id: data.planId } });
       } else {
         plan = await tx.subscriptionPlan.findFirst({ where: { isActive: true } });
       }
