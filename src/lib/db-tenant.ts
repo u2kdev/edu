@@ -1,4 +1,4 @@
-import { PrismaClient } from "@prisma/client";
+import { Prisma, PrismaClient } from "@prisma/client";
 import { db } from "./db";
 
 export const TENANT_MODELS = [
@@ -39,23 +39,41 @@ type DelegateMethods = {
 
 type DynamicDb = PrismaClient & Record<string, DelegateMethods>;
 
-const RELATION_FOREIGN_KEYS: Record<string, string> = {
-  groupId: "group",
-  courseId: "course",
-  moduleId: "courseModule",
-  lessonId: "lesson",
-  studentMembershipId: "centerMembership",
-  teacherMembershipId: "centerMembership",
-  creatorMembershipId: "centerMembership",
-  branchId: "branch",
-  subjectId: "subject",
-  homeworkId: "homework",
-  homeworkSubmissionId: "homeworkSubmission",
-  testId: "test",
-};
+// Dynamically generated foreign keys mapping from Prisma.dmmf
+const DMMF_RELATION_FOREIGN_KEYS: Record<string, string> = (() => {
+  const map: Record<string, string> = {};
+  for (const model of Prisma.dmmf.datamodel.models) {
+    for (const field of model.fields) {
+      if (
+        field.kind === "object" &&
+        field.relationFromFields &&
+        field.relationFromFields.length > 0
+      ) {
+        const targetModel = field.type;
+        if (TENANT_MODELS.includes(targetModel)) {
+          const delegateName = targetModel.charAt(0).toLowerCase() + targetModel.slice(1);
+          for (const fk of field.relationFromFields) {
+            map[fk] = delegateName;
+          }
+        }
+      }
+    }
+  }
+  return map;
+})();
 
 async function validateForeignRelations(data: Record<string, unknown>, centerId: string) {
-  for (const [key, modelProp] of Object.entries(RELATION_FOREIGN_KEYS)) {
+  // Reject nested relation mutations like connect, create, connectOrCreate
+  for (const [key, value] of Object.entries(data)) {
+    if (value && typeof value === "object" && !Array.isArray(value) && !(value instanceof Date)) {
+      const nestedKeys = Object.keys(value as Record<string, unknown>);
+      if (nestedKeys.some((k) => ["connect", "create", "connectOrCreate", "createMany"].includes(k))) {
+        throw new Error(`Nested relation mutation on '${key}' is forbidden in tenant db. Use flat foreign key ID.`);
+      }
+    }
+  }
+
+  for (const [key, modelProp] of Object.entries(DMMF_RELATION_FOREIGN_KEYS)) {
     const foreignId = data[key];
     if (typeof foreignId === "string" && foreignId.length > 0) {
       const dynamicDb = db as DynamicDb;
