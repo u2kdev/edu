@@ -18,10 +18,16 @@ export const TENANT_MODELS = [
   "InviteCode",
   "Material",
   "Test",
+  "TestQuestion",
   "TestAttempt",
   "AcademicTerm",
   "Holiday",
   "Announcement",
+  "Subscription",
+  "SupportTicket",
+  "AuditLog",
+  "ActivityLog",
+  "Notification",
 ];
 
 export function getTenantDb(centerId: string) {
