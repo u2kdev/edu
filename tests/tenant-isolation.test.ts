@@ -83,7 +83,7 @@ describe("True Tenant Isolation (Real SQLite DB)", () => {
     
     await expect(
       dbA.course.update({ where: { id: courseB }, data: { title: "Hacked" } })
-    ).rejects.toThrow();
+    ).rejects.toThrow("Record not found or access denied");
 
     const updatedMany = await dbA.course.updateMany({
       where: { id: courseB },
@@ -100,7 +100,7 @@ describe("True Tenant Isolation (Real SQLite DB)", () => {
     
     await expect(
       dbA.course.delete({ where: { id: courseB } })
-    ).rejects.toThrow();
+    ).rejects.toThrow("Record not found or access denied");
 
     const deletedMany = await dbA.course.deleteMany({
       where: { id: courseB }
@@ -117,7 +117,7 @@ describe("True Tenant Isolation (Real SQLite DB)", () => {
         update: { title: "Hacked B" },
         create: { id: courseB, title: "Hacked B", createdByMembershipId: memberA, centerId: centerA },
       })
-    ).rejects.toThrow();
+    ).rejects.toThrow("Record not found or access denied");
   });
 
   it("create / createMany strictly enforces centerId (spoofing prevented)", async () => {
