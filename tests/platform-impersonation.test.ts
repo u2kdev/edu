@@ -156,8 +156,8 @@ describe("TRUST-3 Item 7: Platform roles tenant access matrix (impersonation gat
     expect(res.status).toBe(403);
   });
 
-  // SUPERADMIN has impersonation: GET succeeds, POST succeeds
-  it("SUPERADMIN has impersonation: GET and POST /api/courses succeed", async () => {
+  // SUPERADMIN has platform access: GET succeeds, POST /api/courses rejected without center membership
+  it("SUPERADMIN has impersonation: GET succeeds (200), POST rejected without membership (403)", async () => {
     await setAuth(superAdmin);
     const resGet = await getCourses(new Request(`http://localhost/api/courses?centerId=${center.id}`));
     expect(resGet.status).toBe(200);
@@ -167,11 +167,11 @@ describe("TRUST-3 Item 7: Platform roles tenant access matrix (impersonation gat
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ centerId: center.id, title: "SuperAdmin Course" }),
     }));
-    expect(resPost.status).toBe(200);
+    expect(resPost.status).toBe(403);
   });
 
-  // DEVELOPER has impersonation: GET succeeds, POST succeeds
-  it("DEVELOPER has impersonation: GET and POST /api/grades succeed", async () => {
+  // DEVELOPER has platform access: GET succeeds (200), POST rejected (403) without membership
+  it("DEVELOPER has impersonation: GET succeeds (200), POST rejected without membership (403)", async () => {
     await setAuth(developer);
     const resGet = await getGrades(new Request(`http://localhost/api/grades?centerId=${center.id}`));
     expect(resGet.status).toBe(200);
@@ -186,7 +186,7 @@ describe("TRUST-3 Item 7: Platform roles tenant access matrix (impersonation gat
         gradeType: "TEST",
       }),
     }));
-    expect(resPost.status).toBe(200);
+    expect(resPost.status).toBe(403);
   });
 
   // PLATFORM_SUPPORT: GET succeeds (200), POST rejected with read-only 403
@@ -204,5 +204,38 @@ describe("TRUST-3 Item 7: Platform roles tenant access matrix (impersonation gat
       }),
     }));
     expect(resPost.status).toBe(403);
+  });
+
+  it("TRUST-3b Item 1: entering center by SUPERADMIN and PLATFORM_SUPPORT does not write to DB, staff list and membership count remain unchanged", async () => {
+    const initialMemberships = await db.centerMembership.findMany({
+      where: { centerId: center.id },
+    });
+    const initialCount = initialMemberships.length;
+
+    // SUPERADMIN enters
+    await setAuth(superAdmin);
+    const saGet = await getCourses(new Request(`http://localhost/api/courses?centerId=${center.id}`));
+    expect(saGet.status).toBe(200);
+
+    // PLATFORM_SUPPORT enters
+    await setAuth(platformSupport);
+    const psGet = await getCourses(new Request(`http://localhost/api/courses?centerId=${center.id}`));
+    expect(psGet.status).toBe(200);
+
+    const afterMemberships = await db.centerMembership.findMany({
+      where: { centerId: center.id },
+    });
+    expect(afterMemberships.length).toBe(initialCount);
+
+    // Verify neither superAdmin nor platformSupport has a membership in DB
+    const saMember = await db.centerMembership.findFirst({
+      where: { centerId: center.id, userId: superAdmin.id },
+    });
+    expect(saMember).toBeNull();
+
+    const psMember = await db.centerMembership.findFirst({
+      where: { centerId: center.id, userId: platformSupport.id },
+    });
+    expect(psMember).toBeNull();
   });
 });

@@ -143,6 +143,10 @@ export async function POST(req: Request) {
       if (!group) return NextResponse.json({ error: "Group not found" }, { status: 404 });
     }
 
+    if (!tenantCtx.membership?.id) {
+      return NextResponse.json({ error: "Could not resolve your membership in this center. Platform staff must not perform member-specific academic actions directly." }, { status: 403 });
+    }
+
     const numericValue = parseFloat(value);
     const numericMax = parseFloat(maxValue || "100");
 
@@ -156,7 +160,7 @@ export async function POST(req: Request) {
         studentMembershipId,
         groupId: groupId || null,
         lessonId: lessonId || null,
-        teacherMembershipId: tenantCtx.membership!.id,
+        teacherMembershipId: tenantCtx.membership.id,
         gradeType,
         value: numericValue,
         maxValue: numericMax,
