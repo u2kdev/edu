@@ -1,12 +1,11 @@
 import { NextResponse } from "next/server";
-import { getTenantDb } from "@/lib/db-tenant";
 import { requireTenantAccess } from "@/lib/tenant";
 
 // POST /api/lessons/reorder - Update orderIndex for multiple lessons in batch
 export async function POST(req: Request) {
   try {
-    const tenantCtx = await requireTenantAccess();
-    const tenantDb = getTenantDb(tenantCtx.center.id);
+    const tenantCtx = await requireTenantAccess(undefined, { isWrite: true });
+    const tenantDb = tenantCtx.getTenantDb();
     if (tenantCtx.role !== "DIRECTOR" && tenantCtx.role !== "CENTER_ADMIN" && tenantCtx.role !== "TEACHER" && !tenantCtx.isPlatformStaff) {
       return NextResponse.json({ error: "Forbidden" }, { status: 403 });
     }
@@ -27,6 +26,6 @@ export async function POST(req: Request) {
 
     return NextResponse.json({ success: true, updatedCount: items.length });
   } catch (err: any) {
-    return NextResponse.json({ error: err.message || "Server error" }, { status: 500 });
+    return NextResponse.json({ error: err.message || "Server error" }, { status: (err as { status?: number })?.status || 500 });
   }
 }

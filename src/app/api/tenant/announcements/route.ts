@@ -1,12 +1,11 @@
 import { NextResponse } from "next/server";
-import { getTenantDb } from "@/lib/db-tenant";
 import { requireTenantAccess, logAuditEvent } from "@/lib/tenant";
 
 // GET /api/tenant/announcements
 export async function GET(req: Request) {
   try {
     const tenantCtx = await requireTenantAccess();
-    const tenantDb = getTenantDb(tenantCtx.center.id);
+    const tenantDb = tenantCtx.getTenantDb();
     const { searchParams } = new URL(req.url);
     const groupId = searchParams.get("groupId");
     const page = Math.max(1, parseInt(searchParams.get("page") || "1"));
@@ -82,15 +81,15 @@ export async function GET(req: Request) {
 
     return NextResponse.json({ announcements, total, page, pageSize });
   } catch (err: any) {
-    return NextResponse.json({ error: err.message || "Server error" }, { status: 400 });
+    return NextResponse.json({ error: err.message || "Server error" }, { status: (err as { status?: number })?.status || 400 });
   }
 }
 
 // POST /api/tenant/announcements
 export async function POST(req: Request) {
   try {
-    const tenantCtx = await requireTenantAccess();
-    const tenantDb = getTenantDb(tenantCtx.center.id);
+    const tenantCtx = await requireTenantAccess(undefined, { isWrite: true });
+    const tenantDb = tenantCtx.getTenantDb();
 
     // Teachers can create announcements for their own groups only
     if (
@@ -156,15 +155,15 @@ export async function POST(req: Request) {
 
     return NextResponse.json({ success: true, announcement });
   } catch (err: any) {
-    return NextResponse.json({ error: err.message || "Server error" }, { status: 400 });
+    return NextResponse.json({ error: err.message || "Server error" }, { status: (err as { status?: number })?.status || 400 });
   }
 }
 
 // PATCH /api/tenant/announcements
 export async function PATCH(req: Request) {
   try {
-    const tenantCtx = await requireTenantAccess();
-    const tenantDb = getTenantDb(tenantCtx.center.id);
+    const tenantCtx = await requireTenantAccess(undefined, { isWrite: true });
+    const tenantDb = tenantCtx.getTenantDb();
     const { id, title, body, targetRole, groupId, isPinned, publishAt, expiresAt } = await req.json();
 
     if (!id) return NextResponse.json({ error: "Announcement ID required" }, { status: 400 });
@@ -209,15 +208,15 @@ export async function PATCH(req: Request) {
 
     return NextResponse.json({ success: true, announcement });
   } catch (err: any) {
-    return NextResponse.json({ error: err.message || "Server error" }, { status: 400 });
+    return NextResponse.json({ error: err.message || "Server error" }, { status: (err as { status?: number })?.status || 400 });
   }
 }
 
 // DELETE /api/tenant/announcements
 export async function DELETE(req: Request) {
   try {
-    const tenantCtx = await requireTenantAccess();
-    const tenantDb = getTenantDb(tenantCtx.center.id);
+    const tenantCtx = await requireTenantAccess(undefined, { isWrite: true });
+    const tenantDb = tenantCtx.getTenantDb();
     const { id } = await req.json();
     if (!id) return NextResponse.json({ error: "Announcement ID required" }, { status: 400 });
 
@@ -250,6 +249,6 @@ export async function DELETE(req: Request) {
 
     return NextResponse.json({ success: true });
   } catch (err: any) {
-    return NextResponse.json({ error: err.message || "Server error" }, { status: 400 });
+    return NextResponse.json({ error: err.message || "Server error" }, { status: (err as { status?: number })?.status || 400 });
   }
 }

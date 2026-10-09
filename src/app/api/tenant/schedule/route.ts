@@ -1,5 +1,4 @@
 import { NextResponse } from "next/server";
-import { getTenantDb } from "@/lib/db-tenant";
 import { requireTenantAccess, logAuditEvent } from "@/lib/tenant";
 import { sendNotification } from "@/lib/notifications";
 
@@ -78,7 +77,7 @@ async function detectConflicts(params: ConflictCheckParams) {
 export async function GET(req: Request) {
   try {
     const tenantCtx = await requireTenantAccess();
-    const tenantDb = getTenantDb(tenantCtx.center.id);
+    const tenantDb = tenantCtx.getTenantDb();
     const { searchParams } = new URL(req.url);
     const groupId = searchParams.get("groupId");
     const branchId = searchParams.get("branchId");
@@ -141,7 +140,7 @@ export async function GET(req: Request) {
 
     return NextResponse.json({ slots });
   } catch (err: any) {
-    return NextResponse.json({ error: err.message || "Server error" }, { status: 400 });
+    return NextResponse.json({ error: err.message || "Server error" }, { status: (err as { status?: number })?.status || 400 });
   }
 }
 
@@ -149,8 +148,8 @@ export async function GET(req: Request) {
 
 export async function POST(req: Request) {
   try {
-    const tenantCtx = await requireTenantAccess();
-    const tenantDb = getTenantDb(tenantCtx.center.id);
+    const tenantCtx = await requireTenantAccess(undefined, { isWrite: true });
+    const tenantDb = tenantCtx.getTenantDb();
 
     if (
       tenantCtx.role !== "DIRECTOR" &&
@@ -223,7 +222,7 @@ export async function POST(req: Request) {
 
     return NextResponse.json({ success: true, slot });
   } catch (err: any) {
-    return NextResponse.json({ error: err.message || "Server error" }, { status: 400 });
+    return NextResponse.json({ error: err.message || "Server error" }, { status: (err as { status?: number })?.status || 400 });
   }
 }
 
@@ -231,8 +230,8 @@ export async function POST(req: Request) {
 
 export async function PATCH(req: Request) {
   try {
-    const tenantCtx = await requireTenantAccess();
-    const tenantDb = getTenantDb(tenantCtx.center.id);
+    const tenantCtx = await requireTenantAccess(undefined, { isWrite: true });
+    const tenantDb = tenantCtx.getTenantDb();
 
     if (
       tenantCtx.role !== "DIRECTOR" &&
@@ -348,7 +347,7 @@ export async function PATCH(req: Request) {
 
     return NextResponse.json({ success: true, slot });
   } catch (err: any) {
-    return NextResponse.json({ error: err.message || "Server error" }, { status: 400 });
+    return NextResponse.json({ error: err.message || "Server error" }, { status: (err as { status?: number })?.status || 400 });
   }
 }
 
@@ -356,8 +355,8 @@ export async function PATCH(req: Request) {
 
 export async function DELETE(req: Request) {
   try {
-    const tenantCtx = await requireTenantAccess();
-    const tenantDb = getTenantDb(tenantCtx.center.id);
+    const tenantCtx = await requireTenantAccess(undefined, { isWrite: true });
+    const tenantDb = tenantCtx.getTenantDb();
 
     if (tenantCtx.role !== "DIRECTOR" && tenantCtx.role !== "CENTER_ADMIN" && !tenantCtx.isPlatformStaff) {
       return NextResponse.json({ error: "Forbidden" }, { status: 403 });
@@ -383,6 +382,6 @@ export async function DELETE(req: Request) {
 
     return NextResponse.json({ success: true });
   } catch (err: any) {
-    return NextResponse.json({ error: err.message || "Server error" }, { status: 400 });
+    return NextResponse.json({ error: err.message || "Server error" }, { status: (err as { status?: number })?.status || 400 });
   }
 }

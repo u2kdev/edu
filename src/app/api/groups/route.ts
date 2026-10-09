@@ -1,11 +1,10 @@
 import { NextResponse } from "next/server";
-import { getTenantDb } from "@/lib/db-tenant";
 import { requireTenantAccess } from "@/lib/tenant";
 
 export async function GET(req: Request) {
   try {
     const tenantCtx = await requireTenantAccess();
-    const tenantDb = getTenantDb(tenantCtx.center.id);
+    const tenantDb = tenantCtx.getTenantDb();
 
     let whereCondition: any = {};
 
@@ -34,14 +33,14 @@ export async function GET(req: Request) {
 
     return NextResponse.json({ groups });
   } catch (err: any) {
-    return NextResponse.json({ error: err.message || "Ошибка загрузки групп" }, { status: 400 });
+    return NextResponse.json({ error: err.message || "Ошибка загрузки групп" }, { status: (err as { status?: number })?.status || 400 });
   }
 }
 
 export async function POST(req: Request) {
   try {
-    const tenantCtx = await requireTenantAccess();
-    const tenantDb = getTenantDb(tenantCtx.center.id);
+    const tenantCtx = await requireTenantAccess(undefined, { isWrite: true });
+    const tenantDb = tenantCtx.getTenantDb();
 
     if (tenantCtx.role !== "DIRECTOR" && tenantCtx.role !== "CENTER_ADMIN") {
       return NextResponse.json({ error: "Недостаточно прав для создания групп" }, { status: 403 });
@@ -86,6 +85,6 @@ export async function POST(req: Request) {
 
     return NextResponse.json({ success: true, group });
   } catch (err: any) {
-    return NextResponse.json({ error: err.message || "Ошибка создания группы" }, { status: 400 });
+    return NextResponse.json({ error: err.message || "Ошибка создания группы" }, { status: (err as { status?: number })?.status || 400 });
   }
 }

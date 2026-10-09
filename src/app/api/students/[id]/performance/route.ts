@@ -1,5 +1,4 @@
 import { NextResponse } from "next/server";
-import { getTenantDb } from "@/lib/db-tenant";
 import { requireTenantAccess } from "@/lib/tenant";
 
 // GET /api/students/[id]/performance - Get aggregated performance report for student
@@ -9,7 +8,7 @@ export async function GET(
 ) {
   try {
     const tenantCtx = await requireTenantAccess();
-    const tenantDb = getTenantDb(tenantCtx.center.id);
+    const tenantDb = tenantCtx.getTenantDb();
     const studentMembershipId = params.id;
     const currentRole = tenantCtx.role;
 
@@ -122,6 +121,6 @@ export async function GET(
       },
     });
   } catch (err: any) {
-    return NextResponse.json({ error: err.message || "Server error" }, { status: 500 });
+    return NextResponse.json({ error: err.message || "Server error" }, { status: (err as { status?: number })?.status || 500 });
   }
 }

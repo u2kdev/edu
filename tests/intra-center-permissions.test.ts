@@ -7,11 +7,16 @@ import { GET as getAttendanceHandler, POST as postAttendanceHandler } from "../s
 import { POST as postBulkAttendanceHandler } from "../src/app/api/attendance/bulk/route";
 import type { LearningCenter, PlatformUser, CenterMembership, Group, Lesson, Grade, CenterPayment, Attendance } from "@prisma/client";
 
+import { getTenantDb } from "../src/lib/db-tenant";
+
 interface MockTenantContext {
   center: LearningCenter;
   role: string;
   membership: CenterMembership;
   session: { user: PlatformUser };
+  isPlatformStaff?: boolean;
+  isReadOnly?: boolean;
+  getTenantDb?: () => ReturnType<typeof getTenantDb>;
 }
 
 let mockContext: MockTenantContext | null = null;
@@ -22,7 +27,10 @@ vi.mock("@/lib/tenant", async (importOriginal) => {
     ...actual,
     requireTenantAccess: vi.fn(async () => {
       if (!mockContext) throw new Error("Unauthorized");
-      return mockContext;
+      return {
+        ...mockContext,
+        getTenantDb: mockContext.getTenantDb || (() => getTenantDb(mockContext!.center.id)),
+      };
     }),
   };
 });

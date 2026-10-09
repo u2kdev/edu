@@ -1,13 +1,12 @@
 import { NextResponse } from "next/server";
-import { getTenantDb } from "@/lib/db-tenant";
 import { requireTenantAccess } from "@/lib/tenant";
 
 import { generateSecureInviteCode } from "@/lib/invites";
 
 export async function POST(req: Request) {
   try {
-    const tenantCtx = await requireTenantAccess();
-    const tenantDb = getTenantDb(tenantCtx.center.id);
+    const tenantCtx = await requireTenantAccess(undefined, { isWrite: true });
+    const tenantDb = tenantCtx.getTenantDb();
     
     // Only Director and Center Admin can generate invite codes
     if (tenantCtx.role !== "DIRECTOR" && tenantCtx.role !== "CENTER_ADMIN") {
@@ -39,7 +38,7 @@ export async function POST(req: Request) {
     return NextResponse.json({ success: true, invite });
   } catch (err: any) {
     if (err.code === "P2002") {
-      return NextResponse.json({ error: "This code is already in use" }, { status: 400 });
+      return NextResponse.json({ error: "This code is already in use" }, { status: (err as { status?: number })?.status || 400 });
     }
     return NextResponse.json({ error: err.message || "Server error" }, { status: 400 });
   }

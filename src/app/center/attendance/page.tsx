@@ -1,6 +1,5 @@
 import { requireTenantAccess } from "@/lib/tenant";
 import { getAuthSession } from "@/lib/auth";
-import { getTenantDb } from "@/lib/db-tenant";
 import { redirect } from "next/navigation";
 import { ClipboardCheck, CheckCircle2, XCircle, Clock, AlertCircle } from "lucide-react";
 import { t, formatDateLocalized } from "@/i18n";
@@ -25,7 +24,7 @@ export default async function CenterAttendancePage() {
   if (activeRole === "STUDENT" && currentMembership) {
     whereCondition.studentMembershipId = currentMembership.id;
   } else if (activeRole === "PARENT" && currentMembership) {
-    const childLinks = await getTenantDb(tenantCtx.center.id).parentLink.findMany({
+    const childLinks = await tenantCtx.getTenantDb().parentLink.findMany({
       where: { parentMembershipId: currentMembership.id, status: "CONFIRMED" },
       select: { studentMembershipId: true },
     });
@@ -40,7 +39,7 @@ export default async function CenterAttendancePage() {
     };
   }
 
-  const attendances = await getTenantDb(tenantCtx.center.id).attendance.findMany({
+  const attendances = await tenantCtx.getTenantDb().attendance.findMany({
     where: whereCondition,
     include: {
       lesson: { select: { title: true, scheduledAt: true } },

@@ -89,12 +89,13 @@ describe("TRUST-3 Item 5: Dynamic foreign key check via Prisma.dmmf and nested r
   it("rejects foreign branchId in group creation", async () => {
     const tenantDbA = getTenantDb(centerA.id);
     const courseA = await tenantDbA.course.create({
-      data: { title: "Course A", createdByMembershipId: memberA.id },
+      data: { centerId: centerA.id, title: "Course A", createdByMembershipId: memberA.id },
     });
 
     await expect(
       tenantDbA.group.create({
         data: {
+          centerId: centerA.id,
           name: "Group with Foreign Branch",
           courseId: courseA.id,
           branchId: branchB.id,
@@ -108,6 +109,7 @@ describe("TRUST-3 Item 5: Dynamic foreign key check via Prisma.dmmf and nested r
     await expect(
       tenantDbA.course.create({
         data: {
+          centerId: centerA.id,
           title: "Course with Foreign Subject",
           createdByMembershipId: memberA.id,
           subjectId: subjectB.id,
@@ -121,6 +123,7 @@ describe("TRUST-3 Item 5: Dynamic foreign key check via Prisma.dmmf and nested r
     await expect(
       tenantDbA.lesson.create({
         data: {
+          centerId: centerA.id,
           title: "Lesson with Foreign Module",
           moduleId: moduleB.id,
         },
@@ -133,6 +136,7 @@ describe("TRUST-3 Item 5: Dynamic foreign key check via Prisma.dmmf and nested r
     await expect(
       tenantDbA.testQuestion.create({
         data: {
+          centerId: centerA.id,
           questionText: "Question for Foreign Test",
           testId: testB.id,
         },
@@ -143,14 +147,14 @@ describe("TRUST-3 Item 5: Dynamic foreign key check via Prisma.dmmf and nested r
   it("rejects mixed foreign keys in createMany", async () => {
     const tenantDbA = getTenantDb(centerA.id);
     const courseA = await tenantDbA.course.create({
-      data: { title: "Course A Valid", createdByMembershipId: memberA.id },
+      data: { centerId: centerA.id, title: "Course A Valid", createdByMembershipId: memberA.id },
     });
 
     await expect(
       tenantDbA.group.createMany({
         data: [
-          { name: "Group 1", courseId: courseA.id },
-          { name: "Group 2", courseId: courseB.id },
+          { centerId: centerA.id, name: "Group 1", courseId: courseA.id },
+          { centerId: centerA.id, name: "Group 2", courseId: courseB.id },
         ],
       })
     ).rejects.toThrow(/Cross-tenant relation violation/);

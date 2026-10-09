@@ -1,12 +1,11 @@
 import { NextResponse } from "next/server";
-import { getTenantDb } from "@/lib/db-tenant";
 import { requireTenantAccess, logAuditEvent } from "@/lib/tenant";
 
 // GET /api/materials?lessonId=xxx - List materials for a lesson
 export async function GET(req: Request) {
   try {
     const tenantCtx = await requireTenantAccess();
-    const tenantDb = getTenantDb(tenantCtx.center.id);
+    const tenantDb = tenantCtx.getTenantDb();
     const { searchParams } = new URL(req.url);
     const lessonId = searchParams.get("lessonId");
 
@@ -26,15 +25,15 @@ export async function GET(req: Request) {
 
     return NextResponse.json({ materials });
   } catch (err: any) {
-    return NextResponse.json({ error: err.message || "Server error" }, { status: 500 });
+    return NextResponse.json({ error: err.message || "Server error" }, { status: (err as { status?: number })?.status || 500 });
   }
 }
 
 // POST /api/materials - Create a material (Video, Lecture, Book, Test)
 export async function POST(req: Request) {
   try {
-    const tenantCtx = await requireTenantAccess();
-    const tenantDb = getTenantDb(tenantCtx.center.id);
+    const tenantCtx = await requireTenantAccess(undefined, { isWrite: true });
+    const tenantDb = tenantCtx.getTenantDb();
     if (tenantCtx.role !== "DIRECTOR" && tenantCtx.role !== "CENTER_ADMIN" && tenantCtx.role !== "TEACHER" && !tenantCtx.isPlatformStaff) {
       return NextResponse.json({ error: "Forbidden" }, { status: 403 });
     }
@@ -132,6 +131,6 @@ export async function POST(req: Request) {
     return NextResponse.json({ success: true, material: fullMaterial });
   } catch (err: any) {
     console.error("Material create error:", err);
-    return NextResponse.json({ error: err.message || "Server error" }, { status: 500 });
+    return NextResponse.json({ error: err.message || "Server error" }, { status: (err as { status?: number })?.status || 500 });
   }
 }

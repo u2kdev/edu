@@ -1,5 +1,4 @@
 import { NextResponse } from "next/server";
-import { getTenantDb } from "@/lib/db-tenant";
 import { requireTenantAccess, logAuditEvent } from "@/lib/tenant";
 import { sendNotification } from "@/lib/notifications";
 
@@ -7,7 +6,7 @@ import { sendNotification } from "@/lib/notifications";
 export async function GET(req: Request) {
   try {
     const tenantCtx = await requireTenantAccess();
-    const tenantDb = getTenantDb(tenantCtx.center.id);
+    const tenantDb = tenantCtx.getTenantDb();
     const { searchParams } = new URL(req.url);
     const lessonId = searchParams.get("lessonId");
 
@@ -65,15 +64,15 @@ export async function GET(req: Request) {
 
     return NextResponse.json({ homeworks });
   } catch (err: any) {
-    return NextResponse.json({ error: err.message || "Server error" }, { status: 500 });
+    return NextResponse.json({ error: err.message || "Server error" }, { status: (err as { status?: number })?.status || 500 });
   }
 }
 
 // POST /api/homework - Create homework linked to a lesson
 export async function POST(req: Request) {
   try {
-    const tenantCtx = await requireTenantAccess();
-    const tenantDb = getTenantDb(tenantCtx.center.id);
+    const tenantCtx = await requireTenantAccess(undefined, { isWrite: true });
+    const tenantDb = tenantCtx.getTenantDb();
 
     if (
       tenantCtx.role !== "DIRECTOR" &&
@@ -182,15 +181,15 @@ export async function POST(req: Request) {
 
     return NextResponse.json({ success: true, homework });
   } catch (err: any) {
-    return NextResponse.json({ error: err.message || "Server error" }, { status: 500 });
+    return NextResponse.json({ error: err.message || "Server error" }, { status: (err as { status?: number })?.status || 500 });
   }
 }
 
 // PATCH /api/homework - Submit or Grade homework
 export async function PATCH(req: Request) {
   try {
-    const tenantCtx = await requireTenantAccess();
-    const tenantDb = getTenantDb(tenantCtx.center.id);
+    const tenantCtx = await requireTenantAccess(undefined, { isWrite: true });
+    const tenantDb = tenantCtx.getTenantDb();
     const { action, homeworkId, submissionText, filesJson, grade, feedback, studentMembershipId } = await req.json();
 
     if (!homeworkId) {
@@ -327,6 +326,6 @@ export async function PATCH(req: Request) {
 
     return NextResponse.json({ error: "Invalid action" }, { status: 400 });
   } catch (err: any) {
-    return NextResponse.json({ error: err.message || "Server error" }, { status: 500 });
+    return NextResponse.json({ error: err.message || "Server error" }, { status: (err as { status?: number })?.status || 500 });
   }
 }

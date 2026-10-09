@@ -1,12 +1,11 @@
 import { NextResponse } from "next/server";
-import { getTenantDb } from "@/lib/db-tenant";
 import { requireTenantAccess, logAuditEvent } from "@/lib/tenant";
 import { sendNotification } from "@/lib/notifications";
 
 export async function GET(req: Request) {
   try {
     const tenantCtx = await requireTenantAccess();
-    const tenantDb = getTenantDb(tenantCtx.center.id);
+    const tenantDb = tenantCtx.getTenantDb();
     const { searchParams } = new URL(req.url);
     const groupId = searchParams.get("groupId");
     const studentId = searchParams.get("studentMembershipId");
@@ -101,7 +100,7 @@ export async function GET(req: Request) {
 export async function POST(req: Request) {
   try {
     const tenantCtx = await requireTenantAccess(undefined, { isWrite: true });
-    const tenantDb = getTenantDb(tenantCtx.center.id);
+    const tenantDb = tenantCtx.getTenantDb();
 
     if (
       tenantCtx.role !== "DIRECTOR" &&
@@ -184,8 +183,8 @@ export async function POST(req: Request) {
 
 export async function PATCH(req: Request) {
   try {
-    const tenantCtx = await requireTenantAccess();
-    const tenantDb = getTenantDb(tenantCtx.center.id);
+    const tenantCtx = await requireTenantAccess(undefined, { isWrite: true });
+    const tenantDb = tenantCtx.getTenantDb();
     const { id, value, maxValue, comment, lifecycle } = await req.json();
 
     if (!id) return NextResponse.json({ error: "Grade ID required" }, { status: 400 });
@@ -281,8 +280,8 @@ export async function PATCH(req: Request) {
 
 export async function DELETE(req: Request) {
   try {
-    const tenantCtx = await requireTenantAccess();
-    const tenantDb = getTenantDb(tenantCtx.center.id);
+    const tenantCtx = await requireTenantAccess(undefined, { isWrite: true });
+    const tenantDb = tenantCtx.getTenantDb();
 
     if (tenantCtx.role !== "DIRECTOR" && !tenantCtx.isPlatformStaff) {
       return NextResponse.json({ error: "Only directors can delete grades" }, { status: 403 });

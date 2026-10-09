@@ -17,8 +17,8 @@ export async function POST(req: Request) {
 
     // Action 1: Admin generates a parent invite code tied to a specific student
     if (action === "INITIATE_BY_ADMIN") {
-      const tenantCtx = await requireTenantAccess();
-      const tenantDb = getTenantDb(tenantCtx.center.id);
+      const tenantCtx = await requireTenantAccess(undefined, { isWrite: true });
+      const tenantDb = tenantCtx.getTenantDb();
       
       if (tenantCtx.role !== "DIRECTOR" && tenantCtx.role !== "CENTER_ADMIN") {
         return NextResponse.json({ error: "Forbidden" }, { status: 403 });
@@ -140,6 +140,6 @@ export async function POST(req: Request) {
 
     return NextResponse.json({ error: "Invalid action" }, { status: 400 });
   } catch (err: any) {
-    return NextResponse.json({ error: err.message || "Ошибка сервера" }, { status: 500 });
+    return NextResponse.json({ error: err.message || "Ошибка сервера" }, { status: (err as { status?: number })?.status || 500 });
   }
 }

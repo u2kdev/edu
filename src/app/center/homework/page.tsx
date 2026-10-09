@@ -1,6 +1,5 @@
 import { requireTenantAccess } from "@/lib/tenant";
 import { getAuthSession } from "@/lib/auth";
-import { getTenantDb } from "@/lib/db-tenant";
 import { redirect } from "next/navigation";
 import { BookOpen, Clock, FileText, CheckCircle2 } from "lucide-react";
 import { t, formatDateLocalized } from "@/i18n";
@@ -16,7 +15,7 @@ export default async function CenterHomeworkPage() {
 
   const locale = session.user.preferredLanguage;
 
-  const homeworks = await getTenantDb(tenantCtx.center.id).homework.findMany({
+  const homeworks = await tenantCtx.getTenantDb().homework.findMany({
     where: {
       lesson: { module: { course: { centerId } } },
     },

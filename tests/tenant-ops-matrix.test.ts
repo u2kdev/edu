@@ -111,25 +111,25 @@ describe("TRUST-3 Item 4: db-tenant aggregate, groupBy, and default-deny", () =>
 
     // 9. create
     const cr9 = await tenantDbA.course.create({
-      data: { title: "New Op Course", createdByMembershipId: memberA.id },
+      data: { centerId: centerA.id, title: "New Op Course", createdByMembershipId: memberA.id },
     });
     expect(cr9.centerId).toBe(centerA.id);
 
     // 10. createMany
     const cm10 = await tenantDbA.course.createMany({
-      data: [{ title: "New Many Op Course", createdByMembershipId: memberA.id }],
+      data: [{ centerId: centerA.id, title: "New Many Op Course", createdByMembershipId: memberA.id }],
     });
     expect(cm10.count).toBe(1);
 
     // 11. createManyAndReturn (or fallback)
     type CourseOps = typeof tenantDbA.course & {
-      createManyAndReturn?: (a: { data: { title: string; createdByMembershipId: string }[] }) => Promise<{ centerId: string }[]>;
+      createManyAndReturn?: (a: { data: { centerId: string; title: string; createdByMembershipId: string }[] }) => Promise<{ centerId: string }[]>;
       updateManyAndReturn?: (a: { where: { id: string }; data: { title: string } }) => Promise<unknown[]>;
     };
     const cOps = tenantDbA.course as CourseOps;
     if (typeof cOps.createManyAndReturn === "function") {
       const cmr = await cOps.createManyAndReturn({
-        data: [{ title: "Op Many And Return", createdByMembershipId: memberA.id }],
+        data: [{ centerId: centerA.id, title: "Op Many And Return", createdByMembershipId: memberA.id }],
       });
       expect(cmr[0].centerId).toBe(centerA.id);
     }
@@ -154,7 +154,7 @@ describe("TRUST-3 Item 4: db-tenant aggregate, groupBy, and default-deny", () =>
       tenantDbA.course.upsert({
         where: { id: courseB1.id },
         update: { title: "Hacked" },
-        create: { title: "Upserted", createdByMembershipId: memberA.id },
+        create: { centerId: centerA.id, title: "Upserted", createdByMembershipId: memberA.id },
       })
     ).rejects.toThrow();
 

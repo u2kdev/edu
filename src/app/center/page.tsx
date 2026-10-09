@@ -1,6 +1,5 @@
 import { requireTenantAccess } from "@/lib/tenant";
 import { getAuthSession } from "@/lib/auth";
-import { getTenantDb } from "@/lib/db-tenant";
 import { redirect } from "next/navigation";
 import Link from "next/link";
 import {
@@ -28,7 +27,7 @@ export default async function CenterDashboardPage() {
     );
   }
 
-  const center = await getTenantDb(tenantCtx.center.id).learningCenter.findUnique({
+  const center = await tenantCtx.getTenantDb().learningCenter.findUnique({
     where: { id: activeCenterId },
     include: {
       subscriptions: {
@@ -51,19 +50,19 @@ export default async function CenterDashboardPage() {
   let urgentHomeworks: any[] = [];
   let attendanceRate: number | null = null;
 
-  activeStudentsCount = await getTenantDb(tenantCtx.center.id).centerMembership.count({
+  activeStudentsCount = await tenantCtx.getTenantDb().centerMembership.count({
     where: { centerId: activeCenterId, role: "STUDENT", status: "ACTIVE" },
   });
 
-  activeTeachersCount = await getTenantDb(tenantCtx.center.id).centerMembership.count({
+  activeTeachersCount = await tenantCtx.getTenantDb().centerMembership.count({
     where: { centerId: activeCenterId, role: "TEACHER", status: "ACTIVE" },
   });
 
-  coursesCount = await getTenantDb(tenantCtx.center.id).course.count({
+  coursesCount = await tenantCtx.getTenantDb().course.count({
     where: { centerId: activeCenterId },
   });
 
-  const payments = await getTenantDb(tenantCtx.center.id).centerPayment.aggregate({
+  const payments = await tenantCtx.getTenantDb().centerPayment.aggregate({
     where: { centerId: activeCenterId, status: "PAID" },
     _sum: { amount: true },
   });
@@ -71,7 +70,7 @@ export default async function CenterDashboardPage() {
 
   // Teacher specific pending homework reviews
   if (activeRole === "TEACHER") {
-    pendingHomeworksCount = await getTenantDb(tenantCtx.center.id).homeworkSubmission.count({
+    pendingHomeworksCount = await tenantCtx.getTenantDb().homeworkSubmission.count({
       where: {
         homework: { lesson: { module: { course: { centerId: activeCenterId } } } },
         grade: null,
@@ -83,7 +82,7 @@ export default async function CenterDashboardPage() {
   if (activeRole === "STUDENT") {
     const studentMem = session.memberships.find((m) => m.centerId === activeCenterId);
     if (studentMem) {
-      studentEnrollments = await getTenantDb(tenantCtx.center.id).enrollment.findMany({
+      studentEnrollments = await tenantCtx.getTenantDb().enrollment.findMany({
         where: { studentMembershipId: studentMem.id },
         include: {
           group: {
@@ -95,7 +94,7 @@ export default async function CenterDashboardPage() {
         },
       });
 
-      urgentHomeworks = await getTenantDb(tenantCtx.center.id).homework.findMany({
+      urgentHomeworks = await tenantCtx.getTenantDb().homework.findMany({
         where: {
           lesson: { module: { course: { centerId: activeCenterId } } },
           dueDate: { gte: new Date() },
@@ -104,7 +103,7 @@ export default async function CenterDashboardPage() {
         orderBy: { dueDate: "asc" },
       });
 
-      const studentAttendances = await getTenantDb(tenantCtx.center.id).attendance.findMany({
+      const studentAttendances = await tenantCtx.getTenantDb().attendance.findMany({
         where: { studentMembershipId: studentMem.id },
       });
       const presentCount = studentAttendances.filter(a => a.status === "PRESENT").length;
@@ -117,7 +116,7 @@ export default async function CenterDashboardPage() {
   if (activeRole === "PARENT") {
     const parentMem = session.memberships.find((m) => m.centerId === activeCenterId);
     if (parentMem) {
-      parentChildren = await getTenantDb(tenantCtx.center.id).parentLink.findMany({
+      parentChildren = await tenantCtx.getTenantDb().parentLink.findMany({
         where: { parentMembershipId: parentMem.id, status: "CONFIRMED" },
         include: {
           student: {

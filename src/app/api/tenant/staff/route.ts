@@ -2,7 +2,6 @@ import { NextResponse } from "next/server";
 // Reason: Exception: Creation of platform-level models.
 // eslint-disable-next-line no-restricted-imports
 import { db } from "@/lib/db";
-import { getTenantDb } from "@/lib/db-tenant";
 import { getAuthSession, hashPassword } from "@/lib/auth";
 import { requireTenantAccess, logAuditEvent } from "@/lib/tenant";
 import { hasPermission } from "@/lib/permissions";
@@ -14,7 +13,7 @@ export async function GET(req: Request) {
   try {
     const tenantCtx = await requireTenantAccess();
     const { session, center, role } = tenantCtx;
-    const tenantDb = getTenantDb(center.id);
+    const tenantDb = tenantCtx.getTenantDb();
 
     // Only Director and Center Admin can view staff list
     if (role !== "DIRECTOR" && role !== "CENTER_ADMIN" && !tenantCtx.isPlatformStaff) {
@@ -57,9 +56,9 @@ export async function GET(req: Request) {
 // This creates a User (if new) + CenterMembership and should send an invite
 export async function POST(req: Request) {
   try {
-    const tenantCtx = await requireTenantAccess();
+    const tenantCtx = await requireTenantAccess(undefined, { isWrite: true });
     const { session, center, role } = tenantCtx;
-    const tenantDb = getTenantDb(center.id);
+    const tenantDb = tenantCtx.getTenantDb();
 
     // Only Director can add staff. CENTER_ADMIN can too if delegated (we'll allow it by default for MVP)
     if (role !== "DIRECTOR" && role !== "CENTER_ADMIN" && !tenantCtx.isPlatformStaff) {
@@ -195,9 +194,9 @@ export async function POST(req: Request) {
 // PATCH /api/tenant/staff — Update staff member status (activate/deactivate)
 export async function PATCH(req: Request) {
   try {
-    const tenantCtx = await requireTenantAccess();
+    const tenantCtx = await requireTenantAccess(undefined, { isWrite: true });
     const { session, center, role } = tenantCtx;
-    const tenantDb = getTenantDb(center.id);
+    const tenantDb = tenantCtx.getTenantDb();
 
     if (role !== "DIRECTOR" && role !== "CENTER_ADMIN" && !tenantCtx.isPlatformStaff) {
       return NextResponse.json(

@@ -1,6 +1,5 @@
 import { requireTenantAccess } from "@/lib/tenant";
 import { getAuthSession } from "@/lib/auth";
-import { getTenantDb } from "@/lib/db-tenant";
 import { redirect } from "next/navigation";
 import { User, Mail, Phone, Calendar, ShieldCheck, CreditCard } from "lucide-react";
 import { t, formatDateLocalized } from "@/i18n";
@@ -18,14 +17,14 @@ export default async function CenterProfilePage() {
   const activeRole = session.activeCenterRole || "";
 
   // Get user details
-  const user = await getTenantDb(tenantCtx.center.id).platformUser.findUnique({
+  const user = await tenantCtx.getTenantDb().platformUser.findUnique({
     where: { id: session.user.id },
   });
 
   if (!user) redirect("/login");
 
   // Get center membership
-  const membership = await getTenantDb(tenantCtx.center.id).centerMembership.findFirst({
+  const membership = await tenantCtx.getTenantDb().centerMembership.findFirst({
     where: { userId: user.id, centerId },
     include: {
       center: true,

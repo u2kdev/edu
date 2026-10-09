@@ -1,5 +1,4 @@
 import { NextResponse } from "next/server";
-import { getTenantDb } from "@/lib/db-tenant";
 import { requireTenantAccess, logAuditEvent } from "@/lib/tenant";
 import { sendNotification } from "@/lib/notifications";
 
@@ -7,7 +6,7 @@ import { sendNotification } from "@/lib/notifications";
 export async function GET(req: Request) {
   try {
     const tenantCtx = await requireTenantAccess();
-    const tenantDb = getTenantDb(tenantCtx.center.id);
+    const tenantDb = tenantCtx.getTenantDb();
     const { searchParams } = new URL(req.url);
     const lessonId = searchParams.get("lessonId");
 
@@ -75,7 +74,7 @@ export async function GET(req: Request) {
     return NextResponse.json({ attendances });
   } catch (err: unknown) {
     const error = err as { message?: string };
-    return NextResponse.json({ error: error?.message || "Server error" }, { status: 500 });
+    return NextResponse.json({ error: error?.message || "Server error" }, { status: (err as { status?: number })?.status || 500 });
   }
 }
 
@@ -83,7 +82,7 @@ export async function GET(req: Request) {
 export async function POST(req: Request) {
   try {
     const tenantCtx = await requireTenantAccess(undefined, { isWrite: true });
-    const tenantDb = getTenantDb(tenantCtx.center.id);
+    const tenantDb = tenantCtx.getTenantDb();
     if (
       tenantCtx.role !== "DIRECTOR" &&
       tenantCtx.role !== "CENTER_ADMIN" &&

@@ -1,5 +1,4 @@
 import { NextResponse } from "next/server";
-import { getTenantDb } from "@/lib/db-tenant";
 import { getAuthSession } from "@/lib/auth";
 import { requireTenantAccess, logAuditEvent } from "@/lib/tenant";
 
@@ -11,8 +10,8 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
-    const tenantCtx = await requireTenantAccess();
-    const tenantDb = getTenantDb(tenantCtx.center.id);
+    const tenantCtx = await requireTenantAccess(undefined, { isWrite: true });
+    const tenantDb = tenantCtx.getTenantDb();
     const { testId, studentAnswers } = await req.json(); // studentAnswers: { questionId: string, answer: string | string[] }
 
     if (!testId || !studentAnswers) {
@@ -115,6 +114,6 @@ export async function POST(req: Request) {
     });
   } catch (err: any) {
     console.error("Test submit attempt error:", err);
-    return NextResponse.json({ error: err.message || "Server error" }, { status: 500 });
+    return NextResponse.json({ error: err.message || "Server error" }, { status: (err as { status?: number })?.status || 500 });
   }
 }
