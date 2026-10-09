@@ -8,17 +8,9 @@ import { checkRateLimit } from "@/lib/rate-limit";
 import { getClientIp } from "@/lib/ip";
 import { logAuditEvent } from "@/lib/tenant";
 import { sendEmail } from "@/lib/email";
-import { z } from "zod";
+import { registerSchema } from "@/lib/validation/auth";
 import crypto from "crypto";
 import { REGISTER_CONFIG } from "@/lib/config";
-
-const registerSchema = z.object({
-  email: z.string().email(),
-  password: z.string().min(6),
-  fullName: z.string().min(2),
-  phone: z.string().optional(),
-  inviteCode: z.string().min(3),
-});
 
 export async function POST(req: Request) {
   try {
