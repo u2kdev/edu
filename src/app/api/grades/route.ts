@@ -93,8 +93,8 @@ export async function GET(req: Request) {
 
     return NextResponse.json({ grades, total, page, pageSize });
   } catch (err: unknown) {
-    const message = err instanceof Error ? err.message : "Server error";
-    return NextResponse.json({ error: message }, { status: 400 });
+    const error = err as { message?: string; status?: number };
+    return NextResponse.json({ error: error?.message || "Server error" }, { status: error?.status || 400 });
   }
 }
 
@@ -177,8 +177,8 @@ export async function POST(req: Request) {
 
     return NextResponse.json({ success: true, grade });
   } catch (err: unknown) {
-    const error = err as { message?: string };
-    return NextResponse.json({ error: error?.message || "Server error" }, { status: 400 });
+    const error = err as { message?: string; status?: number };
+    return NextResponse.json({ error: error?.message || "Server error" }, { status: error?.status || 400 });
   }
 }
 
@@ -274,8 +274,8 @@ export async function PATCH(req: Request) {
 
     return NextResponse.json({ success: true, grade });
   } catch (err: unknown) {
-    const error = err as { message?: string };
-    return NextResponse.json({ error: error?.message || "Server error" }, { status: 400 });
+    const error = err as { message?: string; status?: number };
+    return NextResponse.json({ error: error?.message || "Server error" }, { status: error?.status || 400 });
   }
 }
 
@@ -318,7 +318,7 @@ export async function DELETE(req: Request) {
 
     return NextResponse.json({ success: true });
   } catch (err: unknown) {
-    const error = err as { message?: string };
-    return NextResponse.json({ error: error?.message || "Server error" }, { status: 400 });
+    const error = err as { message?: string; status?: number };
+    return NextResponse.json({ error: error?.message || "Server error" }, { status: error?.status || 400 });
   }
 }
