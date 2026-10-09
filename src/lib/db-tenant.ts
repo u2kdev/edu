@@ -30,7 +30,12 @@ export const TENANT_MODELS = [
   "Notification",
 ];
 
-export function getTenantDb(centerId: string) {
+export function getTenantDb(rawCenterId?: string | null) {
+  if (!rawCenterId || typeof rawCenterId !== "string" || rawCenterId.trim() === "") {
+    throw new Error("Invalid or empty centerId provided to getTenantDb");
+  }
+  const centerId = rawCenterId.trim();
+
   return db.$extends({
     query: {
       $allModels: {
