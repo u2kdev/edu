@@ -208,4 +208,47 @@ describe("TRUST-3 Item 8: Audit all tenant write routes - PLATFORM_SUPPORT retur
     const res = await postSubject(req);
     expect(res.status).toBe(403);
   });
+
+  it("new route handler without manual isWrite flag automatically derives isWrite from HTTP method and returns 403 on write", async () => {
+    const { requireTenantAccess } = await import("../src/lib/tenant");
+
+    // Simulated new route handlers without manual options
+    async function newRoutePostHandler(req: Request) {
+      try {
+        const tenantCtx = await requireTenantAccess(req);
+        return new Response(JSON.stringify({ ok: true, centerId: tenantCtx.center.id }), { status: 200 });
+      } catch (err: unknown) {
+        const error = err as { message?: string; status?: number };
+        return new Response(JSON.stringify({ error: error?.message }), { status: error?.status || 500 });
+      }
+    }
+
+    async function newRouteGetHandler(req: Request) {
+      try {
+        const tenantCtx = await requireTenantAccess(req);
+        return new Response(JSON.stringify({ ok: true, centerId: tenantCtx.center.id }), { status: 200 });
+      } catch (err: unknown) {
+        const error = err as { message?: string; status?: number };
+        return new Response(JSON.stringify({ error: error?.message }), { status: error?.status || 500 });
+      }
+    }
+
+    // GET should succeed for PLATFORM_SUPPORT
+    const getReq = new Request("http://localhost/api/new-feature-endpoint", { method: "GET" });
+    const getRes = await newRouteGetHandler(getReq);
+    expect(getRes.status).toBe(200);
+
+    // POST should automatically be identified as write and return 403
+    const postReq = new Request("http://localhost/api/new-feature-endpoint", {
+      method: "POST",
+      body: JSON.stringify({ data: "new" }),
+    });
+    const postRes = await newRoutePostHandler(postReq);
+    expect(postRes.status).toBe(403);
+
+    // DELETE should automatically be identified as write and return 403
+    const deleteReq = new Request("http://localhost/api/new-feature-endpoint", { method: "DELETE" });
+    const deleteRes = await newRoutePostHandler(deleteReq);
+    expect(deleteRes.status).toBe(403);
+  });
 });

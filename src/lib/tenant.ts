@@ -70,9 +70,22 @@ export class TenantMembershipError extends TenantAccessError {
 export const CENTER_SUSPENDED_STATUSES = ["BLOCKED", "CANCELLED", "PAUSED", "OVERDUE"] as const;
 
 export async function requireTenantAccess(
-  expectedCenterId?: string,
-  options?: { isWrite?: boolean; allowSuspended?: boolean }
+  expectedCenterIdOrReq?: string | Request,
+  optionsOrReq?: { isWrite?: boolean; allowSuspended?: boolean } | Request
 ) {
+  const req = expectedCenterIdOrReq instanceof Request
+    ? expectedCenterIdOrReq
+    : (optionsOrReq instanceof Request ? optionsOrReq : undefined);
+
+  const expectedCenterId = typeof expectedCenterIdOrReq === "string" ? expectedCenterIdOrReq : undefined;
+  const options = optionsOrReq && !(optionsOrReq instanceof Request) ? optionsOrReq : undefined;
+
+  let isWrite = options?.isWrite;
+  if (isWrite === undefined && req) {
+    const method = req.method?.toUpperCase();
+    isWrite = ["POST", "PUT", "PATCH", "DELETE"].includes(method);
+  }
+
   const session = await getAuthSession();
   if (!session) {
     throw new TenantUnauthorizedError();
@@ -96,7 +109,7 @@ export async function requireTenantAccess(
     if (!center) throw new TenantNotFoundError();
 
     if (session.user.platformRole === "PLATFORM_SUPPORT") {
-      if (options?.isWrite) {
+      if (isWrite) {
         throw new TenantAccessError("Forbidden: Platform support has read-only access", "SUPPORT_READ_ONLY", 403);
       }
     }
@@ -109,7 +122,7 @@ export async function requireTenantAccess(
       resourceId: targetCenterId,
       details: {
         platformRole: session.user.platformRole,
-        isWrite: !!options?.isWrite,
+        isWrite: !!isWrite,
       },
     });
 
@@ -176,7 +189,7 @@ export async function requireTenantAccess(
   const isSuspendedAllowed = CENTER_SUSPENDED_STATUSES.includes(center.status as (typeof CENTER_SUSPENDED_STATUSES)[number]);
   if (isSuspendedAllowed) {
     if (["PAUSED", "OVERDUE"].includes(center.status) && options?.allowSuspended) {
-      if (options?.isWrite) {
+      if (isWrite) {
         throw new TenantAccessError("Forbidden: Learning center is suspended for write operations", "CENTER_SUSPENDED_WRITE", 403);
       }
     } else {
