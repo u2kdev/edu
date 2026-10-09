@@ -319,12 +319,13 @@ export function hasPermission(
   // DEVELOPER always has full access
   if (platformRole === "DEVELOPER") return true;
 
-  // SUPERADMIN has full platform access (not infrastructure)
+  // SUPERADMIN has full platform commercial management & center impersonation (not technical infrastructure)
   if (platformRole === "SUPERADMIN") {
     const platformPerms = PLATFORM_ROLE_PERMISSIONS["SUPERADMIN"];
     if (platformPerms.includes(permission as Permission)) return true;
-    // SUPERADMIN gets center permissions too (for impersonation management)
-    return true; // SUPERADMIN is effectively full access at center level
+    // SUPERADMIN gets center permissions for impersonation management
+    if (CENTER_ROLE_PERMISSIONS["DIRECTOR"].includes(permission as Permission)) return true;
+    return false;
   }
 
   // Check platform role permissions
