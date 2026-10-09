@@ -136,13 +136,23 @@ export async function getAuthSession(): Promise<{
   let activeCenterId = payload.activeCenterId;
   let activeCenterRole = payload.activeCenterRole;
 
+  const hasPlatformImpersonation =
+    user.platformRole === "DEVELOPER" ||
+    user.platformRole === "SUPERADMIN" ||
+    user.platformRole === "PLATFORM_SUPPORT";
+
   if (activeCenterId) {
     const activeMem = membershipsFormatted.find((m) => m.centerId === activeCenterId);
     if (activeMem) {
       activeCenterRole = activeMem.role;
-    } else {
+    } else if (hasPlatformImpersonation) {
+      // Platform roles with impersonation can target any center
+      activeCenterRole = user.platformRole === "PLATFORM_SUPPORT" ? "CENTER_SUPPORT" : "DIRECTOR";
+    } else if (membershipsFormatted.length > 0) {
       activeCenterId = membershipsFormatted[0]?.centerId;
       activeCenterRole = membershipsFormatted[0]?.role;
+    } else {
+      activeCenterRole = undefined;
     }
   } else if (membershipsFormatted.length > 0) {
     activeCenterId = membershipsFormatted[0].centerId;

@@ -38,7 +38,7 @@ export async function GET(req: Request) {
 
 export async function POST(req: Request) {
   try {
-    const tenantCtx = await requireTenantAccess();
+    const tenantCtx = await requireTenantAccess(undefined, { isWrite: true });
     const tenantDb = getTenantDb(tenantCtx.center.id);
 
     if (tenantCtx.role !== "DIRECTOR" && tenantCtx.role !== "CENTER_ADMIN") {

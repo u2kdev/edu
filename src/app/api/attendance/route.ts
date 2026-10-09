@@ -82,7 +82,7 @@ export async function GET(req: Request) {
 // POST /api/attendance - Mark attendance for students (PRESENT, ABSENT, EXCUSED, LATE)
 export async function POST(req: Request) {
   try {
-    const tenantCtx = await requireTenantAccess();
+    const tenantCtx = await requireTenantAccess(undefined, { isWrite: true });
     const tenantDb = getTenantDb(tenantCtx.center.id);
     if (
       tenantCtx.role !== "DIRECTOR" &&
@@ -218,8 +218,7 @@ export async function POST(req: Request) {
 
     return NextResponse.json({ success: true, count: attendanceRecords.length });
   } catch (err: unknown) {
-    const error = err as { message?: string };
-    console.error("Attendance mark error:", err);
-    return NextResponse.json({ error: error?.message || "Server error" }, { status: 500 });
+    const error = err as { message?: string; status?: number };
+    return NextResponse.json({ error: error?.message || "Server error" }, { status: error?.status || 400 });
   }
 }

@@ -114,10 +114,35 @@ export async function requireTenantAccess(
     });
 
     const isSupport = session.user.platformRole === "PLATFORM_SUPPORT";
+    const impersonatorRole = isSupport ? "CENTER_SUPPORT" : (session.activeCenterRole || "DIRECTOR");
+    
+    // Check if platform user has an existing membership in this center, or ensure one exists in DB
+    let membership = await db.centerMembership.findFirst({
+      where: { userId: session.user.id, centerId: center.id },
+    });
+
+    if (!membership) {
+      try {
+        membership = await db.centerMembership.create({
+          data: {
+            userId: session.user.id,
+            centerId: center.id,
+            role: impersonatorRole,
+            status: "ACTIVE",
+          },
+        });
+      } catch {
+        membership = await db.centerMembership.findFirst({
+          where: { userId: session.user.id, centerId: center.id },
+        });
+      }
+    }
+
     return {
       session,
       center,
-      role: isSupport ? "CENTER_SUPPORT" : (session.activeCenterRole || "DIRECTOR"),
+      membership,
+      role: impersonatorRole,
       isPlatformStaff: true,
       isReadOnly: isSupport,
       getTenantDb: () => getTenantDb(center.id, { isReadOnly: isSupport }),
