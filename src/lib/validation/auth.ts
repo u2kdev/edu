@@ -13,6 +13,8 @@ export const registerSchema = z
     fullName: z.string().min(2, "auth.fullName.min_2").max(100, "auth.fullName.max_100"),
     phone: z.string().optional(),
     inviteCode: z.string().min(3),
+    locale: z.enum(["ru", "uz"]).optional(),
+    lang: z.enum(["ru", "uz"]).optional(),
   })
   .refine(
     (data) => data.password.toLowerCase() !== data.email.toLowerCase(),

@@ -76,8 +76,12 @@ export async function POST(req: Request) {
         return apiError("Too many pending invites from this IP", "RATE_LIMITED", 429);
       }
 
+      // Determine language: locale/lang param or Accept-Language or user preferredLanguage
+      const rawLang = parsed.data.locale || parsed.data.lang || req.headers.get("accept-language")?.slice(0, 2) || user.preferredLanguage || "ru";
+      const lang = rawLang.startsWith("uz") ? "uz" : "ru";
+
       // Do NOT consume invite usesCount yet.
-      await db.pendingInvite.create({
+      const pendingInvite = await db.pendingInvite.create({
         data: {
           email,
           inviteCodeId: invite.id,
@@ -86,8 +90,14 @@ export async function POST(req: Request) {
         }
       });
 
+      const acceptUrl = `/auth/invites/accept?pendingInviteId=${pendingInvite.id}&lang=${lang}`;
+      const subject = lang === "uz" ? "O'quv markaziga taklifnoma" : "Приглашение в учебный центр";
+      const emailBody = lang === "uz"
+        ? `Siz o'quv markaziga taklif qilindingiz. Qabul qilish uchun havolani bosing: ${acceptUrl}`
+        : `Вас пригласили в учебный центр. Для принятия перейдите по ссылке: ${acceptUrl}`;
+
       // Fire and forget email safely
-      void sendEmail(user.email, "Invited", "Please check").catch(err => {
+      void sendEmail(user.email, subject, emailBody).catch(err => {
         db.auditLog.create({
           data: {
             action: "EMAIL_FAILED",
@@ -165,7 +175,15 @@ export async function POST(req: Request) {
       details: { inviteCode: invite.code, isNewUser: true },
     });
 
-    void sendEmail(user.email, "Confirm", "Please confirm").catch(err => {
+    const rawLang = parsed.data.locale || parsed.data.lang || req.headers.get("accept-language")?.slice(0, 2) || "ru";
+    const lang = rawLang.startsWith("uz") ? "uz" : "ru";
+    const confirmUrl = `/auth/confirm-email?token=${confirmToken}&lang=${lang}`;
+    const confirmSubject = lang === "uz" ? "Email manzilingizni tasdiqlang" : "Подтвердите ваш email";
+    const confirmBody = lang === "uz"
+      ? `Ro'yxatdan o'tishni yakunlash uchun havola orqali o'ting: ${confirmUrl}`
+      : `Для подтверждения регистрации перейдите по ссылке: ${confirmUrl}`;
+
+    void sendEmail(user.email, confirmSubject, confirmBody).catch(err => {
       db.auditLog.create({
         data: {
           action: "EMAIL_FAILED",
@@ -176,7 +194,7 @@ export async function POST(req: Request) {
     });
 
     return apiSuccess({ message: "Registration successful. Please check your email to confirm." });
-  } catch (err: any) {
+  } catch (err: unknown) {
     return handleApiError(err);
   }
 }
