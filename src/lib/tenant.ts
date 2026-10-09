@@ -27,18 +27,59 @@ export async function logAuditEvent(params: {
   }
 }
 
+export class TenantAccessError extends Error {
+  status: number;
+  code: string;
+  constructor(message: string, code: string, status: number = 403) {
+    super(message);
+    this.name = "TenantAccessError";
+    this.code = code;
+    this.status = status;
+  }
+}
+
+export class TenantUnauthorizedError extends TenantAccessError {
+  constructor(message: string = "Unauthorized: No session found") {
+    super(message, "UNAUTHORIZED", 401);
+    this.name = "TenantUnauthorizedError";
+  }
+}
+
+export class TenantNotFoundError extends TenantAccessError {
+  constructor(message: string = "Tenant center not found") {
+    super(message, "TENANT_NOT_FOUND", 404);
+    this.name = "TenantNotFoundError";
+  }
+}
+
+export class TenantSuspendedError extends TenantAccessError {
+  constructor(status: string) {
+    super(`Forbidden: Tenant suspended: ${status}`, "CENTER_SUSPENDED", 403);
+    this.name = "TenantSuspendedError";
+  }
+}
+
+export class TenantMembershipError extends TenantAccessError {
+  constructor(message: string = "Forbidden: Active membership required", code: string = "MEMBERSHIP_INACTIVE") {
+    super(message, code, 403);
+    this.name = "TenantMembershipError";
+  }
+}
+
+export const CENTER_SUSPENDED_STATUSES = ["BLOCKED", "CANCELLED", "PAUSED", "OVERDUE"] as const;
+
 export async function requireTenantAccess(
   expectedCenterId?: string,
-  options?: { isWrite?: boolean }
+  options?: { isWrite?: boolean; allowSuspended?: boolean }
 ) {
   const session = await getAuthSession();
   if (!session) {
-    throw new Error("Unauthorized: No session found");
+    throw new TenantUnauthorizedError();
   }
 
   const targetCenterId = expectedCenterId || session.activeCenterId;
   if (!targetCenterId) {
-    throw new Error("Bad Request: No active learning center selected");
+    throw new TenantAccessError("Bad Request: No active learning center selected", "BAD_REQUEST", 400);
   }
 
   // DEVELOPER, SUPERADMIN & PLATFORM_SUPPORT bypass tenant isolation
@@ -51,18 +92,11 @@ export async function requireTenantAccess(
     const center = await db.learningCenter.findUnique({
       where: { id: targetCenterId },
     });
-    if (!center) throw new Error("Tenant center not found");
+    if (!center) throw new TenantNotFoundError();
 
     if (session.user.platformRole === "PLATFORM_SUPPORT") {
       if (options?.isWrite) {
-        const err = Object.assign(
-          new Error("Forbidden: Platform support has read-only access"),
-          {
-            status: 403,
-            code: "SUPPORT_READ_ONLY",
-          }
-        );
-        throw err;
+        throw new TenantAccessError("Forbidden: Platform support has read-only access", "SUPPORT_READ_ONLY", 403);
       }
     }
 
@@ -88,10 +122,20 @@ export async function requireTenantAccess(
     };
   }
 
-  // Standard user check membership in target center
-  const membership = session.memberships.find((m) => m.centerId === targetCenterId);
+  // Standard user check membership in target center from DB
+  const membership = await db.centerMembership.findFirst({
+    where: {
+      userId: session.user.id,
+      centerId: targetCenterId,
+    },
+  });
+
   if (!membership) {
-    throw new Error("Forbidden: You do not have access to this learning center");
+    throw new TenantMembershipError("Forbidden: You do not have access to this learning center", "FORBIDDEN");
+  }
+
+  if (membership.status !== "ACTIVE") {
+    throw new TenantMembershipError("Forbidden: Membership is not active", "MEMBERSHIP_INACTIVE");
   }
 
   const center = await db.learningCenter.findUnique({
@@ -99,21 +143,15 @@ export async function requireTenantAccess(
   });
 
   if (!center) {
-    throw new Error("Tenant center not found");
+    throw new TenantNotFoundError();
   }
 
   // Check center status
-  if (["BLOCKED", "CANCELLED", "PAUSED", "OVERDUE", "FROZEN"].includes(center.status)) {
-    // If it's a specific status that some roles can still access, allow them
-    if ((center.status === "PAUSED" || center.status === "OVERDUE" || center.status === "FROZEN") && 
-        (membership.role === "DIRECTOR" || membership.role === "CENTER_ADMIN")) {
-      // allow
+  if (CENTER_SUSPENDED_STATUSES.includes(center.status as (typeof CENTER_SUSPENDED_STATUSES)[number])) {
+    if (["PAUSED", "OVERDUE"].includes(center.status) && options?.allowSuspended) {
+      // Allowed for status/resume reading page
     } else {
-      const err = Object.assign(new Error(`Forbidden: Tenant suspended: ${center.status}`), {
-        status: 403,
-        code: "CENTER_SUSPENDED",
-      });
-      throw err;
+      throw new TenantSuspendedError(center.status);
     }
   }
 
