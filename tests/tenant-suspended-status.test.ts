@@ -72,6 +72,29 @@ describe("TRUST-2 Item 7: requireTenantAccess PAUSED blocking, DB membership che
     expect(ctx.role).toBe("DIRECTOR");
   });
 
+  it("PAUSED blocks DIRECTOR on write even if allowSuspended is true", async () => {
+    mockToken = signJWT({ userId: directorUserId, email: "dir@t2i7.com", platformRole: "NONE" });
+    await expect(requireTenantAccess(pausedCenterId, { allowSuspended: true, isWrite: true })).rejects.toMatchObject({
+      status: 403,
+      code: "CENTER_SUSPENDED_WRITE",
+    });
+  });
+
+  it("PAUSED center getTenantDb blocks write operations in database layer", async () => {
+    mockToken = signJWT({ userId: directorUserId, email: "dir@t2i7.com", platformRole: "NONE" });
+    const ctx = await requireTenantAccess(pausedCenterId, { allowSuspended: true });
+    const tenantDb = ctx.getTenantDb();
+    await expect(
+      tenantDb.course.create({
+        data: {
+          title: "Forbidden Course on Paused Center",
+          createdByMembershipId: "some-id",
+          centerId: pausedCenterId,
+        },
+      })
+    ).rejects.toThrow(/Read-only tenant database/);
+  });
+
   it("checks membership from DB: rejects if DB membership status is not ACTIVE", async () => {
     // JWT has token, but DB membership status is BLOCKED
     mockToken = signJWT({ userId: inactiveMemberUserId, email: "inact@t2i7.com", platformRole: "NONE" });

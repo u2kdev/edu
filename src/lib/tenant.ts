@@ -148,14 +148,18 @@ export async function requireTenantAccess(
     throw new TenantNotFoundError();
   }
 
-  // Check center status
-  if (CENTER_SUSPENDED_STATUSES.includes(center.status as (typeof CENTER_SUSPENDED_STATUSES)[number])) {
+  const isSuspendedAllowed = CENTER_SUSPENDED_STATUSES.includes(center.status as (typeof CENTER_SUSPENDED_STATUSES)[number]);
+  if (isSuspendedAllowed) {
     if (["PAUSED", "OVERDUE"].includes(center.status) && options?.allowSuspended) {
-      // Allowed for status/resume reading page
+      if (options?.isWrite) {
+        throw new TenantAccessError("Forbidden: Learning center is suspended for write operations", "CENTER_SUSPENDED_WRITE", 403);
+      }
     } else {
       throw new TenantSuspendedError(center.status);
     }
   }
+
+  const isReadOnly = isSuspendedAllowed;
 
   return {
     session,
@@ -163,7 +167,7 @@ export async function requireTenantAccess(
     membership,
     role: membership.role,
     isPlatformStaff: false,
-    isReadOnly: false,
-    getTenantDb: () => getTenantDb(center.id, { isReadOnly: false }),
+    isReadOnly,
+    getTenantDb: () => getTenantDb(center.id, { isReadOnly }),
   };
 }
