@@ -10,7 +10,8 @@ export default defineConfig({
     // Обоснование: SQLite БД (test.db) одна на все тесты. Параллельное выполнение вызывает гонки при удалении и ошибку Foreign Key Violation.
     fileParallelism: false,
     env: {
-      DATABASE_URL: "file:./test.db"
+      DATABASE_URL: "file:./test.db",
+      TRUSTED_PROXY_HOPS: "1"
     }
   },
 });
