@@ -74,7 +74,7 @@ async function validateForeignRelations(data: Record<string, unknown>, centerId:
   }
 }
 
-export function getTenantDb(rawCenterId?: string | null) {
+export function getTenantDb(rawCenterId?: string | null, options?: { isReadOnly?: boolean }) {
   if (!rawCenterId || typeof rawCenterId !== "string" || rawCenterId.trim() === "") {
     throw new Error("Invalid or empty centerId provided to getTenantDb");
   }
@@ -94,6 +94,23 @@ export function getTenantDb(rawCenterId?: string | null) {
           args: Record<string, unknown>;
           query: (args: unknown) => Promise<unknown>;
         }) {
+          if (options?.isReadOnly) {
+            const writeOperations = [
+              "create",
+              "createMany",
+              "createManyAndReturn",
+              "update",
+              "updateMany",
+              "updateManyAndReturn",
+              "upsert",
+              "delete",
+              "deleteMany",
+            ];
+            if (writeOperations.includes(operation)) {
+              throw new Error(`Read-only tenant database: write operation ${operation} is forbidden`);
+            }
+          }
+
           if (TENANT_MODELS.includes(model)) {
             if (
               [

@@ -1,5 +1,6 @@
 import { db } from "./db";
 import { getAuthSession } from "./auth";
+import { getTenantDb } from "./db-tenant";
 
 export async function logAuditEvent(params: {
   centerId?: string;
@@ -119,6 +120,7 @@ export async function requireTenantAccess(
       role: isSupport ? "CENTER_SUPPORT" : (session.activeCenterRole || "DIRECTOR"),
       isPlatformStaff: true,
       isReadOnly: isSupport,
+      getTenantDb: () => getTenantDb(center.id, { isReadOnly: isSupport }),
     };
   }
 
@@ -161,5 +163,7 @@ export async function requireTenantAccess(
     membership,
     role: membership.role,
     isPlatformStaff: false,
+    isReadOnly: false,
+    getTenantDb: () => getTenantDb(center.id, { isReadOnly: false }),
   };
 }
