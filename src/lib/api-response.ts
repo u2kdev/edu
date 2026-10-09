@@ -11,7 +11,8 @@ export type ApiErrorCode =
   | "TENANT_BLOCKED"
   | "BAD_REQUEST"
   | "INVALID_TOKEN"
-  | "INVALID_INVITE";
+  | "INVALID_INVITE"
+  | "ROLE_CONFLICT";
 
 export interface ApiErrorResponse {
   success: false;
