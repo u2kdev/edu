@@ -112,6 +112,29 @@ export function getTenantDb(rawCenterId?: string | null, options?: { isReadOnly?
           }
 
           if (TENANT_MODELS.includes(model)) {
+            const ALLOWED_OPERATIONS = [
+              "findFirst",
+              "findFirstOrThrow",
+              "findUnique",
+              "findUniqueOrThrow",
+              "findMany",
+              "count",
+              "aggregate",
+              "groupBy",
+              "create",
+              "createMany",
+              "createManyAndReturn",
+              "update",
+              "updateMany",
+              "updateManyAndReturn",
+              "upsert",
+              "delete",
+              "deleteMany",
+            ];
+            if (!ALLOWED_OPERATIONS.includes(operation)) {
+              throw new Error(`Operation ${operation} is forbidden on tenant model ${model}`);
+            }
+
             if (
               [
                 "findFirst",
