@@ -14,7 +14,7 @@ export async function GET(req: Request) {
     const page = Math.max(1, parseInt(searchParams.get("page") || "1"));
     const pageSize = Math.min(100, parseInt(searchParams.get("pageSize") || "50"));
 
-    let whereCondition: any = {
+    const whereCondition: Record<string, unknown> = {
       deletedAt: null, // exclude soft-deleted
     };
 
@@ -46,6 +46,9 @@ export async function GET(req: Request) {
         where: { id: groupId },
       });
       if (!group) return NextResponse.json({ error: "Group not found" }, { status: 404 });
+      if (tenantCtx.role === "TEACHER" && tenantCtx.membership && group.teacherMembershipId !== tenantCtx.membership.id) {
+        return NextResponse.json({ error: "Forbidden: You do not teach this group" }, { status: 403 });
+      }
       whereCondition.groupId = groupId;
     }
 
@@ -54,6 +57,17 @@ export async function GET(req: Request) {
         where: { id: studentId },
       });
       if (!studentMem) return NextResponse.json({ error: "Student not found" }, { status: 404 });
+      if (tenantCtx.role === "STUDENT" && tenantCtx.membership && studentId !== tenantCtx.membership.id) {
+        return NextResponse.json({ error: "Forbidden: You can only view your own grades" }, { status: 403 });
+      }
+      if (tenantCtx.role === "PARENT" && tenantCtx.membership) {
+        const isChild = await tenantDb.parentLink.findFirst({
+          where: { parentMembershipId: tenantCtx.membership.id, studentMembershipId: studentId, status: "CONFIRMED" },
+        });
+        if (!isChild) {
+          return NextResponse.json({ error: "Forbidden: Not your child" }, { status: 403 });
+        }
+      }
       whereCondition.studentMembershipId = studentId;
     }
 
@@ -78,8 +92,9 @@ export async function GET(req: Request) {
     ]);
 
     return NextResponse.json({ grades, total, page, pageSize });
-  } catch (err: any) {
-    return NextResponse.json({ error: err.message || "Server error" }, { status: 400 });
+  } catch (err: unknown) {
+    const message = err instanceof Error ? err.message : "Server error";
+    return NextResponse.json({ error: message }, { status: 400 });
   }
 }
 
@@ -161,8 +176,9 @@ export async function POST(req: Request) {
     });
 
     return NextResponse.json({ success: true, grade });
-  } catch (err: any) {
-    return NextResponse.json({ error: err.message || "Server error" }, { status: 400 });
+  } catch (err: unknown) {
+    const error = err as { message?: string };
+    return NextResponse.json({ error: error?.message || "Server error" }, { status: 400 });
   }
 }
 
@@ -210,7 +226,7 @@ export async function PATCH(req: Request) {
       }
     }
 
-    const updateData: any = {
+    const updateData: Record<string, unknown> = {
       value: value !== undefined ? parseFloat(value) : existing.value,
       maxValue: maxValue !== undefined ? parseFloat(maxValue) : existing.maxValue,
       comment: comment !== undefined ? comment?.trim() || null : existing.comment,
@@ -257,8 +273,9 @@ export async function PATCH(req: Request) {
     }
 
     return NextResponse.json({ success: true, grade });
-  } catch (err: any) {
-    return NextResponse.json({ error: err.message || "Server error" }, { status: 400 });
+  } catch (err: unknown) {
+    const error = err as { message?: string };
+    return NextResponse.json({ error: error?.message || "Server error" }, { status: 400 });
   }
 }
 
@@ -300,7 +317,8 @@ export async function DELETE(req: Request) {
     });
 
     return NextResponse.json({ success: true });
-  } catch (err: any) {
-    return NextResponse.json({ error: err.message || "Server error" }, { status: 400 });
+  } catch (err: unknown) {
+    const error = err as { message?: string };
+    return NextResponse.json({ error: error?.message || "Server error" }, { status: 400 });
   }
 }

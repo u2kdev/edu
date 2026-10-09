@@ -1,9 +1,10 @@
 import { describe, it, expect, vi, beforeAll } from "vitest";
 import { db } from "../src/lib/db";
-import { GET as getGradesHandler } from "../src/app/api/grades/route";
+import { GET as getGradesHandler, POST as postGradesHandler } from "../src/app/api/grades/route";
 import { GET as getPaymentsHandler } from "../src/app/api/center-payments/route";
 import { GET as getGroupsHandler } from "../src/app/api/groups/route";
-import { GET as getAttendanceHandler } from "../src/app/api/attendance/route";
+import { GET as getAttendanceHandler, POST as postAttendanceHandler } from "../src/app/api/attendance/route";
+import { POST as postBulkAttendanceHandler } from "../src/app/api/attendance/bulk/route";
 import type { LearningCenter, PlatformUser, CenterMembership, Group, Lesson, Grade, CenterPayment, Attendance } from "@prisma/client";
 
 interface MockTenantContext {
@@ -299,5 +300,85 @@ describe("TRUST-2 Item 14: Center intra-permissions on real test.db", () => {
     const attendanceStudentIds = attendanceData.attendances.map((a) => a.studentMembershipId);
     expect(attendanceStudentIds).toContain(memberStudentA.id);
     expect(attendanceStudentIds).not.toContain(memberStudentB.id);
+  });
+
+  it("Teacher 1 cannot grade student in Teacher 2's group", async () => {
+    mockContext = {
+      center,
+      role: "TEACHER",
+      membership: memberTeacher1,
+      session: { user: teacherUser1 },
+    };
+
+    const res = await postGradesHandler(
+      new Request("http://localhost:3000/api/grades", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          studentMembershipId: memberStudentB.id,
+          groupId: group2.id,
+          gradeType: "HOMEWORK",
+          value: 90,
+        }),
+      })
+    );
+    expect(res.status).toBe(403);
+  });
+
+  it("Teacher 1 cannot mark bulk attendance in Teacher 2's group", async () => {
+    mockContext = {
+      center,
+      role: "TEACHER",
+      membership: memberTeacher1,
+      session: { user: teacherUser1 },
+    };
+
+    const res = await postBulkAttendanceHandler(
+      new Request("http://localhost:3000/api/attendance/bulk", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          lessonId: lesson1.id,
+          groupId: group2.id,
+          defaultStatus: "PRESENT",
+        }),
+      })
+    );
+    expect(res.status).toBe(403);
+  });
+
+  it("Teacher 1 cannot mark single attendance for student in Teacher 2's group", async () => {
+    mockContext = {
+      center,
+      role: "TEACHER",
+      membership: memberTeacher1,
+      session: { user: teacherUser1 },
+    };
+
+    const res = await postAttendanceHandler(
+      new Request("http://localhost:3000/api/attendance", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          lessonId: lesson1.id,
+          records: [{ studentMembershipId: memberStudentB.id, status: "PRESENT" }],
+        }),
+      })
+    );
+    expect(res.status).toBe(403);
+  });
+
+  it("Parent of A cannot view Student B's grades by query param", async () => {
+    mockContext = {
+      center,
+      role: "PARENT",
+      membership: memberParent,
+      session: { user: parentUser },
+    };
+
+    const res = await getGradesHandler(
+      new Request(`http://localhost:3000/api/grades?studentMembershipId=${memberStudentB.id}`)
+    );
+    expect(res.status).toBe(403);
   });
 });

@@ -18,6 +18,15 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: "lessonId and groupId are required" }, { status: 400 });
     }
 
+    if (tenantCtx.role === "TEACHER" && tenantCtx.membership) {
+      const isTeacherGroup = await tenantDb.group.findFirst({
+        where: { id: groupId, teacherMembershipId: tenantCtx.membership.id },
+      });
+      if (!isTeacherGroup) {
+        return NextResponse.json({ error: "You can only mark attendance for your own groups" }, { status: 403 });
+      }
+    }
+
     const enrollments = await tenantDb.enrollment.findMany({
       where: { groupId, status: "ACTIVE" },
       select: { studentMembershipId: true },
@@ -53,8 +62,9 @@ export async function POST(req: Request) {
                markedByMembershipId: markerId,
              }
           });
-        } catch (e: any) {
-          if (e.code === 'P2002') {
+        } catch (e: unknown) {
+          const err = e as { code?: string };
+          if (err?.code === 'P2002') {
             await tenantDb.attendance.updateMany({
                where: { lessonId, studentMembershipId: en.studentMembershipId },
                data: {
@@ -81,8 +91,9 @@ export async function POST(req: Request) {
     });
 
     return NextResponse.json({ success: true, count: enrollments.length });
-  } catch (err: any) {
+  } catch (err: unknown) {
+    const error = err as { message?: string };
     console.error("Bulk attendance error:", err);
-    return NextResponse.json({ error: err.message || "Server error" }, { status: 500 });
+    return NextResponse.json({ error: error?.message || "Server error" }, { status: 500 });
   }
 }

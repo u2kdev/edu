@@ -7,7 +7,7 @@ export async function GET(req: Request) {
     const tenantCtx = await requireTenantAccess();
     const tenantDb = getTenantDb(tenantCtx.center.id);
 
-    let whereCondition: any = {};
+    const whereCondition: Record<string, unknown> = {};
 
     if (tenantCtx.role === "STUDENT" && tenantCtx.membership) {
       whereCondition.studentMembershipId = tenantCtx.membership.id;
@@ -16,7 +16,7 @@ export async function GET(req: Request) {
         where: { parentMembershipId: tenantCtx.membership.id, status: "CONFIRMED" },
         select: { studentMembershipId: true },
       });
-      const studentIds = parentLinks.map((l) => l.studentMembershipId);
+      const studentIds = parentLinks.map((l: { studentMembershipId: string }) => l.studentMembershipId);
       whereCondition.studentMembershipId = { in: studentIds };
     }
 
@@ -32,8 +32,9 @@ export async function GET(req: Request) {
     });
 
     return NextResponse.json({ payments });
-  } catch (err: any) {
-    return NextResponse.json({ error: err.message || "Ошибка загрузки оплат" }, { status: 400 });
+  } catch (err: unknown) {
+    const error = err as { message?: string };
+    return NextResponse.json({ error: error?.message || "Ошибка загрузки оплат" }, { status: 400 });
   }
 }
 
@@ -97,8 +98,9 @@ export async function POST(req: Request) {
     });
 
     return NextResponse.json({ success: true, payment });
-  } catch (err: any) {
-    return NextResponse.json({ error: err.message || "Ошибка фиксации оплаты" }, { status: 400 });
+  } catch (err: unknown) {
+    const error = err as { message?: string };
+    return NextResponse.json({ error: error?.message || "Ошибка фиксации оплаты" }, { status: 400 });
   }
 }
 
@@ -142,7 +144,8 @@ export async function PATCH(req: Request) {
     });
 
     return NextResponse.json({ success: true, payment });
-  } catch (err: any) {
-    return NextResponse.json({ error: err.message || "Server error" }, { status: 500 });
+  } catch (err: unknown) {
+    const error = err as { message?: string };
+    return NextResponse.json({ error: error?.message || "Server error" }, { status: 500 });
   }
 }

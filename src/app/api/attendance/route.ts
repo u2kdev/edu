@@ -39,6 +39,26 @@ export async function GET(req: Request) {
         select: { studentMembershipId: true },
       });
       whereCondition.studentMembershipId = { in: childLinks.map((l: { studentMembershipId: string }) => l.studentMembershipId) };
+    } else if (tenantCtx.role === "TEACHER" && tenantCtx.membership) {
+      const teacherGroups = await tenantDb.group.findMany({
+        where: { teacherMembershipId: tenantCtx.membership.id },
+        select: { id: true },
+      });
+      const groupEnrollments = await tenantDb.enrollment.findMany({
+        where: { groupId: { in: teacherGroups.map((g: { id: string }) => g.id) } },
+        select: { studentMembershipId: true },
+      });
+      whereCondition.studentMembershipId = { in: groupEnrollments.map((e: { studentMembershipId: string }) => e.studentMembershipId) };
+    } else if (tenantCtx.role === "TEACHER_ASSISTANT" && tenantCtx.membership) {
+      const assistantGroups = await tenantDb.group.findMany({
+        where: { assistantMembershipId: tenantCtx.membership.id },
+        select: { id: true },
+      });
+      const groupEnrollments = await tenantDb.enrollment.findMany({
+        where: { groupId: { in: assistantGroups.map((g: { id: string }) => g.id) } },
+        select: { studentMembershipId: true },
+      });
+      whereCondition.studentMembershipId = { in: groupEnrollments.map((e: { studentMembershipId: string }) => e.studentMembershipId) };
     }
 
     const attendances = await tenantDb.attendance.findMany({
@@ -97,19 +117,20 @@ export async function POST(req: Request) {
       status: string;
     }
     const attendanceRecords = records as AttendanceRecordInput[];
-    if (attendanceRecords.length > 0) {
-      const membershipIds = attendanceRecords.map((r) => r.studentMembershipId);
-      const validMemberships = await tenantDb.centerMembership.findMany({
-        where: {
-          id: { in: membershipIds },
-          role: "STUDENT",
-        },
+    // SECURITY: If teacher, verify students belong to teacher's groups
+    if (tenantCtx.role === "TEACHER" && tenantCtx.membership && attendanceRecords.length > 0) {
+      const teacherGroups = await tenantDb.group.findMany({
+        where: { teacherMembershipId: tenantCtx.membership.id },
         select: { id: true },
       });
-      const validIds = new Set(validMemberships.map((m: { id: string }) => m.id));
-      const invalidRecord = attendanceRecords.find((r) => !validIds.has(r.studentMembershipId));
-      if (invalidRecord) {
-        return NextResponse.json({ error: "One or more student memberships are invalid or cross-tenant" }, { status: 403 });
+      const allowedEnrollments = await tenantDb.enrollment.findMany({
+        where: { groupId: { in: teacherGroups.map((g: { id: string }) => g.id) } },
+        select: { studentMembershipId: true },
+      });
+      const allowedStudentIds = new Set(allowedEnrollments.map((e: { studentMembershipId: string }) => e.studentMembershipId));
+      const unauthorizedRecord = attendanceRecords.find((r) => !allowedStudentIds.has(r.studentMembershipId));
+      if (unauthorizedRecord) {
+        return NextResponse.json({ error: "Teachers can only mark attendance for students in their own groups" }, { status: 403 });
       }
     }
 
