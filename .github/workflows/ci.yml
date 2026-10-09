@@ -15,8 +15,23 @@ jobs:
     name: Lint, Test & Build
     runs-on: ubuntu-latest
 
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: password
+          POSTGRES_DB: lms_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
     env:
-      DATABASE_URL: "file:./dev.db"
+      DATABASE_URL: "postgresql://postgres:password@localhost:5432/lms_test?schema=public"
       JWT_SECRET: "ci-dummy-jwt-secret-key-32-chars-long!"
       DEV_LOGIN: "false"
       DEV_EMAIL_LOG: "false"

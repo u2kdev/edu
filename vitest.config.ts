@@ -7,10 +7,10 @@ export default defineConfig({
       "@": path.resolve(__dirname, "./src"),
     },
     globalSetup: "./tests/global-setup.ts",
-    // Обоснование: SQLite БД (test.db) одна на все тесты. Параллельное выполнение вызывает гонки при удалении и ошибку Foreign Key Violation.
+    // Test isolation in PostgreSQL with sequential execution
     fileParallelism: false,
     env: {
-      DATABASE_URL: "file:./test.db",
+      DATABASE_URL: process.env.TEST_DATABASE_URL || "postgresql://postgres:admin@localhost:5432/lms_test?schema=public",
       TRUSTED_PROXY_HOPS: "1"
     }
   },
