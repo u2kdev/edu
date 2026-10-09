@@ -6,6 +6,7 @@ import { getAuthSession } from "@/lib/auth";
 
 import { z } from "zod";
 import { checkRateLimit } from "@/lib/rate-limit";
+import { getClientIp } from "@/lib/ip";
 import { apiError, apiSuccess, handleApiError } from "@/lib/api-response";
 
 const deleteSessionSchema = z.object({
@@ -17,7 +18,7 @@ const deleteSessionSchema = z.object({
 
 export async function GET(req: Request) {
   try {
-    const ip = req.headers.get("x-forwarded-for") || "unknown";
+    const ip = getClientIp(req);
     if (!checkRateLimit(ip)) return apiError("Too many requests", "RATE_LIMITED", 429);
 
     const session = await getAuthSession();
@@ -41,14 +42,14 @@ export async function GET(req: Request) {
         isCurrent: s.id === session.sessionId
       }))
     });
-  } catch (err: any) {
+  } catch (err: unknown) {
     return handleApiError(err);
   }
 }
 
 export async function DELETE(req: Request) {
   try {
-    const ip = req.headers.get("x-forwarded-for") || "unknown";
+    const ip = getClientIp(req);
     if (!checkRateLimit(ip)) return apiError("Too many requests", "RATE_LIMITED", 429);
 
     const session = await getAuthSession();

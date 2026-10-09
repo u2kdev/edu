@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { getAuthSession } from "@/lib/auth";
+import { getClientIp } from "@/lib/ip";
 // Reason: Exception: Auth routes operate on platform models.
 // eslint-disable-next-line no-restricted-imports
 import { db } from "@/lib/db";
@@ -9,7 +10,7 @@ export async function POST(req: Request) {
     // Log logout event before clearing cookie
     const session = await getAuthSession();
     if (session) {
-      const ip = req.headers.get("x-forwarded-for")?.split(",")[0].trim() || "unknown";
+      const ip = getClientIp(req);
       try {
         if (session.sessionId) {
           await db.userSession.update({

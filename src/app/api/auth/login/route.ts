@@ -4,6 +4,7 @@ import { z } from "zod";
 import { db } from "@/lib/db";
 import { comparePassword, signJWT, JWTPayload } from "@/lib/auth";
 import { checkRateLimit } from "@/lib/rate-limit";
+import { getClientIp } from "@/lib/ip";
 import { sendEmail } from '@/lib/email';
 import { apiError, apiSuccess, handleApiError } from "@/lib/api-response";
 import { loginSchema } from "@/lib/validation/auth";
@@ -14,7 +15,7 @@ const ACCOUNT_GLOBAL_DELAY_THRESHOLD = 20;
 
 export async function POST(req: Request) {
   try {
-    const ip = req.headers.get("x-forwarded-for") || "unknown";
+    const ip = getClientIp(req);
     const userAgent = req.headers.get("user-agent") || "unknown";
 
     if (!checkRateLimit(ip)) {

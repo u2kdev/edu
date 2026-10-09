@@ -5,11 +5,12 @@ import { db } from "@/lib/db";
 import { getAuthSession, signJWT } from "@/lib/auth";
 import { getTenantDb } from "@/lib/db-tenant";
 import { checkRateLimit } from "@/lib/rate-limit";
+import { getClientIp } from "@/lib/ip";
 import { apiError, handleApiError } from "@/lib/api-response";
 
 export async function POST(req: Request) {
   try {
-    const ip = req.headers.get("x-forwarded-for") || "unknown";
+    const ip = getClientIp(req);
     if (!checkRateLimit(ip)) {
       return apiError("Too many attempts", "RATE_LIMITED", 429);
     }

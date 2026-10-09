@@ -3,13 +3,14 @@ import { NextResponse } from "next/server";
 // eslint-disable-next-line no-restricted-imports
 import { db } from "@/lib/db";
 import { checkRateLimit } from "@/lib/rate-limit";
+import { getClientIp } from "@/lib/ip";
 import { apiError, apiSuccess, handleApiError } from "@/lib/api-response";
 import { logAuditEvent } from "@/lib/tenant";
 import crypto from "crypto";
 
 export async function POST(req: Request) {
   try {
-    const ip = req.headers.get("x-forwarded-for") || "unknown";
+    const ip = getClientIp(req);
     
     // Rate limit specifically for email confirmation attempts
     if (!checkRateLimit(ip + "_confirm_email", 10, 15 * 60 * 1000)) {

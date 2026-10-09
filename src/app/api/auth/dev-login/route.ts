@@ -3,6 +3,7 @@ import { NextResponse } from "next/server";
 // eslint-disable-next-line no-restricted-imports
 import { db } from "@/lib/db";
 import { signJWT, hashJti, JWTPayload } from "@/lib/auth";
+import { getClientIp } from "@/lib/ip";
 import { v4 as uuidv4 } from "uuid";
 
 export async function POST(req: Request) {
@@ -40,7 +41,7 @@ export async function POST(req: Request) {
 
     const token = signJWT(payload, expiresIn);
 
-    const ip = req.headers.get("x-forwarded-for") || "127.0.0.1";
+    const ip = getClientIp(req);
 
     // Create session in DB
     await db.userSession.create({
