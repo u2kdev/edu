@@ -49,9 +49,11 @@ export function getTenantDb(centerId: string) {
             if (
               [
                 "findFirst",
+                "findFirstOrThrow",
                 "findMany",
                 "count",
                 "updateMany",
+                "updateManyAndReturn",
                 "deleteMany",
                 "aggregate",
                 "groupBy",
@@ -71,24 +73,24 @@ export function getTenantDb(centerId: string) {
               args.create = { ...((args.create as Record<string, unknown> | null | undefined) || {}), centerId };
             }
 
-            if (operation === "findUnique" || operation === "update" || operation === "delete") {
-              // Prisma requires findUnique/update/delete to only use unique fields.
-              // To safely scope them, we intercept and convert to findFirst/updateMany/deleteMany, 
-              // or just rely on the fact that if we know the unique ID, it's globally unique.
-              // BUT to prevent IDOR, we MUST verify centerId.
-              // We'll add centerId to where. If Prisma complains about invalid fields for findUnique,
-              // we can rewrite findUnique to findFirst.
-              
+            if (
+              operation === "findUnique" ||
+              operation === "findUniqueOrThrow" ||
+              operation === "update" ||
+              operation === "delete"
+            ) {
               const delegate = (db as unknown as Record<string, {
                 findFirst: (a: unknown) => Promise<unknown>;
+                findFirstOrThrow: (a: unknown) => Promise<unknown>;
                 updateMany: (a: unknown) => Promise<{ count: number }>;
                 deleteMany: (a: unknown) => Promise<{ count: number }>;
               }>)[model];
 
-              if (operation === "findUnique") {
-                operation = "findFirst";
+              if (operation === "findUnique" || operation === "findUniqueOrThrow") {
                 args.where = { ...((args.where as Record<string, unknown> | null | undefined) || {}), centerId };
-                return delegate.findFirst(args);
+                return operation === "findUniqueOrThrow"
+                  ? delegate.findFirstOrThrow(args)
+                  : delegate.findFirst(args);
               }
               
               if (operation === "update") {
@@ -112,7 +114,7 @@ export function getTenantDb(centerId: string) {
               args.data = { ...((args.data as Record<string, unknown> | null | undefined) || {}), centerId };
             }
 
-            if (operation === "createMany") {
+            if (operation === "createMany" || operation === "createManyAndReturn") {
               if (Array.isArray(args.data)) {
                 args.data = (args.data as Record<string, unknown>[]).map((d) => ({ ...d, centerId }));
               } else {
