@@ -120,12 +120,16 @@ describe("Authentication & Foundation Tests", () => {
       }
     });
 
-    beforeEach(() => {
+    beforeEach(async () => {
       clearRateLimit("test-ip");
+      await db.loginAttempt.deleteMany({
+        where: { email: { in: ["wrong@email.com", "login-fail@e2e.com"] } },
+      });
     });
 
     it("should fail with invalid credentials and log audit", async () => {
-      const req = mockRequest({ email: "wrong@email.com", password: "wrong_password" }, "test-ip");
+      const email = `login-fail-${Date.now()}@e2e.com`;
+      const req = mockRequest({ email, password: "wrong_password" }, "test-ip");
       const res = await loginPost(req);
       const data = await res.json();
       

@@ -117,13 +117,13 @@ export async function POST(req: Request) {
     };
 
     if (!user || !user.isActive) {
-      return handleFailure("user_not_found_or_inactive");
+      return await handleFailure("user_not_found_or_inactive");
     }
 
     const isMatch = await comparePassword(password, user.passwordHash);
 
     if (!isMatch) {
-      return handleFailure("invalid_password", user.id);
+      return await handleFailure("invalid_password", user.id);
     }
 
     // Success -> Reset ALL attempts for this email

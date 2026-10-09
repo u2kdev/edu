@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach, afterEach } from "vitest";
+import { describe, it, expect, beforeEach, afterEach, afterAll } from "vitest";
 import { getClientIp } from "../src/lib/ip";
 import { checkRateLimit, rateLimits } from "../src/lib/rate-limit";
 import { POST as loginRoute } from "../src/app/api/auth/login/route";
@@ -21,6 +21,19 @@ describe("TRUST-3 Item 2: getClientIp proxy security, default unknown, NaN handl
   beforeEach(() => {
     delete process.env.TRUSTED_PROXY_HOPS;
     delete process.env.TRUST_PROXY_HEADERS;
+  });
+
+  afterAll(() => {
+    if (origHops !== undefined) {
+      process.env.TRUSTED_PROXY_HOPS = origHops;
+    } else {
+      delete process.env.TRUSTED_PROXY_HOPS;
+    }
+    if (origTrustHeaders !== undefined) {
+      process.env.TRUST_PROXY_HEADERS = origTrustHeaders;
+    } else {
+      delete process.env.TRUST_PROXY_HEADERS;
+    }
   });
 
   afterEach(() => {
