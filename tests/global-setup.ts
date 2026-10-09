@@ -1,7 +1,8 @@
 import { execSync } from "child_process";
 import { PrismaClient } from "@prisma/client";
 
-const testDbUrl = process.env.TEST_DATABASE_URL || process.env.DATABASE_URL || "postgresql://postgres:admin@localhost:5432/lms_test?schema=public";
+const testDbUrl = process.env.TEST_DATABASE_URL || "postgresql://postgres:admin@localhost:5432/lms_test?schema=public";
+process.env.DATABASE_URL = testDbUrl;
 
 export async function setup() {
   console.log("Setting up PostgreSQL test database...");

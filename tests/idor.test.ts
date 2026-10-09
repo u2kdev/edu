@@ -106,7 +106,17 @@ describe("Phase C & E: IDOR / Privilege Escalation Tests", () => {
   });
 
   afterAll(async () => {
-    // Cleanup
+    // Cleanup in dependency order
+    await db.attendance.deleteMany({ where: { lesson: { centerId: { in: [tenantA, tenantB] } } } });
+    await db.grade.deleteMany({ where: { centerId: { in: [tenantA, tenantB] } } });
+    await db.inviteCode.deleteMany({ where: { centerId: { in: [tenantA, tenantB] } } });
+    await db.announcement.deleteMany({ where: { centerId: { in: [tenantA, tenantB] } } });
+    await db.scheduleSlot.deleteMany({ where: { centerId: { in: [tenantA, tenantB] } } });
+    await db.group.deleteMany({ where: { centerId: { in: [tenantA, tenantB] } } });
+    await db.lesson.deleteMany({ where: { centerId: { in: [tenantA, tenantB] } } });
+    await db.courseModule.deleteMany({ where: { centerId: { in: [tenantA, tenantB] } } });
+    await db.course.deleteMany({ where: { centerId: { in: [tenantA, tenantB] } } });
+    await db.centerMembership.deleteMany({ where: { centerId: { in: [tenantA, tenantB] } } });
     await db.learningCenter.deleteMany({ where: { id: { in: [tenantA, tenantB] } } });
     await db.platformUser.deleteMany({ where: { id: { in: [directorA, directorB, teacherA, studentA, studentB] } } });
   });

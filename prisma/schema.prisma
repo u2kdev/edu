@@ -243,7 +243,7 @@ model InviteCode {
   updatedAt             DateTime  @updatedAt
 
   center  LearningCenter   @relation(fields: [centerId], references: [id], onDelete: Cascade)
-  creator CenterMembership @relation("InviteCreator", fields: [createdByMembershipId], references: [id], onDelete: Cascade)
+  creator CenterMembership @relation("InviteCreator", fields: [createdByMembershipId], references: [id], onDelete: Restrict)
   course  Course?          @relation(fields: [courseId], references: [id], onDelete: SetNull)
   group   Group?           @relation(fields: [groupId], references: [id], onDelete: SetNull)
   pendingInvites PendingInvite[]
@@ -290,7 +290,7 @@ model Course {
 
   center  LearningCenter   @relation(fields: [centerId], references: [id], onDelete: Cascade)
   subject Subject?         @relation(fields: [subjectId], references: [id], onDelete: SetNull)
-  creator CenterMembership @relation("CourseCreator", fields: [createdByMembershipId], references: [id], onDelete: Cascade)
+  creator CenterMembership @relation("CourseCreator", fields: [createdByMembershipId], references: [id], onDelete: Restrict)
   modules CourseModule[]
   groups  Group[]
   invites InviteCode[]
@@ -379,7 +379,7 @@ model ScheduleSlot {
 
   center  LearningCenter   @relation(fields: [centerId], references: [id], onDelete: Cascade)
   group   Group            @relation(fields: [groupId], references: [id], onDelete: Cascade)
-  teacher CenterMembership @relation("ScheduleCreator", fields: [teacherMembershipId], references: [id], onDelete: Cascade)
+  teacher CenterMembership @relation("ScheduleCreator", fields: [teacherMembershipId], references: [id], onDelete: Restrict)
   branch  Branch?          @relation(fields: [branchId], references: [id], onDelete: SetNull)
   lessons Lesson[]
 
@@ -460,7 +460,7 @@ model Attendance {
 
   lesson  Lesson           @relation(fields: [lessonId], references: [id], onDelete: Cascade)
   student CenterMembership @relation("StudentAttendances", fields: [studentMembershipId], references: [id], onDelete: Cascade)
-  marker  CenterMembership @relation("MarkerAttendances", fields: [markedByMembershipId], references: [id], onDelete: Cascade)
+  marker  CenterMembership @relation("MarkerAttendances", fields: [markedByMembershipId], references: [id], onDelete: Restrict)
 
   @@unique([lessonId, studentMembershipId])
   @@index([lessonId])
@@ -547,7 +547,7 @@ model Grade {
   student            CenterMembership    @relation("StudentGrades", fields: [studentMembershipId], references: [id], onDelete: Cascade)
   group              Group?              @relation(fields: [groupId], references: [id], onDelete: SetNull)
   lesson             Lesson?             @relation(fields: [lessonId], references: [id], onDelete: SetNull)
-  teacher            CenterMembership    @relation("TeacherGrades", fields: [teacherMembershipId], references: [id], onDelete: Cascade)
+  teacher            CenterMembership    @relation("TeacherGrades", fields: [teacherMembershipId], references: [id], onDelete: Restrict)
   finalizedBy        CenterMembership?   @relation("GradeFinalizerGrades", fields: [finalizedById], references: [id], onDelete: SetNull)
   homeworkSubmission HomeworkSubmission? @relation("SubmissionGrade", fields: [homeworkSubmissionId], references: [id], onDelete: SetNull)
 
@@ -610,7 +610,7 @@ model Announcement {
   updatedAt  DateTime  @updatedAt
 
   center LearningCenter   @relation(fields: [centerId], references: [id], onDelete: Cascade)
-  author CenterMembership @relation("AnnouncementAuthor", fields: [authorId], references: [id], onDelete: Cascade)
+  author CenterMembership @relation("AnnouncementAuthor", fields: [authorId], references: [id], onDelete: Restrict)
   group  Group?           @relation(fields: [groupId], references: [id], onDelete: SetNull)
 
   @@index([centerId])

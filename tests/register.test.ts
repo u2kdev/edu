@@ -51,16 +51,13 @@ describe("Registration by Invite (POST /api/auth/register)", () => {
   afterAll(async () => {
     await db.inviteCode.deleteMany({ where: { centerId } });
     await db.centerMembership.deleteMany({ where: { centerId } });
-    await db.learningCenter.delete({ where: { id: centerId } });
-    await db.course.deleteMany({ where: { center: { owner: { email: { startsWith: "reg" } } } } });
-    await db.centerMembership.deleteMany({ where: { user: { email: { startsWith: "reg" } } } });
-    await db.subscription.deleteMany({ where: { center: { owner: { email: { startsWith: "reg" } } } } });
-    await db.learningCenter.deleteMany({ where: { owner: { email: { startsWith: "reg" } } } });
+    await db.learningCenter.delete({ where: { id: centerId } }).catch(() => {});
+    await db.learningCenter.deleteMany({ where: { owner: { email: { startsWith: "regowner-" } } } });
     await db.platformUser.deleteMany({ where: { email: { startsWith: "regowner-" } } });
     await db.platformUser.deleteMany({ where: { email: { startsWith: "racer-" } } });
     await db.platformUser.deleteMany({ where: { email: { startsWith: "invalid-" } } });
-    await db.platformUser.deleteMany({ where: { email: { startsWith: "exist-" } } });
-    await db.platformUser.deleteMany({ where: { email: { startsWith: "dir-" } } });
+    await db.platformUser.deleteMany({ where: { email: { startsWith: "regexist-" } } });
+    await db.platformUser.deleteMany({ where: { email: { startsWith: "regdir-" } } });
     await db.platformUser.deleteMany({ where: { email: { startsWith: "new-" } } });
   });
 
@@ -116,7 +113,7 @@ describe("Registration by Invite (POST /api/auth/register)", () => {
 
 
   it("Existing email gets same response, no membership added, receives login email", async () => {
-    const existingEmail = `exist-${Date.now()}@test.com`;
+    const existingEmail = `regexist-${Date.now()}@test.com`;
     // create user beforehand
     const user = await db.platformUser.create({
       data: { email: existingEmail, passwordHash: "x", fullName: "Exist" }
@@ -144,7 +141,7 @@ describe("Registration by Invite (POST /api/auth/register)", () => {
     const invite = await db.inviteCode.create({
       data: { centerId, code: `DIR-${Date.now()}`, targetRole: "DIRECTOR", maxUses: 1, createdByMembershipId: membershipOwner!.id }
     });
-    const res = await registerPost(mockReq({ email: `dir-${Date.now()}@test.com`, password: "password123", fullName: "Dir", inviteCode: invite.code }, "1.1.1.4"));
+    const res = await registerPost(mockReq({ email: `regdir-${Date.now()}@test.com`, password: "password123", fullName: "Dir", inviteCode: invite.code }, "1.1.1.4"));
     const data = await res.json();
     expect(res.status).toBe(400);
     expect(data.error.message).toBe("Invalid, expired, or exhausted invite code");
