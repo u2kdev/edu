@@ -30,6 +30,50 @@ export const TENANT_MODELS = [
   "Notification",
 ];
 
+type DelegateMethods = {
+  findFirst: (a: unknown) => Promise<{ id?: string; centerId?: string } | null>;
+  findFirstOrThrow: (a: unknown) => Promise<unknown>;
+  updateMany: (a: unknown) => Promise<{ count: number }>;
+  deleteMany: (a: unknown) => Promise<{ count: number }>;
+};
+
+type DynamicDb = PrismaClient & Record<string, DelegateMethods>;
+
+const RELATION_FOREIGN_KEYS: Record<string, string> = {
+  groupId: "group",
+  courseId: "course",
+  moduleId: "courseModule",
+  lessonId: "lesson",
+  studentMembershipId: "centerMembership",
+  teacherMembershipId: "centerMembership",
+  creatorMembershipId: "centerMembership",
+  branchId: "branch",
+  subjectId: "subject",
+  homeworkId: "homework",
+  homeworkSubmissionId: "homeworkSubmission",
+  testId: "test",
+};
+
+async function validateForeignRelations(data: Record<string, unknown>, centerId: string) {
+  for (const [key, modelProp] of Object.entries(RELATION_FOREIGN_KEYS)) {
+    const foreignId = data[key];
+    if (typeof foreignId === "string" && foreignId.length > 0) {
+      const dynamicDb = db as DynamicDb;
+      const delegate = dynamicDb[modelProp];
+      if (delegate && typeof delegate.findFirst === "function") {
+        const found = await delegate.findFirst({
+          where: { id: foreignId, centerId },
+        });
+        if (!found) {
+          throw new Error(
+            `Cross-tenant relation violation: ${key} (${foreignId}) does not belong to this center`
+          );
+        }
+      }
+    }
+  }
+}
+
 export function getTenantDb(rawCenterId?: string | null) {
   if (!rawCenterId || typeof rawCenterId !== "string" || rawCenterId.trim() === "") {
     throw new Error("Invalid or empty centerId provided to getTenantDb");
@@ -82,6 +126,7 @@ export function getTenantDb(rawCenterId?: string | null) {
                   }
                   delete dataObj.centerId;
                 }
+                await validateForeignRelations(dataObj, centerId);
               }
             }
 
@@ -94,10 +139,14 @@ export function getTenantDb(rawCenterId?: string | null) {
                   }
                   delete updateObj.centerId;
                 }
+                await validateForeignRelations(updateObj, centerId);
               }
-              const delegate = (db as unknown as Record<string, {
-                findFirst: (a: unknown) => Promise<{ centerId?: string } | null>;
-              }>)[model];
+              if (args.create && typeof args.create === "object") {
+                await validateForeignRelations(args.create as Record<string, unknown>, centerId);
+              }
+              const modelProp = model.charAt(0).toLowerCase() + model.slice(1);
+              const dynamicDb = db as DynamicDb;
+              const delegate = dynamicDb[modelProp] || dynamicDb[model];
               const target = await delegate.findFirst({ where: args.where });
               if (target && target.centerId !== centerId) {
                 throw new Error("Record not found or access denied");
@@ -111,12 +160,9 @@ export function getTenantDb(rawCenterId?: string | null) {
               operation === "update" ||
               operation === "delete"
             ) {
-              const delegate = (db as unknown as Record<string, {
-                findFirst: (a: unknown) => Promise<unknown>;
-                findFirstOrThrow: (a: unknown) => Promise<unknown>;
-                updateMany: (a: unknown) => Promise<{ count: number }>;
-                deleteMany: (a: unknown) => Promise<{ count: number }>;
-              }>)[model];
+              const modelProp = model.charAt(0).toLowerCase() + model.slice(1);
+              const dynamicDb = db as DynamicDb;
+              const delegate = dynamicDb[modelProp] || dynamicDb[model];
 
               if (operation === "findUnique" || operation === "findUniqueOrThrow") {
                 args.where = { ...((args.where as Record<string, unknown> | null | undefined) || {}), centerId };
@@ -143,13 +189,24 @@ export function getTenantDb(rawCenterId?: string | null) {
             }
 
             if (operation === "create") {
+              if (args.data && typeof args.data === "object") {
+                await validateForeignRelations(args.data as Record<string, unknown>, centerId);
+              }
               args.data = { ...((args.data as Record<string, unknown> | null | undefined) || {}), centerId };
             }
 
             if (operation === "createMany" || operation === "createManyAndReturn") {
               if (Array.isArray(args.data)) {
+                for (const item of args.data) {
+                  if (item && typeof item === "object") {
+                    await validateForeignRelations(item as Record<string, unknown>, centerId);
+                  }
+                }
                 args.data = (args.data as Record<string, unknown>[]).map((d) => ({ ...d, centerId }));
               } else {
+                if (args.data && typeof args.data === "object") {
+                  await validateForeignRelations(args.data as Record<string, unknown>, centerId);
+                }
                 args.data = { ...((args.data as Record<string, unknown> | null | undefined) || {}), centerId };
               }
             }
