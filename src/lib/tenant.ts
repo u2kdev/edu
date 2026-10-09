@@ -27,7 +27,10 @@ export async function logAuditEvent(params: {
   }
 }
 
-export async function requireTenantAccess(expectedCenterId?: string) {
+export async function requireTenantAccess(
+  expectedCenterId?: string,
+  options?: { isWrite?: boolean }
+) {
   const session = await getAuthSession();
   if (!session) {
     throw new Error("Unauthorized: No session found");
@@ -38,22 +41,50 @@ export async function requireTenantAccess(expectedCenterId?: string) {
     throw new Error("Bad Request: No active learning center selected");
   }
 
-  // DEVELOPER, SUPERADMIN & Platform Support bypass tenant isolation for impersonation/support
-  if (
+  // DEVELOPER, SUPERADMIN & PLATFORM_SUPPORT bypass tenant isolation
+  const isPlatformRole =
     session.user.platformRole === "DEVELOPER" ||
     session.user.platformRole === "SUPERADMIN" ||
-    session.user.platformRole === "PLATFORM_SUPPORT" ||
-    session.user.platformRole === "FULL_ACCESS"
-  ) {
+    session.user.platformRole === "PLATFORM_SUPPORT";
+
+  if (isPlatformRole) {
     const center = await db.learningCenter.findUnique({
       where: { id: targetCenterId },
     });
     if (!center) throw new Error("Tenant center not found");
+
+    if (session.user.platformRole === "PLATFORM_SUPPORT") {
+      if (options?.isWrite) {
+        const err = Object.assign(
+          new Error("Forbidden: Platform support has read-only access"),
+          {
+            status: 403,
+            code: "SUPPORT_READ_ONLY",
+          }
+        );
+        throw err;
+      }
+    }
+
+    await logAuditEvent({
+      centerId: targetCenterId,
+      actorUserId: session.user.id,
+      action: "PLATFORM_TENANT_ACCESS",
+      resource: "LearningCenter",
+      resourceId: targetCenterId,
+      details: {
+        platformRole: session.user.platformRole,
+        isWrite: !!options?.isWrite,
+      },
+    });
+
+    const isSupport = session.user.platformRole === "PLATFORM_SUPPORT";
     return {
       session,
       center,
-      role: session.activeCenterRole || "DIRECTOR",
+      role: isSupport ? "CENTER_SUPPORT" : (session.activeCenterRole || "DIRECTOR"),
       isPlatformStaff: true,
+      isReadOnly: isSupport,
     };
   }
 
