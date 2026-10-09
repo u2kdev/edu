@@ -62,7 +62,34 @@ export function getTenantDb(centerId: string) {
               args.where = { ...((args.where as Record<string, unknown> | null | undefined) || {}), centerId };
             }
 
+            if (
+              [
+                "update",
+                "updateMany",
+                "updateManyAndReturn",
+              ].includes(operation)
+            ) {
+              if (args.data && typeof args.data === "object") {
+                const dataObj = args.data as Record<string, unknown>;
+                if ("centerId" in dataObj && dataObj.centerId !== undefined) {
+                  if (dataObj.centerId !== centerId) {
+                    throw new Error("Changing centerId is not allowed");
+                  }
+                  delete dataObj.centerId;
+                }
+              }
+            }
+
             if (operation === "upsert") {
+              if (args.update && typeof args.update === "object") {
+                const updateObj = args.update as Record<string, unknown>;
+                if ("centerId" in updateObj && updateObj.centerId !== undefined) {
+                  if (updateObj.centerId !== centerId) {
+                    throw new Error("Changing centerId is not allowed");
+                  }
+                  delete updateObj.centerId;
+                }
+              }
               const delegate = (db as unknown as Record<string, {
                 findFirst: (a: unknown) => Promise<{ centerId?: string } | null>;
               }>)[model];
