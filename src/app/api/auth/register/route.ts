@@ -110,60 +110,75 @@ export async function POST(req: Request) {
       return apiSuccess({ message: "Registration successful. Please check your email to confirm." });
     }
 
-    // 4. Atomic increment of invite uses for NEW user
-    let updateCount;
-    if (invite.maxUses !== null) {
-      updateCount = await db.inviteCode.updateMany({
-        where: { id: invite.id, usesCount: { lt: invite.maxUses } },
-        data: { usesCount: { increment: 1 } },
-      });
-    } else {
-      updateCount = await db.inviteCode.updateMany({
-        where: { id: invite.id },
-        data: { usesCount: { increment: 1 } },
-      });
-    }
-
-    if (updateCount.count === 0) {
-      return consumeAndReturnInvalidError();
-    }
-
-    // 5. New User Logic
+    // 4. Atomic Registration Transaction for NEW user
     const passwordHash = await hashPassword(password);
     const confirmToken = crypto.randomBytes(32).toString("hex");
     const confirmTokenHash = crypto.createHash("sha256").update(confirmToken).digest("hex");
     const confirmExpires = new Date(Date.now() + 24 * 60 * 60 * 1000); // 24h
 
-    user = await db.platformUser.create({
-      data: {
-        email,
-        passwordHash,
-        fullName,
-        phone,
-        emailConfirmToken: confirmTokenHash,
-        emailConfirmExpires: confirmExpires,
-      },
-    });
-
-    // Create membership only for new users
-    const membership = await db.centerMembership.create({
-      data: {
-        userId: user.id,
-        centerId: invite.centerId,
-        role: invite.targetRole,
-        status: "ACTIVE",
-      }
-    });
-
-    if (invite.groupId) {
-      await db.enrollment.create({
-        data: {
-          centerId: invite.centerId,
-          studentMembershipId: membership.id,
-          groupId: invite.groupId,
-          status: "ACTIVE"
+    try {
+      user = await db.$transaction(async (tx) => {
+        // Atomic increment of invite uses inside transaction
+        let updateCount;
+        if (invite.maxUses !== null) {
+          updateCount = await tx.inviteCode.updateMany({
+            where: { id: invite.id, usesCount: { lt: invite.maxUses } },
+            data: { usesCount: { increment: 1 } },
+          });
+        } else {
+          updateCount = await tx.inviteCode.updateMany({
+            where: { id: invite.id },
+            data: { usesCount: { increment: 1 } },
+          });
         }
+
+        if (updateCount.count === 0) {
+          throw new Error("INVITE_EXHAUSTED");
+        }
+
+        const newUser = await tx.platformUser.create({
+          data: {
+            email,
+            passwordHash,
+            fullName,
+            phone,
+            emailConfirmToken: confirmTokenHash,
+            emailConfirmExpires: confirmExpires,
+          },
+        });
+
+        const membership = await tx.centerMembership.create({
+          data: {
+            userId: newUser.id,
+            centerId: invite.centerId,
+            role: invite.targetRole,
+            status: "ACTIVE",
+          },
+        });
+
+        if (invite.groupId) {
+          await tx.enrollment.create({
+            data: {
+              centerId: invite.centerId,
+              studentMembershipId: membership.id,
+              groupId: invite.groupId,
+              status: "ACTIVE",
+            },
+          });
+        }
+
+        return newUser;
       });
+    } catch (txError: unknown) {
+      const err = txError as { code?: string; message?: string };
+      if (err?.message === "INVITE_EXHAUSTED") {
+        return consumeAndReturnInvalidError();
+      }
+      if (err?.code === "P2002") {
+        // Concurrent user registration for the same email: handle gracefully without 500
+        return apiError("A user with this email already exists or is being registered", "BAD_REQUEST", 409);
+      }
+      throw txError;
     }
 
     await logAuditEvent({
