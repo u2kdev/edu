@@ -4,7 +4,7 @@ import { requireTenantAccess } from "@/lib/tenant";
 // GET /api/center-payments/report - Financial report & forecast
 export async function GET(req: Request) {
   try {
-    const tenantCtx = await requireTenantAccess();
+    const tenantCtx = await requireTenantAccess(req);
     const tenantDb = tenantCtx.getTenantDb();
     if (tenantCtx.role !== "DIRECTOR" && tenantCtx.role !== "CENTER_ADMIN" && !tenantCtx.isPlatformStaff) {
       return NextResponse.json({ error: "Forbidden" }, { status: 403 });

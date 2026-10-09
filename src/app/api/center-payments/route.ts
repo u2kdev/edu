@@ -3,7 +3,7 @@ import { requireTenantAccess, logAuditEvent } from "@/lib/tenant";
 
 export async function GET(req: Request) {
   try {
-    const tenantCtx = await requireTenantAccess();
+    const tenantCtx = await requireTenantAccess(req);
     const tenantDb = tenantCtx.getTenantDb();
 
     const whereCondition: Record<string, unknown> = {};
@@ -40,7 +40,7 @@ export async function GET(req: Request) {
 // POST /api/center-payments - Record payment, partial payment, or discount
 export async function POST(req: Request) {
   try {
-    const tenantCtx = await requireTenantAccess(undefined, { isWrite: true });
+    const tenantCtx = await requireTenantAccess(req);
     
     if (!tenantCtx.session.user.emailVerified) {
       return NextResponse.json({ error: "Email confirmation required for sensitive actions" }, { status: 403 });
@@ -106,7 +106,7 @@ export async function POST(req: Request) {
 // PATCH /api/center-payments - Issue refund for a payment
 export async function PATCH(req: Request) {
   try {
-    const tenantCtx = await requireTenantAccess(undefined, { isWrite: true });
+    const tenantCtx = await requireTenantAccess(req);
 
     if (!tenantCtx.session.user.emailVerified) {
       return NextResponse.json({ error: "Email confirmation required for sensitive actions" }, { status: 403 });

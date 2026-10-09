@@ -4,7 +4,7 @@ import { checkSubscriptionLimit } from "@/lib/limits";
 
 export async function GET(req: Request) {
   try {
-    const tenantCtx = await requireTenantAccess();
+    const tenantCtx = await requireTenantAccess(req);
     const tenantDb = tenantCtx.getTenantDb();
 
     const courses = await tenantDb.course.findMany({
@@ -30,14 +30,15 @@ export async function GET(req: Request) {
     });
 
     return NextResponse.json({ courses });
-  } catch (err: any) {
-    return NextResponse.json({ error: err.message || "Ошибка загрузки курсов" }, { status: err.status || 400 });
+  } catch (err: unknown) {
+    const error = err as { message?: string; status?: number };
+    return NextResponse.json({ error: error.message || "Ошибка загрузки курсов" }, { status: error.status || 400 });
   }
 }
 
 export async function POST(req: Request) {
   try {
-    const tenantCtx = await requireTenantAccess(undefined, { isWrite: true });
+    const tenantCtx = await requireTenantAccess(req);
     const tenantDb = tenantCtx.getTenantDb();
 
     if (tenantCtx.role !== "DIRECTOR" && tenantCtx.role !== "CENTER_ADMIN") {

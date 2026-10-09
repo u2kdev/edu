@@ -7,7 +7,7 @@ export async function GET(
   { params }: { params: { id: string } } // id = studentMembershipId
 ) {
   try {
-    const tenantCtx = await requireTenantAccess();
+    const tenantCtx = await requireTenantAccess(req);
     const tenantDb = tenantCtx.getTenantDb();
     const studentMembershipId = params.id;
     const currentRole = tenantCtx.role;

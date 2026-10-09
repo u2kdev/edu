@@ -4,7 +4,7 @@ import { sendNotification } from "@/lib/notifications";
 
 export async function GET(req: Request) {
   try {
-    const tenantCtx = await requireTenantAccess();
+    const tenantCtx = await requireTenantAccess(req);
     const tenantDb = tenantCtx.getTenantDb();
     const { searchParams } = new URL(req.url);
     const groupId = searchParams.get("groupId");
@@ -99,7 +99,7 @@ export async function GET(req: Request) {
 
 export async function POST(req: Request) {
   try {
-    const tenantCtx = await requireTenantAccess(undefined, { isWrite: true });
+    const tenantCtx = await requireTenantAccess(req);
     const tenantDb = tenantCtx.getTenantDb();
 
     if (
@@ -187,7 +187,7 @@ export async function POST(req: Request) {
 
 export async function PATCH(req: Request) {
   try {
-    const tenantCtx = await requireTenantAccess(undefined, { isWrite: true });
+    const tenantCtx = await requireTenantAccess(req);
     const tenantDb = tenantCtx.getTenantDb();
     const { id, value, maxValue, comment, lifecycle } = await req.json();
 
@@ -284,7 +284,7 @@ export async function PATCH(req: Request) {
 
 export async function DELETE(req: Request) {
   try {
-    const tenantCtx = await requireTenantAccess(undefined, { isWrite: true });
+    const tenantCtx = await requireTenantAccess(req);
     const tenantDb = tenantCtx.getTenantDb();
 
     if (tenantCtx.role !== "DIRECTOR" && !tenantCtx.isPlatformStaff) {

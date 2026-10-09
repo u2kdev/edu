@@ -1,11 +1,12 @@
-import { requireTenantAccess } from "@/lib/tenant";
+import { requireTenantPageAccess } from "@/lib/tenant";
 import { getAuthSession } from "@/lib/auth";
 import { redirect } from "next/navigation";
 import { ClipboardCheck, CheckCircle2, XCircle, Clock, AlertCircle } from "lucide-react";
 import { t, formatDateLocalized } from "@/i18n";
+import { Prisma } from "@prisma/client";
 
 export default async function CenterAttendancePage() {
-  const tenantCtx = await requireTenantAccess();
+  const tenantCtx = await requireTenantPageAccess();
 
   const session = await getAuthSession();
   if (!session) redirect("/login");
@@ -17,7 +18,7 @@ export default async function CenterAttendancePage() {
   const activeRole = session.activeCenterRole || "";
   const currentMembership = session.memberships.find(m => m.centerId === centerId);
 
-  let whereCondition: any = {
+  const whereCondition: Prisma.AttendanceWhereInput = {
     lesson: { module: { course: { centerId } } },
   };
 

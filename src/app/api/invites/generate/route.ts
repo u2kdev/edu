@@ -5,7 +5,7 @@ import { generateSecureInviteCode } from "@/lib/invites";
 
 export async function POST(req: Request) {
   try {
-    const tenantCtx = await requireTenantAccess(undefined, { isWrite: true });
+    const tenantCtx = await requireTenantAccess(req);
     const tenantDb = tenantCtx.getTenantDb();
     
     // Only Director and Center Admin can generate invite codes

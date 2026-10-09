@@ -1,11 +1,12 @@
-import { requireTenantAccess } from "@/lib/tenant";
+import { requireTenantPageAccess } from "@/lib/tenant";
 import { getAuthSession } from "@/lib/auth";
 import { redirect } from "next/navigation";
 import { Megaphone, Pin, Clock, Users, BookOpen } from "lucide-react";
 import { t, formatDateLocalized } from "@/i18n";
+import { Prisma } from "@prisma/client";
 
 export default async function AnnouncementsPage() {
-  const tenantCtx = await requireTenantAccess();
+  const tenantCtx = await requireTenantPageAccess();
 
   const session = await getAuthSession();
   if (!session) redirect("/login");
@@ -20,7 +21,7 @@ export default async function AnnouncementsPage() {
   const now = new Date();
 
   // Role-scoped query
-  let whereCondition: any = {
+  const whereCondition: Prisma.AnnouncementWhereInput = {
     centerId,
     publishAt: { lte: now },
     OR: [{ expiresAt: null }, { expiresAt: { gte: now } }],

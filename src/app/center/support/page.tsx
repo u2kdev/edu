@@ -1,11 +1,11 @@
-import { requireTenantAccess } from "@/lib/tenant";
+import { requireTenantPageAccess } from "@/lib/tenant";
 import { getAuthSession } from "@/lib/auth";
 import { redirect } from "next/navigation";
 import { HelpCircle, MessageSquare, Plus, Clock } from "lucide-react";
 import { t, formatDateLocalized } from "@/i18n";
 
 export default async function CenterSupportPage() {
-  const tenantCtx = await requireTenantAccess();
+  const tenantCtx = await requireTenantPageAccess();
 
   const session = await getAuthSession();
   if (!session) redirect("/login");

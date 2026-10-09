@@ -5,7 +5,7 @@ import { sendNotification } from "@/lib/notifications";
 // GET /api/attendance?lessonId=xxx - Get attendance for a lesson
 export async function GET(req: Request) {
   try {
-    const tenantCtx = await requireTenantAccess();
+    const tenantCtx = await requireTenantAccess(req);
     const tenantDb = tenantCtx.getTenantDb();
     const { searchParams } = new URL(req.url);
     const lessonId = searchParams.get("lessonId");
@@ -81,7 +81,7 @@ export async function GET(req: Request) {
 // POST /api/attendance - Mark attendance for students (PRESENT, ABSENT, EXCUSED, LATE)
 export async function POST(req: Request) {
   try {
-    const tenantCtx = await requireTenantAccess(undefined, { isWrite: true });
+    const tenantCtx = await requireTenantAccess(req);
     const tenantDb = tenantCtx.getTenantDb();
     if (
       tenantCtx.role !== "DIRECTOR" &&

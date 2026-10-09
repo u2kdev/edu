@@ -1,4 +1,4 @@
-import { requireTenantAccess } from "@/lib/tenant";
+import { requireTenantPageAccess } from "@/lib/tenant";
 import { getAuthSession } from "@/lib/auth";
 import { redirect } from "next/navigation";
 import Link from "next/link";
@@ -10,7 +10,7 @@ import {
 import { t, formatCurrencyLocalized, formatDateLocalized } from "@/i18n";
 
 export default async function CenterDashboardPage() {
-  const tenantCtx = await requireTenantAccess();
+  const tenantCtx = await requireTenantPageAccess();
 
   const session = await getAuthSession();
   if (!session) redirect("/login");

@@ -11,7 +11,7 @@ import crypto from "crypto";
 // GET /api/tenant/staff — List all staff members of the active center
 export async function GET(req: Request) {
   try {
-    const tenantCtx = await requireTenantAccess();
+    const tenantCtx = await requireTenantAccess(req);
     const { session, center, role } = tenantCtx;
     const tenantDb = tenantCtx.getTenantDb();
 
@@ -44,10 +44,11 @@ export async function GET(req: Request) {
     });
 
     return NextResponse.json({ staff: staffMembers });
-  } catch (err: any) {
+  } catch (err: unknown) {
+    const error = err as { message?: string; code?: string; status?: number };
     return NextResponse.json(
-      { error: err.message || "Server error", code: err.code },
-      { status: err.status || (err.message?.includes("Forbidden") ? 403 : 500) }
+      { error: error.message || "Server error", code: error.code },
+      { status: error.status || (error.message?.includes("Forbidden") ? 403 : 500) }
     );
   }
 }
@@ -56,7 +57,7 @@ export async function GET(req: Request) {
 // This creates a User (if new) + CenterMembership and should send an invite
 export async function POST(req: Request) {
   try {
-    const tenantCtx = await requireTenantAccess(undefined, { isWrite: true });
+    const tenantCtx = await requireTenantAccess(req);
     const { session, center, role } = tenantCtx;
     const tenantDb = tenantCtx.getTenantDb();
 
@@ -194,7 +195,7 @@ export async function POST(req: Request) {
 // PATCH /api/tenant/staff — Update staff member status (activate/deactivate)
 export async function PATCH(req: Request) {
   try {
-    const tenantCtx = await requireTenantAccess(undefined, { isWrite: true });
+    const tenantCtx = await requireTenantAccess(req);
     const { session, center, role } = tenantCtx;
     const tenantDb = tenantCtx.getTenantDb();
 
@@ -286,11 +287,12 @@ export async function PATCH(req: Request) {
     });
 
     return NextResponse.json({ success: true, membership: updated });
-  } catch (err: any) {
+  } catch (err: unknown) {
     console.error("Staff update error:", err);
+    const error = err as { message?: string };
     return NextResponse.json(
-      { error: err.message || "Server error" },
-      { status: err.message?.includes("Forbidden") ? 403 : 500 }
+      { error: error?.message || "Server error" },
+      { status: error?.message?.includes("Forbidden") ? 403 : 500 }
     );
   }
 }

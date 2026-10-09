@@ -1,16 +1,17 @@
 import { NextResponse } from "next/server";
 import { requireTenantAccess, logAuditEvent } from "@/lib/tenant";
 import { sendNotification } from "@/lib/notifications";
+import { Prisma } from "@prisma/client";
 
 // GET /api/homework?lessonId=xxx - List homeworks for a lesson (tenant-scoped)
 export async function GET(req: Request) {
   try {
-    const tenantCtx = await requireTenantAccess();
+    const tenantCtx = await requireTenantAccess(req);
     const tenantDb = tenantCtx.getTenantDb();
     const { searchParams } = new URL(req.url);
     const lessonId = searchParams.get("lessonId");
 
-    let whereCondition: any = {
+    let whereCondition: Prisma.HomeworkWhereInput = {
       lesson: { module: { course: { centerId: tenantCtx.center.id } } },
     };
 
@@ -71,7 +72,7 @@ export async function GET(req: Request) {
 // POST /api/homework - Create homework linked to a lesson
 export async function POST(req: Request) {
   try {
-    const tenantCtx = await requireTenantAccess(undefined, { isWrite: true });
+    const tenantCtx = await requireTenantAccess(req);
     const tenantDb = tenantCtx.getTenantDb();
 
     if (
@@ -188,7 +189,7 @@ export async function POST(req: Request) {
 // PATCH /api/homework - Submit or Grade homework
 export async function PATCH(req: Request) {
   try {
-    const tenantCtx = await requireTenantAccess(undefined, { isWrite: true });
+    const tenantCtx = await requireTenantAccess(req);
     const tenantDb = tenantCtx.getTenantDb();
     const { action, homeworkId, submissionText, filesJson, grade, feedback, studentMembershipId } = await req.json();
 

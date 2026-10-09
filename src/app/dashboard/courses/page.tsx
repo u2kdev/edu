@@ -1,10 +1,10 @@
-import { requireTenantAccess } from "@/lib/tenant";
+import { requireTenantPageAccess } from "@/lib/tenant";
 import { getAuthSession } from "@/lib/auth";
 import { redirect } from "next/navigation";
 import CourseManager from "@/components/CourseManager";
 
 export default async function CoursesPage() {
-  const tenantCtx = await requireTenantAccess();
+  const tenantCtx = await requireTenantPageAccess();
 
   const session = await getAuthSession();
   if (!session) redirect("/login");

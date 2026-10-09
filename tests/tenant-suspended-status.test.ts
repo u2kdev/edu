@@ -59,7 +59,8 @@ describe("TRUST-2 Item 7: requireTenantAccess PAUSED blocking, DB membership che
 
   it("PAUSED blocks DIRECTOR by default", async () => {
     mockToken = signJWT({ userId: directorUserId, email: "dir@t2i7.com", platformRole: "NONE" });
-    await expect(requireTenantAccess(pausedCenterId)).rejects.toMatchObject({
+    const req = new Request("http://localhost/api/test");
+    await expect(requireTenantAccess(req, pausedCenterId)).rejects.toMatchObject({
       status: 403,
       code: "CENTER_SUSPENDED",
     });
@@ -67,14 +68,16 @@ describe("TRUST-2 Item 7: requireTenantAccess PAUSED blocking, DB membership che
 
   it("PAUSED allows access when allowSuspended is true (resume / status read page)", async () => {
     mockToken = signJWT({ userId: directorUserId, email: "dir@t2i7.com", platformRole: "NONE" });
-    const ctx = await requireTenantAccess(pausedCenterId, { allowSuspended: true });
+    const req = new Request("http://localhost/api/test");
+    const ctx = await requireTenantAccess(req, pausedCenterId, { allowSuspended: true });
     expect(ctx.center.id).toBe(pausedCenterId);
     expect(ctx.role).toBe("DIRECTOR");
   });
 
   it("PAUSED blocks DIRECTOR on write even if allowSuspended is true", async () => {
     mockToken = signJWT({ userId: directorUserId, email: "dir@t2i7.com", platformRole: "NONE" });
-    await expect(requireTenantAccess(pausedCenterId, { allowSuspended: true, isWrite: true })).rejects.toMatchObject({
+    const req = new Request("http://localhost/api/test", { method: "POST" });
+    await expect(requireTenantAccess(req, pausedCenterId, { allowSuspended: true, isWrite: true })).rejects.toMatchObject({
       status: 403,
       code: "CENTER_SUSPENDED_WRITE",
     });
@@ -82,7 +85,8 @@ describe("TRUST-2 Item 7: requireTenantAccess PAUSED blocking, DB membership che
 
   it("PAUSED center getTenantDb blocks write operations in database layer", async () => {
     mockToken = signJWT({ userId: directorUserId, email: "dir@t2i7.com", platformRole: "NONE" });
-    const ctx = await requireTenantAccess(pausedCenterId, { allowSuspended: true });
+    const req = new Request("http://localhost/api/test");
+    const ctx = await requireTenantAccess(req, pausedCenterId, { allowSuspended: true });
     const tenantDb = ctx.getTenantDb();
     await expect(
       tenantDb.course.create({
@@ -98,7 +102,8 @@ describe("TRUST-2 Item 7: requireTenantAccess PAUSED blocking, DB membership che
   it("checks membership from DB: rejects if DB membership status is not ACTIVE", async () => {
     // JWT has token, but DB membership status is BLOCKED
     mockToken = signJWT({ userId: inactiveMemberUserId, email: "inact@t2i7.com", platformRole: "NONE" });
-    await expect(requireTenantAccess(activeCenterId)).rejects.toMatchObject({
+    const req = new Request("http://localhost/api/test");
+    await expect(requireTenantAccess(req, activeCenterId)).rejects.toMatchObject({
       status: 403,
       code: "MEMBERSHIP_INACTIVE",
     });

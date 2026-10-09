@@ -1,14 +1,15 @@
-import { requireTenantAccess } from "@/lib/tenant";
+import { requireTenantPageAccess } from "@/lib/tenant";
 import { getAuthSession } from "@/lib/auth";
 import { redirect } from "next/navigation";
 import { CalendarDays, Clock, MapPin, Video, UserCheck, Building2, BookOpen } from "lucide-react";
 import { t } from "@/i18n";
+import { Prisma } from "@prisma/client";
 
 const DAY_NAMES_RU = ["", "Пн", "Вт", "Ср", "Чт", "Пт", "Сб", "Вс"];
 const DAY_NAMES_FULL = ["", "Понедельник", "Вторник", "Среда", "Четверг", "Пятница", "Суббота", "Воскресенье"];
 
 export default async function CenterSchedulePage() {
-  const tenantCtx = await requireTenantAccess();
+  const tenantCtx = await requireTenantPageAccess();
 
   const session = await getAuthSession();
   if (!session) redirect("/login");
@@ -21,7 +22,7 @@ export default async function CenterSchedulePage() {
   const currentMembership = session.memberships.find((m) => m.centerId === centerId);
 
   // Build role-scoped schedule query
-  let whereCondition: any = { centerId, status: "ACTIVE" };
+  const whereCondition: Prisma.ScheduleSlotWhereInput = { centerId, status: "ACTIVE" };
 
   if (activeRole === "TEACHER" && currentMembership) {
     whereCondition.teacherMembershipId = currentMembership.id;

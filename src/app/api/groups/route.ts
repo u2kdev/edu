@@ -1,12 +1,13 @@
 import { NextResponse } from "next/server";
 import { requireTenantAccess } from "@/lib/tenant";
+import { Prisma } from "@prisma/client";
 
 export async function GET(req: Request) {
   try {
-    const tenantCtx = await requireTenantAccess();
+    const tenantCtx = await requireTenantAccess(req);
     const tenantDb = tenantCtx.getTenantDb();
 
-    let whereCondition: any = {};
+    const whereCondition: Prisma.GroupWhereInput = {};
 
     // If teacher, only return groups assigned to this teacher
     if (tenantCtx.role === "TEACHER" && tenantCtx.membership) {
@@ -32,14 +33,15 @@ export async function GET(req: Request) {
     });
 
     return NextResponse.json({ groups });
-  } catch (err: any) {
-    return NextResponse.json({ error: err.message || "Ошибка загрузки групп" }, { status: (err as { status?: number })?.status || 400 });
+  } catch (err: unknown) {
+    const error = err as { message?: string; status?: number };
+    return NextResponse.json({ error: error.message || "Ошибка загрузки групп" }, { status: error.status || 400 });
   }
 }
 
 export async function POST(req: Request) {
   try {
-    const tenantCtx = await requireTenantAccess(undefined, { isWrite: true });
+    const tenantCtx = await requireTenantAccess(req);
     const tenantDb = tenantCtx.getTenantDb();
 
     if (tenantCtx.role !== "DIRECTOR" && tenantCtx.role !== "CENTER_ADMIN") {
@@ -84,7 +86,8 @@ export async function POST(req: Request) {
     });
 
     return NextResponse.json({ success: true, group });
-  } catch (err: any) {
-    return NextResponse.json({ error: err.message || "Ошибка создания группы" }, { status: (err as { status?: number })?.status || 400 });
+  } catch (err: unknown) {
+    const error = err as { message?: string; status?: number };
+    return NextResponse.json({ error: error.message || "Ошибка создания группы" }, { status: error.status || 400 });
   }
 }

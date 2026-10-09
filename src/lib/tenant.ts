@@ -70,18 +70,21 @@ export class TenantMembershipError extends TenantAccessError {
 export const CENTER_SUSPENDED_STATUSES = ["BLOCKED", "CANCELLED", "PAUSED", "OVERDUE"] as const;
 
 export async function requireTenantAccess(
-  expectedCenterIdOrReq?: string | Request,
-  optionsOrReq?: { isWrite?: boolean; allowSuspended?: boolean } | Request
+  req: Request,
+  expectedCenterIdOrOptions?: string | { isWrite?: boolean; allowSuspended?: boolean },
+  maybeOptions?: { isWrite?: boolean; allowSuspended?: boolean }
 ) {
-  const req = expectedCenterIdOrReq instanceof Request
-    ? expectedCenterIdOrReq
-    : (optionsOrReq instanceof Request ? optionsOrReq : undefined);
+  if (!req || typeof req !== "object" || !("method" in req)) {
+    throw new Error("requireTenantAccess requires a Request object as its first argument");
+  }
 
-  const expectedCenterId = typeof expectedCenterIdOrReq === "string" ? expectedCenterIdOrReq : undefined;
-  const options = optionsOrReq && !(optionsOrReq instanceof Request) ? optionsOrReq : undefined;
+  const expectedCenterId =
+    typeof expectedCenterIdOrOptions === "string" ? expectedCenterIdOrOptions : undefined;
+  const options =
+    typeof expectedCenterIdOrOptions === "object" ? expectedCenterIdOrOptions : maybeOptions;
 
   let isWrite = options?.isWrite;
-  if (isWrite === undefined && req) {
+  if (isWrite === undefined) {
     const method = req.method?.toUpperCase();
     isWrite = ["POST", "PUT", "PATCH", "DELETE"].includes(method);
   }
@@ -186,4 +189,11 @@ export async function requireTenantAccess(
     isReadOnly,
     getTenantDb: () => getTenantDb(center.id, { isReadOnly }),
   };
+}
+
+export async function requireTenantPageAccess(
+  options?: { expectedCenterId?: string; allowSuspended?: boolean }
+) {
+  const req = new Request("http://localhost/rsc", { method: "GET" });
+  return requireTenantAccess(req, options);
 }

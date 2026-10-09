@@ -17,7 +17,7 @@ export async function POST(req: Request) {
 
     // Action 1: Admin generates a parent invite code tied to a specific student
     if (action === "INITIATE_BY_ADMIN") {
-      const tenantCtx = await requireTenantAccess(undefined, { isWrite: true });
+      const tenantCtx = await requireTenantAccess(req);
       const tenantDb = tenantCtx.getTenantDb();
       
       if (tenantCtx.role !== "DIRECTOR" && tenantCtx.role !== "CENTER_ADMIN") {

@@ -5,7 +5,7 @@ import { checkSubscriptionLimit } from "@/lib/limits";
 // GET /api/tenant/branches - List branches for active center
 export async function GET(req: Request) {
   try {
-    const tenantCtx = await requireTenantAccess();
+    const tenantCtx = await requireTenantAccess(req);
     const tenantDb = tenantCtx.getTenantDb();
 
     const branches = await tenantDb.branch.findMany({
@@ -16,15 +16,16 @@ export async function GET(req: Request) {
     });
 
     return NextResponse.json({ branches });
-  } catch (err: any) {
-    return NextResponse.json({ error: err.message || "Server error" }, { status: (err as { status?: number })?.status || 400 });
+  } catch (err: unknown) {
+    const error = err as { message?: string; status?: number };
+    return NextResponse.json({ error: error.message || "Server error" }, { status: error.status || 400 });
   }
 }
 
 // POST /api/tenant/branches - Create a branch (DIRECTOR/CENTER_ADMIN only)
 export async function POST(req: Request) {
   try {
-    const tenantCtx = await requireTenantAccess(undefined, { isWrite: true });
+    const tenantCtx = await requireTenantAccess(req);
     const tenantDb = tenantCtx.getTenantDb();
 
     if (tenantCtx.role !== "DIRECTOR" && tenantCtx.role !== "CENTER_ADMIN" && !tenantCtx.isPlatformStaff) {
@@ -62,15 +63,16 @@ export async function POST(req: Request) {
     });
 
     return NextResponse.json({ success: true, branch });
-  } catch (err: any) {
-    return NextResponse.json({ error: err.message || "Server error" }, { status: (err as { status?: number })?.status || 400 });
+  } catch (err: unknown) {
+    const error = err as { message?: string; status?: number };
+    return NextResponse.json({ error: error.message || "Server error" }, { status: error.status || 400 });
   }
 }
 
 // PATCH /api/tenant/branches - Update a branch
 export async function PATCH(req: Request) {
   try {
-    const tenantCtx = await requireTenantAccess(undefined, { isWrite: true });
+    const tenantCtx = await requireTenantAccess(req);
     const tenantDb = tenantCtx.getTenantDb();
 
     if (tenantCtx.role !== "DIRECTOR" && tenantCtx.role !== "CENTER_ADMIN" && !tenantCtx.isPlatformStaff) {
@@ -105,15 +107,16 @@ export async function PATCH(req: Request) {
     });
 
     return NextResponse.json({ success: true, branch });
-  } catch (err: any) {
-    return NextResponse.json({ error: err.message || "Server error" }, { status: (err as { status?: number })?.status || 400 });
+  } catch (err: unknown) {
+    const error = err as { message?: string; status?: number };
+    return NextResponse.json({ error: error.message || "Server error" }, { status: error.status || 400 });
   }
 }
 
 // DELETE /api/tenant/branches - Delete a branch (DIRECTOR only, if no active groups)
 export async function DELETE(req: Request) {
   try {
-    const tenantCtx = await requireTenantAccess(undefined, { isWrite: true });
+    const tenantCtx = await requireTenantAccess(req);
     const tenantDb = tenantCtx.getTenantDb();
 
     if (tenantCtx.role !== "DIRECTOR" && !tenantCtx.isPlatformStaff) {
@@ -147,7 +150,8 @@ export async function DELETE(req: Request) {
     });
 
     return NextResponse.json({ success: true });
-  } catch (err: any) {
-    return NextResponse.json({ error: err.message || "Server error" }, { status: (err as { status?: number })?.status || 400 });
+  } catch (err: unknown) {
+    const error = err as { message?: string; status?: number };
+    return NextResponse.json({ error: error.message || "Server error" }, { status: error.status || 400 });
   }
 }

@@ -1,10 +1,11 @@
-import { requireTenantAccess } from "@/lib/tenant";
+import { requireTenantPageAccess } from "@/lib/tenant";
 import { getAuthSession } from "@/lib/auth";
 import { redirect } from "next/navigation";
 import PaymentsManager from "@/components/PaymentsManager";
+import { Prisma } from "@prisma/client";
 
 export default async function CenterPaymentsPage() {
-  const tenantCtx = await requireTenantAccess();
+  const tenantCtx = await requireTenantPageAccess();
 
   const session = await getAuthSession();
   if (!session) redirect("/login");
@@ -15,8 +16,8 @@ export default async function CenterPaymentsPage() {
   const activeRole = session.activeCenterRole || "";
   const currentMembership = session.memberships.find(m => m.centerId === centerId);
 
-  let whereCondition: any = { centerId };
-  let studentsWhereCondition: any = { centerId, role: "STUDENT" };
+  const whereCondition: Prisma.CenterPaymentWhereInput = { centerId };
+  const studentsWhereCondition: Prisma.CenterMembershipWhereInput = { centerId, role: "STUDENT" };
 
   if (activeRole === "STUDENT" && currentMembership) {
     whereCondition.studentMembershipId = currentMembership.id;

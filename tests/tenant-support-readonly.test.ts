@@ -53,14 +53,16 @@ describe("TRUST-2 Item 1: requireTenantAccess platform roles security", () => {
 
   it("PLATFORM_SUPPORT does not receive DIRECTOR and is marked read-only", async () => {
     mockToken = signJWT({ userId: supportUserId, email: "support@t2i1.com", platformRole: "PLATFORM_SUPPORT" });
-    const ctx = await requireTenantAccess(centerId);
+    const req = new Request("http://localhost/api/test");
+    const ctx = await requireTenantAccess(req, centerId);
     expect(ctx.role).not.toBe("DIRECTOR");
     expect(ctx.isReadOnly).toBe(true);
   });
 
   it("PLATFORM_SUPPORT gets 403 on write operation", async () => {
     mockToken = signJWT({ userId: supportUserId, email: "support@t2i1.com", platformRole: "PLATFORM_SUPPORT" });
-    await expect(requireTenantAccess(centerId, { isWrite: true })).rejects.toMatchObject({
+    const req = new Request("http://localhost/api/test", { method: "POST" });
+    await expect(requireTenantAccess(req, centerId)).rejects.toMatchObject({
       status: 403,
       code: "SUPPORT_READ_ONLY",
     });
@@ -68,12 +70,14 @@ describe("TRUST-2 Item 1: requireTenantAccess platform roles security", () => {
 
   it("FULL_ACCESS is removed from bypass and cannot access without membership", async () => {
     mockToken = signJWT({ userId: fullAccessUserId, email: "full@t2i1.com", platformRole: "FULL_ACCESS" });
-    await expect(requireTenantAccess(centerId)).rejects.toThrow("Forbidden: You do not have access to this learning center");
+    const req = new Request("http://localhost/api/test");
+    await expect(requireTenantAccess(req, centerId)).rejects.toThrow("Forbidden: You do not have access to this learning center");
   });
 
   it("Platform role entry writes AuditLog record", async () => {
     mockToken = signJWT({ userId: devUserId, email: "dev@t2i1.com", platformRole: "DEVELOPER" });
-    await requireTenantAccess(centerId);
+    const req = new Request("http://localhost/api/test");
+    await requireTenantAccess(req, centerId);
 
     const log = await db.auditLog.findFirst({
       where: {

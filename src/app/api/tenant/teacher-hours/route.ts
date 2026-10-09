@@ -4,7 +4,7 @@ import { requireTenantAccess } from "@/lib/tenant";
 // GET /api/tenant/teacher-hours - Teacher academic hours and salary report for Director/Admin
 export async function GET(req: Request) {
   try {
-    const tenantCtx = await requireTenantAccess();
+    const tenantCtx = await requireTenantAccess(req);
     const tenantDb = tenantCtx.getTenantDb();
 
     if (tenantCtx.role !== "DIRECTOR" && tenantCtx.role !== "CENTER_ADMIN" && !tenantCtx.isPlatformStaff) {
@@ -47,7 +47,8 @@ export async function GET(req: Request) {
     });
 
     return NextResponse.json({ teacherReport: report });
-  } catch (err: any) {
-    return NextResponse.json({ error: err.message || "Server error" }, { status: (err as { status?: number })?.status || 500 });
+  } catch (err: unknown) {
+    const error = err as { message?: string; status?: number };
+    return NextResponse.json({ error: error.message || "Server error" }, { status: error.status || 500 });
   }
 }

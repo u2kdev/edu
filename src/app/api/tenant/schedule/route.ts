@@ -1,11 +1,14 @@
 import { NextResponse } from "next/server";
 import { requireTenantAccess, logAuditEvent } from "@/lib/tenant";
 import { sendNotification } from "@/lib/notifications";
+import { Prisma } from "@prisma/client";
 
 // ─── Conflict Detection Helper ───────────────────────────────────────────────
 
+type TenantDb = ReturnType<Awaited<ReturnType<typeof requireTenantAccess>>["getTenantDb"]>;
+
 interface ConflictCheckParams {
-  tenantDb: any;
+  tenantDb: TenantDb;
   groupId: string;
   teacherMembershipId: string;
   branchId?: string | null;
@@ -76,14 +79,14 @@ async function detectConflicts(params: ConflictCheckParams) {
 
 export async function GET(req: Request) {
   try {
-    const tenantCtx = await requireTenantAccess();
+    const tenantCtx = await requireTenantAccess(req);
     const tenantDb = tenantCtx.getTenantDb();
     const { searchParams } = new URL(req.url);
     const groupId = searchParams.get("groupId");
     const branchId = searchParams.get("branchId");
     const dayOfWeek = searchParams.get("dayOfWeek");
 
-    let whereCondition: any = { status: "ACTIVE" };
+    const whereCondition: Prisma.ScheduleSlotWhereInput = { status: "ACTIVE" };
 
     if (groupId) {
       const group = await tenantDb.group.findFirst({
@@ -139,8 +142,9 @@ export async function GET(req: Request) {
     });
 
     return NextResponse.json({ slots });
-  } catch (err: any) {
-    return NextResponse.json({ error: err.message || "Server error" }, { status: (err as { status?: number })?.status || 400 });
+  } catch (err: unknown) {
+    const error = err as { message?: string; status?: number };
+    return NextResponse.json({ error: error.message || "Server error" }, { status: error.status || 400 });
   }
 }
 
@@ -148,7 +152,7 @@ export async function GET(req: Request) {
 
 export async function POST(req: Request) {
   try {
-    const tenantCtx = await requireTenantAccess(undefined, { isWrite: true });
+    const tenantCtx = await requireTenantAccess(req);
     const tenantDb = tenantCtx.getTenantDb();
 
     if (
@@ -221,8 +225,9 @@ export async function POST(req: Request) {
     });
 
     return NextResponse.json({ success: true, slot });
-  } catch (err: any) {
-    return NextResponse.json({ error: err.message || "Server error" }, { status: (err as { status?: number })?.status || 400 });
+  } catch (err: unknown) {
+    const error = err as { message?: string; status?: number };
+    return NextResponse.json({ error: error.message || "Server error" }, { status: error.status || 400 });
   }
 }
 
@@ -230,7 +235,7 @@ export async function POST(req: Request) {
 
 export async function PATCH(req: Request) {
   try {
-    const tenantCtx = await requireTenantAccess(undefined, { isWrite: true });
+    const tenantCtx = await requireTenantAccess(req);
     const tenantDb = tenantCtx.getTenantDb();
 
     if (
@@ -346,8 +351,9 @@ export async function PATCH(req: Request) {
     }
 
     return NextResponse.json({ success: true, slot });
-  } catch (err: any) {
-    return NextResponse.json({ error: err.message || "Server error" }, { status: (err as { status?: number })?.status || 400 });
+  } catch (err: unknown) {
+    const error = err as { message?: string; status?: number };
+    return NextResponse.json({ error: error.message || "Server error" }, { status: error.status || 400 });
   }
 }
 
@@ -355,7 +361,7 @@ export async function PATCH(req: Request) {
 
 export async function DELETE(req: Request) {
   try {
-    const tenantCtx = await requireTenantAccess(undefined, { isWrite: true });
+    const tenantCtx = await requireTenantAccess(req);
     const tenantDb = tenantCtx.getTenantDb();
 
     if (tenantCtx.role !== "DIRECTOR" && tenantCtx.role !== "CENTER_ADMIN" && !tenantCtx.isPlatformStaff) {
@@ -381,7 +387,8 @@ export async function DELETE(req: Request) {
     });
 
     return NextResponse.json({ success: true });
-  } catch (err: any) {
-    return NextResponse.json({ error: err.message || "Server error" }, { status: (err as { status?: number })?.status || 400 });
+  } catch (err: unknown) {
+    const error = err as { message?: string; status?: number };
+    return NextResponse.json({ error: error.message || "Server error" }, { status: error.status || 400 });
   }
 }
