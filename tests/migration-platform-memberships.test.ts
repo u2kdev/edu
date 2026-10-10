@@ -7,23 +7,35 @@ import path from "path";
 describe("TRUST-3c Item 2: Migration deletes platform CenterMemberships and transfers references to SetNull", () => {
   let center: LearningCenter;
   let owner: PlatformUser;
-  let superAdmin: PlatformUser;
+  let impersonatedAdmin: PlatformUser;
+  let platformTeacher: PlatformUser;
+  let studentUser: PlatformUser;
   let normalTeacher: PlatformUser;
 
   let ownerMember: CenterMembership;
-  let superAdminMember: CenterMembership;
+  let impersonatedAdminMember: CenterMembership;
+  let platformTeacherMember: CenterMembership;
+  let studentMember: CenterMembership;
   let normalTeacherMember: CenterMembership;
 
-  let groupWithAdminTeacher: Group;
+  let groupWithPlatformTeacher: Group;
   let groupWithNormalTeacher: Group;
+  let gradeWithPlatformTeacher: { id: string };
+  let attendanceWithPlatformTeacher: { id: string };
 
   beforeAll(async () => {
     const ts = Date.now();
     owner = await db.platformUser.create({
       data: { email: `owner_mig_${ts}@test.com`, passwordHash: "x", fullName: "Owner Mig" },
     });
-    superAdmin = await db.platformUser.create({
-      data: { email: `sa_mig_${ts}@test.com`, passwordHash: "x", fullName: "Super Admin Mig", platformRole: "SUPERADMIN" },
+    impersonatedAdmin = await db.platformUser.create({
+      data: { email: `imp_mig_${ts}@test.com`, passwordHash: "x", fullName: "Impersonated Admin Mig", platformRole: "SUPERADMIN" },
+    });
+    platformTeacher = await db.platformUser.create({
+      data: { email: `plat_teacher_${ts}@test.com`, passwordHash: "x", fullName: "Platform Teacher Mig", platformRole: "DEVELOPER" },
+    });
+    studentUser = await db.platformUser.create({
+      data: { email: `student_mig_${ts}@test.com`, passwordHash: "x", fullName: "Student Mig", platformRole: "NONE" },
     });
     normalTeacher = await db.platformUser.create({
       data: { email: `teacher_mig_${ts}@test.com`, passwordHash: "x", fullName: "Normal Teacher Mig", platformRole: "NONE" },
@@ -36,8 +48,14 @@ describe("TRUST-3c Item 2: Migration deletes platform CenterMemberships and tran
     ownerMember = await db.centerMembership.create({
       data: { centerId: center.id, userId: owner.id, role: "DIRECTOR" },
     });
-    superAdminMember = await db.centerMembership.create({
-      data: { centerId: center.id, userId: superAdmin.id, role: "DIRECTOR" },
+    impersonatedAdminMember = await db.centerMembership.create({
+      data: { centerId: center.id, userId: impersonatedAdmin.id, role: "DIRECTOR" },
+    });
+    platformTeacherMember = await db.centerMembership.create({
+      data: { centerId: center.id, userId: platformTeacher.id, role: "TEACHER" },
+    });
+    studentMember = await db.centerMembership.create({
+      data: { centerId: center.id, userId: studentUser.id, role: "STUDENT" },
     });
     normalTeacherMember = await db.centerMembership.create({
       data: { centerId: center.id, userId: normalTeacher.id, role: "TEACHER" },
@@ -47,13 +65,13 @@ describe("TRUST-3c Item 2: Migration deletes platform CenterMemberships and tran
       data: { centerId: center.id, title: "Course Mig", createdByMembershipId: ownerMember.id },
     });
 
-    // Group assigned to superAdmin teacher
-    groupWithAdminTeacher = await db.group.create({
+    // Group assigned to platformTeacher
+    groupWithPlatformTeacher = await db.group.create({
       data: {
         centerId: center.id,
         courseId: course.id,
-        name: "Admin Group",
-        teacherMembershipId: superAdminMember.id,
+        name: "Platform Teacher Group",
+        teacherMembershipId: platformTeacherMember.id,
       },
     });
 
@@ -66,25 +84,74 @@ describe("TRUST-3c Item 2: Migration deletes platform CenterMemberships and tran
         teacherMembershipId: normalTeacherMember.id,
       },
     });
+
+    const courseModule = await db.courseModule.create({
+      data: { centerId: center.id, courseId: course.id, title: "Module 1" },
+    });
+
+    // Lesson
+    const lesson = await db.lesson.create({
+      data: {
+        centerId: center.id,
+        moduleId: courseModule.id,
+        title: "Lesson 1",
+      },
+    });
+
+    // Attendance marked by platformTeacher
+    attendanceWithPlatformTeacher = await db.attendance.create({
+      data: {
+        lessonId: lesson.id,
+        studentMembershipId: studentMember.id,
+        groupId: groupWithPlatformTeacher.id,
+        markedByMembershipId: platformTeacherMember.id,
+        status: "PRESENT",
+      },
+    });
+
+    // Grade given by platformTeacher
+    gradeWithPlatformTeacher = await db.grade.create({
+      data: {
+        centerId: center.id,
+        studentMembershipId: studentMember.id,
+        groupId: groupWithPlatformTeacher.id,
+        teacherMembershipId: platformTeacherMember.id,
+        value: 95,
+        gradeType: "HOMEWORK",
+      },
+    });
   });
 
   afterAll(async () => {
+    await db.grade.deleteMany({ where: { centerId: center.id } });
+    await db.attendance.deleteMany({ where: { groupId: groupWithPlatformTeacher.id } });
+    await db.lesson.deleteMany({ where: { centerId: center.id } });
     await db.group.deleteMany({ where: { centerId: center.id } });
+    await db.courseModule.deleteMany({ where: { centerId: center.id } });
     await db.course.deleteMany({ where: { centerId: center.id } });
     await db.centerMembership.deleteMany({ where: { centerId: center.id } });
     await db.learningCenter.deleteMany({ where: { id: center.id } });
-    await db.platformUser.deleteMany({ where: { id: { in: [owner.id, superAdmin.id, normalTeacher.id] } } });
+    await db.platformUser.deleteMany({
+      where: {
+        id: {
+          in: [owner.id, impersonatedAdmin.id, platformTeacher.id, studentUser.id, normalTeacher.id],
+        },
+      },
+    });
   });
 
-  it("data before migration: superAdmin has CenterMembership and is assigned as group teacher", async () => {
-    const saMember = await db.centerMembership.findUnique({ where: { id: superAdminMember.id } });
-    expect(saMember).not.toBeNull();
+  it("data before migration: impersonated admin has membership, platform teacher has real grades and attendance", async () => {
+    const impMember = await db.centerMembership.findUnique({ where: { id: impersonatedAdminMember.id } });
+    expect(impMember).not.toBeNull();
 
-    const group = await db.group.findUnique({ where: { id: groupWithAdminTeacher.id } });
-    expect(group?.teacherMembershipId).toBe(superAdminMember.id);
+    const ptMember = await db.centerMembership.findUnique({ where: { id: platformTeacherMember.id } });
+    expect(ptMember).not.toBeNull();
+
+    const group = await db.group.findUnique({ where: { id: groupWithPlatformTeacher.id } });
+    expect(group?.teacherMembershipId).toBe(platformTeacherMember.id);
   });
 
-  it("executing migration SQL sets nullable references to NULL and removes platform CenterMembership", async () => {
+  it("executing migration SQL: removes empty impersonation memberships, preserves platform teacher with real data and references", async () => {
     const migrationPath = path.resolve(
       process.cwd(),
       "prisma/migrations/20261009192930_remove_platform_memberships/migration.sql"
@@ -102,19 +169,30 @@ describe("TRUST-3c Item 2: Migration deletes platform CenterMemberships and tran
       await db.$executeRawUnsafe(stmt);
     }
 
-    // 1. superAdmin membership is DELETED
-    const saMemberAfter = await db.centerMembership.findUnique({ where: { id: superAdminMember.id } });
-    expect(saMemberAfter).toBeNull();
+    // 1. impersonatedAdmin membership (no data) is DELETED
+    const impMemberAfter = await db.centerMembership.findUnique({ where: { id: impersonatedAdminMember.id } });
+    expect(impMemberAfter).toBeNull();
 
-    // 2. groupWithAdminTeacher has teacherMembershipId = null (SetNull)
-    const adminGroupAfter = await db.group.findUnique({ where: { id: groupWithAdminTeacher.id } });
-    expect(adminGroupAfter?.teacherMembershipId).toBeNull();
+    // 2. platformTeacher membership (has real data) is PRESERVED
+    const ptMemberAfter = await db.centerMembership.findUnique({ where: { id: platformTeacherMember.id } });
+    expect(ptMemberAfter).not.toBeNull();
+    expect(ptMemberAfter?.role).toBe("TEACHER");
 
-    // 3. normal teacher membership is UNTOUCHED
+    // 3. groupWithPlatformTeacher retains platformTeacher (NOT set to null)
+    const ptGroupAfter = await db.group.findUnique({ where: { id: groupWithPlatformTeacher.id } });
+    expect(ptGroupAfter?.teacherMembershipId).toBe(platformTeacherMember.id);
+
+    // 4. grade and attendance retain platformTeacher
+    const gradeAfter = await db.grade.findUnique({ where: { id: gradeWithPlatformTeacher.id } });
+    expect(gradeAfter?.teacherMembershipId).toBe(platformTeacherMember.id);
+
+    const attAfter = await db.attendance.findUnique({ where: { id: attendanceWithPlatformTeacher.id } });
+    expect(attAfter?.markedByMembershipId).toBe(platformTeacherMember.id);
+
+    // 5. normal teacher data is UNTOUCHED
     const normalMemberAfter = await db.centerMembership.findUnique({ where: { id: normalTeacherMember.id } });
     expect(normalMemberAfter).not.toBeNull();
 
-    // 4. normal teacher group is UNTOUCHED
     const normalGroupAfter = await db.group.findUnique({ where: { id: groupWithNormalTeacher.id } });
     expect(normalGroupAfter?.teacherMembershipId).toBe(normalTeacherMember.id);
   });
