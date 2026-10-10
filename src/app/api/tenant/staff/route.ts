@@ -183,11 +183,12 @@ export async function POST(req: Request) {
       // Only include temp password in development
       ...(process.env.NODE_ENV === "development" ? { tempPassword } : {}),
     });
-  } catch (err: any) {
+  } catch (err: unknown) {
     console.error("Staff creation error:", err);
+    const error = err as { message?: string };
     return NextResponse.json(
-      { error: err.message || "Server error" },
-      { status: err.message?.includes("Forbidden") ? 403 : 500 }
+      { error: error?.message || "Server error" },
+      { status: error?.message?.includes("Forbidden") ? 403 : 500 }
     );
   }
 }
@@ -247,8 +248,8 @@ export async function PATCH(req: Request) {
       );
     }
 
-    const updateData: any = {};
-    if (status && ["ACTIVE", "INACTIVE", "SUSPENDED"].includes(status)) {
+    const updateData: { status?: string; role?: string } = {};
+    if (status && ["ACTIVE", "INACTIVE", "SUSPENDED", "ARCHIVED"].includes(status)) {
       updateData.status = status;
     }
     if (newRole && ["CENTER_ADMIN", "TEACHER", "CENTER_SUPPORT"].includes(newRole)) {

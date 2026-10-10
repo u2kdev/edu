@@ -55,10 +55,7 @@ describe("TRUST-3b Item 4: Audit Cascade Foreign Keys to CenterMembership", () =
     const allowedCascadeModels = [
       "ParentLink",
       "Enrollment",
-      "Attendance",
       "HomeworkSubmission",
-      "Grade",
-      "CenterPayment",
       "TestAttempt",
       "PerformanceSnapshot",
       "ActivityLog",
@@ -69,6 +66,15 @@ describe("TRUST-3b Item 4: Audit Cascade Foreign Keys to CenterMembership", () =
         allowedCascadeModels.includes(rel.model),
         `Unexpected Cascade relation found on model ${rel.model}.${rel.field}`
       ).toBe(true);
+    }
+  });
+
+  it("CenterPayment, Grade, and Attendance student relations are strictly Restrict", () => {
+    const studentRestrictModels = ["CenterPayment", "Grade", "Attendance"];
+    for (const modelName of studentRestrictModels) {
+      const model = models.find((m) => m.name === modelName);
+      const studentField = model?.fields.find((f) => f.name === "student");
+      expect(studentField?.relationOnDelete).toBe("Restrict");
     }
   });
 });

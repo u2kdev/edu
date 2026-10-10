@@ -459,7 +459,7 @@ model Attendance {
   updatedAt            DateTime @updatedAt
 
   lesson  Lesson           @relation(fields: [lessonId], references: [id], onDelete: Cascade)
-  student CenterMembership @relation("StudentAttendances", fields: [studentMembershipId], references: [id], onDelete: Cascade)
+  student CenterMembership @relation("StudentAttendances", fields: [studentMembershipId], references: [id], onDelete: Restrict)
   marker  CenterMembership @relation("MarkerAttendances", fields: [markedByMembershipId], references: [id], onDelete: Restrict)
 
   @@unique([lessonId, studentMembershipId])
@@ -544,7 +544,7 @@ model Grade {
   updatedAt            DateTime  @updatedAt
 
   center             LearningCenter      @relation(fields: [centerId], references: [id], onDelete: Cascade)
-  student            CenterMembership    @relation("StudentGrades", fields: [studentMembershipId], references: [id], onDelete: Cascade)
+  student            CenterMembership    @relation("StudentGrades", fields: [studentMembershipId], references: [id], onDelete: Restrict)
   group              Group?              @relation(fields: [groupId], references: [id], onDelete: SetNull)
   lesson             Lesson?             @relation(fields: [lessonId], references: [id], onDelete: SetNull)
   teacher            CenterMembership    @relation("TeacherGrades", fields: [teacherMembershipId], references: [id], onDelete: Restrict)
@@ -582,7 +582,7 @@ model CenterPayment {
   updatedAt           DateTime  @updatedAt
 
   center  LearningCenter   @relation(fields: [centerId], references: [id], onDelete: Cascade)
-  student CenterMembership @relation("StudentPayments", fields: [studentMembershipId], references: [id], onDelete: Cascade)
+  student CenterMembership @relation("StudentPayments", fields: [studentMembershipId], references: [id], onDelete: Restrict)
   group   Group?           @relation(fields: [groupId], references: [id], onDelete: SetNull)
 
 
