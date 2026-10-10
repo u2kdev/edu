@@ -36,10 +36,11 @@ export async function POST(req: Request) {
     });
 
     return NextResponse.json({ success: true, invite });
-  } catch (err: any) {
-    if (err.code === "P2002") {
-      return NextResponse.json({ error: "This code is already in use" }, { status: (err as { status?: number })?.status || 400 });
+  } catch (err: unknown) {
+    const error = err as { message?: string; status?: number; code?: string };
+    if (error.code === "P2002") {
+      return NextResponse.json({ error: "This code is already in use" }, { status: error.status || 400 });
     }
-    return NextResponse.json({ error: err.message || "Server error" }, { status: 400 });
+    return NextResponse.json({ error: error.message || "Server error" }, { status: error.status || 400 });
   }
 }
