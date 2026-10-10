@@ -19,6 +19,7 @@ describe("TRUST-3 Item 2: getClientIp proxy security, default unknown, NaN handl
   const origTrustHeaders = process.env.TRUST_PROXY_HEADERS;
 
   beforeEach(() => {
+    rateLimits.clear();
     delete process.env.TRUSTED_PROXY_HOPS;
     delete process.env.TRUST_PROXY_HEADERS;
   });
@@ -37,6 +38,7 @@ describe("TRUST-3 Item 2: getClientIp proxy security, default unknown, NaN handl
   });
 
   afterEach(() => {
+    rateLimits.clear();
     if (origHops !== undefined) {
       process.env.TRUSTED_PROXY_HOPS = origHops;
     } else {
@@ -167,6 +169,62 @@ describe("TRUST-3 Item 2: getClientIp proxy security, default unknown, NaN handl
     } finally {
       await db.loginAttempt.deleteMany({ where: { email: { in: [emailA, emailB] } } });
       await db.platformUser.deleteMany({ where: { id: { in: [userA.id, userB.id] } } });
+    }
+  });
+
+  it("at 0 hops behind a proxy, lockout of one user on IP does not lock out all users at once (composite email, IP key architecture)", async () => {
+    // hops is deleted (0 hops)
+    delete process.env.TRUSTED_PROXY_HOPS;
+    delete process.env.TRUST_PROXY_HEADERS;
+
+    const emailVictim = `victim-zero-hops-${Date.now()}@proxytest.com`;
+    const emailLegit = `legit-zero-hops-${Date.now()}@proxytest.com`;
+
+    const userVictim = await db.platformUser.create({
+      data: { email: emailVictim, fullName: "Victim 0 Hops", passwordHash: await hashPassword("VictimPass123!"), platformRole: "NONE" },
+    });
+    const userLegit = await db.platformUser.create({
+      data: { email: emailLegit, fullName: "Legit 0 Hops", passwordHash: await hashPassword("LegitPass123!"), platformRole: "NONE" },
+    });
+
+    try {
+      // Proxy sends x-forwarded-for header, but since hops=0, getClientIp returns "unknown"
+      const proxyHeaders = {
+        "Content-Type": "application/json",
+        "x-forwarded-for": "203.0.113.195",
+      };
+
+      // Attacker brute-forces emailVictim 5 times behind proxy
+      for (let i = 0; i < 5; i++) {
+        const reqFail = new Request("http://localhost/api/auth/login", {
+          method: "POST",
+          headers: proxyHeaders,
+          body: JSON.stringify({ email: emailVictim, password: "WrongPass!" }),
+        });
+        const res = await loginRoute(reqFail);
+        expect(res.status).toBe(401);
+      }
+
+      // Verify emailVictim is locked out on composite key (emailVictim, "unknown")
+      const reqLocked = new Request("http://localhost/api/auth/login", {
+        method: "POST",
+        headers: proxyHeaders,
+        body: JSON.stringify({ email: emailVictim, password: "VictimPass123!" }),
+      });
+      const resLocked = await loginRoute(reqLocked);
+      expect(resLocked.status).toBe(401);
+
+      // Verify emailLegit behind the SAME proxy with SAME "unknown" resolved IP is NOT locked out!
+      const reqLegit = new Request("http://localhost/api/auth/login", {
+        method: "POST",
+        headers: proxyHeaders,
+        body: JSON.stringify({ email: emailLegit, password: "LegitPass123!" }),
+      });
+      const resLegit = await loginRoute(reqLegit);
+      expect(resLegit.status).toBe(200);
+    } finally {
+      await db.loginAttempt.deleteMany({ where: { email: { in: [emailVictim, emailLegit] } } });
+      await db.platformUser.deleteMany({ where: { id: { in: [userVictim.id, userLegit.id] } } });
     }
   });
 });
