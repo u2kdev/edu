@@ -30,17 +30,55 @@ function scanRouteFiles(dir: string): string[] {
   return routes;
 }
 
-const EXCLUDED_PATTERNS = [
-  /[\\/]api[\\/]auth[\\/]/,
-  /[\\/]api[\\/]platform[\\/]/,
-  /[\\/]api[\\/]developer[\\/]/,
-  /[\\/]api[\\/]tickets[\\/]/,
-  /[\\/]api[\\/]notifications[\\/]/,
-  /[\\/]api[\\/]invites[\\/]accept[\\/]/,
-  /[\\/]api[\\/]invites[\\/]redeem[\\/]/,
-  /[\\/]api[\\/]tenant[\\/]onboarding[\\/]/,
-  /[\\/]api[\\/]health[\\/]/,
+export const EXCLUDED_ROUTES_MAP: { pattern: RegExp; route: string; reason: string }[] = [
+  {
+    pattern: /[\\/]api[\\/]auth[\\/]/,
+    route: "api/auth/*",
+    reason: "Глобальная аутентификация и управление сессиями пользователей вне тенанта",
+  },
+  {
+    pattern: /[\\/]api[\\/]platform[\\/]/,
+    route: "api/platform/*",
+    reason: "Платформенное супер-администрирование (центры, тарифы, глобальные аккаунты)",
+  },
+  {
+    pattern: /[\\/]api[\\/]developer[\\/]/,
+    route: "api/developer/*",
+    reason: "Инженерные маршруты разработчиков (health, системный аудит, владельцы)",
+  },
+  {
+    pattern: /[\\/]api[\\/]tickets[\\/]/,
+    route: "api/tickets/*",
+    reason: "Служба технической поддержки платформы (тикеты, доступные саппорту для ответа)",
+  },
+  {
+    pattern: /[\\/]api[\\/]notifications[\\/]/,
+    route: "api/notifications",
+    reason: "Личные уведомления пользователя (отметка прочитанности текущим пользователем)",
+  },
+  {
+    pattern: /[\\/]api[\\/]invites[\\/]accept[\\/]/,
+    route: "api/invites/accept",
+    reason: "Пользовательский шлюз погашения инвайт-кода до входа в тенант",
+  },
+  {
+    pattern: /[\\/]api[\\/]invites[\\/]redeem[\\/]/,
+    route: "api/invites/redeem",
+    reason: "Публичный шлюз регистрации по инвайту",
+  },
+  {
+    pattern: /[\\/]api[\\/]tenant[\\/]onboarding[\\/]/,
+    route: "api/tenant/onboarding",
+    reason: "Создание нового учебного центра будущим владельцем",
+  },
+  {
+    pattern: /[\\/]api[\\/]health[\\/]/,
+    route: "api/health",
+    reason: "Системный мониторинг доступности сервиса (только GET, без мутаций)",
+  },
 ];
+
+const EXCLUDED_PATTERNS = EXCLUDED_ROUTES_MAP.map((item) => item.pattern);
 
 describe("TRUST-3b Item 3: Dynamic audit of all tenant write routes - PLATFORM_SUPPORT returns 403", () => {
   let center: LearningCenter;
@@ -121,6 +159,7 @@ describe("TRUST-3b Item 3: Dynamic audit of all tenant write routes - PLATFORM_S
     await db.subscription.deleteMany({ where: { centerId: center.id } });
     await db.subscriptionPlan.deleteMany({ where: { name: { contains: "Audit Plan" } } });
     await db.centerMembership.deleteMany({ where: { centerId: center.id } });
+    await db.learningCenter.deleteMany({ where: { slug: "illegal-center" } });
     await db.learningCenter.deleteMany({ where: { id: center.id } });
     await db.platformUser.deleteMany({ where: { email: { in: [owner.email, platformSupport.email] } } });
   });
@@ -321,5 +360,48 @@ describe("TRUST-3b Item 3: Dynamic audit of all tenant write routes - PLATFORM_S
     const deleteReq = new Request("http://localhost/api/new-feature-endpoint", { method: "DELETE" });
     const deleteRes = await newRoutePostHandler(deleteReq);
     expect(deleteRes.status).toBe(403);
+  });
+
+  it("exclusion mapping explicitly documents all 9 categories with non-empty reasons", () => {
+    const requiredCategories = [
+      "api/auth/*",
+      "api/platform/*",
+      "api/developer/*",
+      "api/tickets/*",
+      "api/notifications",
+      "api/invites/accept",
+      "api/invites/redeem",
+      "api/tenant/onboarding",
+      "api/health",
+    ];
+
+    expect(EXCLUDED_ROUTES_MAP.length).toBe(requiredCategories.length);
+    for (const cat of requiredCategories) {
+      const found = EXCLUDED_ROUTES_MAP.find((m) => m.route === cat);
+      expect(found, `Missing documented exclusion for ${cat}`).toBeDefined();
+      expect(found?.reason.length).toBeGreaterThan(10);
+    }
+  });
+
+  it("PLATFORM_SUPPORT cannot write to /api/tenant/onboarding (returns 403)", async () => {
+    const { POST: onboardingPost } = await import("../src/app/api/tenant/onboarding/route");
+    const req = new Request("http://localhost/api/tenant/onboarding", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ name: "Illegal Support Center", slug: "illegal-center", centerType: "OFFLINE" }),
+    });
+    const res = await onboardingPost(req);
+    expect(res.status).toBe(403);
+  });
+
+  it("PLATFORM_SUPPORT cannot write to /api/invites/accept (returns 403)", async () => {
+    const { POST: acceptPost } = await import("../src/app/api/invites/accept/route");
+    const req = new Request("http://localhost/api/invites/accept", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ code: "ANY-CODE-123" }),
+    });
+    const res = await acceptPost(req);
+    expect(res.status).toBe(403);
   });
 });

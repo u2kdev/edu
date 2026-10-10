@@ -20,6 +20,10 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: "Для погашения инвайта войдите в аккаунт" }, { status: 401 });
     }
 
+    if (session.user.platformRole === "PLATFORM_SUPPORT") {
+      return NextResponse.json({ error: "Forbidden: Platform support cannot redeem invites" }, { status: 403 });
+    }
+
     const { code } = await req.json();
     if (!code) {
       return NextResponse.json({ error: "Введите инвайт-код" }, { status: 400 });
@@ -136,7 +140,7 @@ export async function POST(req: Request) {
     });
 
     return response;
-  } catch (err: any) {
+  } catch (err: unknown) {
     console.error("Accept invite error:", err);
     return NextResponse.json({ error: "Ошибка при активации инвайта" }, { status: 500 });
   }
