@@ -80,11 +80,29 @@ export const EXCLUDED_ROUTES_MAP: { pattern: RegExp; route: string; reason: stri
 
 const EXCLUDED_PATTERNS = EXCLUDED_ROUTES_MAP.map((item) => item.pattern);
 
+const apiDir = path.resolve(process.cwd(), "src/app/api");
+const allRoutes = scanRouteFiles(apiDir);
+const writeMethods = ["POST", "PUT", "PATCH", "DELETE"];
+
+const discoveredEndpoints: { relPath: string; fullPath: string; method: string }[] = [];
+
+for (const routePath of allRoutes) {
+  if (EXCLUDED_PATTERNS.some((p) => p.test(routePath))) {
+    continue;
+  }
+  const relPath = path.relative(process.cwd(), routePath).replace(/\\/g, "/");
+  const mod = await import(pathToFileURL(routePath).href);
+  for (const m of writeMethods) {
+    if (typeof mod[m] === "function") {
+      discoveredEndpoints.push({ relPath, fullPath: routePath, method: m });
+    }
+  }
+}
+
 describe("TRUST-3b Item 3: Dynamic audit of all tenant write routes - PLATFORM_SUPPORT returns 403", () => {
   let center: LearningCenter;
   let owner: PlatformUser;
   let platformSupport: PlatformUser;
-  const discoveredRoutes: { relPath: string; fullPath: string; methods: string[] }[] = [];
 
   beforeAll(async () => {
     const ts = Date.now();
@@ -136,23 +154,6 @@ describe("TRUST-3b Item 3: Dynamic audit of all tenant write routes - PLATFORM_S
       platformRole: "PLATFORM_SUPPORT",
       activeCenterId: center.id,
     });
-
-    // Dynamic scanning
-    const apiDir = path.resolve(process.cwd(), "src/app/api");
-    const allRoutes = scanRouteFiles(apiDir);
-    const writeMethods = ["POST", "PUT", "PATCH", "DELETE"];
-
-    for (const routePath of allRoutes) {
-      if (EXCLUDED_PATTERNS.some((p) => p.test(routePath))) {
-        continue;
-      }
-      const relPath = path.relative(process.cwd(), routePath).replace(/\\/g, "/");
-      const mod = await import(pathToFileURL(routePath).href);
-      const methods = writeMethods.filter((m) => typeof mod[m] === "function");
-      if (methods.length > 0) {
-        discoveredRoutes.push({ relPath, fullPath: routePath, methods });
-      }
-    }
   });
 
   afterAll(async () => {
@@ -164,164 +165,23 @@ describe("TRUST-3b Item 3: Dynamic audit of all tenant write routes - PLATFORM_S
     await db.platformUser.deleteMany({ where: { email: { in: [owner.email, platformSupport.email] } } });
   });
 
-  it("dynamic scanner discovers all tenant write routes and prints the list", () => {
-    expect(discoveredRoutes.length).toBeGreaterThanOrEqual(15);
-    console.log("=== Discovered Tenant Write Routes for Dynamic Audit ===");
-    for (const r of discoveredRoutes) {
-      console.log(`- ${r.relPath}: [${r.methods.join(", ")}]`);
-    }
-  });
-
-  it("POST /api/center-payments returns 403 for PLATFORM_SUPPORT", async () => {
-    const { POST } = await import("../src/app/api/center-payments/route");
-    const req = new Request(`http://localhost/api/center-payments?centerId=${center.id}`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ amount: 100 }),
-    });
-    const res = await POST(req);
-    expect(res.status).toBe(403);
-  });
-
-  it("PATCH /api/center-payments returns 403 for PLATFORM_SUPPORT", async () => {
-    const { PATCH } = await import("../src/app/api/center-payments/route");
-    const req = new Request(`http://localhost/api/center-payments?centerId=${center.id}`, {
-      method: "PATCH",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ paymentId: "dummy" }),
-    });
-    const res = await PATCH(req);
-    expect(res.status).toBe(403);
-  });
-
-  it("POST /api/attendance/bulk returns 403 for PLATFORM_SUPPORT", async () => {
-    const { POST } = await import("../src/app/api/attendance/bulk/route");
-    const req = new Request(`http://localhost/api/attendance/bulk?centerId=${center.id}`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ lessonId: "dummy", groupId: "dummy" }),
-    });
-    const res = await POST(req);
-    expect(res.status).toBe(403);
-  });
-
-  it("POST /api/groups returns 403 for PLATFORM_SUPPORT", async () => {
-    const { POST } = await import("../src/app/api/groups/route");
-    const req = new Request(`http://localhost/api/groups?centerId=${center.id}`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ name: "Audit Group" }),
-    });
-    const res = await POST(req);
-    expect(res.status).toBe(403);
-  });
-
-  it("POST /api/homework returns 403 for PLATFORM_SUPPORT", async () => {
-    const { POST } = await import("../src/app/api/homework/route");
-    const req = new Request(`http://localhost/api/homework?centerId=${center.id}`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ title: "HW" }),
-    });
-    const res = await POST(req);
-    expect(res.status).toBe(403);
-  });
-
-  it("PATCH /api/grades returns 403 for PLATFORM_SUPPORT", async () => {
-    const { PATCH } = await import("../src/app/api/grades/route");
-    const req = new Request(`http://localhost/api/grades?centerId=${center.id}`, {
-      method: "PATCH",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ id: "dummy" }),
-    });
-    const res = await PATCH(req);
-    expect(res.status).toBe(403);
-  });
-
-  it("DELETE /api/grades returns 403 for PLATFORM_SUPPORT", async () => {
-    const { DELETE } = await import("../src/app/api/grades/route");
-    const req = new Request(`http://localhost/api/grades?centerId=${center.id}`, {
-      method: "DELETE",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ id: "dummy" }),
-    });
-    const res = await DELETE(req);
-    expect(res.status).toBe(403);
-  });
-
-  it("POST /api/tenant/announcements returns 403 for PLATFORM_SUPPORT", async () => {
-    const { POST } = await import("../src/app/api/tenant/announcements/route");
-    const req = new Request(`http://localhost/api/tenant/announcements?centerId=${center.id}`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ title: "A" }),
-    });
-    const res = await POST(req);
-    expect(res.status).toBe(403);
-  });
-
-  it("POST /api/tenant/branches returns 403 for PLATFORM_SUPPORT", async () => {
-    const { POST } = await import("../src/app/api/tenant/branches/route");
-    const req = new Request(`http://localhost/api/tenant/branches?centerId=${center.id}`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ name: "B" }),
-    });
-    const res = await POST(req);
-    expect(res.status).toBe(403);
-  });
-
-  it("POST /api/tenant/schedule returns 403 for PLATFORM_SUPPORT", async () => {
-    const { POST } = await import("../src/app/api/tenant/schedule/route");
-    const req = new Request(`http://localhost/api/tenant/schedule?centerId=${center.id}`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({}),
-    });
-    const res = await POST(req);
-    expect(res.status).toBe(403);
-  });
-
-  it("POST /api/tenant/staff returns 403 for PLATFORM_SUPPORT", async () => {
-    const { POST } = await import("../src/app/api/tenant/staff/route");
-    const req = new Request(`http://localhost/api/tenant/staff?centerId=${center.id}`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ email: "staff@test.com" }),
-    });
-    const res = await POST(req);
-    expect(res.status).toBe(403);
-  });
-
-  it("POST /api/tenant/subjects returns 403 for PLATFORM_SUPPORT", async () => {
-    const { POST } = await import("../src/app/api/tenant/subjects/route");
-    const req = new Request(`http://localhost/api/tenant/subjects?centerId=${center.id}`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ name: "Sub" }),
-    });
-    const res = await POST(req);
-    expect(res.status).toBe(403);
-  });
-
-  it("all dynamically discovered tenant write routes return 403 for PLATFORM_SUPPORT", async () => {
-    for (const { relPath, fullPath, methods } of discoveredRoutes) {
+  it.each(discoveredEndpoints)(
+    "$method $relPath returns 403 for PLATFORM_SUPPORT",
+    async ({ relPath, fullPath, method }) => {
       const mod = await import(pathToFileURL(fullPath).href);
-      for (const method of methods) {
-        const handler = mod[method];
-        const req = new Request(`http://localhost/api/test?centerId=${center.id}`, {
-          method,
-          headers: { "Content-Type": "application/json" },
-          body: method !== "DELETE" ? JSON.stringify({ centerId: center.id, action: "INITIATE_BY_ADMIN" }) : undefined,
-        });
-        const res = await handler(req, { params: { id: "test-id" } });
-        expect(
-          res.status,
-          `Route ${relPath} method ${method} expected 403 for PLATFORM_SUPPORT, got ${res.status}`
-        ).toBe(403);
-      }
+      const handler = mod[method];
+      const req = new Request(`http://localhost/api/test?centerId=${center.id}`, {
+        method,
+        headers: { "Content-Type": "application/json" },
+        body: method !== "DELETE" ? JSON.stringify({ centerId: center.id, action: "INITIATE_BY_ADMIN" }) : undefined,
+      });
+      const res = await handler(req, { params: { id: "test-id" } });
+      expect(
+        res.status,
+        `Route ${relPath} method ${method} expected 403 for PLATFORM_SUPPORT, got ${res.status}`
+      ).toBe(403);
     }
-  });
+  );
 
   it("new route handler without manual isWrite flag automatically derives isWrite from HTTP method and returns 403 on write", async () => {
     const { requireTenantAccess } = await import("../src/lib/tenant");
