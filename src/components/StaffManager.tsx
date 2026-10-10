@@ -1,10 +1,11 @@
 "use client";
 
 import { useState, useEffect } from "react";
+import type { ComponentType } from "react";
 import {
   UserPlus, Shield, GraduationCap, HeadphonesIcon,
-  MoreVertical, CheckCircle2, XCircle, Mail, Phone,
-  Loader2, AlertTriangle
+  CheckCircle2, XCircle, Mail, Phone,
+  Loader2, AlertTriangle, Archive, Trash2
 } from "lucide-react";
 
 interface StaffMember {
@@ -28,7 +29,7 @@ interface StaffManagerProps {
   currentRole: string;
 }
 
-const ROLE_CONFIG: Record<string, { label: string; labelUz: string; icon: any; color: string }> = {
+const ROLE_CONFIG: Record<string, { label: string; labelUz: string; icon: ComponentType<{ className?: string }>; color: string }> = {
   DIRECTOR: {
     label: "Директор",
     labelUz: "Direktor",
@@ -52,6 +53,12 @@ const ROLE_CONFIG: Record<string, { label: string; labelUz: string; icon: any; c
     labelUz: "Markaz qoʻllab-quvvatlashi",
     icon: HeadphonesIcon,
     color: "text-purple-400 bg-purple-500/10 border-purple-500/20",
+  },
+  STUDENT: {
+    label: "Ученик",
+    labelUz: "Oʻquvchi",
+    icon: GraduationCap,
+    color: "text-sky-400 bg-sky-500/10 border-sky-500/20",
   },
 };
 
@@ -151,7 +158,59 @@ export default function StaffManager({ locale, currentRole }: StaffManagerProps)
           ? `Xodim holati oʻzgartirildi`
           : `Статус сотрудника изменён`
       );
-    } catch (err) {
+    } catch {
+      setError("Network error");
+    }
+  }
+
+  async function handleArchive(membershipId: string) {
+    try {
+      const res = await fetch("/api/tenant/staff", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ membershipId, status: "ARCHIVED" }),
+      });
+
+      const data = (await res.json()) as { error?: string };
+      if (!res.ok) {
+        setError(data.error || "Error archiving member");
+        return;
+      }
+
+      await loadStaff();
+      setSuccess(
+        isUz ? "Aʼzo muvaffaqiyatli arxivlandi" : "Пользователь успешно архивирован"
+      );
+    } catch {
+      setError("Network error");
+    }
+  }
+
+  async function handleDelete(membershipId: string) {
+    try {
+      const res = await fetch(`/api/tenant/staff?membershipId=${membershipId}`, {
+        method: "DELETE",
+      });
+
+      const data = (await res.json()) as { error?: string; hint?: string };
+      if (!res.ok) {
+        if (res.status === 409 && data.hint) {
+          setError(
+            isUz
+              ? `${data.error || "Oʻchirib boʻlmaydi"}. Maslahat: ${data.hint}`
+              : `${data.error || "Невозможно удалить"}. Подсказка: ${data.hint}`
+          );
+        } else {
+          setError(data.error || "Error deleting member");
+        }
+        return;
+      }
+
+      await loadStaff();
+      setSuccess(
+        isUz ? "Aʼzo muvaffaqiyatli oʻchirildi" : "Пользователь успешно удалён"
+      );
+    } catch {
       setError("Network error");
     }
   }
@@ -328,11 +387,15 @@ export default function StaffManager({ locale, currentRole }: StaffManagerProps)
                   <span className="text-sm font-semibold text-white truncate">
                     {member.user.fullName}
                   </span>
-                  {isInactive && (
+                  {member.status === "ARCHIVED" ? (
+                    <span className="px-2 py-0.5 rounded-full bg-amber-500/10 text-amber-400 text-[10px] font-semibold border border-amber-500/20">
+                      {isUz ? "Arxivlangan" : "Архивирован"}
+                    </span>
+                  ) : isInactive ? (
                     <span className="px-2 py-0.5 rounded-full bg-red-500/10 text-red-400 text-[10px] font-semibold border border-red-500/20">
                       {isUz ? "Faolsiz" : "Неактивен"}
                     </span>
-                  )}
+                  ) : null}
                 </div>
                 <div className="flex items-center gap-3 mt-1 text-xs text-slate-400">
                   <span className="flex items-center gap-1">
@@ -358,25 +421,43 @@ export default function StaffManager({ locale, currentRole }: StaffManagerProps)
 
               {/* Actions */}
               {member.role !== "DIRECTOR" && (
-                <button
-                  onClick={() => toggleStatus(member.id, member.status)}
-                  className={`p-2 rounded-lg transition-colors shrink-0 ${
-                    member.status === "ACTIVE"
-                      ? "text-slate-400 hover:text-red-400 hover:bg-red-500/10"
-                      : "text-slate-400 hover:text-emerald-400 hover:bg-emerald-500/10"
-                  }`}
-                  title={
-                    member.status === "ACTIVE"
-                      ? isUz ? "Faolsizlantirish" : "Деактивировать"
-                      : isUz ? "Faollashtirish" : "Активировать"
-                  }
-                >
-                  {member.status === "ACTIVE" ? (
-                    <XCircle className="w-5 h-5" />
-                  ) : (
-                    <CheckCircle2 className="w-5 h-5" />
+                <div className="flex items-center gap-1 shrink-0">
+                  <button
+                    onClick={() => toggleStatus(member.id, member.status)}
+                    className={`p-2 rounded-lg transition-colors ${
+                      member.status === "ACTIVE"
+                        ? "text-slate-400 hover:text-red-400 hover:bg-red-500/10"
+                        : "text-slate-400 hover:text-emerald-400 hover:bg-emerald-500/10"
+                    }`}
+                    title={
+                      member.status === "ACTIVE"
+                        ? isUz ? "Faolsizlantirish" : "Деактивировать"
+                        : isUz ? "Faollashtirish" : "Активировать"
+                    }
+                  >
+                    {member.status === "ACTIVE" ? (
+                      <XCircle className="w-5 h-5" />
+                    ) : (
+                      <CheckCircle2 className="w-5 h-5" />
+                    )}
+                  </button>
+                  {member.status !== "ARCHIVED" && (
+                    <button
+                      onClick={() => handleArchive(member.id)}
+                      className="p-2 rounded-lg transition-colors text-slate-400 hover:text-amber-400 hover:bg-amber-500/10"
+                      title={isUz ? "Arxivlash" : "Архивировать"}
+                    >
+                      <Archive className="w-5 h-5" />
+                    </button>
                   )}
-                </button>
+                  <button
+                    onClick={() => handleDelete(member.id)}
+                    className="p-2 rounded-lg transition-colors text-slate-400 hover:text-red-400 hover:bg-red-500/10"
+                    title={isUz ? "Oʻchirish" : "Удалить"}
+                  >
+                    <Trash2 className="w-5 h-5" />
+                  </button>
+                </div>
               )}
             </div>
           );

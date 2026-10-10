@@ -22,6 +22,7 @@ export async function GET(req: Request) {
           include: { user: { select: { fullName: true, email: true } } },
         },
         enrollments: {
+          where: { student: { status: "ACTIVE" } },
           include: {
             student: {
               include: { user: { select: { fullName: true, email: true, phone: true } } },

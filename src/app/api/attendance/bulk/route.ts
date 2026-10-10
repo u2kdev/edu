@@ -27,7 +27,11 @@ export async function POST(req: Request) {
     }
 
     const enrollments = await tenantDb.enrollment.findMany({
-      where: { groupId, status: "ACTIVE" },
+      where: {
+        groupId,
+        status: "ACTIVE",
+        student: { status: "ACTIVE" },
+      },
       select: { studentMembershipId: true },
     });
 

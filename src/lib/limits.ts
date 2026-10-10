@@ -20,7 +20,7 @@ export async function checkSubscriptionLimit(
 
   if (resourceType === "students") {
     const currentCount = await db.centerMembership.count({
-      where: { centerId, role: "STUDENT" },
+      where: { centerId, role: "STUDENT", status: { not: "ARCHIVED" } },
     });
     return currentCount + incrementAmount <= plan.maxStudents;
   }

@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { getAuthSession, signJWT } from "@/lib/auth";
+import { db } from "@/lib/db";
 
 export async function POST(req: Request) {
   try {
@@ -15,6 +16,15 @@ export async function POST(req: Request) {
 
     const targetMembership = session.memberships.find((m) => m.centerId === centerId);
     if (!targetMembership && session.user.platformRole === "NONE") {
+      const existingMem = await db.centerMembership.findFirst({
+        where: { userId: session.user.id, centerId },
+      });
+      if (existingMem && existingMem.status !== "ACTIVE") {
+        return NextResponse.json(
+          { error: "Forbidden: Membership is not active", code: "MEMBERSHIP_INACTIVE" },
+          { status: 403 }
+        );
+      }
       return NextResponse.json({ error: "Forbidden: You are not a member of this center" }, { status: 403 });
     }
 
@@ -41,7 +51,7 @@ export async function POST(req: Request) {
     });
 
     return response;
-  } catch (err: any) {
+  } catch (err: unknown) {
     return NextResponse.json({ error: "Server error" }, { status: 500 });
   }
 }

@@ -297,3 +297,113 @@ export async function PATCH(req: Request) {
     );
   }
 }
+
+// DELETE /api/tenant/staff — Delete a center member (student or staff)
+export async function DELETE(req: Request) {
+  try {
+    const tenantCtx = await requireTenantAccess(req);
+    const { session, center, role } = tenantCtx;
+    const tenantDb = tenantCtx.getTenantDb();
+
+    if (role !== "DIRECTOR" && role !== "CENTER_ADMIN" && !tenantCtx.isPlatformStaff) {
+      return NextResponse.json(
+        { error: "Forbidden: Only Director or Center Admin can delete members" },
+        { status: 403 }
+      );
+    }
+
+    const { searchParams } = new URL(req.url);
+    let membershipId = searchParams.get("membershipId");
+    if (!membershipId) {
+      try {
+        const body = (await req.json()) as { membershipId?: string };
+        membershipId = body?.membershipId || null;
+      } catch {
+        // Body might be empty or invalid json
+      }
+    }
+
+    if (!membershipId) {
+      return NextResponse.json(
+        { error: "Membership ID is required" },
+        { status: 400 }
+      );
+    }
+
+    const membership = await tenantDb.centerMembership.findFirst({
+      where: { id: membershipId },
+      include: { user: { select: { email: true, fullName: true } } },
+    });
+
+    if (!membership) {
+      return NextResponse.json(
+        { error: "Member not found in this center" },
+        { status: 404 }
+      );
+    }
+
+    if (membership.role === "DIRECTOR") {
+      return NextResponse.json(
+        { error: "Cannot delete the Director" },
+        { status: 403 }
+      );
+    }
+
+    if (
+      role === "CENTER_ADMIN" &&
+      (membership.role === "CENTER_ADMIN" || membership.role === "DIRECTOR")
+    ) {
+      return NextResponse.json(
+        { error: "Only Director can delete administrative staff" },
+        { status: 403 }
+      );
+    }
+
+    try {
+      await tenantDb.centerMembership.delete({
+        where: { id: membershipId },
+      });
+    } catch (err: unknown) {
+      const errStr = String(err);
+      if (
+        errStr.includes("P2003") ||
+        errStr.includes("23001") ||
+        errStr.includes("Foreign key constraint") ||
+        errStr.includes("RESTRICT")
+      ) {
+        return NextResponse.json(
+          {
+            error:
+              "Невозможно удалить студента с существующими записями (платежи, оценки, посещаемость). Рекомендуется архивировать студента.",
+            hint: "архивировать",
+            code: "CANNOT_DELETE_HAS_RECORDS",
+          },
+          { status: 409 }
+        );
+      }
+      throw err;
+    }
+
+    await logAuditEvent({
+      centerId: center.id,
+      actorUserId: session.user.id,
+      action: "MEMBER_DELETED",
+      resource: "CenterMembership",
+      resourceId: membershipId,
+      details: {
+        targetEmail: membership.user.email,
+        role: membership.role,
+      },
+    });
+
+    return NextResponse.json({ success: true, message: "Member deleted successfully" });
+  } catch (err: unknown) {
+    console.error("Member delete error:", err);
+    const error = err as { message?: string; status?: number };
+    return NextResponse.json(
+      { error: error?.message || "Server error" },
+      { status: error?.status || 500 }
+    );
+  }
+}
+

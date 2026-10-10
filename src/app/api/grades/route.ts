@@ -92,8 +92,8 @@ export async function GET(req: Request) {
 
     return NextResponse.json({ grades, total, page, pageSize });
   } catch (err: unknown) {
-    const error = err as { message?: string; status?: number };
-    return NextResponse.json({ error: error?.message || "Server error" }, { status: error?.status || 400 });
+    const error = err as { message?: string; status?: number; code?: string };
+    return NextResponse.json({ error: error?.message || "Server error", code: error?.code }, { status: error?.status || 400 });
   }
 }
 

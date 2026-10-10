@@ -139,6 +139,22 @@ export async function POST(req: Request) {
     }
     const markerId = tenantCtx.membership.id;
 
+    // Check if any student in records is ARCHIVED
+    const targetStudents = await tenantDb.centerMembership.findMany({
+      where: {
+        id: { in: attendanceRecords.map((r) => r.studentMembershipId) },
+        role: "STUDENT",
+      },
+      select: { id: true, status: true },
+    });
+    const archivedStudent = targetStudents.find((m) => m.status === "ARCHIVED");
+    if (archivedStudent) {
+      return NextResponse.json(
+        { error: "Cannot mark attendance for archived student" },
+        { status: 400 }
+      );
+    }
+
     // Use updateMany for UPSERT simulation with getTenantDb because prisma extension doesn't fully intercept compound where upserts well yet.
     for (const r of attendanceRecords) {
       const existing = await tenantDb.attendance.findFirst({
