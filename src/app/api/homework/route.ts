@@ -64,8 +64,9 @@ export async function GET(req: Request) {
     });
 
     return NextResponse.json({ homeworks });
-  } catch (err: any) {
-    return NextResponse.json({ error: err.message || "Server error" }, { status: (err as { status?: number })?.status || 500 });
+  } catch (err: unknown) {
+    const error = err as { message?: string; status?: number };
+    return NextResponse.json({ error: error.message || "Server error" }, { status: error.status || 500 });
   }
 }
 
@@ -181,8 +182,9 @@ export async function POST(req: Request) {
     }
 
     return NextResponse.json({ success: true, homework });
-  } catch (err: any) {
-    return NextResponse.json({ error: err.message || "Server error" }, { status: (err as { status?: number })?.status || 500 });
+  } catch (err: unknown) {
+    const error = err as { message?: string; status?: number };
+    return NextResponse.json({ error: error.message || "Server error" }, { status: error.status || 500 });
   }
 }
 
@@ -304,7 +306,7 @@ export async function PATCH(req: Request) {
         data: {
           grade: grade !== undefined ? parseInt(grade) : null,
           feedback: feedback || null,
-          gradedByMembershipId: tenantCtx.membership?.id,
+          gradedByMembershipId: tenantCtx.membership?.id || null,
           gradedAt: new Date(),
         },
       });
@@ -326,7 +328,8 @@ export async function PATCH(req: Request) {
     }
 
     return NextResponse.json({ error: "Invalid action" }, { status: 400 });
-  } catch (err: any) {
-    return NextResponse.json({ error: err.message || "Server error" }, { status: (err as { status?: number })?.status || 500 });
+  } catch (err: unknown) {
+    const error = err as { message?: string; status?: number };
+    return NextResponse.json({ error: error.message || "Server error" }, { status: error.status || 500 });
   }
 }

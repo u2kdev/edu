@@ -79,8 +79,9 @@ export async function GET(req: Request) {
     ]);
 
     return NextResponse.json({ announcements, total, page, pageSize });
-  } catch (err: any) {
-    return NextResponse.json({ error: err.message || "Server error" }, { status: (err as { status?: number })?.status || 400 });
+  } catch (err: unknown) {
+    const error = err as { message?: string; status?: number };
+    return NextResponse.json({ error: error.message || "Server error" }, { status: error.status || 400 });
   }
 }
 
@@ -153,8 +154,9 @@ export async function POST(req: Request) {
     });
 
     return NextResponse.json({ success: true, announcement });
-  } catch (err: any) {
-    return NextResponse.json({ error: err.message || "Server error" }, { status: (err as { status?: number })?.status || 400 });
+  } catch (err: unknown) {
+    const error = err as { message?: string; status?: number };
+    return NextResponse.json({ error: error.message || "Server error" }, { status: error.status || 400 });
   }
 }
 

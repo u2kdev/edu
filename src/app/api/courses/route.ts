@@ -41,7 +41,11 @@ export async function POST(req: Request) {
     const tenantCtx = await requireTenantAccess(req);
     const tenantDb = tenantCtx.getTenantDb();
 
-    if (tenantCtx.role !== "DIRECTOR" && tenantCtx.role !== "CENTER_ADMIN") {
+    if (
+      tenantCtx.role !== "DIRECTOR" &&
+      tenantCtx.role !== "CENTER_ADMIN" &&
+      !tenantCtx.isPlatformStaff
+    ) {
       return NextResponse.json({ error: "Недостаточно прав для создания курсов" }, { status: 403 });
     }
 
@@ -74,7 +78,8 @@ export async function POST(req: Request) {
     });
 
     return NextResponse.json({ success: true, course });
-  } catch (err: any) {
-    return NextResponse.json({ error: err.message || "Ошибка создания курса" }, { status: err.status || 400 });
+  } catch (err: unknown) {
+    const error = err as { message?: string; status?: number };
+    return NextResponse.json({ error: error.message || "Ошибка создания курса" }, { status: error.status || 400 });
   }
 }

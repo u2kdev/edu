@@ -8,8 +8,12 @@ export async function POST(req: Request) {
     const tenantCtx = await requireTenantAccess(req);
     const tenantDb = tenantCtx.getTenantDb();
     
-    // Only Director and Center Admin can generate invite codes
-    if (tenantCtx.role !== "DIRECTOR" && tenantCtx.role !== "CENTER_ADMIN") {
+    // Only Director and Center Admin (or platform staff) can generate invite codes
+    if (
+      tenantCtx.role !== "DIRECTOR" &&
+      tenantCtx.role !== "CENTER_ADMIN" &&
+      !tenantCtx.isPlatformStaff
+    ) {
       return NextResponse.json({ error: "Forbidden" }, { status: 403 });
     }
 
@@ -19,6 +23,17 @@ export async function POST(req: Request) {
       ? customCode.toUpperCase().trim()
       : `${tenantCtx.center.slug.toUpperCase()}-${generateSecureInviteCode(12)}`;
 
+    let createdByMembershipId = tenantCtx.membership?.id;
+    if (!createdByMembershipId) {
+      const directorMem = await tenantDb.centerMembership.findFirst({
+        where: { role: "DIRECTOR" },
+      });
+      createdByMembershipId = directorMem?.id;
+    }
+    if (!createdByMembershipId) {
+      return NextResponse.json({ error: "Could not resolve creator membership" }, { status: 403 });
+    }
+
     const invite = await tenantDb.inviteCode.create({
       data: {
         centerId: tenantCtx.center.id,
@@ -27,7 +42,7 @@ export async function POST(req: Request) {
         courseId: courseId || null,
         groupId: groupId || null,
         maxUses: maxUses ? parseInt(maxUses) : 10,
-        createdByMembershipId: tenantCtx.membership?.id || tenantCtx.center.ownerId,
+        createdByMembershipId,
       },
       include: {
         course: { select: { title: true } },
