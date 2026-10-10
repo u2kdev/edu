@@ -1,6 +1,45 @@
--- Delete center memberships created for platform users (SUPERADMIN, DEVELOPER, PLATFORM_SUPPORT, PLATFORM_ADMIN)
--- Only deletes memberships that are not referenced by foreign keys (courses, grades, attendance, etc.)
+-- 1. Transfer nullable relations pointing to platform user memberships to NULL:
+UPDATE "Group"
+SET "teacherMembershipId" = NULL
+WHERE "teacherMembershipId" IN (
+  SELECT cm.id FROM "CenterMembership" cm
+  JOIN "PlatformUser" pu ON cm."userId" = pu.id
+  WHERE pu."platformRole" IN ('SUPERADMIN', 'DEVELOPER', 'PLATFORM_SUPPORT', 'PLATFORM_ADMIN')
+);
 
+UPDATE "Group"
+SET "assistantMembershipId" = NULL
+WHERE "assistantMembershipId" IN (
+  SELECT cm.id FROM "CenterMembership" cm
+  JOIN "PlatformUser" pu ON cm."userId" = pu.id
+  WHERE pu."platformRole" IN ('SUPERADMIN', 'DEVELOPER', 'PLATFORM_SUPPORT', 'PLATFORM_ADMIN')
+);
+
+UPDATE "Lesson"
+SET "substituteTeacherMembershipId" = NULL
+WHERE "substituteTeacherMembershipId" IN (
+  SELECT cm.id FROM "CenterMembership" cm
+  JOIN "PlatformUser" pu ON cm."userId" = pu.id
+  WHERE pu."platformRole" IN ('SUPERADMIN', 'DEVELOPER', 'PLATFORM_SUPPORT', 'PLATFORM_ADMIN')
+);
+
+UPDATE "HomeworkSubmission"
+SET "gradedByMembershipId" = NULL
+WHERE "gradedByMembershipId" IN (
+  SELECT cm.id FROM "CenterMembership" cm
+  JOIN "PlatformUser" pu ON cm."userId" = pu.id
+  WHERE pu."platformRole" IN ('SUPERADMIN', 'DEVELOPER', 'PLATFORM_SUPPORT', 'PLATFORM_ADMIN')
+);
+
+UPDATE "Grade"
+SET "finalizedById" = NULL
+WHERE "finalizedById" IN (
+  SELECT cm.id FROM "CenterMembership" cm
+  JOIN "PlatformUser" pu ON cm."userId" = pu.id
+  WHERE pu."platformRole" IN ('SUPERADMIN', 'DEVELOPER', 'PLATFORM_SUPPORT', 'PLATFORM_ADMIN')
+);
+
+-- 2. Delete CenterMembership of platform users that have no blocking foreign keys:
 DELETE FROM "CenterMembership" cm
 USING "PlatformUser" pu
 WHERE cm."userId" = pu.id
