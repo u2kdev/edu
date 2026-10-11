@@ -2,6 +2,7 @@ import { describe, it, expect, beforeAll, vi } from "vitest";
 import { db } from "../src/lib/db";
 import { signJWT, hashPassword } from "../src/lib/auth";
 import { GET as getSchedule, POST as createSchedule, PATCH as updateSchedule, DELETE as deleteSchedule } from "../src/app/api/tenant/schedule/route";
+import { POST as createLesson, PATCH as updateLesson } from "../src/app/api/lessons/route";
 
 let mockToken: string = "";
 
@@ -40,6 +41,7 @@ describe("CORE-2 Schedule & Timetable Management", () => {
   let groupA1Id: string;
   let groupA2Id: string;
   let groupB1Id: string;
+  let moduleA1Id: string;
 
   beforeAll(async () => {
     const passwordHash = await hashPassword("Password123!");
@@ -196,6 +198,15 @@ describe("CORE-2 Schedule & Timetable Management", () => {
         createdByMembershipId: directorAMembershipId,
       },
     });
+
+    const modA1 = await db.courseModule.create({
+      data: {
+        centerId: centerAId,
+        courseId: courseA.id,
+        title: "Module Sched A1",
+      },
+    });
+    moduleA1Id = modA1.id;
 
     const groupA1 = await db.group.create({
       data: {
@@ -510,5 +521,138 @@ describe("CORE-2 Schedule & Timetable Management", () => {
       })
     );
     expect(resEqual.status).toBe(400);
+  });
+
+  it("8. Lesson cancellation: Status changed to CANCELLED with cancelledReason, writes audit log", async () => {
+    const dirA = await db.centerMembership.findUnique({
+      where: { id: directorAMembershipId },
+      include: { user: true },
+    });
+    mockToken = signJWT({
+      userId: dirA!.userId,
+      email: dirA!.user.email,
+      platformRole: "NONE",
+      activeCenterId: centerAId,
+      activeCenterRole: "DIRECTOR",
+    });
+
+    // Create a lesson
+    const resCreate = await createLesson(
+      mockRequest("/api/lessons", "POST", {
+        moduleId: moduleA1Id,
+        title: "Lesson to cancel",
+      })
+    );
+    expect(resCreate.status).toBe(200);
+    const { lesson } = await resCreate.json();
+
+    // Cancel the lesson
+    const resCancel = await updateLesson(
+      mockRequest("/api/lessons", "PATCH", {
+        lessonId: lesson.id,
+        status: "CANCELLED",
+        cancelledReason: "Teacher emergency leave",
+      })
+    );
+    expect(resCancel.status).toBe(200);
+    const dataCancel = await resCancel.json();
+    expect(dataCancel.lesson.status).toBe("CANCELLED");
+    expect(dataCancel.lesson.cancelledReason).toBe("Teacher emergency leave");
+
+    // Verify audit log
+    const auditLog = await db.auditLog.findFirst({
+      where: {
+        centerId: centerAId,
+        action: "LESSON_UPDATED",
+        resourceId: lesson.id,
+      },
+    });
+    expect(auditLog).toBeDefined();
+    expect(auditLog?.detailsJson).toContain("CANCELLED");
+  });
+
+  it("9. Lesson substitution: Rejects non-teacher or foreign membership with 400, succeeds with active teacher", async () => {
+    const dirA = await db.centerMembership.findUnique({
+      where: { id: directorAMembershipId },
+      include: { user: true },
+    });
+    mockToken = signJWT({
+      userId: dirA!.userId,
+      email: dirA!.user.email,
+      platformRole: "NONE",
+      activeCenterId: centerAId,
+      activeCenterRole: "DIRECTOR",
+    });
+
+    const resCreate = await createLesson(
+      mockRequest("/api/lessons", "POST", {
+        moduleId: moduleA1Id,
+        title: "Lesson for substitution",
+      })
+    );
+    const { lesson } = await resCreate.json();
+
+    // Attempt substitution with student membership (invalid role) -> 400
+    const resBadRole = await updateLesson(
+      mockRequest("/api/lessons", "PATCH", {
+        lessonId: lesson.id,
+        substituteTeacherMembershipId: studentA1MembershipId,
+      })
+    );
+    expect(resBadRole.status).toBe(400);
+
+    // Attempt substitution with teacher from Center B -> 400
+    const teacherB = await db.centerMembership.findFirst({ where: { centerId: centerBId } });
+    const resForeign = await updateLesson(
+      mockRequest("/api/lessons", "PATCH", {
+        lessonId: lesson.id,
+        substituteTeacherMembershipId: teacherB!.id,
+      })
+    );
+    expect(resForeign.status).toBe(400);
+
+    // Valid substitution with Teacher A2 -> 200
+    const resValid = await updateLesson(
+      mockRequest("/api/lessons", "PATCH", {
+        lessonId: lesson.id,
+        substituteTeacherMembershipId: teacherA2MembershipId,
+      })
+    );
+    expect(resValid.status).toBe(200);
+    const dataValid = await resValid.json();
+    expect(dataValid.lesson.substituteTeacherMembershipId).toBe(teacherA2MembershipId);
+  });
+
+  it("10. Lesson role scoping: Unassigned teacher cannot modify or cancel another teacher's lesson", async () => {
+    // Lesson created for Teacher A1
+    const resCreate = await createLesson(
+      mockRequest("/api/lessons", "POST", {
+        moduleId: moduleA1Id,
+        title: "Teacher 1 private lesson",
+      })
+    );
+    const { lesson } = await resCreate.json();
+
+    // Teacher 2 (not assigned to this lesson/group/course) attempts to cancel
+    const t2 = await db.centerMembership.findUnique({
+      where: { id: teacherA2MembershipId },
+      include: { user: true },
+    });
+    mockToken = signJWT({
+      userId: t2!.userId,
+      email: t2!.user.email,
+      platformRole: "NONE",
+      activeCenterId: centerAId,
+      activeCenterRole: "TEACHER",
+    });
+
+    const resForbidden = await updateLesson(
+      mockRequest("/api/lessons", "PATCH", {
+        lessonId: lesson.id,
+        status: "CANCELLED",
+        cancelledReason: "Malicious cancellation",
+      })
+    );
+    expect(resForbidden.status).toBe(403);
   });
 });
