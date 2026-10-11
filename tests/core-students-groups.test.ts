@@ -469,6 +469,81 @@ describe("Core Students and Groups Management", () => {
     expect(data.error).toContain("Вместимость группы исчерпана");
   });
 
+  it("4b. Group capacity race condition: Promise.all concurrent enrollments for the last remaining seat allows exactly one", async () => {
+    // Create students C1..C5 in Center A
+    const defaultPassword = "Password123!";
+    const passwordHash = await hashPassword(defaultPassword);
+    const now = new Date();
+
+    // Create a group with capacity = 1 and 0 students
+    const groupRace = await db.group.create({
+      data: {
+        centerId: centerAId,
+        courseId: (await db.course.findFirst({ where: { centerId: centerAId } }))!.id,
+        name: `Race Group ${Date.now()}`,
+        maxStudents: 1,
+      },
+    });
+
+    const candidateIds: string[] = [];
+    for (let i = 0; i < 5; i++) {
+      const u = await db.platformUser.create({
+        data: {
+          email: `race-candidate-${i}-${Date.now()}@test.com`,
+          fullName: `Race Candidate ${i}`,
+          passwordHash,
+          emailVerified: now,
+          memberships: {
+            create: {
+              centerId: centerAId,
+              role: "STUDENT",
+              status: "ACTIVE",
+            },
+          },
+        },
+        include: { memberships: true },
+      });
+      candidateIds.push(u.memberships[0].id);
+    }
+
+    const dir = await db.centerMembership.findUnique({
+      where: { id: directorAMembershipId },
+      include: { user: true },
+    });
+    mockToken = signJWT({
+      userId: dir!.userId,
+      email: dir!.user.email,
+      platformRole: "NONE",
+      activeCenterId: centerAId,
+      activeCenterRole: "DIRECTOR",
+    });
+
+    // Run 5 concurrent enrollments for the single remaining seat
+    const responses = await Promise.all(
+      candidateIds.map((cId) =>
+        enrollStudent(
+          mockRequest(`/api/groups/${groupRace.id}/enrollments`, "POST", {
+            studentMembershipId: cId,
+          }),
+          { params: { id: groupRace.id } }
+        )
+      )
+    );
+
+    const statuses = responses.map((r) => r.status);
+    const successCount = statuses.filter((s) => s === 200).length;
+    const rejectedCount = statuses.filter((s) => s === 400).length;
+
+    expect(successCount).toBe(1);
+    expect(rejectedCount).toBe(4);
+
+    // Confirm DB has exactly 1 active enrollment
+    const actualEnrollments = await db.enrollment.count({
+      where: { groupId: groupRace.id, status: "ACTIVE" },
+    });
+    expect(actualEnrollments).toBe(1);
+  });
+
   it("5. Transfer between groups: moves student and preserves history via audit log", async () => {
     const dir = await db.centerMembership.findUnique({
       where: { id: directorAMembershipId },

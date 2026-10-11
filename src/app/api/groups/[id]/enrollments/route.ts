@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { requireTenantAccess } from "@/lib/tenant";
+import { withKeyedLock } from "@/lib/async-lock";
 
 export async function POST(
   req: Request,
@@ -18,32 +19,11 @@ export async function POST(
       return NextResponse.json({ error: "Forbidden" }, { status: 403 });
     }
 
-    const group = await tenantDb.group.findFirst({
-      where: { id: groupId, centerId: tenantCtx.center.id },
-      include: {
-        _count: {
-          select: { enrollments: { where: { status: "ACTIVE" } } },
-        },
-      },
-    });
-
-    if (!group) {
-      return NextResponse.json({ error: "Группа не найдена" }, { status: 404 });
-    }
-
     const { studentMembershipId } = await req.json();
 
     if (!studentMembershipId) {
       return NextResponse.json(
         { error: "Не указан ID студента" },
-        { status: 400 }
-      );
-    }
-
-    // Check capacity
-    if (group._count.enrollments >= group.maxStudents) {
-      return NextResponse.json(
-        { error: "Вместимость группы исчерпана" },
         { status: 400 }
       );
     }
@@ -64,48 +44,73 @@ export async function POST(
       );
     }
 
-    const existingEnrollment = await tenantDb.enrollment.findFirst({
-      where: {
-        studentMembershipId,
-        groupId,
-        centerId: tenantCtx.center.id,
-      },
-    });
-
-    let enrollment;
-    if (existingEnrollment) {
-      enrollment = await tenantDb.enrollment.update({
-        where: { id: existingEnrollment.id },
-        data: { status: "ACTIVE" },
+    return await withKeyedLock(`group-enroll:${groupId}`, async () => {
+      const group = await tenantDb.group.findFirst({
+        where: { id: groupId, centerId: tenantCtx.center.id },
       });
-    } else {
-      enrollment = await tenantDb.enrollment.create({
-        data: {
-          centerId: tenantCtx.center.id,
-          studentMembershipId,
+
+      if (!group) {
+        return NextResponse.json({ error: "Группа не найдена" }, { status: 404 });
+      }
+
+      const activeCount = await tenantDb.enrollment.count({
+        where: {
           groupId,
           status: "ACTIVE",
+          centerId: tenantCtx.center.id,
         },
       });
-    }
 
-    // Record audit log
-    await tenantDb.auditLog.create({
-      data: {
-        centerId: tenantCtx.center.id,
-        actorUserId: tenantCtx.session.user.id,
-        action: "STUDENT_ENROLLED",
-        resource: "Student",
-        resourceId: studentMembershipId,
-        detailsJson: JSON.stringify({
+      if (activeCount >= group.maxStudents) {
+        return NextResponse.json(
+          { error: "Вместимость группы исчерпана" },
+          { status: 400 }
+        );
+      }
+
+      const existingEnrollment = await tenantDb.enrollment.findFirst({
+        where: {
+          studentMembershipId,
           groupId,
-          groupName: group.name,
-          enrollmentId: enrollment.id,
-        }),
-      },
-    });
+          centerId: tenantCtx.center.id,
+        },
+      });
 
-    return NextResponse.json({ success: true, enrollment });
+      let enrollment;
+      if (existingEnrollment) {
+        enrollment = await tenantDb.enrollment.update({
+          where: { id: existingEnrollment.id },
+          data: { status: "ACTIVE" },
+        });
+      } else {
+        enrollment = await tenantDb.enrollment.create({
+          data: {
+            centerId: tenantCtx.center.id,
+            studentMembershipId,
+            groupId,
+            status: "ACTIVE",
+          },
+        });
+      }
+
+      // Record audit log
+      await tenantDb.auditLog.create({
+        data: {
+          centerId: tenantCtx.center.id,
+          actorUserId: tenantCtx.session.user.id,
+          action: "STUDENT_ENROLLED",
+          resource: "Student",
+          resourceId: studentMembershipId,
+          detailsJson: JSON.stringify({
+            groupId,
+            groupName: group.name,
+            enrollmentId: enrollment.id,
+          }),
+        },
+      });
+
+      return NextResponse.json({ success: true, enrollment });
+    });
   } catch (err: unknown) {
     const error = err as { message?: string; status?: number };
     return NextResponse.json(
