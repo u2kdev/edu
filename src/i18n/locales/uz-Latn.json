@@ -267,7 +267,29 @@
     "absent": "Qatnashmadi",
     "excused": "Sababli",
     "late": "Kechikdi",
-    "attendanceRate": "% davomat"
+    "attendanceRate": "% davomat",
+    "exportCsv": "CSV ga eksport",
+    "riskList": "Xavf guruhi (< 80%)",
+    "riskListEmpty": "Xavf guruhida o'quvchilar yo'q",
+    "selectGroup": "Guruhni tanlang",
+    "selectLesson": "Darsni tanlang",
+    "markAllPresent": "Barchani belgilash",
+    "saveAttendance": "Davomatni saqlash",
+    "note": "Eslatma",
+    "savedSuccess": "Davomat muvaffaqiyatli saqlandi"
+  },
+
+  "grades": {
+    "title": "Baholar jurnali va o'zlashtirish",
+    "gradebookMatrix": "Baholar matritsasi",
+    "weightedScore": "Yakuniy ball",
+    "letterGrade": "Baho",
+    "finalizePeriod": "Davrni yakunlash",
+    "finalizedSuccess": "Davr baholari muvaffaqiyatli yakunlandi",
+    "exportCsv": "CSV ga eksport",
+    "lockedTooltip": "Baho qulflangan va o'zgartirilmaydi",
+    "selectGroup": "Guruhni tanlang",
+    "noGrades": "Hozircha baholar yo'q"
   },
 
   "homework": {

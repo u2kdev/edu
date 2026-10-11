@@ -267,7 +267,29 @@
     "absent": "Отсутствует",
     "excused": "По ув. причине",
     "late": "Опоздал",
-    "attendanceRate": "% посещаемости"
+    "attendanceRate": "% посещаемости",
+    "exportCsv": "Экспорт в CSV",
+    "riskList": "Зона риска (< 80%)",
+    "riskListEmpty": "Нет учеников в зоне риска",
+    "selectGroup": "Выберите группу",
+    "selectLesson": "Выберите урок",
+    "markAllPresent": "Отметить всех",
+    "saveAttendance": "Сохранить отметки",
+    "note": "Заметка",
+    "savedSuccess": "Посещаемость успешно сохранена"
+  },
+
+  "grades": {
+    "title": "Успеваемость и журнал оценок",
+    "gradebookMatrix": "Матрица оценок",
+    "weightedScore": "Итоговый балл",
+    "letterGrade": "Оценка",
+    "finalizePeriod": "Финализировать период",
+    "finalizedSuccess": "Оценки периода успешно финализированы",
+    "exportCsv": "Экспорт в CSV",
+    "lockedTooltip": "Оценка зафиксирована и не подлежит изменению",
+    "selectGroup": "Выберите группу",
+    "noGrades": "Оценок пока нет"
   },
 
   "homework": {

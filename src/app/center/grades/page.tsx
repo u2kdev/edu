@@ -5,6 +5,7 @@ import Link from "next/link";
 import { GraduationCap, Award, CheckCircle2, AlertCircle, Users } from "lucide-react";
 import { t, formatDateLocalized } from "@/i18n";
 import { Prisma } from "@prisma/client";
+import GradebookManager from "@/components/GradebookManager";
 
 export default async function CenterGradesPage() {
   const tenantCtx = await requireTenantPageAccess();
@@ -110,6 +111,26 @@ export default async function CenterGradesPage() {
     ? Math.round(submissions.reduce((sum, s) => sum + (s.grade || 0), 0) / totalGraded)
     : 0;
 
+  const isStaff =
+    activeRole === "DIRECTOR" ||
+    activeRole === "CENTER_ADMIN" ||
+    activeRole === "TEACHER" ||
+    session.user.platformRole === "SUPERADMIN";
+
+  let groups: { id: string; name: string }[] = [];
+  if (isStaff) {
+    const groupsWhere: Prisma.GroupWhereInput = { centerId };
+    if (activeRole === "TEACHER" && currentMembership) {
+      groupsWhere.teacherMembershipId = currentMembership.id;
+    }
+    const rawGroups = await tenantCtx.getTenantDb().group.findMany({
+      where: groupsWhere,
+      select: { id: true, name: true },
+      orderBy: { name: "asc" },
+    });
+    groups = rawGroups;
+  }
+
   return (
     <div className="space-y-8">
       <div className="flex items-center justify-between">
@@ -134,6 +155,15 @@ export default async function CenterGradesPage() {
           </div>
         )}
       </div>
+
+      {/* Gradebook Matrix Component for Staff */}
+      {isStaff && groups.length > 0 && (
+        <GradebookManager
+          groups={groups}
+          locale={locale}
+          userRole={activeRole}
+        />
+      )}
 
       {/* Test Attempts Grades Table */}
       <div className="space-y-4">
