@@ -193,7 +193,16 @@ export async function PATCH(req: Request) {
   try {
     const tenantCtx = await requireTenantAccess(req);
     const tenantDb = tenantCtx.getTenantDb();
-    const { action, homeworkId, submissionText, filesJson, grade, feedback, studentMembershipId } = await req.json();
+    const {
+      action,
+      homeworkId,
+      submissionText,
+      filesJson,
+      grade,
+      feedback,
+      studentMembershipId,
+      status,
+    } = await req.json();
 
     if (!homeworkId) {
       return NextResponse.json({ error: "homeworkId required" }, { status: 400 });
@@ -213,36 +222,52 @@ export async function PATCH(req: Request) {
         return NextResponse.json({ error: "Only students can submit homework" }, { status: 403 });
       }
 
-      // We cannot use upsert because db-tenant intercepts findUnique but homeworkId_studentMembershipId is compound.
-      // We'll manually findFirst and create or update.
+      // Check existing submission
       const existing = await tenantDb.homeworkSubmission.findFirst({
         where: { homeworkId, studentMembershipId: tenantCtx.membership.id },
       });
 
-      let submission;
+      if (existing && existing.status === "ACCEPTED") {
+        return NextResponse.json(
+          { error: "Homework is already accepted and graded" },
+          { status: 400 }
+        );
+      }
+
+      const statusToSet = "SUBMITTED";
+      const filesPayload = filesJson
+        ? typeof filesJson === "string"
+          ? filesJson
+          : JSON.stringify(filesJson)
+        : null;
+
       if (existing) {
-        submission = await tenantDb.homeworkSubmission.updateMany({
+        await tenantDb.homeworkSubmission.updateMany({
           where: { homeworkId, studentMembershipId: tenantCtx.membership.id },
           data: {
             submissionText: submissionText || null,
-            filesJson: filesJson ? JSON.stringify(filesJson) : null,
+            filesJson: filesPayload,
+            status: statusToSet,
             submittedAt: new Date(),
           },
         });
-        submission = await tenantDb.homeworkSubmission.findFirst({
-           where: { homeworkId, studentMembershipId: tenantCtx.membership.id }
-        });
       } else {
-        submission = await tenantDb.homeworkSubmission.create({
+        await tenantDb.homeworkSubmission.create({
           data: {
             centerId: tenantCtx.center.id,
             homeworkId,
             studentMembershipId: tenantCtx.membership.id,
             submissionText: submissionText || null,
-            filesJson: filesJson ? JSON.stringify(filesJson) : null,
+            filesJson: filesPayload,
+            status: statusToSet,
+            submittedAt: new Date(),
           },
         });
       }
+
+      const submission = await tenantDb.homeworkSubmission.findFirst({
+        where: { homeworkId, studentMembershipId: tenantCtx.membership.id },
+      });
 
       // Log activity
       await tenantDb.activityLog.create({
@@ -297,23 +322,81 @@ export async function PATCH(req: Request) {
         }
       }
 
-      // We use updateMany for composite unique keys because db-tenant doesn't support compound unique updates yet natively without error
+      const numericGrade =
+        grade !== undefined && grade !== null && grade !== ""
+          ? parseInt(String(grade))
+          : null;
+      if (numericGrade !== null && (isNaN(numericGrade) || numericGrade < 0 || numericGrade > 100)) {
+        return NextResponse.json({ error: "Grade must be between 0 and 100" }, { status: 400 });
+      }
+
+      let targetStatus = "ACCEPTED";
+      if (status) {
+        targetStatus = status;
+      } else if (numericGrade !== null) {
+        targetStatus = numericGrade >= 60 ? "ACCEPTED" : "REVISION_REQUESTED";
+      }
+
+      // We use updateMany for composite unique keys because db-tenant doesn't support compound unique updates natively without error
       await tenantDb.homeworkSubmission.updateMany({
         where: {
           homeworkId,
           studentMembershipId,
         },
         data: {
-          grade: grade !== undefined ? parseInt(grade) : null,
+          grade: numericGrade,
           feedback: feedback || null,
+          status: targetStatus,
           gradedByMembershipId: tenantCtx.membership?.id || null,
           gradedAt: new Date(),
         },
       });
 
       const submission = await tenantDb.homeworkSubmission.findFirst({
-        where: { homeworkId, studentMembershipId }
+        where: { homeworkId, studentMembershipId },
       });
+
+      // Synchronize Grade record into db.grade if numericGrade is provided
+      if (numericGrade !== null && homework.lessonId) {
+        const studentEnrollment = await tenantDb.enrollment.findFirst({
+          where: { studentMembershipId, status: "ACTIVE" },
+        });
+
+        const existingGrade = await tenantDb.grade.findFirst({
+          where: {
+            centerId: tenantCtx.center.id,
+            studentMembershipId,
+            lessonId: homework.lessonId,
+            gradeType: "HOMEWORK",
+          },
+        });
+
+        if (existingGrade) {
+          await tenantDb.grade.updateMany({
+            where: { id: existingGrade.id },
+            data: {
+              value: numericGrade,
+              comment: feedback || existingGrade.comment,
+              lifecycle: targetStatus === "ACCEPTED" ? "SUBMITTED" : "DRAFT",
+            },
+          });
+        } else {
+          await tenantDb.grade.create({
+            data: {
+              centerId: tenantCtx.center.id,
+              studentMembershipId,
+              groupId: studentEnrollment?.groupId || null,
+              lessonId: homework.lessonId,
+              teacherMembershipId: tenantCtx.membership?.id || studentMem.id,
+              gradeType: "HOMEWORK",
+              value: numericGrade,
+              maxValue: 100,
+              comment: feedback || null,
+              lifecycle: targetStatus === "ACCEPTED" ? "SUBMITTED" : "DRAFT",
+            },
+          });
+        }
+      }
 
       await logAuditEvent({
         centerId: tenantCtx.center.id,
@@ -321,7 +404,7 @@ export async function PATCH(req: Request) {
         action: "HOMEWORK_GRADED",
         resource: "HomeworkSubmission",
         resourceId: submission?.id,
-        details: { grade, studentMembershipId, homeworkId },
+        details: { grade: numericGrade, status: targetStatus, studentMembershipId, homeworkId },
       });
 
       return NextResponse.json({ success: true, submission });
