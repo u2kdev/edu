@@ -2,6 +2,8 @@ import { describe, it, expect, beforeAll, vi } from "vitest";
 import { db } from "../src/lib/db";
 import { signJWT, hashPassword } from "../src/lib/auth";
 import { GET as getHomework, POST as createHomework, PATCH as patchHomework } from "../src/app/api/homework/route";
+import { POST as startTestAttempt } from "../src/app/api/tests/start/route";
+import { POST as submitTestAttempt } from "../src/app/api/tests/attempt/route";
 
 let mockToken: string = "";
 
@@ -432,4 +434,222 @@ describe("CORE-4 Homework Lifecycle & Testing System", () => {
     );
     expect(forbiddenGrade.status).toBe(403);
   });
+
+  let test1Id: string;
+  let q1Id: string;
+  let q2Id: string;
+  let q3Id: string;
+  let q4Id: string;
+
+  it("6. Online Testing: Auto-grades SINGLE_CHOICE, MULTIPLE_CHOICE, TRUE_FALSE, TEXT with review breakdown", async () => {
+    // Director creates Material and Test with 4 question types
+    const material = await db.material.create({
+      data: {
+        centerId: centerAId,
+        title: "Algorithms Final Test",
+        materialType: "TEST",
+      },
+    });
+
+    const testRecord = await db.test.create({
+      data: {
+        centerId: centerAId,
+        materialId: material.id,
+        timeLimitMinutes: 10,
+        maxAttempts: 2,
+        passingScorePercent: 75,
+      },
+    });
+    test1Id = testRecord.id;
+
+    // Q1: SINGLE_CHOICE
+    const q1 = await db.testQuestion.create({
+      data: {
+        centerId: centerAId,
+        testId: test1Id,
+        questionText: "What is the time complexity of binary search?",
+        questionType: "SINGLE_CHOICE",
+        optionsJson: JSON.stringify([
+          { text: "O(1)", isCorrect: false },
+          { text: "O(log n)", isCorrect: true },
+          { text: "O(n)", isCorrect: false },
+        ]),
+        points: 2,
+        orderIndex: 1,
+      },
+    });
+    q1Id = q1.id;
+
+    // Q2: MULTIPLE_CHOICE
+    const q2 = await db.testQuestion.create({
+      data: {
+        centerId: centerAId,
+        testId: test1Id,
+        questionText: "Which of the following are non-linear data structures?",
+        questionType: "MULTIPLE_CHOICE",
+        optionsJson: JSON.stringify([
+          { text: "Tree", isCorrect: true },
+          { text: "Graph", isCorrect: true },
+          { text: "Array", isCorrect: false },
+        ]),
+        points: 2,
+        orderIndex: 2,
+      },
+    });
+    q2Id = q2.id;
+
+    // Q3: TRUE_FALSE
+    const q3 = await db.testQuestion.create({
+      data: {
+        centerId: centerAId,
+        testId: test1Id,
+        questionText: "HTTP is a stateful protocol.",
+        questionType: "TRUE_FALSE",
+        correctAnswer: "false",
+        points: 1,
+        orderIndex: 3,
+      },
+    });
+    q3Id = q3.id;
+
+    // Q4: TEXT
+    const q4 = await db.testQuestion.create({
+      data: {
+        centerId: centerAId,
+        testId: test1Id,
+        questionText: "Which protocol secures web traffic?",
+        questionType: "TEXT",
+        correctAnswer: "https",
+        points: 1,
+        orderIndex: 4,
+      },
+    });
+    q4Id = q4.id;
+
+    // Student A1 starts attempt
+    const studA1 = await db.centerMembership.findUnique({
+      where: { id: studentA1MembershipId },
+      include: { user: true },
+    });
+    mockToken = signJWT({
+      userId: studA1!.userId,
+      email: studA1!.user.email,
+      platformRole: "NONE",
+      activeCenterId: centerAId,
+      activeCenterRole: "STUDENT",
+    });
+
+    const startRes = await startTestAttempt(
+      mockRequest("/api/tests/start", "POST", { testId: test1Id })
+    );
+    expect(startRes.status).toBe(200);
+    const startData = await startRes.json();
+    expect(startData.attemptId).toBeDefined();
+    expect(startData.timeLimitMinutes).toBe(10);
+
+    // Student A1 submits answers
+    const submitRes = await submitTestAttempt(
+      mockRequest("/api/tests/attempt", "POST", {
+        attemptId: startData.attemptId,
+        testId: test1Id,
+        studentAnswers: {
+          [q1Id]: "O(log n)",
+          [q2Id]: ["Tree", "Graph"],
+          [q3Id]: "false",
+          [q4Id]: "HTTPS ",
+        },
+      })
+    );
+    expect(submitRes.status).toBe(200);
+    const submitData = await submitRes.json();
+    expect(submitData.passed).toBe(true);
+    expect(submitData.attempt.scorePoints).toBe(6);
+    expect(submitData.attempt.maxPoints).toBe(6);
+    expect(submitData.attempt.scorePercent).toBe(100);
+    expect(submitData.review).toHaveLength(4);
+    expect(submitData.review.every((r: { isCorrect: boolean }) => r.isCorrect)).toBe(true);
+  });
+
+  it("7. Attempts Limit: Rejects attempts beyond maxAttempts", async () => {
+    const studA1 = await db.centerMembership.findUnique({
+      where: { id: studentA1MembershipId },
+      include: { user: true },
+    });
+    mockToken = signJWT({
+      userId: studA1!.userId,
+      email: studA1!.user.email,
+      platformRole: "NONE",
+      activeCenterId: centerAId,
+      activeCenterRole: "STUDENT",
+    });
+
+    // Start & submit attempt #2
+    const start2Res = await startTestAttempt(
+      mockRequest("/api/tests/start", "POST", { testId: test1Id })
+    );
+    expect(start2Res.status).toBe(200);
+    const start2Data = await start2Res.json();
+
+    await submitTestAttempt(
+      mockRequest("/api/tests/attempt", "POST", {
+        attemptId: start2Data.attemptId,
+        testId: test1Id,
+        studentAnswers: {},
+      })
+    );
+
+    // Attempt #3 (should be rejected since maxAttempts = 2)
+    const start3Res = await startTestAttempt(
+      mockRequest("/api/tests/start", "POST", { testId: test1Id })
+    );
+    expect(start3Res.status).toBe(400);
+    const errData = await start3Res.json();
+    expect(errData.error).toMatch(/maximum allowed attempts/i);
+  });
+
+  it("8. Server-side Timer: Rejects or penalizes test submission when time limit is exceeded", async () => {
+    const studA2 = await db.centerMembership.findUnique({
+      where: { id: studentA2MembershipId },
+      include: { user: true },
+    });
+    mockToken = signJWT({
+      userId: studA2!.userId,
+      email: studA2!.user.email,
+      platformRole: "NONE",
+      activeCenterId: centerAId,
+      activeCenterRole: "STUDENT",
+    });
+
+    // Student A2 starts attempt
+    const startRes = await startTestAttempt(
+      mockRequest("/api/tests/start", "POST", { testId: test1Id })
+    );
+    expect(startRes.status).toBe(200);
+    const startData = await startRes.json();
+
+    // Backdate startedAt in DB by 15 minutes (exceeding 10-minute limit)
+    const fifteenMinutesAgo = new Date(Date.now() - 15 * 60 * 1000);
+    await db.testAttempt.update({
+      where: { id: startData.attemptId },
+      data: { startedAt: fifteenMinutesAgo },
+    });
+
+    const submitRes = await submitTestAttempt(
+      mockRequest("/api/tests/attempt", "POST", {
+        attemptId: startData.attemptId,
+        testId: test1Id,
+        studentAnswers: {
+          [q1Id]: "O(log n)",
+        },
+      })
+    );
+    expect([400, 200]).toContain(submitRes.status);
+    const submitData = await submitRes.json();
+    if (submitRes.status === 400) {
+      expect(submitData.error).toMatch(/time limit exceeded/i);
+    } else {
+      expect(submitData.isTimeExceeded).toBe(true);
+    }
+  });
 });
+
