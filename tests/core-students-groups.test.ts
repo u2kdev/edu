@@ -751,4 +751,201 @@ describe("Core Students and Groups Management", () => {
     expect(userAt?.fullName).toBe("'@SUM(1+2)");
     expect(userAt?.phone).toBe("'-50");
   });
+
+  it("8. Strict role scoping on students list and search: Teacher, Student, Parent", async () => {
+    // Setup isolated test users in Center A:
+    const course = await db.course.findFirst({ where: { centerId: centerAId } });
+    const passwordHash = await hashPassword("Password123!");
+    const now = new Date();
+
+    // Teacher T1 and Group G1
+    const tUser1 = await db.platformUser.create({
+      data: {
+        email: `scope-teacher1-${Date.now()}@test.com`,
+        fullName: "Scope Teacher 1",
+        passwordHash,
+        emailVerified: now,
+        memberships: {
+          create: { centerId: centerAId, role: "TEACHER", status: "ACTIVE" },
+        },
+      },
+      include: { memberships: true },
+    });
+    const tMem1 = tUser1.memberships[0];
+
+    const groupG1 = await db.group.create({
+      data: {
+        centerId: centerAId,
+        courseId: course!.id,
+        name: `Scope Group 1 ${Date.now()}`,
+        teacherMembershipId: tMem1.id,
+      },
+    });
+
+    // Student S1 enrolled in G1
+    const sUser1 = await db.platformUser.create({
+      data: {
+        email: `scope-student1-${Date.now()}@test.com`,
+        fullName: "Alisher Scope",
+        passwordHash,
+        emailVerified: now,
+        memberships: {
+          create: { centerId: centerAId, role: "STUDENT", status: "ACTIVE" },
+        },
+      },
+      include: { memberships: true },
+    });
+    const sMem1 = sUser1.memberships[0];
+
+    await db.enrollment.create({
+      data: {
+        centerId: centerAId,
+        studentMembershipId: sMem1.id,
+        groupId: groupG1.id,
+        status: "ACTIVE",
+      },
+    });
+
+    // Teacher T2 and Group G2 with Student S2
+    const tUser2 = await db.platformUser.create({
+      data: {
+        email: `scope-teacher2-${Date.now()}@test.com`,
+        fullName: "Scope Teacher 2",
+        passwordHash,
+        emailVerified: now,
+        memberships: {
+          create: { centerId: centerAId, role: "TEACHER", status: "ACTIVE" },
+        },
+      },
+      include: { memberships: true },
+    });
+    const tMem2 = tUser2.memberships[0];
+
+    const groupG2 = await db.group.create({
+      data: {
+        centerId: centerAId,
+        courseId: course!.id,
+        name: `Scope Group 2 ${Date.now()}`,
+        teacherMembershipId: tMem2.id,
+      },
+    });
+
+    const sUser2 = await db.platformUser.create({
+      data: {
+        email: `scope-student2-${Date.now()}@test.com`,
+        fullName: "Bekzod Scope",
+        passwordHash,
+        emailVerified: now,
+        memberships: {
+          create: { centerId: centerAId, role: "STUDENT", status: "ACTIVE" },
+        },
+      },
+      include: { memberships: true },
+    });
+    const sMem2 = sUser2.memberships[0];
+
+    await db.enrollment.create({
+      data: {
+        centerId: centerAId,
+        studentMembershipId: sMem2.id,
+        groupId: groupG2.id,
+        status: "ACTIVE",
+      },
+    });
+
+    // Parent P1 linked to S1
+    const pUser1 = await db.platformUser.create({
+      data: {
+        email: `scope-parent1-${Date.now()}@test.com`,
+        fullName: "Parent Scope 1",
+        passwordHash,
+        emailVerified: now,
+        memberships: {
+          create: { centerId: centerAId, role: "PARENT", status: "ACTIVE" },
+        },
+      },
+      include: { memberships: true },
+    });
+    const pMem1 = pUser1.memberships[0];
+
+    await db.parentLink.create({
+      data: {
+        parentMembershipId: pMem1.id,
+        studentMembershipId: sMem1.id,
+        status: "CONFIRMED",
+      },
+    });
+
+    // --- CHECK 1: Teacher 1 sees only Student 1 ---
+    mockToken = signJWT({
+      userId: tUser1.id,
+      email: tUser1.email,
+      platformRole: "NONE",
+      activeCenterId: centerAId,
+      activeCenterRole: "TEACHER",
+    });
+    const resT1 = await getStudents(mockRequest("/api/students", "GET"));
+    expect(resT1.status).toBe(200);
+    const dataT1 = await resT1.json();
+    const t1Ids = dataT1.students.map((s: { id: string }) => s.id);
+    expect(t1Ids).toContain(sMem1.id);
+    expect(t1Ids).not.toContain(sMem2.id);
+
+    // Search for Student 2 returns empty for Teacher 1
+    const resT1Search = await getStudents(
+      mockRequest("/api/students?search=Bekzod", "GET")
+    );
+    const dataT1Search = await resT1Search.json();
+    expect(dataT1Search.students.length).toBe(0);
+
+    // Search for Student 1 returns Student 1
+    const resT1SearchSelf = await getStudents(
+      mockRequest("/api/students?search=Alisher", "GET")
+    );
+    const dataT1SearchSelf = await resT1SearchSelf.json();
+    expect(dataT1SearchSelf.students.length).toBe(1);
+    expect(dataT1SearchSelf.students[0].id).toBe(sMem1.id);
+
+    // --- CHECK 2: Student 1 sees ONLY self ---
+    mockToken = signJWT({
+      userId: sUser1.id,
+      email: sUser1.email,
+      platformRole: "NONE",
+      activeCenterId: centerAId,
+      activeCenterRole: "STUDENT",
+    });
+    const resS1 = await getStudents(mockRequest("/api/students", "GET"));
+    expect(resS1.status).toBe(200);
+    const dataS1 = await resS1.json();
+    expect(dataS1.students.length).toBe(1);
+    expect(dataS1.students[0].id).toBe(sMem1.id);
+
+    // Student 1 searching for other student gets 0 results
+    const resS1Search = await getStudents(
+      mockRequest("/api/students?search=Bekzod", "GET")
+    );
+    const dataS1Search = await resS1Search.json();
+    expect(dataS1Search.students.length).toBe(0);
+
+    // --- CHECK 3: Parent 1 sees ONLY linked child ---
+    mockToken = signJWT({
+      userId: pUser1.id,
+      email: pUser1.email,
+      platformRole: "NONE",
+      activeCenterId: centerAId,
+      activeCenterRole: "PARENT",
+    });
+    const resP1 = await getStudents(mockRequest("/api/students", "GET"));
+    expect(resP1.status).toBe(200);
+    const dataP1 = await resP1.json();
+    expect(dataP1.students.length).toBe(1);
+    expect(dataP1.students[0].id).toBe(sMem1.id);
+
+    // Parent 1 searching for other student gets 0 results
+    const resP1Search = await getStudents(
+      mockRequest("/api/students?search=Bekzod", "GET")
+    );
+    const dataP1Search = await resP1Search.json();
+    expect(dataP1Search.students.length).toBe(0);
+  });
 });
