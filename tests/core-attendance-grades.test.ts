@@ -6,6 +6,8 @@ import { GET as getAttendanceAnalytics } from "../src/app/api/attendance/analyti
 import { GET as getGradeMatrix } from "../src/app/api/grades/matrix/route";
 import { POST as finalizeGrades } from "../src/app/api/grades/finalize/route";
 import { POST as createGrade, PATCH as updateGrade } from "../src/app/api/grades/route";
+import { GET as exportAttendance } from "../src/app/api/attendance/export/route";
+import { GET as exportGrades } from "../src/app/api/grades/export/route";
 
 let mockToken: string = "";
 
@@ -655,6 +657,137 @@ describe("CORE-3 Attendance & Grades System", () => {
     expect(patchRes.status).toBe(403);
     const patchData = await patchRes.json();
     expect(patchData.error).toMatch(/Cannot modify a finalized grade/i);
+  });
+
+  it("9. Attendance CSV Export: Sanitizes formula injection and enforces role access", async () => {
+    // Insert attendance record with formula injection payload
+    const teachA1 = await db.centerMembership.findUnique({
+      where: { id: teacherA1MembershipId },
+      include: { user: true },
+    });
+    mockToken = signJWT({
+      userId: teachA1!.userId,
+      email: teachA1!.user.email,
+      platformRole: "NONE",
+      activeCenterId: centerAId,
+      activeCenterRole: "TEACHER",
+    });
+
+    await markAttendance(
+      mockRequest("/api/attendance", "POST", {
+        lessonId: lessonA1Id,
+        records: [
+          {
+            studentMembershipId: studentA1MembershipId,
+            groupId: groupA1Id,
+            status: "PRESENT",
+            note: "=cmd|' /C calc'!A0",
+          },
+        ],
+      })
+    );
+
+    // Teacher of Group A1 exports CSV
+    const exportRes = await exportAttendance(
+      mockRequest(`/api/attendance/export?groupId=${groupA1Id}`, "GET")
+    );
+    expect(exportRes.status).toBe(200);
+    expect(exportRes.headers.get("content-type")).toContain("text/csv");
+    const csvContent = await exportRes.text();
+    // Verify formula injection is sanitized with leading single quote
+    expect(csvContent).toContain("`'=cmd|' /C calc'!A0`".replace(/`/g, ""));
+    expect(csvContent).not.toMatch(/^=cmd/m);
+
+    // Teacher of Group A2 cannot export Group A1
+    const teachA2 = await db.centerMembership.findUnique({
+      where: { id: teacherA2MembershipId },
+      include: { user: true },
+    });
+    mockToken = signJWT({
+      userId: teachA2!.userId,
+      email: teachA2!.user.email,
+      platformRole: "NONE",
+      activeCenterId: centerAId,
+      activeCenterRole: "TEACHER",
+    });
+    const forbiddenRes = await exportAttendance(
+      mockRequest(`/api/attendance/export?groupId=${groupA1Id}`, "GET")
+    );
+    expect(forbiddenRes.status).toBe(403);
+
+    // Student cannot export attendance CSV
+    const student = await db.centerMembership.findUnique({
+      where: { id: studentA1MembershipId },
+      include: { user: true },
+    });
+    mockToken = signJWT({
+      userId: student!.userId,
+      email: student!.user.email,
+      platformRole: "NONE",
+      activeCenterId: centerAId,
+      activeCenterRole: "STUDENT",
+    });
+    const studentExportRes = await exportAttendance(
+      mockRequest(`/api/attendance/export?groupId=${groupA1Id}`, "GET")
+    );
+    expect(studentExportRes.status).toBe(403);
+  });
+
+  it("10. Grades CSV Export: Sanitizes formula injection and enforces role access", async () => {
+    const dirA = await db.centerMembership.findUnique({
+      where: { id: directorAMembershipId },
+      include: { user: true },
+    });
+    mockToken = signJWT({
+      userId: dirA!.userId,
+      email: dirA!.user.email,
+      platformRole: "NONE",
+      activeCenterId: centerAId,
+      activeCenterRole: "DIRECTOR",
+    });
+
+    // Create a grade with formula injection payload in comment
+    await createGrade(
+      mockRequest("/api/grades", "POST", {
+        studentMembershipId: studentA1MembershipId,
+        groupId: groupA1Id,
+        gradeType: "TEST",
+        value: 95,
+        maxValue: 100,
+        comment: "+2+5=7 danger formula",
+      })
+    );
+
+    const exportRes = await exportGrades(
+      mockRequest(`/api/grades/export?groupId=${groupA1Id}`, "GET")
+    );
+    expect(exportRes.status).toBe(200);
+    expect(exportRes.headers.get("content-type")).toContain("text/csv");
+    const buf = await exportRes.arrayBuffer();
+    const bytes = new Uint8Array(buf);
+    // Verify UTF-8 BOM bytes (EF BB BF)
+    expect(bytes[0]).toBe(0xef);
+    expect(bytes[1]).toBe(0xbb);
+    expect(bytes[2]).toBe(0xbf);
+    const csvContent = new TextDecoder().decode(bytes);
+    expect(csvContent).toContain("'+2+5=7 danger formula");
+
+    // Parent cannot export grades CSV
+    const parent = await db.centerMembership.findUnique({
+      where: { id: parentA1MembershipId },
+      include: { user: true },
+    });
+    mockToken = signJWT({
+      userId: parent!.userId,
+      email: parent!.user.email,
+      platformRole: "NONE",
+      activeCenterId: centerAId,
+      activeCenterRole: "PARENT",
+    });
+    const parentExportRes = await exportGrades(
+      mockRequest(`/api/grades/export?groupId=${groupA1Id}`, "GET")
+    );
+    expect(parentExportRes.status).toBe(403);
   });
 });
 

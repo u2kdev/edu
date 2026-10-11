@@ -172,6 +172,15 @@ export async function POST(req: Request) {
 
     // Use updateMany for UPSERT simulation with getTenantDb because prisma extension doesn't fully intercept compound where upserts well yet.
     for (const r of attendanceRecords) {
+      let recordGroupId = r.groupId || null;
+      if (!recordGroupId) {
+        const enr = await tenantDb.enrollment.findFirst({
+          where: { studentMembershipId: r.studentMembershipId, status: "ACTIVE" },
+          select: { groupId: true },
+        });
+        if (enr) recordGroupId = enr.groupId;
+      }
+
       const existing = await tenantDb.attendance.findFirst({
         where: { lessonId, studentMembershipId: r.studentMembershipId },
       });
@@ -181,7 +190,7 @@ export async function POST(req: Request) {
           data: {
             status: r.status,
             note: r.note?.trim() || null,
-            groupId: r.groupId || existing.groupId || null,
+            groupId: recordGroupId || existing.groupId || null,
             markedByMembershipId: markerId,
             markedAt: new Date(),
           },
@@ -194,7 +203,7 @@ export async function POST(req: Request) {
               studentMembershipId: r.studentMembershipId,
               status: r.status,
               note: r.note?.trim() || null,
-              groupId: r.groupId || null,
+              groupId: recordGroupId,
               markedByMembershipId: markerId,
             },
           });
@@ -206,7 +215,7 @@ export async function POST(req: Request) {
               data: {
                 status: r.status,
                 note: r.note?.trim() || null,
-                groupId: r.groupId || null,
+                groupId: recordGroupId,
                 markedByMembershipId: markerId,
                 markedAt: new Date(),
               },
