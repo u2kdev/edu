@@ -11,7 +11,8 @@ export default defineConfig({
     fileParallelism: false,
     env: {
       DATABASE_URL: process.env.TEST_DATABASE_URL || "postgresql://postgres:admin@localhost:5432/lms_test?schema=public",
-      TRUSTED_PROXY_HOPS: "1"
+      TRUSTED_PROXY_HOPS: "1",
+      JWT_SECRET: process.env.JWT_SECRET || "ci-dummy-jwt-secret-key-32-chars-long!"
     }
   },
 });
