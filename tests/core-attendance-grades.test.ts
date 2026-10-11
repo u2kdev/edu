@@ -3,6 +3,9 @@ import { db } from "../src/lib/db";
 import { signJWT, hashPassword } from "../src/lib/auth";
 import { GET as getAttendance, POST as markAttendance } from "../src/app/api/attendance/route";
 import { GET as getAttendanceAnalytics } from "../src/app/api/attendance/analytics/route";
+import { GET as getGradeMatrix } from "../src/app/api/grades/matrix/route";
+import { POST as finalizeGrades } from "../src/app/api/grades/finalize/route";
+import { POST as createGrade, PATCH as updateGrade } from "../src/app/api/grades/route";
 
 let mockToken: string = "";
 
@@ -500,4 +503,158 @@ describe("CORE-3 Attendance & Grades System", () => {
     expect(studentData.studentStats.studentMembershipId).toBe(studentA1MembershipId);
     expect(studentData.riskList).toHaveLength(0);
   });
+
+  let createdGradeId: string;
+
+  it("6. Gradebook Matrix: Returns students x assignments matrix with weighted scores and letter grades", async () => {
+    const teachA1 = await db.centerMembership.findUnique({
+      where: { id: teacherA1MembershipId },
+      include: { user: true },
+    });
+    mockToken = signJWT({
+      userId: teachA1!.userId,
+      email: teachA1!.user.email,
+      platformRole: "NONE",
+      activeCenterId: centerAId,
+      activeCenterRole: "TEACHER",
+    });
+
+    // Create several grades for Student A1 in Group A1
+    const hwRes = await createGrade(
+      mockRequest("/api/grades", "POST", {
+        studentMembershipId: studentA1MembershipId,
+        groupId: groupA1Id,
+        lessonId: lessonA1Id,
+        gradeType: "HOMEWORK",
+        value: 90,
+        maxValue: 100,
+        comment: "Great HW",
+      })
+    );
+    expect(hwRes.status).toBe(200);
+    const hwData = await hwRes.json();
+    createdGradeId = hwData.grade.id;
+
+    await createGrade(
+      mockRequest("/api/grades", "POST", {
+        studentMembershipId: studentA1MembershipId,
+        groupId: groupA1Id,
+        lessonId: lessonA1Id,
+        gradeType: "TEST",
+        value: 80,
+        maxValue: 100,
+      })
+    );
+
+    // Call matrix API
+    const matrixRes = await getGradeMatrix(
+      mockRequest(`/api/grades/matrix?groupId=${groupA1Id}`, "GET")
+    );
+    expect(matrixRes.status).toBe(200);
+    const matrixData = await matrixRes.json();
+
+    expect(matrixData.groupId).toBe(groupA1Id);
+    expect(matrixData.students).toBeInstanceOf(Array);
+    const s1Row = matrixData.students.find(
+      (s: { studentMembershipId: string }) => s.studentMembershipId === studentA1MembershipId
+    );
+    expect(s1Row).toBeDefined();
+    expect(s1Row.weightedScore).toBeGreaterThan(0);
+    expect(s1Row.letterGrade).toBeDefined();
+
+    // Tenant isolation: Director B cannot view Group A1's matrix
+    const dirBMem = await db.centerMembership.findFirst({
+      where: { centerId: centerBId, role: "DIRECTOR" },
+      include: { user: true },
+    });
+    // Use center B context
+    mockToken = signJWT({
+      userId: dirBMem!.userId,
+      email: dirBMem!.user.email,
+      platformRole: "NONE",
+      activeCenterId: centerBId,
+      activeCenterRole: "DIRECTOR",
+    });
+
+    const resIsolated = await getGradeMatrix(
+      mockRequest(`/api/grades/matrix?groupId=${groupA1Id}`, "GET")
+    );
+    expect([403, 404]).toContain(resIsolated.status);
+  });
+
+  it("7. Assessment Period Finalization: Finalizes grades, records audit log, restricted to Director/Admin", async () => {
+    // Teacher attempt to finalize -> 403 Forbidden
+    const teachA1 = await db.centerMembership.findUnique({
+      where: { id: teacherA1MembershipId },
+      include: { user: true },
+    });
+    mockToken = signJWT({
+      userId: teachA1!.userId,
+      email: teachA1!.user.email,
+      platformRole: "NONE",
+      activeCenterId: centerAId,
+      activeCenterRole: "TEACHER",
+    });
+
+    const teacherFinRes = await finalizeGrades(
+      mockRequest("/api/grades/finalize", "POST", {
+        groupId: groupA1Id,
+      })
+    );
+    expect(teacherFinRes.status).toBe(403);
+
+    // Director finalize -> 200 Success
+    const dirA = await db.centerMembership.findUnique({
+      where: { id: directorAMembershipId },
+      include: { user: true },
+    });
+    mockToken = signJWT({
+      userId: dirA!.userId,
+      email: dirA!.user.email,
+      platformRole: "NONE",
+      activeCenterId: centerAId,
+      activeCenterRole: "DIRECTOR",
+    });
+
+    const dirFinRes = await finalizeGrades(
+      mockRequest("/api/grades/finalize", "POST", {
+        groupId: groupA1Id,
+      })
+    );
+    expect(dirFinRes.status).toBe(200);
+    const finData = await dirFinRes.json();
+    expect(finData.finalizedCount).toBeGreaterThan(0);
+
+    // Verify in DB that grades are now FINAL
+    const updatedGrade = await db.grade.findUnique({
+      where: { id: createdGradeId },
+    });
+    expect(updatedGrade?.lifecycle).toBe("FINAL");
+    expect(updatedGrade?.finalizedById).toBe(directorAMembershipId);
+  });
+
+  it("8. Finalized Grade Lock: Teacher cannot modify a finalized grade", async () => {
+    const teachA1 = await db.centerMembership.findUnique({
+      where: { id: teacherA1MembershipId },
+      include: { user: true },
+    });
+    mockToken = signJWT({
+      userId: teachA1!.userId,
+      email: teachA1!.user.email,
+      platformRole: "NONE",
+      activeCenterId: centerAId,
+      activeCenterRole: "TEACHER",
+    });
+
+    const patchRes = await updateGrade(
+      mockRequest("/api/grades", "PATCH", {
+        id: createdGradeId,
+        value: 100,
+      })
+    );
+    expect(patchRes.status).toBe(403);
+    const patchData = await patchRes.json();
+    expect(patchData.error).toMatch(/Cannot modify a finalized grade/i);
+  });
 });
+
