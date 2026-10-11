@@ -4,14 +4,42 @@
 
 :root {
   --font-sans: 'Inter', system-ui, -apple-system, sans-serif;
+  --bg-main: #FFFFFF;
+  --bg-alt: #F4F8FF;
+  --bg-card: #FFFFFF;
+  --border-card: rgba(30, 58, 138, 0.12);
+  --text-main: #0F172A;
+  --text-muted: #475569;
+  --primary: #2563EB;
+  --primary-hover: #1D4ED8;
+  --accent: #1E3A8A;
+  --glow-color: rgba(37, 99, 235, 0.15);
+}
+
+.dark {
+  --bg-main: #0A1128;
+  --bg-alt: #0F1B3D;
+  --bg-card: #13224D;
+  --border-card: rgba(255, 255, 255, 0.12);
+  --text-main: #E2E8F0;
+  --text-muted: #94A3B8;
+  --primary: #3B82F6;
+  --primary-hover: #60A5FA;
+  --accent: #1E3A8A;
+  --glow-color: rgba(59, 130, 246, 0.35);
+}
+
+html {
+  transition: background-color 400ms ease, color 400ms ease;
 }
 
 body {
   font-family: var(--font-sans);
-  background-color: #0b0f19;
-  color: #f3f4f6;
+  background-color: var(--bg-main);
+  color: var(--text-main);
   min-height: 100vh;
   overflow-x: hidden;
+  transition: background-color 400ms ease, color 400ms ease;
 }
 
 /* Glassmorphism & Modern UI utilities */

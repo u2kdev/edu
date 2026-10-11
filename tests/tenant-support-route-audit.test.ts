@@ -76,6 +76,11 @@ export const EXCLUDED_ROUTES_MAP: { pattern: RegExp; route: string; reason: stri
     route: "api/health",
     reason: "Системный мониторинг доступности сервиса (только GET, без мутаций)",
   },
+  {
+    pattern: /[\\/]api[\\/]public[\\/]/,
+    route: "api/public/*",
+    reason: "Публичные запросы лендинга (сбор заявок на подключение учебных центров)",
+  },
 ];
 
 const EXCLUDED_PATTERNS = EXCLUDED_ROUTES_MAP.map((item) => item.pattern);
@@ -222,7 +227,7 @@ describe("TRUST-3b Item 3: Dynamic audit of all tenant write routes - PLATFORM_S
     expect(deleteRes.status).toBe(403);
   });
 
-  it("exclusion mapping explicitly documents all 9 categories with non-empty reasons", () => {
+  it("exclusion mapping explicitly documents all 10 categories with non-empty reasons", () => {
     const requiredCategories = [
       "api/auth/*",
       "api/platform/*",
@@ -233,6 +238,7 @@ describe("TRUST-3b Item 3: Dynamic audit of all tenant write routes - PLATFORM_S
       "api/invites/redeem",
       "api/tenant/onboarding",
       "api/health",
+      "api/public/*",
     ];
 
     expect(EXCLUDED_ROUTES_MAP.length).toBe(requiredCategories.length);
