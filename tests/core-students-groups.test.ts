@@ -646,4 +646,32 @@ describe("Core Students and Groups Management", () => {
     expect(audit).not.toBeNull();
     expect(audit?.detailsJson).toContain("Relocated to another city");
   });
+
+  it("6b. Enrollment history preservation: all historical enrollments remain intact in DB (no hard deletes)", async () => {
+    // Check total enrollments for studentA1MembershipId
+    const history = await db.enrollment.findMany({
+      where: {
+        studentMembershipId: studentA1MembershipId,
+        centerId: centerAId,
+      },
+      include: { group: true },
+      orderBy: { createdAt: "asc" },
+    });
+
+    // Student A1 was enrolled in group A1 (transferred) and group A2 (dropped)
+    expect(history.length).toBe(2);
+    expect(history.some((e) => e.groupId === groupA1Id && e.status === "DROPPED")).toBe(true);
+    expect(history.some((e) => e.groupId === groupA2Id && e.status === "DROPPED")).toBe(true);
+
+    // Audit logs for all changes must exist
+    const logs = await db.auditLog.findMany({
+      where: {
+        centerId: centerAId,
+        resourceId: studentA1MembershipId,
+      },
+    });
+    const actions = logs.map((l) => l.action);
+    expect(actions).toContain("STUDENT_TRANSFERRED");
+    expect(actions).toContain("STUDENT_DROPPED");
+  });
 });
