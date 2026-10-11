@@ -6,6 +6,7 @@ import { GET as getStudents, POST as createStudent } from "../src/app/api/studen
 import { GET as getStudentCard } from "../src/app/api/students/[id]/route";
 import { POST as enrollStudent, DELETE as dropStudent } from "../src/app/api/groups/[id]/enrollments/route";
 import { POST as transferStudent } from "../src/app/api/groups/[id]/transfer/route";
+import { POST as importCsv } from "../src/app/api/students/import-csv/route";
 
 let mockToken: string = "";
 
@@ -673,5 +674,81 @@ describe("Core Students and Groups Management", () => {
     const actions = logs.map((l) => l.action);
     expect(actions).toContain("STUDENT_TRANSFERRED");
     expect(actions).toContain("STUDENT_DROPPED");
+  });
+
+  it("7. CSV import protection: size limits, row limits, and formula injection sanitization", async () => {
+    await db.subscriptionPlan.update({
+      where: { id: defaultPlanId },
+      data: { maxStudents: 500 },
+    });
+
+    const dir = await db.centerMembership.findUnique({
+      where: { id: directorAMembershipId },
+      include: { user: true },
+    });
+    mockToken = signJWT({
+      userId: dir!.userId,
+      email: dir!.user.email,
+      platformRole: "NONE",
+      activeCenterId: centerAId,
+      activeCenterRole: "DIRECTOR",
+    });
+
+    // 1. Payload > 1MB rejected
+    const bigCsv = "name,email,phone\n" + "A".repeat(1024 * 1024 + 10);
+    const resBig = await importCsv(
+      mockRequest("/api/students/import-csv", "POST", {
+        csvContent: bigCsv,
+        mode: "preview",
+      })
+    );
+    expect(resBig.status).toBe(400);
+    const dataBig = await resBig.json();
+    expect(dataBig.error).toContain("1 МБ");
+
+    // 2. Rows > 500 rejected
+    const rows501 = ["fullName,email,phone"];
+    for (let i = 0; i < 501; i++) {
+      rows501.push(`Student ${i},student${i}@test.com,+998901234567`);
+    }
+    const resRows = await importCsv(
+      mockRequest("/api/students/import-csv", "POST", {
+        csvContent: rows501.join("\n"),
+        mode: "preview",
+      })
+    );
+    expect(resRows.status).toBe(400);
+    const dataRows = await resRows.json();
+    expect(dataRows.error).toContain("500");
+
+    // 3. Formula injection sanitization (=, @, +, -)
+    const emailEq = `formula-eq-${Date.now()}@test.com`;
+    const emailAt = `formula-at-${Date.now()}@test.com`;
+    const formulaCsv = [
+      "fullName,email,phone",
+      `=1+1,${emailEq},+100`,
+      `@SUM(1+2),${emailAt},-50`,
+    ].join("\n");
+
+    const resExecute = await importCsv(
+      mockRequest("/api/students/import-csv", "POST", {
+        csvContent: formulaCsv,
+        mode: "execute",
+      })
+    );
+    expect(resExecute.status).toBe(200);
+
+    // Verify stored users have formula characters escaped with a leading quote
+    const userEq = await db.platformUser.findUnique({
+      where: { email: emailEq },
+    });
+    expect(userEq?.fullName).toBe("'=1+1");
+    expect(userEq?.phone).toBe("'+100");
+
+    const userAt = await db.platformUser.findUnique({
+      where: { email: emailAt },
+    });
+    expect(userAt?.fullName).toBe("'@SUM(1+2)");
+    expect(userAt?.phone).toBe("'-50");
   });
 });

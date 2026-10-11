@@ -13,6 +13,14 @@ interface CsvRow {
   error?: string;
 }
 
+function sanitizeCsvValue(val: string): string {
+  const trimmed = val.trim();
+  if (/^[=+\-@\t\r]/.test(trimmed)) {
+    return `'${trimmed}`;
+  }
+  return trimmed;
+}
+
 export async function POST(req: Request) {
   try {
     const tenantCtx = await requireTenantAccess(req);
@@ -35,6 +43,13 @@ export async function POST(req: Request) {
       );
     }
 
+    if (csvContent.length > 1_000_000) {
+      return NextResponse.json(
+        { error: "Размер CSV файла превышает допустимый предел (1 МБ)" },
+        { status: 400 }
+      );
+    }
+
     // Split rows by newline
     const lines = csvContent
       .split(/\r?\n/)
@@ -52,6 +67,15 @@ export async function POST(req: Request) {
       firstLine.includes("имя") ||
       firstLine.includes("name");
     const dataLines = hasHeader ? lines.slice(1) : lines;
+
+    if (dataLines.length > 500) {
+      return NextResponse.json(
+        {
+          error: "Превышено максимальное число строк для импорта (максимум 500)",
+        },
+        { status: 400 }
+      );
+    }
 
     // Cache valid group IDs for this center
     const centerGroups = await tenantDb.group.findMany({
@@ -73,12 +97,12 @@ export async function POST(req: Request) {
         ? line.split(";").map((p) => p.trim())
         : line.split(",").map((p) => p.trim());
 
-      const fullName = parts[0] || "";
+      const rawFullName = parts[0] || "";
       const email = parts[1] || "";
-      const phone = parts[2] || undefined;
+      const rawPhone = parts[2] || undefined;
       const groupId = parts[3] || undefined;
 
-      if (!fullName) {
+      if (!rawFullName) {
         errors.push({
           row: rowNumber,
           error: "Не указано ФИО",
@@ -86,6 +110,9 @@ export async function POST(req: Request) {
         });
         return;
       }
+
+      const fullName = sanitizeCsvValue(rawFullName);
+      const phone = rawPhone ? sanitizeCsvValue(rawPhone) : undefined;
 
       if (!email || !emailRegex.test(email)) {
         errors.push({
