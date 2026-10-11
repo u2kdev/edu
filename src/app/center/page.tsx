@@ -5,7 +5,7 @@ import Link from "next/link";
 import {
   Users, BookOpen, CreditCard, Sparkles, CheckCircle2,
   ArrowRight, AlertTriangle, CalendarDays, ClipboardCheck,
-  Flame, Clock, ShieldCheck
+  Flame, Clock, ShieldCheck, BarChart3, GraduationCap, Plus
 } from "lucide-react";
 import { t, formatCurrencyLocalized, formatDateLocalized } from "@/i18n";
 
@@ -68,6 +68,17 @@ interface UrgentHomeworkItem {
   let activeTeachersCount = 0;
   let coursesCount = 0;
   let totalRevenue = 0;
+  let overallAttendanceRate: number | null = null;
+  let atRiskStudentsCount = 0;
+  let centerScheduleSlots: Array<{
+    id: string;
+    dayOfWeek: number;
+    startTime: string;
+    endTime: string;
+    roomName?: string | null;
+    group: { name: string; course: { title: string } };
+    teacher: { user: { fullName: string } };
+  }> = [];
   let studentEnrollments: StudentEnrollmentItem[] = [];
   let parentChildren: ParentChildItem[] = [];
   let pendingHomeworksCount = 0;
@@ -91,6 +102,43 @@ interface UrgentHomeworkItem {
     _sum: { amount: true },
   });
   totalRevenue = payments._sum.amount || 0;
+
+  // Director / Admin specific attendance analytics and upcoming schedule
+  if (activeRole === "DIRECTOR" || activeRole === "CENTER_ADMIN") {
+    const centerAttendances = await tenantCtx.getTenantDb().attendance.findMany({
+      where: { lesson: { module: { course: { centerId: activeCenterId } } } },
+      select: { studentMembershipId: true, status: true },
+    });
+    const totalCenterAtt = centerAttendances.length;
+    const presentCenterAtt = centerAttendances.filter(
+      (a) => a.status === "PRESENT" || a.status === "LATE"
+    ).length;
+    overallAttendanceRate =
+      totalCenterAtt > 0 ? Math.round((presentCenterAtt / totalCenterAtt) * 100) : null;
+
+    const studentAttMap = new Map<string, { total: number; present: number }>();
+    for (const a of centerAttendances) {
+      const cur = studentAttMap.get(a.studentMembershipId) || { total: 0, present: 0 };
+      cur.total++;
+      if (a.status === "PRESENT" || a.status === "LATE") cur.present++;
+      studentAttMap.set(a.studentMembershipId, cur);
+    }
+    for (const [, stats] of studentAttMap) {
+      if (stats.total > 0 && stats.present / stats.total < 0.8) {
+        atRiskStudentsCount++;
+      }
+    }
+
+    centerScheduleSlots = await tenantCtx.getTenantDb().scheduleSlot.findMany({
+      where: { centerId: activeCenterId, status: "ACTIVE" },
+      include: {
+        group: { include: { course: { select: { title: true } } } },
+        teacher: { include: { user: { select: { fullName: true } } } },
+      },
+      orderBy: [{ dayOfWeek: "asc" }, { startTime: "asc" }],
+      take: 6,
+    });
+  }
 
   // Teacher specific pending homework reviews
   if (activeRole === "TEACHER") {
@@ -330,58 +378,235 @@ interface UrgentHomeworkItem {
         </div>
       )}
 
-      {/* Metrics Grid (Director/Admin) */}
+      {/* Director & Admin Dashboard */}
       {(activeRole === "DIRECTOR" || activeRole === "CENTER_ADMIN") && (
-        <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
-          <div className="glass-panel p-6 rounded-2xl border border-slate-800 flex items-center justify-between">
-            <div>
-              <span className="text-xs font-semibold text-slate-400 uppercase tracking-wider">
-                {t(locale, "dashboard.activeStudents")}
-              </span>
-              <div className="text-3xl font-bold text-white mt-2">{activeStudentsCount}</div>
-            </div>
-            <div className="w-12 h-12 rounded-xl bg-brand-500/10 border border-brand-500/20 flex items-center justify-center text-brand-400">
-              <Users className="w-6 h-6" />
-            </div>
-          </div>
-
-          <div className="glass-panel p-6 rounded-2xl border border-slate-800 flex items-center justify-between">
-            <div>
-              <span className="text-xs font-semibold text-slate-400 uppercase tracking-wider">
-                {t(locale, "dashboard.teachers")}
-              </span>
-              <div className="text-3xl font-bold text-white mt-2">{activeTeachersCount}</div>
-            </div>
-            <div className="w-12 h-12 rounded-xl bg-emerald-500/10 border border-emerald-500/20 flex items-center justify-center text-emerald-400">
-              <Sparkles className="w-6 h-6" />
-            </div>
-          </div>
-
-          <div className="glass-panel p-6 rounded-2xl border border-slate-800 flex items-center justify-between">
-            <div>
-              <span className="text-xs font-semibold text-slate-400 uppercase tracking-wider">
-                {t(locale, "dashboard.totalCourses")}
-              </span>
-              <div className="text-3xl font-bold text-white mt-2">{coursesCount}</div>
-            </div>
-            <div className="w-12 h-12 rounded-xl bg-blue-500/10 border border-blue-500/20 flex items-center justify-center text-blue-400">
-              <BookOpen className="w-6 h-6" />
-            </div>
-          </div>
-
-          <div className="glass-panel p-6 rounded-2xl border border-slate-800 flex items-center justify-between">
-            <div>
-              <span className="text-xs font-semibold text-slate-400 uppercase tracking-wider">
-                {t(locale, "dashboard.centerRevenue")}
-              </span>
-              <div className="text-3xl font-bold text-emerald-400 mt-2">
-                {formatCurrencyLocalized(totalRevenue, locale, "UZS")}
+        <div className="space-y-6">
+          {/* Key Metrics Grid */}
+          <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
+            <div className="glass-panel p-6 rounded-2xl border border-slate-800 flex items-center justify-between">
+              <div>
+                <span className="text-xs font-semibold text-slate-400 uppercase tracking-wider">
+                  {t(locale, "dashboard.activeStudents")}
+                </span>
+                <div className="text-3xl font-bold text-white mt-2">{activeStudentsCount}</div>
+              </div>
+              <div className="w-12 h-12 rounded-xl bg-brand-500/10 border border-brand-500/20 flex items-center justify-center text-brand-400">
+                <Users className="w-6 h-6" />
               </div>
             </div>
-            <div className="w-12 h-12 rounded-xl bg-purple-500/10 border border-purple-500/20 flex items-center justify-center text-purple-400">
-              <CreditCard className="w-6 h-6" />
+
+            <div className="glass-panel p-6 rounded-2xl border border-slate-800 flex items-center justify-between">
+              <div>
+                <span className="text-xs font-semibold text-slate-400 uppercase tracking-wider">
+                  {t(locale, "dashboard.teachers")}
+                </span>
+                <div className="text-3xl font-bold text-white mt-2">{activeTeachersCount}</div>
+              </div>
+              <div className="w-12 h-12 rounded-xl bg-emerald-500/10 border border-emerald-500/20 flex items-center justify-center text-emerald-400">
+                <Sparkles className="w-6 h-6" />
+              </div>
+            </div>
+
+            <div className="glass-panel p-6 rounded-2xl border border-slate-800 flex items-center justify-between">
+              <div>
+                <span className="text-xs font-semibold text-slate-400 uppercase tracking-wider">
+                  {t(locale, "dashboard.totalCourses")}
+                </span>
+                <div className="text-3xl font-bold text-white mt-2">{coursesCount}</div>
+              </div>
+              <div className="w-12 h-12 rounded-xl bg-blue-500/10 border border-blue-500/20 flex items-center justify-center text-blue-400">
+                <BookOpen className="w-6 h-6" />
+              </div>
+            </div>
+
+            <div className="glass-panel p-6 rounded-2xl border border-slate-800 flex items-center justify-between">
+              <div>
+                <span className="text-xs font-semibold text-slate-400 uppercase tracking-wider">
+                  {t(locale, "dashboard.centerRevenue")}
+                </span>
+                <div className="text-3xl font-bold text-emerald-400 mt-2">
+                  {formatCurrencyLocalized(totalRevenue, locale, "UZS")}
+                </div>
+              </div>
+              <div className="w-12 h-12 rounded-xl bg-purple-500/10 border border-purple-500/20 flex items-center justify-center text-purple-400">
+                <CreditCard className="w-6 h-6" />
+              </div>
             </div>
           </div>
+
+          {/* Attendance Summary & Quality Bar */}
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+            <div className="glass-panel p-6 rounded-2xl border border-slate-800 flex flex-col justify-between space-y-4">
+              <div className="flex items-center justify-between">
+                <div>
+                  <span className="text-xs font-semibold text-slate-400 uppercase tracking-wider">
+                    {t(locale, "dashboard.centerAttendanceRate")}
+                  </span>
+                  <div className="text-2xl font-extrabold text-white mt-1">
+                    {overallAttendanceRate !== null ? `${overallAttendanceRate}%` : "—"}
+                  </div>
+                </div>
+                <div className="w-10 h-10 rounded-xl bg-emerald-500/10 border border-emerald-500/20 flex items-center justify-center text-emerald-400">
+                  <BarChart3 className="w-5 h-5" />
+                </div>
+              </div>
+
+              {overallAttendanceRate !== null && (
+                <div className="w-full bg-slate-800 h-2 rounded-full overflow-hidden">
+                  <div
+                    className={`h-full rounded-full transition-all ${
+                      overallAttendanceRate >= 80 ? "bg-emerald-500" : "bg-red-500"
+                    }`}
+                    style={{ width: `${overallAttendanceRate}%` }}
+                  />
+                </div>
+              )}
+
+              <div className="flex items-center justify-between text-xs pt-1 border-t border-slate-800/80">
+                <span className="text-slate-400">{t(locale, "attendance.title")}</span>
+                <Link
+                  href="/center/attendance"
+                  className="text-brand-400 hover:text-brand-300 font-medium hover:underline flex items-center gap-1"
+                >
+                  {t(locale, "dashboard.viewAttendanceJournal")}
+                  <ArrowRight className="w-3.5 h-3.5" />
+                </Link>
+              </div>
+            </div>
+
+            <div className="glass-panel p-6 rounded-2xl border border-slate-800 flex flex-col justify-between space-y-4">
+              <div className="flex items-center justify-between">
+                <div>
+                  <span className="text-xs font-semibold text-slate-400 uppercase tracking-wider">
+                    {t(locale, "dashboard.atRiskCount")}
+                  </span>
+                  <div className={`text-2xl font-extrabold mt-1 ${atRiskStudentsCount > 0 ? "text-amber-400" : "text-emerald-400"}`}>
+                    {atRiskStudentsCount}
+                  </div>
+                </div>
+                <div className={`w-10 h-10 rounded-xl flex items-center justify-center ${atRiskStudentsCount > 0 ? "bg-amber-500/10 border border-amber-500/20 text-amber-400" : "bg-emerald-500/10 border border-emerald-500/20 text-emerald-400"}`}>
+                  <AlertTriangle className="w-5 h-5" />
+                </div>
+              </div>
+
+              <p className="text-xs text-slate-400">
+                {atRiskStudentsCount > 0
+                  ? "Студенты с посещаемостью ниже 80% требуют внимания преподавателей и родителей."
+                  : "Все активные студенты имеют удовлетворительный уровень посещаемости."}
+              </p>
+
+              <div className="flex items-center justify-between text-xs pt-1 border-t border-slate-800/80">
+                <span className="text-slate-400">{t(locale, "attendance.riskList")}</span>
+                <Link
+                  href="/center/attendance"
+                  className="text-brand-400 hover:text-brand-300 font-medium hover:underline flex items-center gap-1"
+                >
+                  {t(locale, "dashboard.viewAttendanceJournal")}
+                  <ArrowRight className="w-3.5 h-3.5" />
+                </Link>
+              </div>
+            </div>
+          </div>
+
+          {/* Upcoming Center Schedule */}
+          <div className="space-y-4">
+            <div className="flex items-center justify-between">
+              <h2 className="text-xl font-bold text-white flex items-center gap-2">
+                <CalendarDays className="w-5 h-5 text-brand-400" />
+                <span>{t(locale, "dashboard.upcomingCenterSchedule")}</span>
+              </h2>
+              <Link
+                href="/center/schedule"
+                className="text-xs font-semibold text-brand-400 hover:text-brand-300 flex items-center gap-1 hover:underline"
+              >
+                {t(locale, "dashboard.viewSchedule")}
+                <ArrowRight className="w-3.5 h-3.5" />
+              </Link>
+            </div>
+
+            {centerScheduleSlots.length === 0 ? (
+              <div className="glass-panel p-8 rounded-2xl border border-slate-800 text-center space-y-3">
+                <CalendarDays className="w-10 h-10 text-slate-600 mx-auto" />
+                <p className="text-sm text-slate-400">{t(locale, "dashboard.noUpcomingClasses")}</p>
+                <Link
+                  href="/center/schedule"
+                  className="inline-flex items-center gap-1.5 px-4 py-2 bg-brand-600 hover:bg-brand-500 text-white text-xs font-bold rounded-xl transition-all"
+                >
+                  <Plus className="w-4 h-4" />
+                  {t(locale, "dashboard.setupSchedulePrompt")}
+                </Link>
+              </div>
+            ) : (
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                {centerScheduleSlots.map((slot) => {
+                  const dayNames: Record<number, string> = {
+                    1: t(locale, "schedule.monShort"),
+                    2: t(locale, "schedule.tueShort"),
+                    3: t(locale, "schedule.wedShort"),
+                    4: t(locale, "schedule.thuShort"),
+                    5: t(locale, "schedule.friShort"),
+                    6: t(locale, "schedule.satShort"),
+                    7: t(locale, "schedule.sunShort"),
+                  };
+                  return (
+                    <div
+                      key={slot.id}
+                      className="glass-panel p-4 rounded-xl border border-slate-800/80 hover:border-slate-700 transition-colors space-y-3"
+                    >
+                      <div className="flex items-center justify-between">
+                        <span className="px-2.5 py-0.5 rounded-md text-xs font-bold bg-brand-500/10 text-brand-400 border border-brand-500/20">
+                          {dayNames[slot.dayOfWeek] || `День ${slot.dayOfWeek}`} • {slot.startTime} - {slot.endTime}
+                        </span>
+                        {slot.roomName && (
+                          <span className="text-[11px] text-slate-400 bg-slate-900 px-2 py-0.5 rounded border border-slate-800">
+                            {slot.roomName}
+                          </span>
+                        )}
+                      </div>
+                      <div>
+                        <h4 className="text-sm font-bold text-white line-clamp-1">{slot.group.course.title}</h4>
+                        <p className="text-xs text-brand-400 font-medium mt-0.5">{slot.group.name}</p>
+                      </div>
+                      <div className="text-xs text-slate-400 border-t border-slate-800/60 pt-2 flex items-center justify-between">
+                        <span>{slot.teacher.user.fullName}</span>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+
+          {/* Helpful Empty State Banners */}
+          {coursesCount === 0 && (
+            <div className="p-4 rounded-2xl bg-brand-500/10 border border-brand-500/20 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+              <div className="flex items-center gap-3">
+                <BookOpen className="w-5 h-5 text-brand-400 shrink-0" />
+                <p className="text-xs text-slate-300">{t(locale, "dashboard.noCoursesYet")}</p>
+              </div>
+              <Link
+                href="/center/courses"
+                className="px-3.5 py-1.5 bg-brand-500 hover:bg-brand-600 text-white text-xs font-bold rounded-xl transition-all shrink-0 text-center"
+              >
+                {t(locale, "dashboard.createFirstCourse")}
+              </Link>
+            </div>
+          )}
+
+          {activeStudentsCount === 0 && (
+            <div className="p-4 rounded-2xl bg-emerald-500/10 border border-emerald-500/20 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+              <div className="flex items-center gap-3">
+                <Users className="w-5 h-5 text-emerald-400 shrink-0" />
+                <p className="text-xs text-slate-300">{t(locale, "dashboard.noActiveStudents")}</p>
+              </div>
+              <Link
+                href="/center/students"
+                className="px-3.5 py-1.5 bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold rounded-xl transition-all shrink-0 text-center"
+              >
+                {t(locale, "dashboard.addStudentsPrompt")}
+              </Link>
+            </div>
+          )}
         </div>
       )}
     </div>
