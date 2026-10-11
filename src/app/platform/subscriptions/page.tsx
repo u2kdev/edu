@@ -3,8 +3,21 @@
 import { useEffect, useState } from "react";
 import { CreditCard, Check, Shield, Zap, Info } from "lucide-react";
 
+interface SubscriptionPlanItem {
+  id: string;
+  name: string;
+  priceMonthly: number;
+  maxStudents: number;
+  maxTeachers: number;
+  maxCourses: number;
+  maxBranches: number;
+  maxStorage: number;
+  isActive: boolean;
+  _count: { subscriptions: number };
+}
+
 export default function SubscriptionsPage() {
-  const [plans, setPlans] = useState<any[]>([]);
+  const [plans, setPlans] = useState<SubscriptionPlanItem[]>([]);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {

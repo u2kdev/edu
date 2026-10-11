@@ -4,11 +4,27 @@ import React, { useState, useEffect, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 
+interface TenantDetails {
+  id: string;
+  name: string;
+  slug: string;
+  phone?: string | null;
+  email?: string | null;
+  timeZone?: string | null;
+  status: string;
+  suspensionReason?: string | null;
+  createdAt: string;
+  trialEndsAt?: string | null;
+  director?: { fullName?: string | null; email?: string | null; phone?: string | null } | null;
+  metrics?: { activeStudents?: number; activeTeachers?: number; totalCourses?: number } | null;
+  auditLogs?: Array<{ action: string; createdAt: string; details?: string | null }>;
+}
+
 export default function TenantDetailsPage({ params }: { params: { id: string } }) {
   const router = useRouter();
   const { id } = params;
   
-  const [data, setData] = useState<any>(null);
+  const [data, setData] = useState<TenantDetails | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   
@@ -35,8 +51,8 @@ export default function TenantDetailsPage({ params }: { params: { id: string } }
         email: center.email || '',
         timeZone: center.timeZone || ''
       });
-    } catch (err: any) {
-      setError(err.message);
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : "Failed to fetch center details");
     } finally {
       setLoading(false);
     }
@@ -62,8 +78,8 @@ export default function TenantDetailsPage({ params }: { params: { id: string } }
       if (!res.ok) throw new Error('Update failed');
       showMessage('success', 'Center updated successfully');
       fetchCenter();
-    } catch (err: any) {
-      showMessage('error', err.message);
+    } catch (err: unknown) {
+      showMessage('error', err instanceof Error ? err.message : "Update failed");
     }
   };
 
@@ -79,8 +95,8 @@ export default function TenantDetailsPage({ params }: { params: { id: string } }
       showMessage('success', 'Director changed successfully');
       setDirectorEmail('');
       fetchCenter();
-    } catch (err: any) {
-      showMessage('error', err.message);
+    } catch (err: unknown) {
+      showMessage('error', err instanceof Error ? err.message : "Failed to change director");
     }
   };
 
@@ -100,8 +116,8 @@ export default function TenantDetailsPage({ params }: { params: { id: string } }
       showMessage('success', `Status updated to ${suspendForm.action}`);
       setSuspendForm({ action: 'pause', reason: '' });
       fetchCenter();
-    } catch (err: any) {
-      showMessage('error', err.message);
+    } catch (err: unknown) {
+      showMessage('error', err instanceof Error ? err.message : "Failed to update status");
     }
   };
 
@@ -169,7 +185,7 @@ export default function TenantDetailsPage({ params }: { params: { id: string } }
               <h3 className="text-lg font-medium border-b pb-2 mb-4">Audit Logs (Last 20)</h3>
               {data.auditLogs && data.auditLogs.length > 0 ? (
                 <ul className="space-y-2 text-sm">
-                  {data.auditLogs.map((log: any, idx: number) => (
+                  {data.auditLogs.map((log, idx: number) => (
                     <li key={idx} className="bg-gray-50 p-2 rounded border border-gray-100">
                       <span className="font-semibold">{log.action}</span> - {new Date(log.createdAt).toLocaleString()}
                       <p className="text-gray-600 mt-1">{log.details}</p>

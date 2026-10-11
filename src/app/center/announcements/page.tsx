@@ -126,13 +126,24 @@ export default async function AnnouncementsPage() {
   );
 }
 
+interface AnnouncementItem {
+  id?: string;
+  title: string;
+  body: string;
+  targetRole?: string | null;
+  publishAt: Date | string;
+  expiresAt?: Date | string | null;
+  group?: { name: string } | null;
+  author: { user: { fullName: string } };
+}
+
 function AnnouncementCard({
   announcement,
   locale,
   roleLabels,
   isPinned = false,
 }: {
-  announcement: any;
+  announcement: AnnouncementItem;
   locale: string;
   roleLabels: Record<string, string>;
   isPinned?: boolean;

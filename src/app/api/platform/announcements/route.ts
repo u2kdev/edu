@@ -13,7 +13,7 @@ export async function GET() {
       orderBy: { createdAt: "desc" },
     });
     return NextResponse.json({ announcements });
-  } catch (err: any) {
+  } catch (err: unknown) {
     return handlePlatformError(err);
   }
 }
@@ -46,7 +46,7 @@ export async function POST(req: Request) {
     });
 
     return NextResponse.json({ success: true, announcement });
-  } catch (err: any) {
+  } catch (err: unknown) {
     return handlePlatformError(err);
   }
 }

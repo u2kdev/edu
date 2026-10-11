@@ -92,7 +92,7 @@ export async function PATCH(req: Request, { params }: { params: { id: string } }
     });
 
     return apiSuccess({ ticket: updated });
-  } catch (err: any) {
+  } catch (err: unknown) {
     return handleApiError(err);
   }
 }

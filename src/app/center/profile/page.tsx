@@ -83,7 +83,7 @@ export default async function CenterProfilePage() {
             {membership.enrollments.length === 0 ? (
               <p className="text-slate-400">Вы пока не состоите ни в одной группе.</p>
             ) : (
-              membership.enrollments.map((en: any) => (
+              membership.enrollments.map((en) => (
                 <div key={en.id} className="glass-panel p-5 rounded-2xl border border-slate-800">
                   <div className="font-bold text-white">{en.group.name}</div>
                   <div className="text-sm text-slate-400 mt-1">
@@ -103,7 +103,7 @@ export default async function CenterProfilePage() {
             {membership.parentLinksAsParent.length === 0 ? (
               <p className="text-slate-400">У вас нет привязанных учеников.</p>
             ) : (
-              membership.parentLinksAsParent.map((link: any) => (
+              membership.parentLinksAsParent.map((link) => (
                 <div key={link.id} className="glass-panel p-5 rounded-2xl border border-slate-800">
                   <div className="font-bold text-white">{link.student.user.fullName}</div>
                   <div className="text-sm text-slate-400 mt-1">

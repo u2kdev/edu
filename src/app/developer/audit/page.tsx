@@ -3,8 +3,18 @@
 import { useEffect, useState } from "react";
 import { Database, Search } from "lucide-react";
 
+interface AuditLogItem {
+  id: string;
+  createdAt: string;
+  center?: { slug: string } | null;
+  actor: { email: string };
+  action: string;
+  resource: string;
+  resourceId?: string | null;
+}
+
 export default function GlobalAuditLogsPage() {
-  const [logs, setLogs] = useState<any[]>([]);
+  const [logs, setLogs] = useState<AuditLogItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState("");
 

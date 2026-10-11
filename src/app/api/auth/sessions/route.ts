@@ -108,7 +108,7 @@ export async function DELETE(req: Request) {
     }
 
     return apiError("Bad request", "BAD_REQUEST", 400);
-  } catch (err: any) {
+  } catch (err: unknown) {
     return handleApiError(err);
   }
 }

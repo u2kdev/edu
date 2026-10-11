@@ -40,14 +40,38 @@ export default async function CenterDashboardPage() {
 
   if (!center) redirect("/login");
 
+interface StudentEnrollmentItem {
+  id: string;
+  group: {
+    name: string;
+    course: { title: string };
+    teacher?: { user: { fullName: string } } | null;
+  };
+}
+
+interface ParentChildItem {
+  id: string;
+  student: {
+    user: { fullName: string; email: string };
+    enrollments: Array<{ id: string; group: { name: string; course: { title: string } } }>;
+    payments: Array<{ id: string; amount: number; status: string }>;
+  };
+}
+
+interface UrgentHomeworkItem {
+  id: string;
+  title: string;
+  dueDate?: Date | null;
+}
+
   let activeStudentsCount = 0;
   let activeTeachersCount = 0;
   let coursesCount = 0;
   let totalRevenue = 0;
-  let studentEnrollments: any[] = [];
-  let parentChildren: any[] = [];
+  let studentEnrollments: StudentEnrollmentItem[] = [];
+  let parentChildren: ParentChildItem[] = [];
   let pendingHomeworksCount = 0;
-  let urgentHomeworks: any[] = [];
+  let urgentHomeworks: UrgentHomeworkItem[] = [];
   let attendanceRate: number | null = null;
 
   activeStudentsCount = await tenantCtx.getTenantDb().centerMembership.count({
@@ -215,7 +239,7 @@ export default async function CenterDashboardPage() {
             </div>
           ) : (
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-              {studentEnrollments.map((en: any) => (
+              {studentEnrollments.map((en) => (
                 <div key={en.id} className="glass-panel p-6 rounded-2xl border border-slate-800 space-y-4">
                   <div className="flex justify-between items-start">
                     <div>
@@ -250,7 +274,7 @@ export default async function CenterDashboardPage() {
               <p className="text-xs text-slate-500">{t(locale, "parent.getInviteCode")}</p>
             </div>
           ) : (
-            parentChildren.map((link: any) => (
+            parentChildren.map((link) => (
               <div key={link.id} className="glass-panel p-6 rounded-2xl border border-slate-800 space-y-6">
                 <div className="flex items-center justify-between border-b border-slate-800 pb-4">
                   <div className="flex items-center gap-3">
@@ -277,7 +301,7 @@ export default async function CenterDashboardPage() {
                       {t(locale, "parent.coursesAndGroups")}
                     </span>
                     <ul className="mt-2 space-y-2 text-sm">
-                      {link.student.enrollments.map((e: any) => (
+                      {link.student.enrollments.map((e) => (
                         <li key={e.id} className="text-slate-200 font-medium flex justify-between">
                           <span>{e.group.course.title}</span>
                           <span className="text-xs text-brand-400 font-semibold">{e.group.name}</span>
@@ -291,7 +315,7 @@ export default async function CenterDashboardPage() {
                       {t(locale, "parent.paymentHistory")}
                     </span>
                     <ul className="mt-2 space-y-2 text-sm">
-                      {link.student.payments.map((p: any) => (
+                      {link.student.payments.map((p) => (
                         <li key={p.id} className="text-slate-200 flex justify-between">
                           <span>{formatCurrencyLocalized(p.amount, locale, "UZS")}</span>
                           <span className="text-xs text-emerald-400 font-semibold">{p.status}</span>

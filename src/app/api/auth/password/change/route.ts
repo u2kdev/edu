@@ -84,7 +84,7 @@ export async function POST(req: Request) {
     });
 
     return apiSuccess({ success: true });
-  } catch (err: any) {
+  } catch (err: unknown) {
     return handleApiError(err);
   }
 }

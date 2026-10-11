@@ -5,10 +5,27 @@ import { useRouter } from "next/navigation";
 import { CreditCard, Plus, CheckCircle2, AlertCircle, ShieldCheck } from "lucide-react";
 import { formatCurrency, formatDate } from "@/lib/utils";
 
+export interface PaymentItem {
+  id: string;
+  amount: number;
+  currency: string;
+  paymentMethod: string;
+  status: string;
+  paidAt?: Date | string | null;
+  student: {
+    user: { fullName: string };
+  };
+}
+
+export interface StudentSelectItem {
+  id: string;
+  user: { fullName: string };
+}
+
 interface PaymentsManagerProps {
-  initialPayments: any[];
-  students: any[];
-  groups?: any[];
+  initialPayments: PaymentItem[];
+  students: StudentSelectItem[];
+  groups?: unknown[];
   role?: string;
 }
 

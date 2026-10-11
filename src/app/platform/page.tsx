@@ -4,8 +4,22 @@ import { useEffect, useState } from "react";
 import { Users, Building2, CreditCard, TrendingUp, Activity, ServerCrash } from "lucide-react";
 import Link from "next/link";
 
+interface PlatformAnalyticsData {
+  centers: { total: number; active: number; trial: number; blocked: number };
+  users: { total: number; directors: number; teachers: number; students: number };
+  revenue: { mrr: number; arr: number; activeSubscriptions: number; byPlan: Record<string, number> };
+  recentActivity: Array<{
+    id: string;
+    createdAt: string;
+    action: string;
+    resource: string;
+    resourceId?: string | null;
+    actor: { fullName: string; email: string };
+  }>;
+}
+
 export default function PlatformDashboard() {
-  const [data, setData] = useState<any>(null);
+  const [data, setData] = useState<PlatformAnalyticsData | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
 
@@ -22,6 +36,7 @@ export default function PlatformDashboard() {
 
   if (loading) return <div className="text-slate-400">Loading analytics...</div>;
   if (error) return <div className="text-rose-400">Error: {error}</div>;
+  if (!data) return null;
 
   return (
     <div className="space-y-8">
@@ -101,7 +116,7 @@ export default function PlatformDashboard() {
         <div className="glass-panel p-6 rounded-2xl border border-slate-800 lg:col-span-1">
           <h3 className="text-lg font-bold text-white mb-4">Revenue by Plan</h3>
           <div className="space-y-4">
-            {Object.entries(data.revenue.byPlan).map(([planName, amount]: any) => (
+            {Object.entries(data.revenue.byPlan).map(([planName, amount]) => (
               <div key={planName} className="flex items-center justify-between">
                 <span className="text-sm font-medium text-slate-300">{planName}</span>
                 <span className="text-sm font-bold text-white">${amount}</span>
@@ -120,7 +135,7 @@ export default function PlatformDashboard() {
             Recent Platform Activity
           </h3>
           <div className="space-y-4">
-            {data.recentActivity.map((log: any) => (
+            {data.recentActivity.map((log) => (
               <div key={log.id} className="flex items-start gap-4 p-4 rounded-xl bg-slate-900/50 border border-slate-800/50">
                 <div className="w-8 h-8 rounded-full bg-slate-800 flex flex-shrink-0 items-center justify-center text-xs font-bold text-slate-300">
                   {log.actor.fullName.charAt(0)}

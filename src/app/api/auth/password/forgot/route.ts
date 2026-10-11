@@ -79,7 +79,7 @@ export async function POST(req: Request) {
 
     // Always return success to prevent email enumeration
     return apiSuccess({ success: true, message: "auth.resetLinkSent" });
-  } catch (err: any) {
+  } catch (err: unknown) {
     return handleApiError(err);
   }
 }

@@ -44,8 +44,9 @@ export async function GET(req: Request) {
     }
 
     return NextResponse.json({ tickets });
-  } catch (err: any) {
-    return NextResponse.json({ error: err.message || "Server error" }, { status: 500 });
+  } catch (err: unknown) {
+    const message = err instanceof Error ? err.message : "Server error";
+    return NextResponse.json({ error: message }, { status: 500 });
   }
 }
 
@@ -91,7 +92,8 @@ export async function POST(req: Request) {
     });
 
     return NextResponse.json({ success: true, ticket });
-  } catch (err: any) {
-    return NextResponse.json({ error: err.message || "Server error" }, { status: 500 });
+  } catch (err: unknown) {
+    const message = err instanceof Error ? err.message : "Server error";
+    return NextResponse.json({ error: message }, { status: 500 });
   }
 }

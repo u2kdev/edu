@@ -14,8 +14,9 @@ export async function GET() {
   try {
     await db.$queryRaw`SELECT 1`;
     checks.database = { status: "ok", latencyMs: Date.now() - start };
-  } catch (err: any) {
-    checks.database = { status: "error", error: err.message };
+  } catch (err: unknown) {
+    const errorMsg = err instanceof Error ? err.message : "Database error";
+    checks.database = { status: "error", error: errorMsg };
   }
 
   const allOk = Object.values(checks).every((c) => c.status === "ok");

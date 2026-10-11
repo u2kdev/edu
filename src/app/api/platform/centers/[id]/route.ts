@@ -43,7 +43,7 @@ export async function GET(req: Request, { params }: { params: { id: string } }) 
     });
 
     return NextResponse.json({ data: center, director: center.owner, metrics, auditLogs });
-  } catch (err: any) {
+  } catch (err: unknown) {
     return NextResponse.json({ error: "Internal Error" }, { status: 500 });
   }
 }
@@ -105,7 +105,7 @@ export async function PATCH(req: Request, { params }: { params: { id: string } }
     });
 
     return NextResponse.json({ success: true, center: updated });
-  } catch (err: any) {
+  } catch (err: unknown) {
     return NextResponse.json({ error: "Internal Error" }, { status: 500 });
   }
 }

@@ -31,7 +31,7 @@ export async function GET(req: Request) {
 
     const { page, pageSize, q, status, sortBy } = parsedParams.data;
 
-    const where: any = {};
+    const where: Record<string, unknown> = {};
     if (q) {
       where.OR = [
         { name: { contains: q } },
@@ -57,8 +57,9 @@ export async function GET(req: Request) {
     ]);
 
     return NextResponse.json({ items, total });
-  } catch (err: any) {
-    return NextResponse.json({ error: err.message || "Internal Error" }, { status: 500 });
+  } catch (err: unknown) {
+    const message = err instanceof Error ? err.message : "Internal Error";
+    return NextResponse.json({ error: message }, { status: 500 });
   }
 }
 
@@ -202,7 +203,8 @@ export async function POST(req: Request) {
       director: { id: result.user.id, email: result.user.email, fullName: result.user.fullName },
       membership: result.membership 
     });
-  } catch (err: any) {
-    return NextResponse.json({ error: err.message || "Internal error" }, { status: 500 });
+  } catch (err: unknown) {
+    const message = err instanceof Error ? err.message : "Internal error";
+    return NextResponse.json({ error: message }, { status: 500 });
   }
 }

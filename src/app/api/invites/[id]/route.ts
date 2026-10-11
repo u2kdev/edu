@@ -39,7 +39,8 @@ export async function PATCH(
     });
 
     return NextResponse.json({ success: true, invite: updated });
-  } catch (err: any) {
-    return NextResponse.json({ error: err.message || "Server error" }, { status: (err as { status?: number })?.status || 500 });
+  } catch (err: unknown) {
+    const errorObj = err as { message?: string; status?: number };
+    return NextResponse.json({ error: errorObj.message || "Server error" }, { status: errorObj.status || 500 });
   }
 }

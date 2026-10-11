@@ -15,7 +15,7 @@ export async function GET() {
       },
     });
     return NextResponse.json({ plans });
-  } catch (err: any) {
+  } catch (err: unknown) {
     return handlePlatformError(err);
   }
 }
@@ -52,7 +52,7 @@ export async function POST(req: Request) {
     });
 
     return NextResponse.json({ success: true, plan });
-  } catch (err: any) {
+  } catch (err: unknown) {
     return handlePlatformError(err);
   }
 }
@@ -88,7 +88,7 @@ export async function PATCH(req: Request) {
     });
 
     return NextResponse.json({ success: true, plan });
-  } catch (err: any) {
+  } catch (err: unknown) {
     return handlePlatformError(err);
   }
 }

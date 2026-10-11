@@ -46,7 +46,7 @@ export async function POST(req: Request) {
       });
 
       // Update password
-      const updateData: any = { passwordHash: hashedPassword };
+      const updateData: { passwordHash: string; emailVerified?: Date } = { passwordHash: hashedPassword };
       if (!resetToken.user.emailVerified) {
         updateData.emailVerified = new Date();
       }
@@ -74,7 +74,7 @@ export async function POST(req: Request) {
     });
 
     return apiSuccess({ success: true });
-  } catch (err: any) {
+  } catch (err: unknown) {
     return handleApiError(err);
   }
 }

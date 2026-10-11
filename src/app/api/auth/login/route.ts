@@ -185,7 +185,7 @@ export async function POST(req: Request) {
         role: user.platformRole,
       }
     });
-  } catch (error: any) {
+  } catch (error: unknown) {
     return handleApiError(error);
   }
 }

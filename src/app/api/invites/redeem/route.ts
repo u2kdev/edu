@@ -234,10 +234,11 @@ export async function POST(req: Request) {
     });
 
     return response;
-  } catch (err: any) {
+  } catch (err: unknown) {
     console.error("Invite redeem error:", err);
+    const message = err instanceof Error ? err.message : "Error redeeming invite";
     return NextResponse.json(
-      { error: err.message || "Error redeeming invite" },
+      { error: message },
       { status: 500 }
     );
   }

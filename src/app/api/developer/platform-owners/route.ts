@@ -24,7 +24,7 @@ export async function GET() {
       orderBy: { createdAt: "asc" },
     });
     return NextResponse.json({ owners });
-  } catch (err: any) {
+  } catch (err: unknown) {
     return handlePlatformError(err);
   }
 }
@@ -69,7 +69,7 @@ export async function POST(req: Request) {
     });
 
     return NextResponse.json({ success: true, user });
-  } catch (err: any) {
+  } catch (err: unknown) {
     return handlePlatformError(err);
   }
 }
@@ -108,7 +108,7 @@ export async function PATCH(req: Request) {
     });
 
     return NextResponse.json({ success: true, user: updated });
-  } catch (err: any) {
+  } catch (err: unknown) {
     return handlePlatformError(err);
   }
 }

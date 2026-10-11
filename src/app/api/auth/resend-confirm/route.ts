@@ -51,7 +51,7 @@ export async function POST(req: Request) {
     console.log(`========================\n`);
 
     return apiSuccess({ success: true, message: "If an unverified account exists, a confirmation link has been sent." });
-  } catch (err: any) {
+  } catch (err: unknown) {
     return handleApiError(err);
   }
 }

@@ -4,8 +4,30 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { Plus, BookOpen, Layers, Video, Calendar, Clock, CheckCircle2, ChevronDown, ChevronRight } from "lucide-react";
 
+export interface LessonItem {
+  id: string;
+  title: string;
+  durationMinutes: number;
+  lessonType: string;
+}
+
+export interface ModuleItem {
+  id: string;
+  title: string;
+  lessons: LessonItem[];
+}
+
+export interface CourseItem {
+  id: string;
+  title: string;
+  description?: string | null;
+  isPublished: boolean;
+  modules: ModuleItem[];
+  groups: Array<{ id: string }>;
+}
+
 interface CourseManagerProps {
-  initialCourses: any[];
+  initialCourses: CourseItem[];
   role?: string;
 }
 
@@ -38,7 +60,7 @@ export default function CourseManager({ initialCourses, role }: CourseManagerPro
       } else {
         alert(data.error);
       }
-    } catch (err: any) {
+    } catch {
       alert("Ошибка сети");
     } finally {
       setLoading(false);
@@ -113,11 +135,11 @@ export default function CourseManager({ initialCourses, role }: CourseManagerPro
                         <p className="text-xs text-slate-500 italic">Модули курса еще не созданы.</p>
                       ) : (
                         <div className="space-y-4">
-                          {course.modules.map((mod: any) => (
+                          {course.modules.map((mod) => (
                             <div key={mod.id} className="p-4 rounded-xl bg-slate-900/80 border border-slate-800">
                               <h5 className="text-sm font-bold text-white mb-3">{mod.title}</h5>
                               <div className="space-y-2">
-                                {mod.lessons.map((lesson: any) => (
+                                {mod.lessons.map((lesson) => (
                                   <div key={lesson.id} className="p-3 rounded-lg bg-slate-950/80 border border-slate-800/80 flex items-center justify-between text-xs">
                                     <div className="flex items-center gap-3">
                                       <Video className="w-4 h-4 text-blue-400" />
