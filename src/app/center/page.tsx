@@ -140,14 +140,71 @@ interface UrgentHomeworkItem {
     });
   }
 
-  // Teacher specific pending homework reviews
+  // Teacher specific schedule and pending homework reviews
+  interface TeacherScheduleSlotItem {
+    id: string;
+    dayOfWeek: number;
+    startTime: string;
+    endTime: string;
+    roomName?: string | null;
+    groupId: string;
+    group: { name: string; course: { title: string } };
+  }
+
+  interface PendingReviewItem {
+    id: string;
+    studentName: string;
+    homeworkTitle: string;
+    submittedAt: Date;
+  }
+
+  let teacherScheduleSlots: TeacherScheduleSlotItem[] = [];
+  let pendingReviewsList: PendingReviewItem[] = [];
+
   if (activeRole === "TEACHER") {
-    pendingHomeworksCount = await tenantCtx.getTenantDb().homeworkSubmission.count({
-      where: {
-        homework: { lesson: { module: { course: { centerId: activeCenterId } } } },
-        grade: null,
-      },
-    });
+    const teacherMem = session.memberships.find((m) => m.centerId === activeCenterId);
+    if (teacherMem) {
+      teacherScheduleSlots = await tenantCtx.getTenantDb().scheduleSlot.findMany({
+        where: {
+          centerId: activeCenterId,
+          teacherMembershipId: teacherMem.id,
+          status: "ACTIVE",
+        },
+        include: {
+          group: { include: { course: { select: { title: true } } } },
+        },
+        orderBy: [{ dayOfWeek: "asc" }, { startTime: "asc" }],
+      });
+
+      pendingHomeworksCount = await tenantCtx.getTenantDb().homeworkSubmission.count({
+        where: {
+          homework: { lesson: { module: { course: { centerId: activeCenterId } } } },
+          grade: null,
+          status: "SUBMITTED",
+        },
+      });
+
+      const rawSubmissions = await tenantCtx.getTenantDb().homeworkSubmission.findMany({
+        where: {
+          homework: { lesson: { module: { course: { centerId: activeCenterId } } } },
+          grade: null,
+          status: "SUBMITTED",
+        },
+        include: {
+          student: { include: { user: { select: { fullName: true, email: true } } } },
+          homework: { select: { title: true } },
+        },
+        orderBy: { submittedAt: "desc" },
+        take: 5,
+      });
+
+      pendingReviewsList = rawSubmissions.map((s) => ({
+        id: s.id,
+        studentName: s.student.user.fullName || s.student.user.email,
+        homeworkTitle: s.homework.title,
+        submittedAt: s.submittedAt,
+      }));
+    }
   }
 
   // Student specific data
@@ -258,6 +315,139 @@ interface UrgentHomeworkItem {
           )}
         </div>
       </div>
+
+      {/* Teacher View: Schedule & Pending Reviews */}
+      {activeRole === "TEACHER" && (
+        <div className="space-y-8">
+          {/* My Schedule Grid */}
+          <div className="space-y-4">
+            <div className="flex items-center justify-between">
+              <h2 className="text-xl font-bold text-white flex items-center gap-2">
+                <CalendarDays className="w-5 h-5 text-brand-400" />
+                <span>{t(locale, "dashboard.mySchedule")}</span>
+              </h2>
+              <Link
+                href="/center/schedule"
+                className="text-xs font-semibold text-brand-400 hover:text-brand-300 flex items-center gap-1 hover:underline"
+              >
+                {t(locale, "dashboard.viewSchedule")}
+                <ArrowRight className="w-3.5 h-3.5" />
+              </Link>
+            </div>
+
+            {teacherScheduleSlots.length === 0 ? (
+              <div className="glass-panel p-8 rounded-2xl border border-slate-800 text-center space-y-2">
+                <CalendarDays className="w-10 h-10 text-slate-600 mx-auto" />
+                <p className="text-sm text-slate-400">{t(locale, "dashboard.noTeacherSchedule")}</p>
+              </div>
+            ) : (
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                {teacherScheduleSlots.map((slot) => {
+                  const dayNames: Record<number, string> = {
+                    1: t(locale, "schedule.monShort"),
+                    2: t(locale, "schedule.tueShort"),
+                    3: t(locale, "schedule.wedShort"),
+                    4: t(locale, "schedule.thuShort"),
+                    5: t(locale, "schedule.friShort"),
+                    6: t(locale, "schedule.satShort"),
+                    7: t(locale, "schedule.sunShort"),
+                  };
+                  return (
+                    <div
+                      key={slot.id}
+                      className="glass-panel p-5 rounded-2xl border border-slate-800 flex flex-col justify-between space-y-4 hover:border-slate-700 transition-colors"
+                    >
+                      <div className="space-y-2">
+                        <div className="flex items-center justify-between">
+                          <span className="px-2.5 py-1 rounded-md text-xs font-bold bg-brand-500/10 text-brand-400 border border-brand-500/20">
+                            {dayNames[slot.dayOfWeek] || `День ${slot.dayOfWeek}`} • {slot.startTime} - {slot.endTime}
+                          </span>
+                          {slot.roomName && (
+                            <span className="text-xs text-slate-400 bg-slate-900 px-2 py-0.5 rounded border border-slate-800">
+                              {slot.roomName}
+                            </span>
+                          )}
+                        </div>
+                        <h4 className="text-base font-bold text-white line-clamp-1">{slot.group.course.title}</h4>
+                        <p className="text-xs text-emerald-400 font-semibold">{slot.group.name}</p>
+                      </div>
+
+                      <div className="pt-2 border-t border-slate-800/80 flex items-center justify-between">
+                        <Link
+                          href={`/center/attendance?groupId=${slot.groupId}`}
+                          className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-emerald-600/20 hover:bg-emerald-600/30 text-emerald-300 border border-emerald-500/30 rounded-xl text-xs font-semibold transition-colors"
+                        >
+                          <ClipboardCheck className="w-3.5 h-3.5" />
+                          <span>{t(locale, "dashboard.quickAttendance")}</span>
+                        </Link>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+
+          {/* Pending Reviews Section */}
+          <div className="space-y-4">
+            <div className="flex items-center justify-between">
+              <h2 className="text-xl font-bold text-white flex items-center gap-2">
+                <Clock className="w-5 h-5 text-amber-400" />
+                <span>{t(locale, "dashboard.pendingReviews")}</span>
+                <span className="px-2 py-0.5 rounded-full bg-amber-500/20 text-amber-400 text-xs font-bold">
+                  {pendingHomeworksCount}
+                </span>
+              </h2>
+              <Link
+                href="/center/homework?status=SUBMITTED"
+                className="text-xs font-semibold text-brand-400 hover:text-brand-300 flex items-center gap-1 hover:underline"
+              >
+                {t(locale, "nav.homework")}
+                <ArrowRight className="w-3.5 h-3.5" />
+              </Link>
+            </div>
+
+            {pendingReviewsList.length === 0 ? (
+              <div className="glass-panel p-8 rounded-2xl border border-emerald-500/20 bg-emerald-950/10 text-center space-y-2">
+                <CheckCircle2 className="w-10 h-10 text-emerald-400 mx-auto" />
+                <p className="text-sm font-semibold text-emerald-300">{t(locale, "dashboard.noPendingReviews")}</p>
+              </div>
+            ) : (
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                {pendingReviewsList.map((rev) => (
+                  <div
+                    key={rev.id}
+                    className="glass-panel p-5 rounded-2xl border border-slate-800 space-y-3 flex flex-col justify-between hover:border-slate-700 transition-colors"
+                  >
+                    <div>
+                      <div className="flex items-center justify-between text-xs text-slate-400 mb-1">
+                        <span>{formatDateLocalized(rev.submittedAt, locale)}</span>
+                        <span className="px-2 py-0.5 rounded bg-amber-500/10 text-amber-400 font-semibold">
+                          {t(locale, "homework.submitted")}
+                        </span>
+                      </div>
+                      <h4 className="text-sm font-bold text-white line-clamp-1">{rev.homeworkTitle}</h4>
+                      <p className="text-xs text-slate-300 font-medium mt-1">
+                        {t(locale, "dashboard.submissionFrom", { name: rev.studentName })}
+                      </p>
+                    </div>
+
+                    <div className="pt-2 border-t border-slate-800/80">
+                      <Link
+                        href="/center/homework?status=SUBMITTED"
+                        className="inline-flex items-center gap-1 text-xs font-semibold text-brand-400 hover:text-brand-300 hover:underline"
+                      >
+                        <span>{t(locale, "dashboard.reviewAction")}</span>
+                        <ArrowRight className="w-3.5 h-3.5" />
+                      </Link>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        </div>
+      )}
 
       {/* Student View: Urgent Homeworks Widget */}
       {activeRole === "STUDENT" && (
