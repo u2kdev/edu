@@ -64,12 +64,11 @@ export async function POST(
     }
 
     // Check source enrollment
-    const sourceEnrollment = await tenantDb.enrollment.findUnique({
+    const sourceEnrollment = await tenantDb.enrollment.findFirst({
       where: {
-        studentMembershipId_groupId: {
-          studentMembershipId,
-          groupId: sourceGroupId,
-        },
+        studentMembershipId,
+        groupId: sourceGroupId,
+        centerId: tenantCtx.center.id,
       },
     });
 
@@ -86,23 +85,30 @@ export async function POST(
       data: { status: "DROPPED" },
     });
 
-    const targetEnrollment = await tenantDb.enrollment.upsert({
+    const existingTarget = await tenantDb.enrollment.findFirst({
       where: {
-        studentMembershipId_groupId: {
-          studentMembershipId,
-          groupId: targetGroupId,
-        },
-      },
-      create: {
-        centerId: tenantCtx.center.id,
         studentMembershipId,
         groupId: targetGroupId,
-        status: "ACTIVE",
-      },
-      update: {
-        status: "ACTIVE",
+        centerId: tenantCtx.center.id,
       },
     });
+
+    let targetEnrollment;
+    if (existingTarget) {
+      targetEnrollment = await tenantDb.enrollment.update({
+        where: { id: existingTarget.id },
+        data: { status: "ACTIVE" },
+      });
+    } else {
+      targetEnrollment = await tenantDb.enrollment.create({
+        data: {
+          centerId: tenantCtx.center.id,
+          studentMembershipId,
+          groupId: targetGroupId,
+          status: "ACTIVE",
+        },
+      });
+    }
 
     // Write audit log
     await tenantDb.auditLog.create({

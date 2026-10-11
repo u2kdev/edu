@@ -64,23 +64,30 @@ export async function POST(
       );
     }
 
-    const enrollment = await tenantDb.enrollment.upsert({
+    const existingEnrollment = await tenantDb.enrollment.findFirst({
       where: {
-        studentMembershipId_groupId: {
-          studentMembershipId,
-          groupId,
-        },
-      },
-      create: {
-        centerId: tenantCtx.center.id,
         studentMembershipId,
         groupId,
-        status: "ACTIVE",
-      },
-      update: {
-        status: "ACTIVE",
+        centerId: tenantCtx.center.id,
       },
     });
+
+    let enrollment;
+    if (existingEnrollment) {
+      enrollment = await tenantDb.enrollment.update({
+        where: { id: existingEnrollment.id },
+        data: { status: "ACTIVE" },
+      });
+    } else {
+      enrollment = await tenantDb.enrollment.create({
+        data: {
+          centerId: tenantCtx.center.id,
+          studentMembershipId,
+          groupId,
+          status: "ACTIVE",
+        },
+      });
+    }
 
     // Record audit log
     await tenantDb.auditLog.create({
@@ -134,12 +141,11 @@ export async function DELETE(
       );
     }
 
-    const enrollment = await tenantDb.enrollment.findUnique({
+    const enrollment = await tenantDb.enrollment.findFirst({
       where: {
-        studentMembershipId_groupId: {
-          studentMembershipId,
-          groupId,
-        },
+        studentMembershipId,
+        groupId,
+        centerId: tenantCtx.center.id,
       },
       include: { group: true },
     });
