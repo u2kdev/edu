@@ -2,6 +2,7 @@ import { describe, it, expect, beforeAll, vi } from "vitest";
 import { db } from "../src/lib/db";
 import { signJWT, hashPassword } from "../src/lib/auth";
 import { GET as getAttendance, POST as markAttendance } from "../src/app/api/attendance/route";
+import { GET as getAttendanceAnalytics } from "../src/app/api/attendance/analytics/route";
 
 let mockToken: string = "";
 
@@ -403,5 +404,100 @@ describe("CORE-3 Attendance & Grades System", () => {
       })
     );
     expect(resForbidden.status).toBe(403);
+  });
+
+  it("5. Attendance Rate & Risk List: Calculates rate and flags students with < 80% attendance in riskList", async () => {
+    const dirA = await db.centerMembership.findUnique({
+      where: { id: directorAMembershipId },
+      include: { user: true },
+    });
+    mockToken = signJWT({
+      userId: dirA!.userId,
+      email: dirA!.user.email,
+      platformRole: "NONE",
+      activeCenterId: centerAId,
+      activeCenterRole: "DIRECTOR",
+    });
+
+    const lessonA = await db.lesson.findUnique({ where: { id: lessonA1Id } });
+
+    // Create 3 additional lessons
+    const l2 = await db.lesson.create({
+      data: { centerId: centerAId, moduleId: lessonA!.moduleId, title: "Lesson A2" },
+    });
+    const l3 = await db.lesson.create({
+      data: { centerId: centerAId, moduleId: lessonA!.moduleId, title: "Lesson A3" },
+    });
+    const l4 = await db.lesson.create({
+      data: { centerId: centerAId, moduleId: lessonA!.moduleId, title: "Lesson A4" },
+    });
+
+    // Mark Student A2 as ABSENT in l2, l3 and PRESENT in l4
+    await markAttendance(
+      mockRequest("/api/attendance", "POST", {
+        lessonId: lessonA1Id,
+        records: [{ studentMembershipId: studentA2MembershipId, status: "ABSENT" }],
+      })
+    );
+    await markAttendance(
+      mockRequest("/api/attendance", "POST", {
+        lessonId: l2.id,
+        records: [
+          { studentMembershipId: studentA1MembershipId, status: "PRESENT" },
+          { studentMembershipId: studentA2MembershipId, status: "ABSENT" },
+        ],
+      })
+    );
+    await markAttendance(
+      mockRequest("/api/attendance", "POST", {
+        lessonId: l3.id,
+        records: [
+          { studentMembershipId: studentA1MembershipId, status: "PRESENT" },
+          { studentMembershipId: studentA2MembershipId, status: "ABSENT" },
+        ],
+      })
+    );
+    await markAttendance(
+      mockRequest("/api/attendance", "POST", {
+        lessonId: l4.id,
+        records: [
+          { studentMembershipId: studentA1MembershipId, status: "PRESENT" },
+          { studentMembershipId: studentA2MembershipId, status: "PRESENT" },
+        ],
+      })
+    );
+
+    // Director query for analytics
+    const resAnalytics = await getAttendanceAnalytics(mockRequest("/api/attendance/analytics", "GET"));
+    expect(resAnalytics.status).toBe(200);
+    const data = await resAnalytics.json();
+
+    expect(data.riskList).toBeDefined();
+    const riskStudentIds = data.riskList.map((s: { studentMembershipId: string }) => s.studentMembershipId);
+    expect(riskStudentIds).toContain(studentA2MembershipId);
+    expect(riskStudentIds).not.toContain(studentA1MembershipId);
+
+    const s2Stats = data.riskList.find((s: { studentMembershipId: string }) => s.studentMembershipId === studentA2MembershipId);
+    expect(s2Stats.attendanceRate).toBeLessThanOrEqual(50);
+    expect(s2Stats.isAtRisk).toBe(true);
+
+    // Student A1 query: sees own stats, cannot see other students in riskList
+    const s1 = await db.centerMembership.findUnique({
+      where: { id: studentA1MembershipId },
+      include: { user: true },
+    });
+    mockToken = signJWT({
+      userId: s1!.userId,
+      email: s1!.user.email,
+      platformRole: "NONE",
+      activeCenterId: centerAId,
+      activeCenterRole: "STUDENT",
+    });
+
+    const resStudentAnalytics = await getAttendanceAnalytics(mockRequest("/api/attendance/analytics", "GET"));
+    expect(resStudentAnalytics.status).toBe(200);
+    const studentData = await resStudentAnalytics.json();
+    expect(studentData.studentStats.studentMembershipId).toBe(studentA1MembershipId);
+    expect(studentData.riskList).toHaveLength(0);
   });
 });
