@@ -365,21 +365,163 @@ interface UrgentHomeworkItem {
   }
 
   // Parent specific data
+  interface ParentChildDetail {
+    id: string;
+    studentMembershipId: string;
+    fullName: string;
+    email: string;
+    enrollments: Array<{ id: string; groupName: string; courseTitle: string }>;
+    scheduleSlots: Array<{
+      id: string;
+      dayOfWeek: number;
+      startTime: string;
+      endTime: string;
+      roomName?: string | null;
+      courseTitle: string;
+      groupName: string;
+      teacherName: string;
+    }>;
+    attendanceRate: number | null;
+    attendedClasses: number;
+    totalClasses: number;
+    absentCount: number;
+    avgGradeScore: number | null;
+    recentGrades: Array<{
+      id: string;
+      title: string;
+      score: number;
+      maxScore: number;
+      letterGrade: string;
+      comment?: string | null;
+    }>;
+    payments: Array<{
+      id: string;
+      amount: number;
+      status: string;
+      createdAt: Date;
+    }>;
+  }
+
+  let detailedChildren: ParentChildDetail[] = [];
+
   if (activeRole === "PARENT") {
     const parentMem = session.memberships.find((m) => m.centerId === activeCenterId);
     if (parentMem) {
-      parentChildren = await tenantCtx.getTenantDb().parentLink.findMany({
+      const rawLinks = await tenantCtx.getTenantDb().parentLink.findMany({
         where: { parentMembershipId: parentMem.id, status: "CONFIRMED" },
         include: {
           student: {
             include: {
               user: true,
-              enrollments: { include: { group: { include: { course: true } } } },
+              enrollments: {
+                where: { status: "ACTIVE" },
+                include: { group: { include: { course: true } } },
+              },
               payments: { take: 5, orderBy: { createdAt: "desc" } },
             },
           },
         },
       });
+
+      for (const link of rawLinks) {
+        const sMemId = link.student.id;
+        const childGroupIds = link.student.enrollments.map((en) => en.group.id);
+
+        let childSchedule: ParentChildDetail["scheduleSlots"] = [];
+        if (childGroupIds.length > 0) {
+          const slots = await tenantCtx.getTenantDb().scheduleSlot.findMany({
+            where: {
+              centerId: activeCenterId,
+              groupId: { in: childGroupIds },
+              status: "ACTIVE",
+            },
+            include: {
+              group: { include: { course: { select: { title: true } } } },
+              teacher: { include: { user: { select: { fullName: true } } } },
+            },
+            orderBy: [{ dayOfWeek: "asc" }, { startTime: "asc" }],
+            take: 4,
+          });
+          childSchedule = slots.map((s) => ({
+            id: s.id,
+            dayOfWeek: s.dayOfWeek,
+            startTime: s.startTime,
+            endTime: s.endTime,
+            roomName: s.roomName,
+            courseTitle: s.group.course.title,
+            groupName: s.group.name,
+            teacherName: s.teacher.user.fullName,
+          }));
+        }
+
+        const attendances = await tenantCtx.getTenantDb().attendance.findMany({
+          where: { studentMembershipId: sMemId },
+        });
+        const totalClasses = attendances.length;
+        const attendedClasses = attendances.filter(
+          (a) => a.status === "PRESENT" || a.status === "LATE"
+        ).length;
+        const absentCount = attendances.filter((a) => a.status === "ABSENT").length;
+        const childAttRate =
+          totalClasses > 0 ? Math.round((attendedClasses / totalClasses) * 100) : null;
+
+        const grades = await tenantCtx.getTenantDb().grade.findMany({
+          where: { studentMembershipId: sMemId },
+          include: {
+            lesson: { select: { title: true } },
+            homeworkSubmission: { include: { homework: { select: { title: true } } } },
+          },
+          orderBy: { createdAt: "desc" },
+          take: 3,
+        });
+
+        const allChildGrades = await tenantCtx.getTenantDb().grade.findMany({
+          where: { studentMembershipId: sMemId },
+          select: { value: true, maxValue: true },
+        });
+        const avgGradeScore =
+          allChildGrades.length > 0
+            ? Math.round(
+                allChildGrades.reduce(
+                  (sum, g) => sum + (g.maxValue > 0 ? (g.value / g.maxValue) * 100 : 0),
+                  0
+                ) / allChildGrades.length
+              )
+            : null;
+
+        detailedChildren.push({
+          id: link.id,
+          studentMembershipId: sMemId,
+          fullName: link.student.user.fullName,
+          email: link.student.user.email,
+          enrollments: link.student.enrollments.map((en) => ({
+            id: en.id,
+            groupName: en.group.name,
+            courseTitle: en.group.course.title,
+          })),
+          scheduleSlots: childSchedule,
+          attendanceRate: childAttRate,
+          attendedClasses,
+          totalClasses,
+          absentCount,
+          avgGradeScore,
+          recentGrades: grades.map((g) => ({
+            id: g.id,
+            title: g.homeworkSubmission?.homework?.title || g.lesson?.title || "Задание",
+            score: g.value,
+            maxScore: g.maxValue,
+            letterGrade:
+              g.value >= 90 ? "A" : g.value >= 80 ? "B" : g.value >= 70 ? "C" : g.value >= 60 ? "D" : "F",
+            comment: g.comment,
+          })),
+          payments: link.student.payments.map((p) => ({
+            id: p.id,
+            amount: p.amount,
+            status: p.status,
+            createdAt: p.createdAt,
+          })),
+        });
+      }
     }
   }
 
@@ -843,68 +985,220 @@ interface UrgentHomeworkItem {
         </div>
       )}
 
-      {/* Parent View */}
+      {/* Parent View: Multi-child Overview */}
       {activeRole === "PARENT" && (
         <div className="space-y-6">
-          <h2 className="text-xl font-bold text-white">{t(locale, "parent.childProgress")}</h2>
-          {parentChildren.length === 0 ? (
-            <div className="glass-panel p-8 rounded-2xl border border-slate-800 text-center space-y-3">
-              <p className="text-slate-400">{t(locale, "parent.noChildren")}</p>
-              <p className="text-xs text-slate-500">{t(locale, "parent.getInviteCode")}</p>
+          <h2 className="text-xl font-bold text-white flex items-center gap-2">
+            <span>{t(locale, "dashboard.childrenOverview")}</span>
+          </h2>
+
+          {detailedChildren.length === 0 ? (
+            <div className="glass-panel p-8 rounded-2xl border border-slate-800 text-center space-y-2">
+              <Users className="w-10 h-10 text-slate-600 mx-auto" />
+              <p className="text-slate-300 font-semibold">{t(locale, "dashboard.parentNoChildrenLinked")}</p>
+              <p className="text-xs text-slate-500">{t(locale, "dashboard.parentLinkHint")}</p>
             </div>
           ) : (
-            parentChildren.map((link) => (
-              <div key={link.id} className="glass-panel p-6 rounded-2xl border border-slate-800 space-y-6">
-                <div className="flex items-center justify-between border-b border-slate-800 pb-4">
-                  <div className="flex items-center gap-3">
-                    <div className="w-10 h-10 rounded-full bg-brand-600/20 text-brand-400 flex items-center justify-center font-bold">
-                      👶
+            detailedChildren.map((child) => {
+              const dayNames: Record<number, string> = {
+                1: t(locale, "schedule.monShort"),
+                2: t(locale, "schedule.tueShort"),
+                3: t(locale, "schedule.wedShort"),
+                4: t(locale, "schedule.thuShort"),
+                5: t(locale, "schedule.friShort"),
+                6: t(locale, "schedule.satShort"),
+                7: t(locale, "schedule.sunShort"),
+              };
+
+              return (
+                <div key={child.id} className="glass-panel p-6 rounded-2xl border border-slate-800 space-y-6">
+                  {/* Child Top Bar */}
+                  <div className="flex flex-col sm:flex-row sm:items-center justify-between border-b border-slate-800 pb-4 gap-4">
+                    <div className="flex items-center gap-3">
+                      <div className="w-12 h-12 rounded-2xl bg-brand-600/20 text-brand-400 flex items-center justify-center font-bold text-xl border border-brand-500/20">
+                        👶
+                      </div>
+                      <div>
+                        <h3 className="text-lg font-bold text-white">{child.fullName}</h3>
+                        <p className="text-xs text-slate-400">{child.email}</p>
+                      </div>
                     </div>
-                    <div>
-                      <h3 className="text-lg font-bold text-white">{link.student.user.fullName}</h3>
-                      <p className="text-xs text-slate-400">{link.student.user.email}</p>
+
+                    <Link
+                      href="/center/payments"
+                      className="px-4 py-2 bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold rounded-xl transition-all shadow-lg shadow-emerald-600/20 self-start sm:self-auto"
+                    >
+                      💳 {t(locale, "dashboard.parentPayNext")}
+                    </Link>
+                  </div>
+
+                  {/* Child Academic & Attendance Stats Row */}
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    {/* Attendance Card */}
+                    <div className="p-4 rounded-xl bg-slate-900/60 border border-slate-800 flex flex-col justify-between space-y-3">
+                      <div className="flex items-center justify-between">
+                        <div>
+                          <span className="text-xs font-semibold text-slate-400 uppercase tracking-wider">
+                            {t(locale, "attendance.title")}
+                          </span>
+                          <div className="text-2xl font-bold text-white mt-1">
+                            {child.attendanceRate !== null ? `${child.attendanceRate}%` : "—"}
+                          </div>
+                        </div>
+                        <div className="flex flex-col items-end gap-1">
+                          <span className="px-2 py-0.5 rounded text-[11px] font-bold bg-slate-800 text-slate-300 border border-slate-700">
+                            {child.attendedClasses} / {child.totalClasses} занятий
+                          </span>
+                          {child.absentCount > 0 && (
+                            <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-red-500/10 text-red-400 border border-red-500/20">
+                              {t(locale, "dashboard.childAbsences", { count: child.absentCount })}
+                            </span>
+                          )}
+                        </div>
+                      </div>
+
+                      {child.attendanceRate !== null && (
+                        <div className="w-full bg-slate-800 h-2 rounded-full overflow-hidden">
+                          <div
+                            className={`h-full rounded-full transition-all ${
+                              child.attendanceRate >= 80 ? "bg-emerald-500" : "bg-amber-500"
+                            }`}
+                            style={{ width: `${child.attendanceRate}%` }}
+                          />
+                        </div>
+                      )}
+
+                      {child.attendanceRate !== null && child.attendanceRate < 80 && (
+                        <p className="text-[11px] text-amber-400 flex items-center gap-1">
+                          <AlertTriangle className="w-3.5 h-3.5 shrink-0" />
+                          <span>{t(locale, "dashboard.inRiskZoneWarning")}</span>
+                        </p>
+                      )}
+                    </div>
+
+                    {/* Academic Performance Card */}
+                    <div className="p-4 rounded-xl bg-slate-900/60 border border-slate-800 space-y-3">
+                      <div className="flex items-center justify-between">
+                        <div>
+                          <span className="text-xs font-semibold text-slate-400 uppercase tracking-wider">
+                            {t(locale, "dashboard.academicPerformance")}
+                          </span>
+                          <div className="flex items-baseline gap-2 mt-1">
+                            <span className="text-2xl font-bold text-white">
+                              {child.avgGradeScore !== null ? `${child.avgGradeScore}%` : "—"}
+                            </span>
+                            {child.avgGradeScore !== null && (
+                              <span className="px-2 py-0.5 rounded text-[11px] font-bold bg-brand-500/20 text-brand-300">
+                                {child.avgGradeScore >= 90 ? "A" : child.avgGradeScore >= 80 ? "B" : child.avgGradeScore >= 70 ? "C" : "D/F"}
+                              </span>
+                            )}
+                          </div>
+                        </div>
+                      </div>
+
+                      <div className="space-y-1.5 pt-1 border-t border-slate-800">
+                        <span className="text-[11px] font-semibold text-slate-400 uppercase">
+                          {t(locale, "dashboard.childRecentGrades")}
+                        </span>
+                        {child.recentGrades.length === 0 ? (
+                          <p className="text-xs text-slate-500">{t(locale, "dashboard.childNoGrades")}</p>
+                        ) : (
+                          <div className="space-y-1">
+                            {child.recentGrades.map((g) => (
+                              <div
+                                key={g.id}
+                                className="flex items-center justify-between text-xs py-1 px-2 rounded bg-slate-950/40 border border-slate-800/60"
+                              >
+                                <span className="text-slate-300 truncate mr-2">{g.title}</span>
+                                <span className="font-bold text-brand-400 shrink-0">
+                                  {g.score} / {g.maxScore} ({g.letterGrade})
+                                </span>
+                              </div>
+                            ))}
+                          </div>
+                        )}
+                      </div>
                     </div>
                   </div>
 
-                  <Link
-                    href="/center/payments"
-                    className="px-4 py-2 bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold rounded-xl transition-all shadow-lg shadow-emerald-600/20"
-                  >
-                    💳 Оплатить следующий месяц
-                  </Link>
-                </div>
+                  {/* Child Schedule & Courses Details */}
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    {/* Child Schedule */}
+                    <div className="p-4 rounded-xl bg-slate-900/60 border border-slate-800 space-y-3">
+                      <span className="text-xs font-semibold text-slate-400 uppercase tracking-wider">
+                        {t(locale, "dashboard.childUpcomingClasses")}
+                      </span>
 
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  <div className="p-4 rounded-xl bg-slate-900/60 border border-slate-800">
-                    <span className="text-xs font-semibold text-slate-400 uppercase tracking-wider">
-                      {t(locale, "parent.coursesAndGroups")}
-                    </span>
-                    <ul className="mt-2 space-y-2 text-sm">
-                      {link.student.enrollments.map((e) => (
-                        <li key={e.id} className="text-slate-200 font-medium flex justify-between">
-                          <span>{e.group.course.title}</span>
-                          <span className="text-xs text-brand-400 font-semibold">{e.group.name}</span>
-                        </li>
-                      ))}
-                    </ul>
-                  </div>
+                      {child.scheduleSlots.length === 0 ? (
+                        <p className="text-xs text-slate-500">{t(locale, "dashboard.childNoClasses")}</p>
+                      ) : (
+                        <div className="space-y-2">
+                          {child.scheduleSlots.map((slot) => (
+                            <div
+                              key={slot.id}
+                              className="p-2.5 rounded-lg bg-slate-950/60 border border-slate-800 text-xs space-y-1"
+                            >
+                              <div className="flex items-center justify-between">
+                                <span className="font-bold text-brand-400">
+                                  {dayNames[slot.dayOfWeek] || `День ${slot.dayOfWeek}`} • {slot.startTime} - {slot.endTime}
+                                </span>
+                                {slot.roomName && (
+                                  <span className="text-[11px] text-slate-400 bg-slate-900 px-1.5 py-0.5 rounded">
+                                    {slot.roomName}
+                                  </span>
+                                )}
+                              </div>
+                              <div className="font-semibold text-white">{slot.courseTitle}</div>
+                              <div className="text-slate-400 flex items-center justify-between text-[11px]">
+                                <span>{slot.groupName}</span>
+                                <span>{slot.teacherName}</span>
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                    </div>
 
-                  <div className="p-4 rounded-xl bg-slate-900/60 border border-slate-800">
-                    <span className="text-xs font-semibold text-slate-400 uppercase tracking-wider">
-                      {t(locale, "parent.paymentHistory")}
-                    </span>
-                    <ul className="mt-2 space-y-2 text-sm">
-                      {link.student.payments.map((p) => (
-                        <li key={p.id} className="text-slate-200 flex justify-between">
-                          <span>{formatCurrencyLocalized(p.amount, locale, "UZS")}</span>
-                          <span className="text-xs text-emerald-400 font-semibold">{p.status}</span>
-                        </li>
-                      ))}
-                    </ul>
+                    {/* Courses & Payments History */}
+                    <div className="space-y-4">
+                      {/* Enrolled Courses */}
+                      <div className="p-4 rounded-xl bg-slate-900/60 border border-slate-800">
+                        <span className="text-xs font-semibold text-slate-400 uppercase tracking-wider">
+                          {t(locale, "parent.coursesAndGroups")}
+                        </span>
+                        <ul className="mt-2 space-y-2 text-sm">
+                          {child.enrollments.map((e) => (
+                            <li key={e.id} className="text-slate-200 font-medium flex justify-between">
+                              <span>{e.courseTitle}</span>
+                              <span className="text-xs text-brand-400 font-semibold">{e.groupName}</span>
+                            </li>
+                          ))}
+                        </ul>
+                      </div>
+
+                      {/* Payment History */}
+                      <div className="p-4 rounded-xl bg-slate-900/60 border border-slate-800">
+                        <span className="text-xs font-semibold text-slate-400 uppercase tracking-wider">
+                          {t(locale, "parent.paymentHistory")}
+                        </span>
+                        {child.payments.length === 0 ? (
+                          <p className="text-xs text-slate-500 mt-2">Платежей пока нет</p>
+                        ) : (
+                          <ul className="mt-2 space-y-2 text-sm">
+                            {child.payments.map((p) => (
+                              <li key={p.id} className="text-slate-200 flex justify-between text-xs">
+                                <span>{formatCurrencyLocalized(p.amount, locale, "UZS")}</span>
+                                <span className="text-emerald-400 font-semibold">{p.status}</span>
+                              </li>
+                            ))}
+                          </ul>
+                        )}
+                      </div>
+                    </div>
                   </div>
                 </div>
-              </div>
-            ))
+              );
+            })
           )}
         </div>
       )}
