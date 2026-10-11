@@ -3,6 +3,7 @@ import { db } from "../src/lib/db";
 import { signJWT, hashPassword } from "../src/lib/auth";
 import { GET as getSchedule, POST as createSchedule, PATCH as updateSchedule, DELETE as deleteSchedule } from "../src/app/api/tenant/schedule/route";
 import { POST as createLesson, PATCH as updateLesson } from "../src/app/api/lessons/route";
+import { GET as getIcal } from "../src/app/api/schedule/ical/route";
 
 let mockToken: string = "";
 
@@ -654,5 +655,72 @@ describe("CORE-2 Schedule & Timetable Management", () => {
       })
     );
     expect(resForbidden.status).toBe(403);
+  });
+
+  it("11. iCal Export RFC 5545: Director receives text/calendar containing VCALENDAR and VEVENT", async () => {
+    const dirA = await db.centerMembership.findUnique({
+      where: { id: directorAMembershipId },
+      include: { user: true },
+    });
+    mockToken = signJWT({
+      userId: dirA!.userId,
+      email: dirA!.user.email,
+      platformRole: "NONE",
+      activeCenterId: centerAId,
+      activeCenterRole: "DIRECTOR",
+    });
+
+    const res = await getIcal(mockRequest("/api/schedule/ical", "GET"));
+    expect(res.status).toBe(200);
+    expect(res.headers.get("content-type")).toContain("text/calendar");
+
+    const text = await res.text();
+    expect(text).toContain("BEGIN:VCALENDAR");
+    expect(text).toContain("VERSION:2.0");
+    expect(text).toContain("PRODID:-//Aziz LMS Platform//Schedule Calendar//EN");
+    expect(text).toContain("BEGIN:VEVENT");
+    expect(text).toContain("END:VEVENT");
+    expect(text).toContain("END:VCALENDAR");
+    expect(text).toContain("Group Sched A1");
+  });
+
+  it("12. iCal Export Scoping & Isolation: Student only exports enrolled groups, rejects unauthorized", async () => {
+    // Ensure Group A2 has an active slot
+    await db.scheduleSlot.create({
+      data: {
+        centerId: centerAId,
+        groupId: groupA2Id,
+        teacherMembershipId: teacherA2MembershipId,
+        dayOfWeek: 2,
+        startTime: "10:00",
+        endTime: "11:30",
+        roomName: "Room 105",
+      },
+    });
+
+    // Student 1 (enrolled only in Group A1)
+    const s1 = await db.centerMembership.findUnique({
+      where: { id: studentA1MembershipId },
+      include: { user: true },
+    });
+    mockToken = signJWT({
+      userId: s1!.userId,
+      email: s1!.user.email,
+      platformRole: "NONE",
+      activeCenterId: centerAId,
+      activeCenterRole: "STUDENT",
+    });
+
+    const resStudent = await getIcal(mockRequest("/api/schedule/ical", "GET"));
+    expect(resStudent.status).toBe(200);
+    const textStudent = await resStudent.text();
+    expect(textStudent).toContain("Group Sched A1");
+    expect(textStudent).not.toContain("Group Sched A2");
+    expect(textStudent).not.toContain("Group Sched B1");
+
+    // Anonymous request (no token) -> 401
+    mockToken = "";
+    const resAnon = await getIcal(mockRequest("/api/schedule/ical", "GET"));
+    expect(resAnon.status).toBe(401);
   });
 });
