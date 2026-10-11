@@ -302,7 +302,25 @@
     "graded": "Проверено",
     "overdue": "Просрочено",
     "submitHomework": "Сдать задание",
-    "gradeHomework": "Оценить задание"
+    "gradeHomework": "Оценить задание",
+    "accepted": "Принято",
+    "revisionRequested": "На доработке",
+    "feedback": "Комментарий преподавателя",
+    "links": "Внешние ссылки",
+    "submitSuccess": "Задание успешно отправлено",
+    "gradeSuccess": "Оценка успешно выставлена"
+  },
+
+  "testing": {
+    "startTest": "Начать тестирование",
+    "submitTest": "Завершить тест",
+    "timeRemaining": "Осталось времени",
+    "attemptsLeft": "Осталось попыток",
+    "passed": "Тест сдан",
+    "failed": "Тест не сдан",
+    "reviewTitle": "Разбор ответов",
+    "yourAnswer": "Ваш ответ",
+    "correctAnswer": "Правильный ответ"
   },
 
   "payments": {

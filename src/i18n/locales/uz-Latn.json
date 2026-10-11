@@ -302,7 +302,25 @@
     "graded": "Tekshirilgan",
     "overdue": "Muddati oʻtgan",
     "submitHomework": "Vazifani topshirish",
-    "gradeHomework": "Vazifani baholash"
+    "gradeHomework": "Vazifani baholash",
+    "accepted": "Qabul qilindi",
+    "revisionRequested": "Qayta ishlashga",
+    "feedback": "O'qituvchi izohi",
+    "links": "Tashqi havolalar",
+    "submitSuccess": "Vazifa muvaffaqiyatli yuborildi",
+    "gradeSuccess": "Baho muvaffaqiyatli qo'yildi"
+  },
+
+  "testing": {
+    "startTest": "Testni boshlash",
+    "submitTest": "Testni yakunlash",
+    "timeRemaining": "Qolgan vaqt",
+    "attemptsLeft": "Qolgan urinishlar",
+    "passed": "Test topshirildi",
+    "failed": "Test topshirilmadi",
+    "reviewTitle": "Javoblar tahlili",
+    "yourAnswer": "Sizning javobingiz",
+    "correctAnswer": "To'g'ri javob"
   },
 
   "payments": {
