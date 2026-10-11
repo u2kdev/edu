@@ -69,10 +69,36 @@ export class TenantMembershipError extends TenantAccessError {
 
 export const CENTER_SUSPENDED_STATUSES = ["BLOCKED", "CANCELLED", "PAUSED", "OVERDUE"] as const;
 
+async function extractReason(
+  req: Request,
+  options?: { reason?: string }
+): Promise<string | undefined> {
+  if (options?.reason && typeof options.reason === "string" && options.reason.trim()) {
+    return options.reason.trim();
+  }
+  const headerReason = req.headers.get("x-action-reason") || req.headers.get("x-reason");
+  if (headerReason && headerReason.trim()) {
+    return headerReason.trim();
+  }
+  try {
+    const url = new URL(req.url);
+    const queryReason = url.searchParams.get("reason");
+    if (queryReason && queryReason.trim()) return queryReason.trim();
+  } catch {}
+  try {
+    const cloned = req.clone();
+    const body = await cloned.json();
+    if (body && typeof body.reason === "string" && body.reason.trim()) {
+      return body.reason.trim();
+    }
+  } catch {}
+  return undefined;
+}
+
 export async function requireTenantAccess(
   req: Request,
-  expectedCenterIdOrOptions?: string | { isWrite?: boolean; allowSuspended?: boolean },
-  maybeOptions?: { isWrite?: boolean; allowSuspended?: boolean }
+  expectedCenterIdOrOptions?: string | { isWrite?: boolean; allowSuspended?: boolean; reason?: string },
+  maybeOptions?: { isWrite?: boolean; allowSuspended?: boolean; reason?: string }
 ) {
   if (!req || typeof req !== "object" || !("method" in req)) {
     throw new Error("requireTenantAccess requires a Request object as its first argument");
@@ -110,6 +136,41 @@ export async function requireTenantAccess(
       where: { id: targetCenterId },
     });
     if (!center) throw new TenantNotFoundError();
+
+    const isBlockedOrCancelled = center.status === "BLOCKED" || center.status === "CANCELLED";
+    if (isBlockedOrCancelled) {
+      if (session.user.platformRole !== "SUPERADMIN" && session.user.platformRole !== "DEVELOPER") {
+        throw new TenantAccessError(
+          `Forbidden: Platform access to ${center.status} centers is restricted to SUPERADMIN and DEVELOPER`,
+          "SUSPENDED_ACCESS_DENIED",
+          403
+        );
+      }
+
+      if (isWrite) {
+        const reason = await extractReason(req, options);
+        if (!reason) {
+          throw new TenantAccessError(
+            `A reason is required for write operations on ${center.status} centers`,
+            "REASON_REQUIRED",
+            400
+          );
+        }
+
+        await logAuditEvent({
+          centerId: targetCenterId,
+          actorUserId: session.user.id,
+          action: "PLATFORM_SUSPENDED_TENANT_WRITE",
+          resource: "LearningCenter",
+          resourceId: targetCenterId,
+          details: {
+            platformRole: session.user.platformRole,
+            centerStatus: center.status,
+            reason,
+          },
+        });
+      }
+    }
 
     if (session.user.platformRole === "PLATFORM_SUPPORT") {
       if (isWrite) {

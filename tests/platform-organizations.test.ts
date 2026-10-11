@@ -219,10 +219,15 @@ describe("Platform Organizations (Real DB)", () => {
       const rData = await r.json();
       expect(rData.code).toBe("CENTER_SUSPENDED");
 
-      // 3. Platform Support accessing it
-      setAuth(platformSupportId, "PLATFORM_SUPPORT", centerId, "NONE");
+      // 3. SUPERADMIN accessing it (reading allowed without reason)
+      setAuth(superAdminId, "SUPERADMIN", centerId, "NONE");
       const r2 = await getTenantStaff(new Request("http://localhost/api/tenant/staff"));
-      expect(r2.status).not.toBe(403); // because platform staff bypasses suspension
+      expect(r2.status).toBe(200);
+
+      // 4. PLATFORM_SUPPORT accessing it (restricted in BLOCKED/CANCELLED centers)
+      setAuth(platformSupportId, "PLATFORM_SUPPORT", centerId, "NONE");
+      const r3 = await getTenantStaff(new Request("http://localhost/api/tenant/staff"));
+      expect(r3.status).toBe(403);
     });
   });
 
