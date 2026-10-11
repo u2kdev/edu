@@ -114,22 +114,37 @@ export async function POST(req: Request) {
     interface AttendanceRecordInput {
       studentMembershipId: string;
       status: string;
+      note?: string | null;
+      groupId?: string | null;
     }
     const attendanceRecords = records as AttendanceRecordInput[];
-    // SECURITY: If teacher, verify students belong to teacher's groups
+
+    const VALID_STATUSES = new Set(["PRESENT", "ABSENT", "EXCUSED", "LATE"]);
+    const invalidRecord = attendanceRecords.find((r) => !VALID_STATUSES.has(r.status));
+    if (invalidRecord) {
+      return NextResponse.json(
+        { error: "Invalid attendance status. Must be one of: PRESENT, ABSENT, EXCUSED, LATE" },
+        { status: 400 }
+      );
+    }
+
+    // SECURITY: If teacher, verify students belong to teacher's groups or teacher is substitute
     if (tenantCtx.role === "TEACHER" && tenantCtx.membership && attendanceRecords.length > 0) {
-      const teacherGroups = await tenantDb.group.findMany({
-        where: { teacherMembershipId: tenantCtx.membership.id },
-        select: { id: true },
-      });
-      const allowedEnrollments = await tenantDb.enrollment.findMany({
-        where: { groupId: { in: teacherGroups.map((g: { id: string }) => g.id) } },
-        select: { studentMembershipId: true },
-      });
-      const allowedStudentIds = new Set(allowedEnrollments.map((e: { studentMembershipId: string }) => e.studentMembershipId));
-      const unauthorizedRecord = attendanceRecords.find((r) => !allowedStudentIds.has(r.studentMembershipId));
-      if (unauthorizedRecord) {
-        return NextResponse.json({ error: "Teachers can only mark attendance for students in their own groups" }, { status: 403 });
+      const isSubstitute = lesson.substituteTeacherMembershipId === tenantCtx.membership.id;
+      if (!isSubstitute) {
+        const teacherGroups = await tenantDb.group.findMany({
+          where: { teacherMembershipId: tenantCtx.membership.id },
+          select: { id: true },
+        });
+        const allowedEnrollments = await tenantDb.enrollment.findMany({
+          where: { groupId: { in: teacherGroups.map((g: { id: string }) => g.id) } },
+          select: { studentMembershipId: true },
+        });
+        const allowedStudentIds = new Set(allowedEnrollments.map((e: { studentMembershipId: string }) => e.studentMembershipId));
+        const unauthorizedRecord = attendanceRecords.find((r) => !allowedStudentIds.has(r.studentMembershipId));
+        if (unauthorizedRecord) {
+          return NextResponse.json({ error: "Teachers can only mark attendance for students in their own groups" }, { status: 403 });
+        }
       }
     }
 
@@ -158,37 +173,43 @@ export async function POST(req: Request) {
     // Use updateMany for UPSERT simulation with getTenantDb because prisma extension doesn't fully intercept compound where upserts well yet.
     for (const r of attendanceRecords) {
       const existing = await tenantDb.attendance.findFirst({
-        where: { lessonId, studentMembershipId: r.studentMembershipId }
+        where: { lessonId, studentMembershipId: r.studentMembershipId },
       });
       if (existing) {
         await tenantDb.attendance.updateMany({
-           where: { lessonId, studentMembershipId: r.studentMembershipId },
-           data: {
-             status: r.status,
-             markedByMembershipId: markerId,
-             markedAt: new Date(),
-           }
+          where: { lessonId, studentMembershipId: r.studentMembershipId },
+          data: {
+            status: r.status,
+            note: r.note?.trim() || null,
+            groupId: r.groupId || existing.groupId || null,
+            markedByMembershipId: markerId,
+            markedAt: new Date(),
+          },
         });
       } else {
         try {
           await tenantDb.attendance.create({
-             data: {
-               lessonId,
-               studentMembershipId: r.studentMembershipId,
-               status: r.status,
-               markedByMembershipId: markerId,
-             }
+            data: {
+              lessonId,
+              studentMembershipId: r.studentMembershipId,
+              status: r.status,
+              note: r.note?.trim() || null,
+              groupId: r.groupId || null,
+              markedByMembershipId: markerId,
+            },
           });
         } catch (e: unknown) {
           const err = e as { code?: string };
-          if (err?.code === 'P2002') {
+          if (err?.code === "P2002") {
             await tenantDb.attendance.updateMany({
-               where: { lessonId, studentMembershipId: r.studentMembershipId },
-               data: {
-                 status: r.status,
-                 markedByMembershipId: markerId,
-                 markedAt: new Date(),
-               }
+              where: { lessonId, studentMembershipId: r.studentMembershipId },
+              data: {
+                status: r.status,
+                note: r.note?.trim() || null,
+                groupId: r.groupId || null,
+                markedByMembershipId: markerId,
+                markedAt: new Date(),
+              },
             });
           } else {
             throw e;
