@@ -43,8 +43,9 @@ export default async function CenterDashboardPage() {
 interface StudentEnrollmentItem {
   id: string;
   group: {
+    id: string;
     name: string;
-    course: { title: string };
+    course: { id: string; title: string };
     teacher?: { user: { fullName: string } } | null;
   };
 }
@@ -208,11 +209,45 @@ interface UrgentHomeworkItem {
   }
 
   // Student specific data
+  interface StudentScheduleSlotItem {
+    id: string;
+    dayOfWeek: number;
+    startTime: string;
+    endTime: string;
+    roomName?: string | null;
+    group: { name: string; course: { title: string } };
+    teacher: { user: { fullName: string } };
+  }
+
+  interface StudentRecentGradeItem {
+    id: string;
+    title: string;
+    score: number;
+    maxScore: number;
+    letterGrade: string;
+    feedback?: string | null;
+    createdAt: Date;
+  }
+
+  interface StudentHomeworkDeadlineItem {
+    id: string;
+    title: string;
+    courseTitle: string;
+    dueDate?: Date | null;
+    status: string;
+    gradeScore?: number | null;
+  }
+
+  let studentScheduleSlots: StudentScheduleSlotItem[] = [];
+  let studentRecentGrades: StudentRecentGradeItem[] = [];
+  let studentHomeworkDeadlines: StudentHomeworkDeadlineItem[] = [];
+  let studentAvgGradeScore: number | null = null;
+
   if (activeRole === "STUDENT") {
     const studentMem = session.memberships.find((m) => m.centerId === activeCenterId);
     if (studentMem) {
       studentEnrollments = await tenantCtx.getTenantDb().enrollment.findMany({
-        where: { studentMembershipId: studentMem.id },
+        where: { studentMembershipId: studentMem.id, status: "ACTIVE" },
         include: {
           group: {
             include: {
@@ -223,21 +258,109 @@ interface UrgentHomeworkItem {
         },
       });
 
-      urgentHomeworks = await tenantCtx.getTenantDb().homework.findMany({
-        where: {
-          lesson: { module: { course: { centerId: activeCenterId } } },
-          dueDate: { gte: new Date() },
-        },
-        take: 3,
-        orderBy: { dueDate: "asc" },
-      });
+      const enrolledGroupIds = studentEnrollments.map((en) => en.group.id);
+      if (enrolledGroupIds.length > 0) {
+        studentScheduleSlots = await tenantCtx.getTenantDb().scheduleSlot.findMany({
+          where: {
+            centerId: activeCenterId,
+            groupId: { in: enrolledGroupIds },
+            status: "ACTIVE",
+          },
+          include: {
+            group: { include: { course: { select: { title: true } } } },
+            teacher: { include: { user: { select: { fullName: true } } } },
+          },
+          orderBy: [{ dayOfWeek: "asc" }, { startTime: "asc" }],
+        });
+      }
+
+      const enrolledCourseIds = studentEnrollments.map((en) => en.group.course.id);
+      if (enrolledCourseIds.length > 0) {
+        const studentHomeworks = await tenantCtx.getTenantDb().homework.findMany({
+          where: {
+            lesson: { module: { courseId: { in: enrolledCourseIds } } },
+          },
+          include: {
+            lesson: { include: { module: { include: { course: { select: { title: true } } } } } },
+            submissions: {
+              where: { studentMembershipId: studentMem.id },
+            },
+          },
+          orderBy: { dueDate: "asc" },
+          take: 6,
+        });
+
+        const now = new Date();
+        studentHomeworkDeadlines = studentHomeworks.map((hw) => {
+          const sub = hw.submissions[0];
+          let status = "PENDING";
+          let gradeScore: number | null = null;
+
+          if (sub) {
+            if (sub.grade !== null && sub.grade !== undefined) {
+              status = "GRADED";
+              gradeScore = sub.grade;
+            } else if (sub.status === "REVISION_REQUESTED") {
+              status = "REVISION_REQUESTED";
+            } else {
+              status = "SUBMITTED";
+            }
+          } else if (hw.dueDate && hw.dueDate < now) {
+            status = "OVERDUE";
+          }
+
+          return {
+            id: hw.id,
+            title: hw.title,
+            courseTitle: hw.lesson.module.course.title,
+            dueDate: hw.dueDate,
+            status,
+            gradeScore,
+          };
+        });
+      }
 
       const studentAttendances = await tenantCtx.getTenantDb().attendance.findMany({
         where: { studentMembershipId: studentMem.id },
       });
-      const presentCount = studentAttendances.filter(a => a.status === "PRESENT").length;
+      const presentCount = studentAttendances.filter(
+        (a) => a.status === "PRESENT" || a.status === "LATE"
+      ).length;
       const totalAttendances = studentAttendances.length;
-      attendanceRate = totalAttendances > 0 ? Math.round((presentCount / totalAttendances) * 100) : null;
+      attendanceRate =
+        totalAttendances > 0 ? Math.round((presentCount / totalAttendances) * 100) : null;
+
+      const allGrades = await tenantCtx.getTenantDb().grade.findMany({
+        where: { studentMembershipId: studentMem.id },
+        include: {
+          lesson: { select: { title: true } },
+          homeworkSubmission: {
+            include: {
+              homework: { select: { title: true } },
+            },
+          },
+        },
+        orderBy: { createdAt: "desc" },
+      });
+
+      if (allGrades.length > 0) {
+        const totalPct = allGrades.reduce(
+          (sum, g) => sum + (g.maxValue > 0 ? (g.value / g.maxValue) * 100 : 0),
+          0
+        );
+        studentAvgGradeScore = Math.round(totalPct / allGrades.length);
+      }
+
+      studentRecentGrades = allGrades.slice(0, 5).map((g) => ({
+        id: g.id,
+        title: g.homeworkSubmission?.homework?.title || g.lesson?.title || "Задание",
+        score: g.value,
+        maxScore: g.maxValue,
+        letterGrade:
+          g.value >= 90 ? "A" : g.value >= 80 ? "B" : g.value >= 70 ? "C" : g.value >= 60 ? "D" : "F",
+        feedback: g.comment,
+        createdAt: g.createdAt,
+      }));
     }
   }
 
@@ -449,56 +572,274 @@ interface UrgentHomeworkItem {
         </div>
       )}
 
-      {/* Student View: Urgent Homeworks Widget */}
+      {/* Student View: Academic Performance, Schedule, Deadlines & Courses */}
       {activeRole === "STUDENT" && (
-        <div className="space-y-6">
-          {urgentHomeworks.length > 0 && (
-            <div className="p-5 rounded-2xl bg-amber-500/10 border border-amber-500/30 space-y-3">
-              <h3 className="text-sm font-bold text-amber-300 flex items-center gap-2">
-                <Clock className="w-4 h-4 text-amber-400" />
-                <span>Горящие домашние задания (Сдать в ближайшие дни)</span>
-              </h3>
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
-                {urgentHomeworks.map((hw) => (
-                  <div key={hw.id} className="p-3 rounded-xl bg-slate-900/80 border border-slate-800 text-xs space-y-1">
-                    <div className="font-bold text-white">{hw.title}</div>
-                    <div className="text-amber-400 font-medium">Срок: {formatDateLocalized(hw.dueDate, locale)}</div>
+        <div className="space-y-8">
+          {/* Academic Performance & Attendance Overview */}
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+            {/* GPA & Attendance Summary */}
+            <div className="glass-panel p-6 rounded-2xl border border-slate-800 space-y-4 flex flex-col justify-between">
+              <div className="flex items-center justify-between">
+                <div>
+                  <span className="text-xs font-semibold text-slate-400 uppercase tracking-wider">
+                    {t(locale, "dashboard.academicPerformance")}
+                  </span>
+                  <div className="flex items-baseline gap-3 mt-1">
+                    <span className="text-3xl font-extrabold text-white">
+                      {studentAvgGradeScore !== null ? `${studentAvgGradeScore}%` : "—"}
+                    </span>
+                    {studentAvgGradeScore !== null && (
+                      <span className="px-2.5 py-0.5 rounded-full text-xs font-bold bg-brand-500/20 text-brand-300 border border-brand-500/30">
+                        {studentAvgGradeScore >= 90 ? "A (Отлично)" : studentAvgGradeScore >= 80 ? "B (Хорошо)" : studentAvgGradeScore >= 70 ? "C (Удовл.)" : "D/F"}
+                      </span>
+                    )}
+                  </div>
+                </div>
+                <div className="w-12 h-12 rounded-xl bg-brand-500/10 border border-brand-500/20 flex items-center justify-center text-brand-400">
+                  <GraduationCap className="w-6 h-6" />
+                </div>
+              </div>
+
+              {/* Attendance Bar */}
+              <div className="space-y-1.5 pt-2 border-t border-slate-800/80">
+                <div className="flex items-center justify-between text-xs">
+                  <span className="text-slate-400">{t(locale, "attendance.title")}</span>
+                  <span className={`font-bold ${attendanceRate !== null && attendanceRate < 80 ? "text-amber-400" : "text-emerald-400"}`}>
+                    {attendanceRate !== null ? `${attendanceRate}%` : "—"}
+                  </span>
+                </div>
+                {attendanceRate !== null && (
+                  <div className="w-full bg-slate-800 h-2 rounded-full overflow-hidden">
+                    <div
+                      className={`h-full rounded-full transition-all ${
+                        attendanceRate >= 80 ? "bg-emerald-500" : "bg-amber-500"
+                      }`}
+                      style={{ width: `${attendanceRate}%` }}
+                    />
+                  </div>
+                )}
+                {attendanceRate !== null && attendanceRate < 80 && (
+                  <p className="text-[11px] text-amber-400 flex items-center gap-1 mt-1">
+                    <AlertTriangle className="w-3.5 h-3.5 shrink-0" />
+                    <span>{t(locale, "dashboard.inRiskZoneWarning")}</span>
+                  </p>
+                )}
+              </div>
+            </div>
+
+            {/* Recent Grades */}
+            <div className="glass-panel p-6 rounded-2xl border border-slate-800 space-y-4">
+              <div className="flex items-center justify-between">
+                <span className="text-xs font-semibold text-slate-400 uppercase tracking-wider">
+                  {t(locale, "dashboard.recentGrades")}
+                </span>
+                <Link
+                  href="/center/grades"
+                  className="text-xs font-semibold text-brand-400 hover:text-brand-300 hover:underline flex items-center gap-1"
+                >
+                  {t(locale, "grades.title")}
+                  <ArrowRight className="w-3.5 h-3.5" />
+                </Link>
+              </div>
+
+              {studentRecentGrades.length === 0 ? (
+                <div className="py-6 text-center text-xs text-slate-500">
+                  {t(locale, "dashboard.noGradesYet")}
+                </div>
+              ) : (
+                <div className="space-y-2">
+                  {studentRecentGrades.map((g) => (
+                    <div
+                      key={g.id}
+                      className="p-2.5 rounded-xl bg-slate-900/60 border border-slate-800 flex items-center justify-between text-xs"
+                    >
+                      <div className="truncate mr-2">
+                        <div className="font-semibold text-white truncate">{g.title}</div>
+                        {g.feedback && <div className="text-[11px] text-slate-400 truncate">{g.feedback}</div>}
+                      </div>
+                      <div className="flex items-center gap-2 shrink-0">
+                        <span className="font-bold text-slate-200">
+                          {g.score} / {g.maxScore}
+                        </span>
+                        <span className="px-1.5 py-0.5 rounded bg-brand-500/20 text-brand-400 font-bold text-[10px]">
+                          {g.letterGrade}
+                        </span>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          </div>
+
+          {/* Student Schedule */}
+          <div className="space-y-4">
+            <div className="flex items-center justify-between">
+              <h2 className="text-xl font-bold text-white flex items-center gap-2">
+                <CalendarDays className="w-5 h-5 text-brand-400" />
+                <span>{t(locale, "dashboard.mySchedule")}</span>
+              </h2>
+              <Link
+                href="/center/schedule"
+                className="text-xs font-semibold text-brand-400 hover:text-brand-300 flex items-center gap-1 hover:underline"
+              >
+                {t(locale, "dashboard.viewSchedule")}
+                <ArrowRight className="w-3.5 h-3.5" />
+              </Link>
+            </div>
+
+            {studentScheduleSlots.length === 0 ? (
+              <div className="glass-panel p-8 rounded-2xl border border-slate-800 text-center space-y-2">
+                <CalendarDays className="w-10 h-10 text-slate-600 mx-auto" />
+                <p className="text-sm text-slate-400">{t(locale, "dashboard.noUpcomingClasses")}</p>
+              </div>
+            ) : (
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                {studentScheduleSlots.map((slot) => {
+                  const dayNames: Record<number, string> = {
+                    1: t(locale, "schedule.monShort"),
+                    2: t(locale, "schedule.tueShort"),
+                    3: t(locale, "schedule.wedShort"),
+                    4: t(locale, "schedule.thuShort"),
+                    5: t(locale, "schedule.friShort"),
+                    6: t(locale, "schedule.satShort"),
+                    7: t(locale, "schedule.sunShort"),
+                  };
+                  return (
+                    <div
+                      key={slot.id}
+                      className="glass-panel p-5 rounded-2xl border border-slate-800 space-y-3 hover:border-slate-700 transition-colors"
+                    >
+                      <div className="flex items-center justify-between">
+                        <span className="px-2.5 py-1 rounded-md text-xs font-bold bg-brand-500/10 text-brand-400 border border-brand-500/20">
+                          {dayNames[slot.dayOfWeek] || `День ${slot.dayOfWeek}`} • {slot.startTime} - {slot.endTime}
+                        </span>
+                        {slot.roomName && (
+                          <span className="text-xs text-slate-400 bg-slate-900 px-2 py-0.5 rounded border border-slate-800">
+                            {slot.roomName}
+                          </span>
+                        )}
+                      </div>
+                      <div>
+                        <h4 className="text-base font-bold text-white line-clamp-1">{slot.group.course.title}</h4>
+                        <p className="text-xs text-emerald-400 font-semibold">{slot.group.name}</p>
+                      </div>
+                      <div className="pt-2 border-t border-slate-800/80 text-xs text-slate-400 flex items-center justify-between">
+                        <span>{t(locale, "student.teacher")}:</span>
+                        <span className="text-slate-200 font-medium">{slot.teacher.user.fullName}</span>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+
+          {/* Homework Deadlines */}
+          <div className="space-y-4">
+            <div className="flex items-center justify-between">
+              <h2 className="text-xl font-bold text-white flex items-center gap-2">
+                <Clock className="w-5 h-5 text-amber-400" />
+                <span>{t(locale, "dashboard.upcomingDeadlines")}</span>
+              </h2>
+              <Link
+                href="/center/homework"
+                className="text-xs font-semibold text-brand-400 hover:text-brand-300 flex items-center gap-1 hover:underline"
+              >
+                {t(locale, "nav.homework")}
+                <ArrowRight className="w-3.5 h-3.5" />
+              </Link>
+            </div>
+
+            {studentHomeworkDeadlines.length === 0 ? (
+              <div className="glass-panel p-8 rounded-2xl border border-slate-800 text-center space-y-2">
+                <CheckCircle2 className="w-10 h-10 text-emerald-400 mx-auto" />
+                <p className="text-sm text-slate-400">{t(locale, "dashboard.noHomeworkDeadlines")}</p>
+              </div>
+            ) : (
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                {studentHomeworkDeadlines.map((hw) => {
+                  const statusColors: Record<string, string> = {
+                    GRADED: "bg-emerald-500/20 text-emerald-400 border-emerald-500/30",
+                    SUBMITTED: "bg-blue-500/20 text-blue-400 border-blue-500/30",
+                    REVISION_REQUESTED: "bg-amber-500/20 text-amber-400 border-amber-500/30",
+                    OVERDUE: "bg-red-500/20 text-red-400 border-red-500/30",
+                    PENDING: "bg-slate-800 text-slate-400 border-slate-700",
+                  };
+                  return (
+                    <div
+                      key={hw.id}
+                      className="glass-panel p-5 rounded-2xl border border-slate-800 space-y-3 flex flex-col justify-between hover:border-slate-700 transition-colors"
+                    >
+                      <div className="space-y-1">
+                        <div className="flex items-center justify-between text-xs mb-1">
+                          <span className={`px-2 py-0.5 rounded text-[11px] font-bold border ${statusColors[hw.status] || statusColors.PENDING}`}>
+                            {hw.status === "GRADED" && `${t(locale, "homework.graded")}: ${hw.gradeScore} баллов`}
+                            {hw.status === "SUBMITTED" && t(locale, "homework.submitted")}
+                            {hw.status === "REVISION_REQUESTED" && t(locale, "homework.revisionRequested")}
+                            {hw.status === "OVERDUE" && t(locale, "homework.overdue")}
+                            {hw.status === "PENDING" && t(locale, "homework.notStarted")}
+                          </span>
+                        </div>
+                        <h4 className="text-sm font-bold text-white line-clamp-1">{hw.title}</h4>
+                        <p className="text-xs text-brand-400 font-medium">{hw.courseTitle}</p>
+                        {hw.dueDate && (
+                          <p className="text-xs text-slate-400 pt-1">
+                            {t(locale, "homework.dueDate")}: <span className="text-slate-200">{formatDateLocalized(hw.dueDate, locale)}</span>
+                          </p>
+                        )}
+                      </div>
+
+                      <div className="pt-2 border-t border-slate-800/80">
+                        <Link
+                          href="/center/homework"
+                          className="inline-flex items-center gap-1 text-xs font-semibold text-brand-400 hover:text-brand-300 hover:underline"
+                        >
+                          <span>{t(locale, "dashboard.submitHomeworkPrompt")}</span>
+                          <ArrowRight className="w-3.5 h-3.5" />
+                        </Link>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+
+          {/* Enrolled Courses Grid */}
+          <div className="space-y-4">
+            <h2 className="text-xl font-bold text-white">{t(locale, "student.myCourses")}</h2>
+            {studentEnrollments.length === 0 ? (
+              <div className="glass-panel p-8 rounded-2xl border border-slate-800 text-center space-y-2">
+                <BookOpen className="w-10 h-10 text-slate-600 mx-auto" />
+                <p className="text-slate-300 font-semibold">{t(locale, "student.noCourses")}</p>
+                <p className="text-xs text-slate-500">{t(locale, "student.useInviteCode")}</p>
+              </div>
+            ) : (
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                {studentEnrollments.map((en) => (
+                  <div key={en.id} className="glass-panel p-6 rounded-2xl border border-slate-800 space-y-4 hover:border-slate-700 transition-colors">
+                    <div className="flex justify-between items-start">
+                      <div>
+                        <span className="text-xs font-semibold text-brand-400 uppercase tracking-wider">
+                          {t(locale, "courses.title")}
+                        </span>
+                        <h3 className="text-lg font-bold text-white mt-1">{en.group.course.title}</h3>
+                      </div>
+                      <span className="px-2.5 py-1 rounded-full bg-emerald-500/10 text-emerald-400 text-xs font-semibold">
+                        {en.group.name}
+                      </span>
+                    </div>
+                    <div className="text-xs text-slate-400 pt-2 border-t border-slate-800/80">
+                      {t(locale, "student.teacher")}: <span className="text-slate-200 font-medium">
+                        {en.group.teacher?.user.fullName || t(locale, "student.assigningTeacher")}
+                      </span>
+                    </div>
                   </div>
                 ))}
               </div>
-            </div>
-          )}
-
-          <h2 className="text-xl font-bold text-white">{t(locale, "student.myCourses")}</h2>
-          {studentEnrollments.length === 0 ? (
-            <div className="glass-panel p-8 rounded-2xl border border-slate-800 text-center">
-              <p className="text-slate-400">{t(locale, "student.noCourses")}</p>
-              <p className="text-xs text-slate-500 mt-1">{t(locale, "student.useInviteCode")}</p>
-            </div>
-          ) : (
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-              {studentEnrollments.map((en) => (
-                <div key={en.id} className="glass-panel p-6 rounded-2xl border border-slate-800 space-y-4">
-                  <div className="flex justify-between items-start">
-                    <div>
-                      <span className="text-xs font-semibold text-brand-400 uppercase tracking-wider">
-                        {t(locale, "courses.title")}
-                      </span>
-                      <h3 className="text-lg font-bold text-white mt-1">{en.group.course.title}</h3>
-                    </div>
-                    <span className="px-2.5 py-1 rounded-full bg-emerald-500/10 text-emerald-400 text-xs font-semibold">
-                      {en.group.name}
-                    </span>
-                  </div>
-                  <div className="text-xs text-slate-400">
-                    {t(locale, "student.teacher")}: <span className="text-slate-200 font-medium">
-                      {en.group.teacher?.user.fullName || t(locale, "student.assigningTeacher")}
-                    </span>
-                  </div>
-                </div>
-              ))}
-            </div>
-          )}
+            )}
+          </div>
         </div>
       )}
 
