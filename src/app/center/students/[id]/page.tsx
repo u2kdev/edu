@@ -218,7 +218,9 @@ export default async function StudentProfilePage({
                     </p>
                     {en.group.teacher && (
                       <p className="text-[11px] text-slate-400 mt-0.5">
-                        Учитель: {en.group.teacher.user.fullName}
+                        {t(locale, "students.teacherLabel", {
+                          name: en.group.teacher.user.fullName,
+                        })}
                       </p>
                     )}
                   </div>
@@ -335,7 +337,7 @@ export default async function StudentProfilePage({
                 >
                   <div>
                     <h3 className="font-semibold text-white">
-                      {g.lesson?.title || "Занятие"}
+                      {g.lesson?.title || t(locale, "students.lessonFallback")}
                     </h3>
                     <p className="text-[10px] text-slate-500">
                       {g.teacher?.user.fullName} &bull;{" "}
@@ -431,12 +433,17 @@ export default async function StudentProfilePage({
                       <div className="text-[11px] text-slate-400">
                         {parsedDetails.fromGroupName && parsedDetails.toGroupName && (
                           <p>
-                            Из «{parsedDetails.fromGroupName}» в «{parsedDetails.toGroupName}»
+                            {t(locale, "students.transferHistory", {
+                              from: parsedDetails.fromGroupName,
+                              to: parsedDetails.toGroupName,
+                            })}
                           </p>
                         )}
                         {parsedDetails.reason && (
                           <p className="italic text-slate-500">
-                            Причина: {parsedDetails.reason}
+                            {t(locale, "students.reasonLabel", {
+                              reason: parsedDetails.reason,
+                            })}
                           </p>
                         )}
                       </div>

@@ -158,7 +158,20 @@
     "unarchiveGroup": "Arxivdan chiqarish",
     "emptyRoster": "Ushbu guruhda hali oʻquvchilar yoʻq",
     "groupFull": "Guruh toʻlgan",
-    "limitReached": "Tarif limiti toʻlgan"
+    "limitReached": "Tarif limiti toʻlgan",
+    "transferSuccess": "Talaba muvaffaqiyatli koʻchirildi",
+    "transferError": "Koʻchirishda xatolik yuz berdi",
+    "dropSuccess": "Talaba guruhdan chiqarildi",
+    "dropError": "Chiqarishda xatolik yuz berdi",
+    "teacherAssigned": "Oʻqituvchi: {name}",
+    "teacherNotAssigned": "Oʻqituvchi belgilanmagan",
+    "rosterTitle": "Biriktirilgan oʻquvchilar ({count})",
+    "noTeacher": "-- Oʻqituvchisiz --",
+    "studentLabel": "Talaba: {name}",
+    "transferReasonLabel": "Koʻchirish sababi",
+    "dropConfirm": "Haqiqatan ham {name} talabasini guruhdan chiqarmoqchimisiz?",
+    "saveError": "Saqlashda xatolik yuz berdi",
+    "networkError": "Tarmoq xatosi"
   },
 
   "students": {
@@ -205,7 +218,19 @@
     "csvRowsError": "Xatolar: {count}",
     "csvImportSuccess": "Muvaffaqiyatli import qilindi: {count}",
     "csvImportErrorsTitle": "Xatolar hisoboti",
-    "csvHelp": "Format: F.I.SH, Email, Telefon (ixtiyoriy), Guruh ID (ixtiyoriy)"
+    "csvHelp": "Format: F.I.SH, Email, Telefon (ixtiyoriy), Guruh ID (ixtiyoriy)",
+    "pageOf": "Sahifa {page} / {totalPages}",
+    "studentCreatedInvite": "Talaba muvaffaqiyatli yaratildi! Bir martalik taklif kodi:",
+    "noGroupSelected": "-- Guruhga biriktirmasdan --",
+    "sortAsc": "A-Z",
+    "sortDesc": "Z-A",
+    "sortNewest": "Yangilari",
+    "sortOldest": "Eskilari",
+    "csvErrorRow": "Qator {row}: {error}",
+    "teacherLabel": "Oʻqituvchi: {name}",
+    "lessonFallback": "Dars",
+    "transferHistory": "«{from}» dan «{to}» ga",
+    "reasonLabel": "Sabab: {reason}"
   },
 
   "lessons": {

@@ -166,10 +166,10 @@ export default function GroupsManager({
         setEditingGroup(null);
         router.refresh();
       } else {
-        alert(data.error || "Ошибка сохранения");
+        alert(data.error || t(locale, "groups.saveError"));
       }
     } catch {
-      alert("Ошибка сети");
+      alert(t(locale, "groups.networkError"));
     } finally {
       setLoading(false);
     }
@@ -191,16 +191,16 @@ export default function GroupsManager({
       });
       const data = await res.json();
       if (res.ok) {
-        alert("Студент успешно переведен");
+        alert(t(locale, "groups.transferSuccess"));
         setTransferData(null);
         setTargetGroupId("");
         setTransferReason("");
         router.refresh();
       } else {
-        alert(data.error || "Ошибка перевода");
+        alert(data.error || t(locale, "groups.transferError"));
       }
     } catch {
-      alert("Ошибка сети");
+      alert(t(locale, "groups.networkError"));
     } finally {
       setLoading(false);
     }
@@ -221,15 +221,15 @@ export default function GroupsManager({
       });
       const data = await res.json();
       if (res.ok) {
-        alert("Студент отчислен из группы");
+        alert(t(locale, "groups.dropSuccess"));
         setDropData(null);
         setDropReason("");
         router.refresh();
       } else {
-        alert(data.error || "Ошибка отчисления");
+        alert(data.error || t(locale, "groups.dropError"));
       }
     } catch {
-      alert("Ошибка сети");
+      alert(t(locale, "groups.networkError"));
     } finally {
       setLoading(false);
     }
@@ -298,17 +298,24 @@ export default function GroupsManager({
                 <div className="p-3 rounded-xl bg-slate-900/60 border border-slate-800/80 text-xs text-slate-300 flex items-center gap-2">
                   <UserCheck className="w-4 h-4 text-emerald-400 shrink-0" />
                   <span>
-                    Преподаватель:{" "}
-                    <strong className="text-white">
-                      {group.teacher?.user.fullName || "Преподаватель не назначен"}
-                    </strong>
+                    {group.teacher ? (
+                      t(locale, "groups.teacherAssigned", {
+                        name: group.teacher.user.fullName,
+                      })
+                    ) : (
+                      <strong className="text-white">
+                        {t(locale, "groups.teacherNotAssigned")}
+                      </strong>
+                    )}
                   </span>
                 </div>
 
                 {/* Student list preview */}
                 <div>
                   <h4 className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-2">
-                    Зачисленные ученики ({group.enrollments.length})
+                    {t(locale, "groups.rosterTitle", {
+                      count: String(group.enrollments.length),
+                    })}
                   </h4>
                   {group.enrollments.length === 0 ? (
                     <p className="text-xs text-slate-500 italic">
@@ -422,7 +429,7 @@ export default function GroupsManager({
                   onChange={(e) => setTeacherMembershipId(e.target.value)}
                   className="w-full px-4 py-3 bg-slate-900 border border-slate-700 rounded-xl text-white text-sm focus:outline-none focus:border-brand-500"
                 >
-                  <option value="">-- Без преподавателя --</option>
+                  <option value="">{t(locale, "groups.noTeacher")}</option>
                   {teachers.map((t) => (
                     <option key={t.id} value={t.id}>
                       {t.user.fullName}
@@ -497,7 +504,7 @@ export default function GroupsManager({
                   onChange={(e) => setEditTeacherId(e.target.value)}
                   className="w-full px-4 py-3 bg-slate-900 border border-slate-700 rounded-xl text-white text-sm focus:outline-none focus:border-brand-500"
                 >
-                  <option value="">-- Без преподавателя --</option>
+                  <option value="">{t(locale, "groups.noTeacher")}</option>
                   {teachers.map((t) => (
                     <option key={t.id} value={t.id}>
                       {t.user.fullName}
@@ -552,7 +559,7 @@ export default function GroupsManager({
             </h3>
 
             <p className="text-xs text-slate-300">
-              Студент: <strong className="text-white">{transferData.studentName}</strong>
+              {t(locale, "groups.studentLabel", { name: transferData.studentName })}
             </p>
 
             <form onSubmit={handleTransfer} className="space-y-4">
@@ -578,7 +585,7 @@ export default function GroupsManager({
 
               <div>
                 <label className="block text-xs font-semibold text-slate-300 uppercase tracking-wider mb-2">
-                  Причина перевода
+                  {t(locale, "groups.transferReasonLabel")}
                 </label>
                 <input
                   type="text"
@@ -620,8 +627,7 @@ export default function GroupsManager({
             </h3>
 
             <p className="text-xs text-slate-300">
-              Вы уверены, что хотите отчислить студента{" "}
-              <strong className="text-white">{dropData.studentName}</strong>?
+              {t(locale, "groups.dropConfirm", { name: dropData.studentName })}
             </p>
 
             <form onSubmit={handleDrop} className="space-y-4">

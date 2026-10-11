@@ -158,7 +158,20 @@
     "unarchiveGroup": "Разархивировать",
     "emptyRoster": "В этой группе пока нет студентов",
     "groupFull": "Группа заполнена",
-    "limitReached": "Лимит тарифа исчерпан"
+    "limitReached": "Лимит тарифа исчерпан",
+    "transferSuccess": "Студент успешно переведен",
+    "transferError": "Ошибка перевода",
+    "dropSuccess": "Студент отчислен из группы",
+    "dropError": "Ошибка отчисления",
+    "teacherAssigned": "Преподаватель: {name}",
+    "teacherNotAssigned": "Преподаватель не назначен",
+    "rosterTitle": "Зачисленные ученики ({count})",
+    "noTeacher": "-- Без преподавателя --",
+    "studentLabel": "Студент: {name}",
+    "transferReasonLabel": "Причина перевода",
+    "dropConfirm": "Вы уверены, что хотите отчислить студента {name}?",
+    "saveError": "Ошибка сохранения",
+    "networkError": "Ошибка сети"
   },
 
   "students": {
@@ -205,7 +218,19 @@
     "csvRowsError": "Ошибок: {count}",
     "csvImportSuccess": "Успешно импортировано: {count}",
     "csvImportErrorsTitle": "Отчёт об ошибках",
-    "csvHelp": "Формат: ФИО, Email, Телефон (опционально), ID группы (опционально)"
+    "csvHelp": "Формат: ФИО, Email, Телефон (опционально), ID группы (опционально)",
+    "pageOf": "Страница {page} из {totalPages}",
+    "studentCreatedInvite": "Студент успешно создан! Одноразовый инвайт-код:",
+    "noGroupSelected": "-- Без зачисления в группу --",
+    "sortAsc": "А-Я",
+    "sortDesc": "Я-А",
+    "sortNewest": "Новые",
+    "sortOldest": "Старые",
+    "csvErrorRow": "Строка {row}: {error}",
+    "teacherLabel": "Учитель: {name}",
+    "lessonFallback": "Занятие",
+    "transferHistory": "Из «{from}» в «{to}»",
+    "reasonLabel": "Причина: {reason}"
   },
 
   "lessons": {

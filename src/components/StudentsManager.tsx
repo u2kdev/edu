@@ -323,10 +323,10 @@ export default function StudentsManager({
             }}
             className="bg-slate-900 px-3 py-2 rounded-xl border border-slate-700/80 text-xs text-slate-200 focus:outline-none cursor-pointer"
           >
-            <option value="name-asc" className="bg-slate-900">{t(locale, "students.sortName")} (А-Я)</option>
-            <option value="name-desc" className="bg-slate-900">{t(locale, "students.sortName")} (Я-А)</option>
-            <option value="createdAt-desc" className="bg-slate-900">{t(locale, "students.sortDate")} (Новые)</option>
-            <option value="createdAt-asc" className="bg-slate-900">{t(locale, "students.sortDate")} (Старые)</option>
+            <option value="name-asc" className="bg-slate-900">{t(locale, "students.sortName")} ({t(locale, "students.sortAsc")})</option>
+            <option value="name-desc" className="bg-slate-900">{t(locale, "students.sortName")} ({t(locale, "students.sortDesc")})</option>
+            <option value="createdAt-desc" className="bg-slate-900">{t(locale, "students.sortDate")} ({t(locale, "students.sortNewest")})</option>
+            <option value="createdAt-asc" className="bg-slate-900">{t(locale, "students.sortDate")} ({t(locale, "students.sortOldest")})</option>
           </select>
         </div>
       </div>
@@ -535,7 +535,7 @@ export default function StudentsManager({
           {totalPages > 1 && (
             <div className="flex items-center justify-between pt-2">
               <span className="text-xs text-slate-400">
-                Страница {page} из {totalPages}
+                {t(locale, "students.pageOf", { page: String(page), totalPages: String(totalPages) })}
               </span>
               <div className="flex items-center gap-2">
                 <button
@@ -570,7 +570,7 @@ export default function StudentsManager({
               <div className="p-4 rounded-2xl bg-emerald-500/10 border border-emerald-500/30 text-emerald-300 space-y-3 text-center">
                 <UserCheck className="w-8 h-8 mx-auto text-emerald-400" />
                 <p className="text-xs font-semibold">
-                  Студент успешно создан! Одноразовый инвайт-код:
+                  {t(locale, "students.studentCreatedInvite")}
                 </p>
                 <div className="font-mono text-lg font-bold text-white bg-slate-950 p-2 rounded-xl border border-emerald-500/30 select-all">
                   {addCreatedCode}
@@ -641,7 +641,7 @@ export default function StudentsManager({
                     onChange={(e) => setAddGroupId(e.target.value)}
                     className="w-full px-4 py-2.5 bg-slate-900 border border-slate-700 rounded-xl text-white text-xs focus:outline-none focus:border-brand-500"
                   >
-                    <option value="">-- Без зачисления в группу --</option>
+                    <option value="">{t(locale, "students.noGroupSelected")}</option>
                     {initialGroups.map((g) => (
                       <option key={g.id} value={g.id}>
                         {g.name}
@@ -729,7 +729,10 @@ export default function StudentsManager({
                     <p className="font-bold">{t(locale, "students.csvImportErrorsTitle")}:</p>
                     {csvPreviewData.errors.map((err, i) => (
                       <p key={i} className="font-mono text-[11px]">
-                        Строка {err.row}: {err.error}
+                        {t(locale, "students.csvErrorRow", {
+                          row: String(err.row),
+                          error: err.error,
+                        })}
                       </p>
                     ))}
                   </div>
@@ -750,7 +753,10 @@ export default function StudentsManager({
                     <p className="font-bold">{t(locale, "students.csvImportErrorsTitle")}:</p>
                     {csvResult.errors.map((err, i) => (
                       <p key={i} className="font-mono text-[11px]">
-                        Строка {err.row}: {err.error}
+                        {t(locale, "students.csvErrorRow", {
+                          row: String(err.row),
+                          error: err.error,
+                        })}
                       </p>
                     ))}
                   </div>
