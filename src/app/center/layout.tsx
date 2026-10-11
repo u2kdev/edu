@@ -106,6 +106,12 @@ export default async function CenterLayout({
           roles: ["DIRECTOR", "CENTER_ADMIN", "TEACHER", "TEACHER_ASSISTANT"],
         },
         {
+          href: "/center/students",
+          icon: Users,
+          label: t(locale, "nav.students"),
+          roles: ["DIRECTOR", "CENTER_ADMIN", "TEACHER", "TEACHER_ASSISTANT"],
+        },
+        {
           href: "/center/schedule",
           icon: CalendarDays,
           label: t(locale, "nav.schedule"),

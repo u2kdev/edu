@@ -41,6 +41,7 @@ export default async function CenterGroupsPage() {
       courses={courses}
       teachers={teachers}
       role={session.activeCenterRole || ""}
+      locale={session.user.preferredLanguage || "ru"}
     />
   );
 }
