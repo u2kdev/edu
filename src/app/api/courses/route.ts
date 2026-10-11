@@ -31,8 +31,8 @@ export async function GET(req: Request) {
 
     return NextResponse.json({ courses });
   } catch (err: unknown) {
-    const error = err as { message?: string; status?: number };
-    return NextResponse.json({ error: error.message || "Ошибка загрузки курсов" }, { status: error.status || 400 });
+    const error = err as { message?: string; code?: string; status?: number };
+    return NextResponse.json({ error: error.message || "Ошибка загрузки курсов", code: error.code }, { status: error.status || 400 });
   }
 }
 
@@ -79,7 +79,7 @@ export async function POST(req: Request) {
 
     return NextResponse.json({ success: true, course });
   } catch (err: unknown) {
-    const error = err as { message?: string; status?: number };
-    return NextResponse.json({ error: error.message || "Ошибка создания курса" }, { status: error.status || 400 });
+    const error = err as { message?: string; code?: string; status?: number };
+    return NextResponse.json({ error: error.message || "Ошибка создания курса", code: error.code }, { status: error.status || 400 });
   }
 }
