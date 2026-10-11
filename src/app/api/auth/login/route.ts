@@ -126,6 +126,16 @@ export async function POST(req: Request) {
       return await handleFailure("invalid_password", user.id);
     }
 
+    const isPlatformRole = user.platformRole && user.platformRole !== "NONE";
+    if (!user.emailVerified && !isPlatformRole) {
+      return apiError(
+        "Email verification required. Please check your inbox or request a new confirmation email.",
+        "EMAIL_NOT_VERIFIED",
+        403,
+        { email: user.email }
+      );
+    }
+
     // Success -> Reset ALL attempts for this email
     await db.loginAttempt.deleteMany({
       where: { email }

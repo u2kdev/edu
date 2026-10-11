@@ -48,31 +48,31 @@ describe("Phase C & E: IDOR / Privilege Escalation Tests", () => {
 
   beforeAll(async () => {
     // 1. Create Tenants & Users
-    const uDirA = await db.platformUser.create({ data: { email: `dira-${Date.now()}@test.com`, passwordHash: "x", fullName: "Dir A" } });
+    const uDirA = await db.platformUser.create({ data: { email: `dira-${Date.now()}@test.com`, passwordHash: "x", fullName: "Dir A", emailVerified: new Date() } });
     const cA = await db.learningCenter.create({ data: { name: "Center A", slug: `center-a-${Date.now()}`, ownerId: uDirA.id, status: "ACTIVE" } });
     tenantA = cA.id;
     directorA = uDirA.id;
     const mDirA = await db.centerMembership.create({ data: { userId: uDirA.id, centerId: tenantA, role: "DIRECTOR" } });
 
-    const uDirB = await db.platformUser.create({ data: { email: `dirb-${Date.now()}@test.com`, passwordHash: "x", fullName: "Dir B" } });
+    const uDirB = await db.platformUser.create({ data: { email: `dirb-${Date.now()}@test.com`, passwordHash: "x", fullName: "Dir B", emailVerified: new Date() } });
     const cB = await db.learningCenter.create({ data: { name: "Center B", slug: `center-b-${Date.now()}`, ownerId: uDirB.id, status: "ACTIVE" } });
     tenantB = cB.id;
     directorB = uDirB.id;
     const mDirB = await db.centerMembership.create({ data: { userId: uDirB.id, centerId: tenantB, role: "DIRECTOR" } });
 
     // 2. Create roles for A
-    const uTeachA = await db.platformUser.create({ data: { email: `teacha-${Date.now()}@test.com`, passwordHash: "x", fullName: "Teacher A" } });
+    const uTeachA = await db.platformUser.create({ data: { email: `teacha-${Date.now()}@test.com`, passwordHash: "x", fullName: "Teacher A", emailVerified: new Date() } });
     const mTeachA = await db.centerMembership.create({ data: { userId: uTeachA.id, centerId: tenantA, role: "TEACHER" } });
     teacherA = uTeachA.id;
     teacherAMemId = mTeachA.id;
 
-    const uStudA = await db.platformUser.create({ data: { email: `studa-${Date.now()}@test.com`, passwordHash: "x", fullName: "Student A" } });
+    const uStudA = await db.platformUser.create({ data: { email: `studa-${Date.now()}@test.com`, passwordHash: "x", fullName: "Student A", emailVerified: new Date() } });
     const mStudA = await db.centerMembership.create({ data: { userId: uStudA.id, centerId: tenantA, role: "STUDENT" } });
     studentA = uStudA.id;
     studentAMemId = mStudA.id;
 
     // 3. Create roles for B
-    const uStudB = await db.platformUser.create({ data: { email: `studb-${Date.now()}@test.com`, passwordHash: "x", fullName: "Student B" } });
+    const uStudB = await db.platformUser.create({ data: { email: `studb-${Date.now()}@test.com`, passwordHash: "x", fullName: "Student B", emailVerified: new Date() } });
     const mStudB = await db.centerMembership.create({ data: { userId: uStudB.id, centerId: tenantB, role: "STUDENT" } });
     studentB = uStudB.id;
     studentBMemId = mStudB.id;

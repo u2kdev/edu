@@ -30,6 +30,7 @@ describe("Brute-force Lockout API", () => {
         email: testEmail,
         passwordHash: phash,
         fullName: "Lockout Tester",
+        emailVerified: new Date(),
       }
     });
   });

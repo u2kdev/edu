@@ -24,7 +24,7 @@ describe("Concurrency Race Condition: Upsert Attendance", () => {
 
   beforeAll(async () => {
     // Setup
-    user = await db.platformUser.create({ data: { email: `test-race-${Date.now()}@test.com`, passwordHash: "x", fullName: "Race User" } });
+    user = await db.platformUser.create({ data: { email: `test-race-${Date.now()}@test.com`, passwordHash: "x", fullName: "Race User", emailVerified: new Date() } });
     const center = await db.learningCenter.create({ data: { name: "Race Center", slug: `race-${Date.now()}`, ownerId: user.id, status: "ACTIVE" } });
     centerA = center.id;
     const mem = await db.centerMembership.create({ data: { centerId: centerA, userId: user.id, role: "DIRECTOR" } });

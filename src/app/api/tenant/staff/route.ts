@@ -130,6 +130,7 @@ export async function POST(req: Request) {
           phone: phone || null,
           passwordHash: tempPasswordHash,
           preferredLanguage: center.defaultLanguage || "ru",
+          emailVerified: new Date(),
         },
       });
     }

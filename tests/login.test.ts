@@ -25,6 +25,7 @@ describe("Login API", () => {
         email,
         passwordHash: await hashPassword("ValidPass123!"),
         fullName: "Test Login User",
+        emailVerified: new Date(),
       }
     });
     user = u.id;

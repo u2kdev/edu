@@ -131,10 +131,10 @@ describe("TRUST-3 Item 2: getClientIp proxy security, default unknown, NaN handl
     const emailB = `user-b-${Date.now()}@t3i2.com`;
 
     const userA = await db.platformUser.create({
-      data: { email: emailA, fullName: "Victim A", passwordHash: await hashPassword("PassA12345!"), platformRole: "NONE" },
+      data: { email: emailA, fullName: "Victim A", passwordHash: await hashPassword("PassA12345!"), platformRole: "NONE", emailVerified: new Date() },
     });
     const userB = await db.platformUser.create({
-      data: { email: emailB, fullName: "User B", passwordHash: await hashPassword("PassB12345!"), platformRole: "NONE" },
+      data: { email: emailB, fullName: "User B", passwordHash: await hashPassword("PassB12345!"), platformRole: "NONE", emailVerified: new Date() },
     });
 
     try {
@@ -181,10 +181,10 @@ describe("TRUST-3 Item 2: getClientIp proxy security, default unknown, NaN handl
     const emailLegit = `legit-zero-hops-${Date.now()}@proxytest.com`;
 
     const userVictim = await db.platformUser.create({
-      data: { email: emailVictim, fullName: "Victim 0 Hops", passwordHash: await hashPassword("VictimPass123!"), platformRole: "NONE" },
+      data: { email: emailVictim, fullName: "Victim 0 Hops", passwordHash: await hashPassword("VictimPass123!"), platformRole: "NONE", emailVerified: new Date() },
     });
     const userLegit = await db.platformUser.create({
-      data: { email: emailLegit, fullName: "Legit 0 Hops", passwordHash: await hashPassword("LegitPass123!"), platformRole: "NONE" },
+      data: { email: emailLegit, fullName: "Legit 0 Hops", passwordHash: await hashPassword("LegitPass123!"), platformRole: "NONE", emailVerified: new Date() },
     });
 
     try {

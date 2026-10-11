@@ -159,6 +159,10 @@ export async function requireTenantAccess(
     throw new TenantMembershipError("Forbidden: Membership is not active", "MEMBERSHIP_INACTIVE");
   }
 
+  if (!session.user.emailVerified) {
+    throw new TenantAccessError("Forbidden: Email verification required", "EMAIL_NOT_VERIFIED", 403);
+  }
+
   const center = await db.learningCenter.findUnique({
     where: { id: targetCenterId },
   });

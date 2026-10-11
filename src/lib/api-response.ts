@@ -12,7 +12,8 @@ export type ApiErrorCode =
   | "BAD_REQUEST"
   | "INVALID_TOKEN"
   | "INVALID_INVITE"
-  | "ROLE_CONFLICT";
+  | "ROLE_CONFLICT"
+  | "EMAIL_NOT_VERIFIED";
 
 export interface ApiErrorResponse {
   success: false;

@@ -33,6 +33,7 @@ describe("TRUST-3 Item 1: requireTenantAccess validates UserSession revocation &
         fullName: "Director T3",
         passwordHash: await hashPassword("Password123!"),
         platformRole: "NONE",
+        emailVerified: new Date(),
         isActive: true,
       },
     });

@@ -21,7 +21,7 @@ describe("TRUST-2 Item 7: requireTenantAccess PAUSED blocking, DB membership che
 
   beforeAll(async () => {
     const directorUser = await db.platformUser.create({
-      data: { email: `director-${Date.now()}@t2i7.com`, passwordHash: "x", fullName: "Director User" },
+      data: { email: `director-${Date.now()}@t2i7.com`, passwordHash: "x", fullName: "Director User", emailVerified: new Date() },
     });
     directorUserId = directorUser.id;
 
