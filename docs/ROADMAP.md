@@ -70,7 +70,7 @@
 - [ ] 2a: Объектное хранилище (S3/R2/Vercel Blob) для файлов ДЗ и аватаров.
 - [x] 2b: Rate limiter и lockout в таблице БД (PostgreSQL RateLimitRecord), протестировано на мульти-инстансах без состояния в памяти.
 - [x] 2c: Почтовый транспорт (Resend REST API + memory buffer) с шаблонами ru/uz (подтверждение, сброс пароля, инвайты, блокировка) и обработкой ошибок.
-- [ ] 2d: Production-сборка, Dockerfile, docker-compose.prod.yml, healthcheck.
+- [x] 2d: Production-сборка, многоэтапный Dockerfile (node:20-alpine, non-root nextjs), docker-compose.prod.yml с healthcheck и автоматической изоляцией сети.
 
 ## БЛОК 7 — Аудит хардкода и i18n (ЭТАП 4)
 - [ ] Инвентаризация текстов в таблице, исключение остаточного хардкода.

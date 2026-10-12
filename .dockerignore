@@ -1,0 +1,12 @@
+node_modules
+.next
+.git
+.gitignore
+*.log
+reports
+dist
+coverage
+.env*.local
+.env.test
+scratch
+.system_generated
