@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeAll, afterAll, afterEach, vi } from "vitest";
+import { describe, it, expect, beforeAll, afterAll, beforeEach, afterEach, vi } from "vitest";
 import { POST as loginPost } from "../src/app/api/auth/login/route";
 
 const mockSet = vi.fn();
@@ -14,10 +14,15 @@ vi.mock("next/headers", () => ({
 }));
 import { db } from "../src/lib/db";
 import { hashPassword } from "../src/lib/auth";
+import { clearRateLimit } from "../src/lib/rate-limit";
 
 describe("Brute-force Lockout API", () => {
   let testEmail = `lockout-${Date.now()}@test.com`;
   let nonExistentEmail = `nonexist-${Date.now()}@test.com`;
+
+  beforeEach(async () => {
+    await db.rateLimitRecord.deleteMany();
+  });
 
   afterEach(() => {
     vi.useRealTimers();
@@ -51,7 +56,7 @@ describe("Brute-force Lockout API", () => {
     });
 
   it("прогрессивная задержка растёт", async () => {
-    const ip = "1.2.3.1";
+    const ip = "192.0.2.1";
     
     // 5 attempts -> 1 minute lockout
     for (let i = 0; i < 5; i++) {
@@ -73,19 +78,19 @@ describe("Brute-force Lockout API", () => {
   });
 
   it("чужой IP не блокирует владельца", async () => {
-    // 1.2.3.1 is already locked out
-    const resOther = await loginPost(mockReq(testEmail, "1.2.3.2", "correctpassword"));
+    // 192.0.2.1 is already locked out
+    const resOther = await loginPost(mockReq(testEmail, "192.0.2.2", "correctpassword"));
     // Wait, let's use a wrong password first to verify it's not locked out, it just fails normally
-    const resFail = await loginPost(mockReq(testEmail, "1.2.3.3", "wrongpass"));
+    const resFail = await loginPost(mockReq(testEmail, "192.0.2.3", "wrongpass"));
     expect(resFail.status).toBe(401);
-    const attemptOther = await db.loginAttempt.findUnique({ where: { email_ip: { email: testEmail, ip: "1.2.3.3" } } });
+    const attemptOther = await db.loginAttempt.findUnique({ where: { email_ip: { email: testEmail, ip: "192.0.2.3" } } });
     expect(attemptOther?.attempts).toBe(1);
     expect(attemptOther?.lockoutUntil).toBeNull();
   });
 
   it("снятие по таймеру (fake timers)", async () => {
     vi.useFakeTimers();
-    const ip = "1.2.3.4";
+    const ip = "192.0.2.4";
     // 5 attempts -> 1 min lockout
     for (let i = 0; i < 5; i++) {
       await loginPost(mockReq(testEmail, ip));
@@ -107,7 +112,7 @@ describe("Brute-force Lockout API", () => {
   });
 
   it("успешный вход обнуляет счётчик", async () => {
-    const ip = "1.2.3.5";
+    const ip = "192.0.2.5";
     // Fail 4 times
     for (let i = 0; i < 4; i++) {
       await loginPost(mockReq(testEmail, ip));
@@ -124,7 +129,8 @@ describe("Brute-force Lockout API", () => {
   });
 
   it("несуществующий email ведёт себя так же", async () => {
-    const ip = "9.9.9.9";
+    const ip = `9.9.9.${Math.floor(Math.random() * 200) + 10}`;
+    await clearRateLimit(ip);
     for (let i = 0; i < 5; i++) {
       const res = await loginPost(mockReq(nonExistentEmail, ip));
       expect(res.status).toBe(401);
@@ -139,7 +145,7 @@ describe("Brute-force Lockout API", () => {
   });
 
   it("блокировка пишет в аудит", async () => {
-    const ip = "1.2.3.6";
+    const ip = "192.0.2.6";
     await loginPost(mockReq(testEmail, ip));
     
     const audit = await db.auditLog.findFirst({
