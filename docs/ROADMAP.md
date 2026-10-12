@@ -67,7 +67,7 @@
 - [x] Тесты прав и корректности отображения данных.
 
 ## БЛОК 6 — Боевая инфраструктура и устранение блокеров Vercel
-- [ ] 2a: Объектное хранилище (S3/R2/Vercel Blob) для файлов ДЗ и аватаров.
+- [x] 2a: Объектное хранилище (S3/R2/Vercel Blob) с валидацией MIME/размеров, защитой от вредоносных расширений и генерацией presigned upload URLs (/api/upload/presign).
 - [x] 2b: Rate limiter и lockout в таблице БД (PostgreSQL RateLimitRecord), протестировано на мульти-инстансах без состояния в памяти.
 - [x] 2c: Почтовый транспорт (Resend REST API + memory buffer) с шаблонами ru/uz (подтверждение, сброс пароля, инвайты, блокировка) и обработкой ошибок.
 - [x] 2d: Production-сборка, многоэтапный Dockerfile (node:20-alpine, non-root nextjs), docker-compose.prod.yml с healthcheck и автоматической изоляцией сети.
