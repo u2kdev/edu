@@ -29,10 +29,13 @@ export default async function CenterCoursesPage() {
     orderBy: { createdAt: "desc" },
   });
 
+  const locale = session.user.preferredLanguage || "ru";
+
   return (
     <CourseManager
       initialCourses={courses}
       role={session.activeCenterRole || ""}
+      locale={locale}
     />
   );
 }

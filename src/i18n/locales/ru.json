@@ -170,7 +170,21 @@
     "draft": "Черновик",
     "modules": "Модули",
     "lessons": "Занятия",
-    "materials": "Материалы"
+    "materials": "Материалы",
+    "addNewCourse": "Добавить Новый Курс",
+    "noCoursesYet": "В этом учебном центре пока нет добавленных курсов.",
+    "noDescription": "Без описания",
+    "modulesCount": "Модулей: {count}",
+    "groupsCount": "Групп: {count}",
+    "curriculum": "Учебная Программа (Модули)",
+    "noModulesYet": "Модули курса еще не созданы.",
+    "minutes": "минут",
+    "createCourseModal": "Создать Новый Курс",
+    "titlePlaceholder": "Например: Frontend разработка на React",
+    "descPlaceholder": "Чему научатся студенты на этом курсе...",
+    "cancel": "Отмена",
+    "creating": "Создание...",
+    "networkError": "Ошибка сети"
   },
 
   "groups": {

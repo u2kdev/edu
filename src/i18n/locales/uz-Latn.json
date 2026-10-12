@@ -170,7 +170,21 @@
     "draft": "Qoralama",
     "modules": "Modullar",
     "lessons": "Darslar",
-    "materials": "Materiallar"
+    "materials": "Materiallar",
+    "addNewCourse": "Yangi kurs qoʻshish",
+    "noCoursesYet": "Ushbu oʻquv markazida hozircha kurslar qoʻshilmagan.",
+    "noDescription": "Tavsifsiz",
+    "modulesCount": "Modullar: {count}",
+    "groupsCount": "Guruhlar: {count}",
+    "curriculum": "Oʻquv dasturi (Modullar)",
+    "noModulesYet": "Kurs modullari hali yaratilmagan.",
+    "minutes": "daqiqa",
+    "createCourseModal": "Yangi kurs yaratish",
+    "titlePlaceholder": "Masalan: React asosida Frontend dasturlash",
+    "descPlaceholder": "Ushbu kursda talabalar nimani oʻrganadilar...",
+    "cancel": "Bekor qilish",
+    "creating": "Yaratilmoqda...",
+    "networkError": "Tarmoq xatosi"
   },
 
   "groups": {

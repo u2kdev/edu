@@ -2,7 +2,8 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
-import { Plus, BookOpen, Layers, Video, Calendar, Clock, CheckCircle2, ChevronDown, ChevronRight } from "lucide-react";
+import { Plus, BookOpen, Layers, Video, Clock, ChevronDown, ChevronRight } from "lucide-react";
+import { t } from "@/i18n";
 
 export interface LessonItem {
   id: string;
@@ -29,11 +30,12 @@ export interface CourseItem {
 interface CourseManagerProps {
   initialCourses: CourseItem[];
   role?: string;
+  locale?: string;
 }
 
-export default function CourseManager({ initialCourses, role }: CourseManagerProps) {
+export default function CourseManager({ initialCourses, role, locale = "ru" }: CourseManagerProps) {
   const router = useRouter();
-  const [courses, setCourses] = useState(initialCourses);
+  const [courses] = useState(initialCourses);
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [title, setTitle] = useState("");
   const [description, setDescription] = useState("");
@@ -61,7 +63,7 @@ export default function CourseManager({ initialCourses, role }: CourseManagerPro
         alert(data.error);
       }
     } catch {
-      alert("Ошибка сети");
+      alert(t(locale, "courses.networkError"));
     } finally {
       setLoading(false);
     }
@@ -76,7 +78,7 @@ export default function CourseManager({ initialCourses, role }: CourseManagerPro
             className="px-4 py-2.5 bg-brand-600 hover:bg-brand-500 text-white text-sm font-semibold rounded-xl shadow-lg shadow-brand-600/30 transition-all flex items-center gap-2"
           >
             <Plus className="w-4 h-4" />
-            <span>Добавить Новый Курс</span>
+            <span>{t(locale, "courses.addNewCourse")}</span>
           </button>
         </div>
       )}
@@ -85,7 +87,7 @@ export default function CourseManager({ initialCourses, role }: CourseManagerPro
       <div className="space-y-4">
         {courses.length === 0 ? (
           <div className="glass-panel p-8 rounded-2xl border border-slate-800 text-center text-slate-400">
-            В этом учебном центре пока нет добавленных курсов.
+            {t(locale, "courses.noCoursesYet")}
           </div>
         ) : (
           courses.map((course) => {
@@ -105,18 +107,18 @@ export default function CourseManager({ initialCourses, role }: CourseManagerPro
                         <span>{course.title}</span>
                         {course.isPublished && (
                           <span className="px-2 py-0.5 rounded-full bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 text-[10px] font-bold uppercase">
-                            Опубликован
+                            {t(locale, "courses.published")}
                           </span>
                         )}
                       </h3>
-                      <p className="text-xs text-slate-400 mt-1 max-w-2xl">{course.description || "Без описания"}</p>
+                      <p className="text-xs text-slate-400 mt-1 max-w-2xl">{course.description || t(locale, "courses.noDescription")}</p>
                     </div>
                   </div>
 
                   <div className="flex items-center gap-6">
                     <div className="text-right hidden sm:block text-xs text-slate-400">
-                      <div>Модулей: <span className="text-slate-200 font-semibold">{course.modules.length}</span></div>
-                      <div>Групп: <span className="text-slate-200 font-semibold">{course.groups.length}</span></div>
+                      <div>{t(locale, "courses.modulesCount", { count: course.modules.length })}</div>
+                      <div>{t(locale, "courses.groupsCount", { count: course.groups.length })}</div>
                     </div>
                     {isExpanded ? <ChevronDown className="w-5 h-5 text-slate-400" /> : <ChevronRight className="w-5 h-5 text-slate-400" />}
                   </div>
@@ -128,11 +130,11 @@ export default function CourseManager({ initialCourses, role }: CourseManagerPro
                     <div>
                       <h4 className="text-sm font-bold text-slate-200 uppercase tracking-wider mb-4 flex items-center gap-2">
                         <Layers className="w-4 h-4 text-brand-400" />
-                        <span>Учебная Программа (Модули)</span>
+                        <span>{t(locale, "courses.curriculum")}</span>
                       </h4>
 
                       {course.modules.length === 0 ? (
-                        <p className="text-xs text-slate-500 italic">Модули курса еще не созданы.</p>
+                        <p className="text-xs text-slate-500 italic">{t(locale, "courses.noModulesYet")}</p>
                       ) : (
                         <div className="space-y-4">
                           {course.modules.map((mod) => (
@@ -148,7 +150,7 @@ export default function CourseManager({ initialCourses, role }: CourseManagerPro
                                     <div className="flex items-center gap-4 text-slate-400">
                                       <span className="flex items-center gap-1">
                                         <Clock className="w-3 h-3 text-slate-500" />
-                                        {lesson.durationMinutes} мин
+                                        {lesson.durationMinutes} {t(locale, "courses.minutes")}
                                       </span>
                                       <span className="px-2 py-0.5 rounded bg-slate-800 text-slate-300 font-medium">
                                         {lesson.lessonType}
@@ -174,27 +176,27 @@ export default function CourseManager({ initialCourses, role }: CourseManagerPro
       {showCreateModal && (
         <div className="fixed inset-0 z-50 bg-black/70 backdrop-blur-sm flex items-center justify-center p-4">
           <div className="glass-panel w-full max-w-lg p-6 rounded-3xl border border-slate-800 space-y-6">
-            <h3 className="text-xl font-bold text-white">Создать Новый Курс</h3>
+            <h3 className="text-xl font-bold text-white">{t(locale, "courses.createCourseModal")}</h3>
             <form onSubmit={handleCreateCourse} className="space-y-4">
               <div>
-                <label className="block text-xs font-semibold text-slate-300 uppercase tracking-wider mb-2">Название Курса</label>
+                <label className="block text-xs font-semibold text-slate-300 uppercase tracking-wider mb-2">{t(locale, "courses.courseName")}</label>
                 <input
                   type="text"
                   required
                   value={title}
                   onChange={(e) => setTitle(e.target.value)}
-                  placeholder="e.g. Frontend Разработка на React"
+                  placeholder={t(locale, "courses.titlePlaceholder")}
                   className="w-full px-4 py-3 bg-slate-900 border border-slate-700 rounded-xl text-white text-sm focus:outline-none focus:border-brand-500"
                 />
               </div>
 
               <div>
-                <label className="block text-xs font-semibold text-slate-300 uppercase tracking-wider mb-2">Описание</label>
+                <label className="block text-xs font-semibold text-slate-300 uppercase tracking-wider mb-2">{t(locale, "courses.courseDescription")}</label>
                 <textarea
                   rows={3}
                   value={description}
                   onChange={(e) => setDescription(e.target.value)}
-                  placeholder="О чем этот курс, требования и результаты..."
+                  placeholder={t(locale, "courses.descPlaceholder")}
                   className="w-full px-4 py-3 bg-slate-900 border border-slate-700 rounded-xl text-white text-sm focus:outline-none focus:border-brand-500"
                 />
               </div>
@@ -205,14 +207,14 @@ export default function CourseManager({ initialCourses, role }: CourseManagerPro
                   onClick={() => setShowCreateModal(false)}
                   className="px-4 py-2.5 bg-slate-800 hover:bg-slate-700 text-slate-300 font-semibold rounded-xl text-sm"
                 >
-                  Отмена
+                  {t(locale, "courses.cancel")}
                 </button>
                 <button
                   type="submit"
                   disabled={loading}
                   className="px-4 py-2.5 bg-brand-600 hover:bg-brand-500 text-white font-semibold rounded-xl text-sm shadow-lg shadow-brand-600/30"
                 >
-                  {loading ? "Сохранение..." : "Создать Курс"}
+                  {loading ? t(locale, "courses.creating") : t(locale, "courses.createCourse")}
                 </button>
               </div>
             </form>
