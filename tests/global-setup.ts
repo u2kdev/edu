@@ -1,17 +1,17 @@
 import { execSync } from "child_process";
-import fs from "fs";
-import path from "path";
+import { PrismaClient } from "@prisma/client";
+
+const testDbUrl = process.env.TEST_DATABASE_URL || "postgresql://postgres:admin@localhost:5432/lms_test?schema=public";
+process.env.DATABASE_URL = testDbUrl;
 
 export async function setup() {
-  console.log("Creating test.db and pushing schema...");
-  const env = { ...process.env, DATABASE_URL: "file:./test.db" };
-  execSync("npx prisma db push --skip-generate --accept-data-loss", { env, stdio: "inherit" });
+  console.log("Setting up PostgreSQL test database...");
+  const env = { ...process.env, DATABASE_URL: testDbUrl };
+  execSync("node node_modules/prisma/build/index.js migrate deploy", { env, stdio: "inherit" });
 }
 
 export async function teardown() {
-  const dbPath = path.join(process.cwd(), "prisma", "test.db");
-  if (fs.existsSync(dbPath)) {
-    fs.unlinkSync(dbPath);
-    console.log("Cleaned up test.db");
-  }
+  console.log("Tearing down PostgreSQL test database connection...");
+  const prisma = new PrismaClient({ datasources: { db: { url: testDbUrl } } });
+  await prisma.$disconnect();
 }

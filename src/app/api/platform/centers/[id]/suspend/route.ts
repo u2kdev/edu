@@ -58,7 +58,7 @@ export async function POST(req: Request, { params }: { params: { id: string } })
     });
 
     return NextResponse.json({ success: true, status });
-  } catch (err: any) {
+  } catch (err: unknown) {
     return NextResponse.json({ error: "Internal Error" }, { status: 500 });
   }
 }

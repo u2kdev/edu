@@ -115,7 +115,7 @@ describe("Platform Centers API", () => {
     });
 
     it("returns centers with pagination", async () => {
-      vi.mocked(db.learningCenter.findMany).mockResolvedValueOnce([{ id: "1" } as any]);
+      vi.mocked(db.learningCenter.findMany).mockResolvedValueOnce([{ id: "1" }] as never);
       vi.mocked(db.learningCenter.count).mockResolvedValueOnce(1);
       
       const req = new Request("http://localhost/api/platform/centers?page=1&pageSize=10");
@@ -167,7 +167,7 @@ describe("Platform Centers API", () => {
 
   describe("GET /api/platform/centers/[id]", () => {
     it("returns center data", async () => {
-      vi.mocked(db.learningCenter.findUnique).mockResolvedValueOnce({ id: "center1", owner: {} } as any);
+      vi.mocked(db.learningCenter.findUnique).mockResolvedValueOnce({ id: "center1", owner: {} } as never);
       const req = new Request("http://localhost/api/platform/centers/center1");
       const res = await getCenter(req, { params: { id: "center1" } });
       expect(res.status).toBe(200);
@@ -178,8 +178,8 @@ describe("Platform Centers API", () => {
 
   describe("PATCH /api/platform/centers/[id]", () => {
     it("updates center data", async () => {
-      vi.mocked(db.learningCenter.findUnique).mockResolvedValueOnce({ id: "center1" } as any);
-      vi.mocked(db.learningCenter.update).mockResolvedValueOnce({ id: "center1", name: "New" } as any);
+      vi.mocked(db.learningCenter.findUnique).mockResolvedValueOnce({ id: "center1" } as never);
+      vi.mocked(db.learningCenter.update).mockResolvedValueOnce({ id: "center1", name: "New" } as never);
 
       const req = new Request("http://localhost/api/platform/centers/center1", {
         method: "PATCH",
@@ -192,7 +192,7 @@ describe("Platform Centers API", () => {
 
   describe("POST /api/platform/centers/[id]/director", () => {
     it("changes director", async () => {
-      vi.mocked(db.learningCenter.findUnique).mockResolvedValueOnce({ id: "center1", ownerId: "old" } as any);
+      vi.mocked(db.learningCenter.findUnique).mockResolvedValueOnce({ id: "center1", ownerId: "old" } as never);
       const req = new Request("http://localhost/api/platform/centers/center1/director", {
         method: "POST",
         body: JSON.stringify({ email: "new@new.com" })
@@ -213,7 +213,7 @@ describe("Platform Centers API", () => {
     });
 
     it("suspends center", async () => {
-      vi.mocked(db.learningCenter.findUnique).mockResolvedValueOnce({ id: "center1" } as any);
+      vi.mocked(db.learningCenter.findUnique).mockResolvedValueOnce({ id: "center1" } as never);
       const req = new Request("http://localhost/api/platform/centers/center1/suspend", {
         method: "POST",
         body: JSON.stringify({ action: "pause", reason: "testing" })

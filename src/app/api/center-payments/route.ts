@@ -1,13 +1,12 @@
 import { NextResponse } from "next/server";
-import { getTenantDb } from "@/lib/db-tenant";
 import { requireTenantAccess, logAuditEvent } from "@/lib/tenant";
 
 export async function GET(req: Request) {
   try {
-    const tenantCtx = await requireTenantAccess();
-    const tenantDb = getTenantDb(tenantCtx.center.id);
+    const tenantCtx = await requireTenantAccess(req);
+    const tenantDb = tenantCtx.getTenantDb();
 
-    let whereCondition: any = {};
+    const whereCondition: Record<string, unknown> = {};
 
     if (tenantCtx.role === "STUDENT" && tenantCtx.membership) {
       whereCondition.studentMembershipId = tenantCtx.membership.id;
@@ -16,7 +15,7 @@ export async function GET(req: Request) {
         where: { parentMembershipId: tenantCtx.membership.id, status: "CONFIRMED" },
         select: { studentMembershipId: true },
       });
-      const studentIds = parentLinks.map((l) => l.studentMembershipId);
+      const studentIds = parentLinks.map((l: { studentMembershipId: string }) => l.studentMembershipId);
       whereCondition.studentMembershipId = { in: studentIds };
     }
 
@@ -32,21 +31,22 @@ export async function GET(req: Request) {
     });
 
     return NextResponse.json({ payments });
-  } catch (err: any) {
-    return NextResponse.json({ error: err.message || "Ошибка загрузки оплат" }, { status: 400 });
+  } catch (err: unknown) {
+    const error = err as { message?: string };
+    return NextResponse.json({ error: error?.message || "Ошибка загрузки оплат" }, { status: (err as { status?: number })?.status || 400 });
   }
 }
 
 // POST /api/center-payments - Record payment, partial payment, or discount
 export async function POST(req: Request) {
   try {
-    const tenantCtx = await requireTenantAccess();
+    const tenantCtx = await requireTenantAccess(req);
     
     if (!tenantCtx.session.user.emailVerified) {
       return NextResponse.json({ error: "Email confirmation required for sensitive actions" }, { status: 403 });
     }
 
-    const tenantDb = getTenantDb(tenantCtx.center.id);
+    const tenantDb = tenantCtx.getTenantDb();
 
     if (tenantCtx.role !== "DIRECTOR" && tenantCtx.role !== "CENTER_ADMIN" && !tenantCtx.isPlatformStaff) {
       return NextResponse.json({ error: "Forbidden: Only Director or Center Admin can process payments" }, { status: 403 });
@@ -97,21 +97,22 @@ export async function POST(req: Request) {
     });
 
     return NextResponse.json({ success: true, payment });
-  } catch (err: any) {
-    return NextResponse.json({ error: err.message || "Ошибка фиксации оплаты" }, { status: 400 });
+  } catch (err: unknown) {
+    const error = err as { message?: string };
+    return NextResponse.json({ error: error?.message || "Ошибка фиксации оплаты" }, { status: (err as { status?: number })?.status || 400 });
   }
 }
 
 // PATCH /api/center-payments - Issue refund for a payment
 export async function PATCH(req: Request) {
   try {
-    const tenantCtx = await requireTenantAccess();
+    const tenantCtx = await requireTenantAccess(req);
 
     if (!tenantCtx.session.user.emailVerified) {
       return NextResponse.json({ error: "Email confirmation required for sensitive actions" }, { status: 403 });
     }
 
-    const tenantDb = getTenantDb(tenantCtx.center.id);
+    const tenantDb = tenantCtx.getTenantDb();
 
     if (tenantCtx.role !== "DIRECTOR" && !tenantCtx.isPlatformStaff) {
       return NextResponse.json({ error: "Forbidden: Only Director can process refunds" }, { status: 403 });
@@ -142,7 +143,8 @@ export async function PATCH(req: Request) {
     });
 
     return NextResponse.json({ success: true, payment });
-  } catch (err: any) {
-    return NextResponse.json({ error: err.message || "Server error" }, { status: 500 });
+  } catch (err: unknown) {
+    const error = err as { message?: string };
+    return NextResponse.json({ error: error?.message || "Server error" }, { status: (err as { status?: number })?.status || 500 });
   }
 }

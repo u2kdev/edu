@@ -4,10 +4,56 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { Users, Plus, UserCheck, Calendar, BookOpen } from "lucide-react";
 
+interface GroupStudent {
+  id: string;
+  user: {
+    fullName: string;
+    phone?: string | null;
+    email: string;
+  };
+}
+
+interface GroupEnrollment {
+  id: string;
+  student: GroupStudent;
+}
+
+interface GroupTeacher {
+  id: string;
+  user: {
+    fullName: string;
+    email?: string;
+  };
+}
+
+interface GroupItem {
+  id: string;
+  name: string;
+  maxStudents: number;
+  course: {
+    id?: string;
+    title: string;
+  };
+  teacher?: GroupTeacher | null;
+  enrollments: GroupEnrollment[];
+}
+
+interface CourseOption {
+  id: string;
+  title: string;
+}
+
+interface TeacherOption {
+  id: string;
+  user: {
+    fullName: string;
+  };
+}
+
 interface GroupsManagerProps {
-  initialGroups: any[];
-  courses: any[];
-  teachers: any[];
+  initialGroups: GroupItem[];
+  courses: CourseOption[];
+  teachers: TeacherOption[];
   role?: string;
 }
 
@@ -100,7 +146,7 @@ export default function GroupsManager({ initialGroups, courses, teachers, role }
                   <p className="text-xs text-slate-500 italic">Ученики еще не вступили в группу.</p>
                 ) : (
                   <ul className="space-y-1.5 text-xs text-slate-300">
-                    {group.enrollments.map((en: any) => (
+                    {group.enrollments.map((en) => (
                       <li key={en.id} className="flex items-center justify-between p-2 rounded bg-slate-950/60 border border-slate-800/60">
                         <span className="font-semibold text-white">{en.student.user.fullName}</span>
                         <span className="text-slate-500 font-mono">{en.student.user.phone || en.student.user.email}</span>

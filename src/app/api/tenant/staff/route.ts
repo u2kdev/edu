@@ -2,7 +2,6 @@ import { NextResponse } from "next/server";
 // Reason: Exception: Creation of platform-level models.
 // eslint-disable-next-line no-restricted-imports
 import { db } from "@/lib/db";
-import { getTenantDb } from "@/lib/db-tenant";
 import { getAuthSession, hashPassword } from "@/lib/auth";
 import { requireTenantAccess, logAuditEvent } from "@/lib/tenant";
 import { hasPermission } from "@/lib/permissions";
@@ -12,9 +11,9 @@ import crypto from "crypto";
 // GET /api/tenant/staff — List all staff members of the active center
 export async function GET(req: Request) {
   try {
-    const tenantCtx = await requireTenantAccess();
+    const tenantCtx = await requireTenantAccess(req);
     const { session, center, role } = tenantCtx;
-    const tenantDb = getTenantDb(center.id);
+    const tenantDb = tenantCtx.getTenantDb();
 
     // Only Director and Center Admin can view staff list
     if (role !== "DIRECTOR" && role !== "CENTER_ADMIN" && !tenantCtx.isPlatformStaff) {
@@ -45,10 +44,11 @@ export async function GET(req: Request) {
     });
 
     return NextResponse.json({ staff: staffMembers });
-  } catch (err: any) {
+  } catch (err: unknown) {
+    const error = err as { message?: string; code?: string; status?: number };
     return NextResponse.json(
-      { error: err.message || "Server error", code: err.code },
-      { status: err.status || (err.message?.includes("Forbidden") ? 403 : 500) }
+      { error: error.message || "Server error", code: error.code },
+      { status: error.status || (error.message?.includes("Forbidden") ? 403 : 500) }
     );
   }
 }
@@ -57,9 +57,9 @@ export async function GET(req: Request) {
 // This creates a User (if new) + CenterMembership and should send an invite
 export async function POST(req: Request) {
   try {
-    const tenantCtx = await requireTenantAccess();
+    const tenantCtx = await requireTenantAccess(req);
     const { session, center, role } = tenantCtx;
-    const tenantDb = getTenantDb(center.id);
+    const tenantDb = tenantCtx.getTenantDb();
 
     // Only Director can add staff. CENTER_ADMIN can too if delegated (we'll allow it by default for MVP)
     if (role !== "DIRECTOR" && role !== "CENTER_ADMIN" && !tenantCtx.isPlatformStaff) {
@@ -130,6 +130,7 @@ export async function POST(req: Request) {
           phone: phone || null,
           passwordHash: tempPasswordHash,
           preferredLanguage: center.defaultLanguage || "ru",
+          emailVerified: new Date(),
         },
       });
     }
@@ -183,11 +184,12 @@ export async function POST(req: Request) {
       // Only include temp password in development
       ...(process.env.NODE_ENV === "development" ? { tempPassword } : {}),
     });
-  } catch (err: any) {
+  } catch (err: unknown) {
     console.error("Staff creation error:", err);
+    const error = err as { message?: string };
     return NextResponse.json(
-      { error: err.message || "Server error" },
-      { status: err.message?.includes("Forbidden") ? 403 : 500 }
+      { error: error?.message || "Server error" },
+      { status: error?.message?.includes("Forbidden") ? 403 : 500 }
     );
   }
 }
@@ -195,9 +197,9 @@ export async function POST(req: Request) {
 // PATCH /api/tenant/staff — Update staff member status (activate/deactivate)
 export async function PATCH(req: Request) {
   try {
-    const tenantCtx = await requireTenantAccess();
+    const tenantCtx = await requireTenantAccess(req);
     const { session, center, role } = tenantCtx;
-    const tenantDb = getTenantDb(center.id);
+    const tenantDb = tenantCtx.getTenantDb();
 
     if (role !== "DIRECTOR" && role !== "CENTER_ADMIN" && !tenantCtx.isPlatformStaff) {
       return NextResponse.json(
@@ -247,8 +249,8 @@ export async function PATCH(req: Request) {
       );
     }
 
-    const updateData: any = {};
-    if (status && ["ACTIVE", "INACTIVE", "SUSPENDED"].includes(status)) {
+    const updateData: { status?: string; role?: string } = {};
+    if (status && ["ACTIVE", "INACTIVE", "SUSPENDED", "ARCHIVED"].includes(status)) {
       updateData.status = status;
     }
     if (newRole && ["CENTER_ADMIN", "TEACHER", "CENTER_SUPPORT"].includes(newRole)) {
@@ -287,11 +289,122 @@ export async function PATCH(req: Request) {
     });
 
     return NextResponse.json({ success: true, membership: updated });
-  } catch (err: any) {
+  } catch (err: unknown) {
     console.error("Staff update error:", err);
+    const error = err as { message?: string };
     return NextResponse.json(
-      { error: err.message || "Server error" },
-      { status: err.message?.includes("Forbidden") ? 403 : 500 }
+      { error: error?.message || "Server error" },
+      { status: error?.message?.includes("Forbidden") ? 403 : 500 }
     );
   }
 }
+
+// DELETE /api/tenant/staff — Delete a center member (student or staff)
+export async function DELETE(req: Request) {
+  try {
+    const tenantCtx = await requireTenantAccess(req);
+    const { session, center, role } = tenantCtx;
+    const tenantDb = tenantCtx.getTenantDb();
+
+    if (role !== "DIRECTOR" && role !== "CENTER_ADMIN" && !tenantCtx.isPlatformStaff) {
+      return NextResponse.json(
+        { error: "Forbidden: Only Director or Center Admin can delete members" },
+        { status: 403 }
+      );
+    }
+
+    const { searchParams } = new URL(req.url);
+    let membershipId = searchParams.get("membershipId");
+    if (!membershipId) {
+      try {
+        const body = (await req.json()) as { membershipId?: string };
+        membershipId = body?.membershipId || null;
+      } catch {
+        // Body might be empty or invalid json
+      }
+    }
+
+    if (!membershipId) {
+      return NextResponse.json(
+        { error: "Membership ID is required" },
+        { status: 400 }
+      );
+    }
+
+    const membership = await tenantDb.centerMembership.findFirst({
+      where: { id: membershipId },
+      include: { user: { select: { email: true, fullName: true } } },
+    });
+
+    if (!membership) {
+      return NextResponse.json(
+        { error: "Member not found in this center" },
+        { status: 404 }
+      );
+    }
+
+    if (membership.role === "DIRECTOR") {
+      return NextResponse.json(
+        { error: "Cannot delete the Director" },
+        { status: 403 }
+      );
+    }
+
+    if (
+      role === "CENTER_ADMIN" &&
+      (membership.role === "CENTER_ADMIN" || membership.role === "DIRECTOR")
+    ) {
+      return NextResponse.json(
+        { error: "Only Director can delete administrative staff" },
+        { status: 403 }
+      );
+    }
+
+    try {
+      await tenantDb.centerMembership.delete({
+        where: { id: membershipId },
+      });
+    } catch (err: unknown) {
+      const errStr = String(err);
+      if (
+        errStr.includes("P2003") ||
+        errStr.includes("23001") ||
+        errStr.includes("Foreign key constraint") ||
+        errStr.includes("RESTRICT")
+      ) {
+        return NextResponse.json(
+          {
+            error:
+              "Невозможно удалить студента с существующими записями (платежи, оценки, посещаемость). Рекомендуется архивировать студента.",
+            hint: "архивировать",
+            code: "CANNOT_DELETE_HAS_RECORDS",
+          },
+          { status: 409 }
+        );
+      }
+      throw err;
+    }
+
+    await logAuditEvent({
+      centerId: center.id,
+      actorUserId: session.user.id,
+      action: "MEMBER_DELETED",
+      resource: "CenterMembership",
+      resourceId: membershipId,
+      details: {
+        targetEmail: membership.user.email,
+        role: membership.role,
+      },
+    });
+
+    return NextResponse.json({ success: true, message: "Member deleted successfully" });
+  } catch (err: unknown) {
+    console.error("Member delete error:", err);
+    const error = err as { message?: string; status?: number };
+    return NextResponse.json(
+      { error: error?.message || "Server error" },
+      { status: error?.status || 500 }
+    );
+  }
+}
+

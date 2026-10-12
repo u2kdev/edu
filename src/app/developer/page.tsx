@@ -3,8 +3,18 @@
 import { useEffect, useState } from "react";
 import { Activity, Database, Server, Clock, HardDrive } from "lucide-react";
 
+interface SystemHealthData {
+  dbStatus: string;
+  dbPingMs: number;
+  redisStatus: string;
+  redisPingMs: string | number;
+  uptimeSeconds: number;
+  memoryUsage: { rss: number; heapUsed: number; heapTotal: number };
+  environment: string;
+}
+
 export default function DeveloperDashboard() {
-  const [health, setHealth] = useState<any>(null);
+  const [health, setHealth] = useState<SystemHealthData | null>(null);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {

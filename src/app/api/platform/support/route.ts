@@ -10,7 +10,7 @@ export async function GET(req: Request) {
     const { searchParams } = new URL(req.url);
     const status = searchParams.get("status");
 
-    let whereClause: any = {};
+    const whereClause: { status?: string } = {};
     if (status) {
       whereClause.status = status;
     }
@@ -26,7 +26,7 @@ export async function GET(req: Request) {
     });
 
     return NextResponse.json({ tickets });
-  } catch (err: any) {
+  } catch (err: unknown) {
     return handlePlatformError(err);
   }
 }
@@ -58,7 +58,7 @@ export async function PATCH(req: Request) {
     });
 
     return NextResponse.json({ success: true, ticket });
-  } catch (err: any) {
+  } catch (err: unknown) {
     return handlePlatformError(err);
   }
 }

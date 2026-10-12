@@ -28,7 +28,7 @@ export async function GET() {
     };
 
     return NextResponse.json({ health: systemStats });
-  } catch (err: any) {
+  } catch (err: unknown) {
     return handlePlatformError(err);
   }
 }

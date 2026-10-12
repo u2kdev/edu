@@ -4,6 +4,7 @@ import { z } from "zod";
 import { db } from "@/lib/db";
 import { comparePassword, signJWT, JWTPayload } from "@/lib/auth";
 import { checkRateLimit } from "@/lib/rate-limit";
+import { getClientIp } from "@/lib/ip";
 import { sendEmail } from '@/lib/email';
 import { apiError, apiSuccess, handleApiError } from "@/lib/api-response";
 import { loginSchema } from "@/lib/validation/auth";
@@ -14,7 +15,7 @@ const ACCOUNT_GLOBAL_DELAY_THRESHOLD = 20;
 
 export async function POST(req: Request) {
   try {
-    const ip = req.headers.get("x-forwarded-for") || "unknown";
+    const ip = getClientIp(req);
     const userAgent = req.headers.get("user-agent") || "unknown";
 
     if (!checkRateLimit(ip)) {
@@ -116,13 +117,23 @@ export async function POST(req: Request) {
     };
 
     if (!user || !user.isActive) {
-      return handleFailure("user_not_found_or_inactive");
+      return await handleFailure("user_not_found_or_inactive");
     }
 
     const isMatch = await comparePassword(password, user.passwordHash);
 
     if (!isMatch) {
-      return handleFailure("invalid_password", user.id);
+      return await handleFailure("invalid_password", user.id);
+    }
+
+    const isPlatformRole = user.platformRole && user.platformRole !== "NONE";
+    if (!user.emailVerified && !isPlatformRole) {
+      return apiError(
+        "Email verification required. Please check your inbox or request a new confirmation email.",
+        "EMAIL_NOT_VERIFIED",
+        403,
+        { email: user.email }
+      );
     }
 
     // Success -> Reset ALL attempts for this email
@@ -139,7 +150,7 @@ export async function POST(req: Request) {
       email: user.email,
       platformRole: user.platformRole,
       jti,
-    } as any;
+    };
 
     const token = signJWT(payload, expiresIn);
 
@@ -184,7 +195,7 @@ export async function POST(req: Request) {
         role: user.platformRole,
       }
     });
-  } catch (error: any) {
+  } catch (error: unknown) {
     return handleApiError(error);
   }
 }

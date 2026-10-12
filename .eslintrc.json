@@ -18,6 +18,10 @@
         "src/app/api/developer/**/*.ts",
         "src/app/api/platform/**/*.ts",
         "src/app/api/tickets/**/*.ts",
+        "src/app/api/tenant/onboarding/**/*.ts",
+        "src/app/api/invites/accept/**/*.ts",
+        "src/app/api/invites/redeem/**/*.ts",
+        "src/app/api/invites/parent-link/**/*.ts",
         "src/app/platform-admin/**/*.tsx",
         "src/app/dashboard/platform/**/*.tsx"
       ],
@@ -29,6 +33,10 @@
               {
                 "group": ["@/lib/db", "*/lib/db", "../**/lib/db", "**/lib/db"],
                 "message": "Use getTenantDb(centerId) instead of raw db for tenant routes. Raw db is only allowed with explicit inline disable."
+              },
+              {
+                "group": ["@/lib/db-tenant", "*/lib/db-tenant", "../**/lib/db-tenant", "**/lib/db-tenant"],
+                "message": "Do not import getTenantDb directly from db-tenant in app routes; use requireTenantAccess() and tenantCtx.getTenantDb() to enforce role and write-access gates."
               }
             ]
           }
@@ -40,6 +48,18 @@
             "message": "Do not instantiate PrismaClient directly in API routes."
           }
         ]
+      }
+    },
+    {
+      "files": [
+        "src/**/*.ts",
+        "src/**/*.tsx",
+        "tests/**/*.ts",
+        "tests/**/*.tsx"
+      ],
+      "plugins": ["@typescript-eslint"],
+      "rules": {
+        "@typescript-eslint/no-explicit-any": "error"
       }
     }
   ]

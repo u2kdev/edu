@@ -76,7 +76,7 @@ export async function GET() {
       },
       recentActivity,
     });
-  } catch (err: any) {
+  } catch (err: unknown) {
     return handlePlatformError(err);
   }
 }

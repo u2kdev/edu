@@ -11,7 +11,7 @@ export async function GET(req: Request) {
     const take = Number(searchParams.get("limit")) || 100;
     const centerId = searchParams.get("centerId");
     
-    let whereClause: any = {};
+    const whereClause: { centerId?: string } = {};
     if (centerId) {
       whereClause.centerId = centerId;
     }
@@ -27,7 +27,7 @@ export async function GET(req: Request) {
     });
 
     return NextResponse.json({ logs });
-  } catch (err: any) {
+  } catch (err: unknown) {
     return handlePlatformError(err);
   }
 }

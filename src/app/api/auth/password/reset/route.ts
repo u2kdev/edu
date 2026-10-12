@@ -3,6 +3,7 @@ import { z } from "zod";
 // eslint-disable-next-line no-restricted-imports
 import { db } from "@/lib/db";
 import { checkRateLimit } from "@/lib/rate-limit";
+import { getClientIp } from "@/lib/ip";
 import { apiError, apiSuccess, handleApiError } from "@/lib/api-response";
 import { passwordResetSubmitSchema } from "@/lib/validation/auth";
 import { hashPassword } from "@/lib/auth";
@@ -10,7 +11,7 @@ import crypto from "crypto";
 
 export async function POST(req: Request) {
   try {
-    const ip = req.headers.get("x-forwarded-for") || "unknown";
+    const ip = getClientIp(req);
     
     if (!checkRateLimit(ip + "_reset_pwd")) {
       return apiError("auth.rate_limited", "RATE_LIMITED", 429);
@@ -45,7 +46,7 @@ export async function POST(req: Request) {
       });
 
       // Update password
-      const updateData: any = { passwordHash: hashedPassword };
+      const updateData: { passwordHash: string; emailVerified?: Date } = { passwordHash: hashedPassword };
       if (!resetToken.user.emailVerified) {
         updateData.emailVerified = new Date();
       }
@@ -73,7 +74,7 @@ export async function POST(req: Request) {
     });
 
     return apiSuccess({ success: true });
-  } catch (err: any) {
+  } catch (err: unknown) {
     return handleApiError(err);
   }
 }

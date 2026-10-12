@@ -3,7 +3,21 @@ import bcrypt from "bcryptjs";
 import { cookies } from "next/headers";
 import { db } from "./db";
 
-const JWT_SECRET = process.env.JWT_SECRET || "fallback-secret-key-change-in-prod";
+export function validateJwtSecret(secret?: string, isProd: boolean = process.env.NODE_ENV === "production"): string {
+  if (!secret) {
+    throw new Error(
+      isProd
+        ? "JWT_SECRET must be defined in production environment and be at least 32 characters long"
+        : "JWT_SECRET must be defined in environment variables and be at least 32 characters long"
+    );
+  }
+  if (secret.length < 32) {
+    throw new Error("JWT_SECRET must be at least 32 characters long");
+  }
+  return secret;
+}
+
+const JWT_SECRET = validateJwtSecret(process.env.JWT_SECRET, process.env.NODE_ENV === "production");
 
 export type PlatformRole = "NONE" | "DEVELOPER" | "SUPERADMIN" | "PLATFORM_ADMIN" | "FULL_ACCESS" | "PLATFORM_SUPPORT" | "SEO_ADMIN";
 export type CenterRole = "DIRECTOR" | "CENTER_ADMIN" | "TEACHER" | "TEACHER_ASSISTANT" | "CENTER_SUPPORT" | "STUDENT" | "PARENT";
@@ -26,8 +40,8 @@ export async function comparePassword(password: string, hash: string): Promise<b
 
 import crypto from "crypto";
 
-export function signJWT(payload: JWTPayload, expiresIn: string = "7d", jwtId?: string): string {
-  const options: jwt.SignOptions = { expiresIn: expiresIn as any };
+export function signJWT(payload: JWTPayload, expiresIn: jwt.SignOptions["expiresIn"] = "7d", jwtId?: string): string {
+  const options: jwt.SignOptions = { expiresIn };
   if (jwtId) options.jwtid = jwtId;
   return jwt.sign(payload, JWT_SECRET, options);
 }
@@ -136,13 +150,23 @@ export async function getAuthSession(): Promise<{
   let activeCenterId = payload.activeCenterId;
   let activeCenterRole = payload.activeCenterRole;
 
+  const hasPlatformImpersonation =
+    user.platformRole === "DEVELOPER" ||
+    user.platformRole === "SUPERADMIN" ||
+    user.platformRole === "PLATFORM_SUPPORT";
+
   if (activeCenterId) {
     const activeMem = membershipsFormatted.find((m) => m.centerId === activeCenterId);
     if (activeMem) {
       activeCenterRole = activeMem.role;
-    } else {
+    } else if (hasPlatformImpersonation) {
+      // Platform roles with impersonation can target any center
+      activeCenterRole = user.platformRole === "PLATFORM_SUPPORT" ? "CENTER_SUPPORT" : "DIRECTOR";
+    } else if (membershipsFormatted.length > 0) {
       activeCenterId = membershipsFormatted[0]?.centerId;
       activeCenterRole = membershipsFormatted[0]?.role;
+    } else {
+      activeCenterRole = undefined;
     }
   } else if (membershipsFormatted.length > 0) {
     activeCenterId = membershipsFormatted[0].centerId;

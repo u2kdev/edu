@@ -3,13 +3,14 @@ import { z } from "zod";
 // eslint-disable-next-line no-restricted-imports
 import { db } from "@/lib/db";
 import { checkRateLimit } from "@/lib/rate-limit";
+import { getClientIp } from "@/lib/ip";
 import { apiError, apiSuccess, handleApiError } from "@/lib/api-response";
 import { passwordResetRequestSchema } from "@/lib/validation/auth";
 import crypto from "crypto";
 
 export async function POST(req: Request) {
   try {
-    const ip = req.headers.get("x-forwarded-for") || "unknown";
+    const ip = getClientIp(req);
     
     // Custom rate limit for password reset (more strict: limit IP & email)
     if (!checkRateLimit(ip + "_forgot_pwd")) {
@@ -78,7 +79,7 @@ export async function POST(req: Request) {
 
     // Always return success to prevent email enumeration
     return apiSuccess({ success: true, message: "auth.resetLinkSent" });
-  } catch (err: any) {
+  } catch (err: unknown) {
     return handleApiError(err);
   }
 }

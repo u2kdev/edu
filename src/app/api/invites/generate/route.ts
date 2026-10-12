@@ -1,23 +1,19 @@
 import { NextResponse } from "next/server";
-import { getTenantDb } from "@/lib/db-tenant";
 import { requireTenantAccess } from "@/lib/tenant";
 
-function generateRandomCode(length: number = 8): string {
-  const chars = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
-  let result = "";
-  for (let i = 0; i < length; i++) {
-    result += chars.charAt(Math.floor(Math.random() * chars.length));
-  }
-  return result;
-}
+import { generateSecureInviteCode } from "@/lib/invites";
 
 export async function POST(req: Request) {
   try {
-    const tenantCtx = await requireTenantAccess();
-    const tenantDb = getTenantDb(tenantCtx.center.id);
+    const tenantCtx = await requireTenantAccess(req);
+    const tenantDb = tenantCtx.getTenantDb();
     
-    // Only Director and Center Admin can generate invite codes
-    if (tenantCtx.role !== "DIRECTOR" && tenantCtx.role !== "CENTER_ADMIN") {
+    // Only Director and Center Admin (or platform staff) can generate invite codes
+    if (
+      tenantCtx.role !== "DIRECTOR" &&
+      tenantCtx.role !== "CENTER_ADMIN" &&
+      !tenantCtx.isPlatformStaff
+    ) {
       return NextResponse.json({ error: "Forbidden" }, { status: 403 });
     }
 
@@ -25,7 +21,18 @@ export async function POST(req: Request) {
 
     const code = customCode
       ? customCode.toUpperCase().trim()
-      : `${tenantCtx.center.slug.toUpperCase()}-${generateRandomCode(6)}`;
+      : `${tenantCtx.center.slug.toUpperCase()}-${generateSecureInviteCode(12)}`;
+
+    let createdByMembershipId = tenantCtx.membership?.id;
+    if (!createdByMembershipId) {
+      const directorMem = await tenantDb.centerMembership.findFirst({
+        where: { role: "DIRECTOR" },
+      });
+      createdByMembershipId = directorMem?.id;
+    }
+    if (!createdByMembershipId) {
+      return NextResponse.json({ error: "Could not resolve creator membership" }, { status: 403 });
+    }
 
     const invite = await tenantDb.inviteCode.create({
       data: {
@@ -35,7 +42,7 @@ export async function POST(req: Request) {
         courseId: courseId || null,
         groupId: groupId || null,
         maxUses: maxUses ? parseInt(maxUses) : 10,
-        createdByMembershipId: tenantCtx.membership?.id || tenantCtx.center.ownerId,
+        createdByMembershipId,
       },
       include: {
         course: { select: { title: true } },
@@ -44,10 +51,11 @@ export async function POST(req: Request) {
     });
 
     return NextResponse.json({ success: true, invite });
-  } catch (err: any) {
-    if (err.code === "P2002") {
-      return NextResponse.json({ error: "This code is already in use" }, { status: 400 });
+  } catch (err: unknown) {
+    const error = err as { message?: string; status?: number; code?: string };
+    if (error.code === "P2002") {
+      return NextResponse.json({ error: "This code is already in use" }, { status: error.status || 400 });
     }
-    return NextResponse.json({ error: err.message || "Server error" }, { status: 400 });
+    return NextResponse.json({ error: error.message || "Server error" }, { status: error.status || 400 });
   }
 }

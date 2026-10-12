@@ -7,17 +7,17 @@ import { PrismaClient } from '@prisma/client';
 
 describe('Migration Test: deploy on clean DB', () => {
   it('should run migrations on a clean db successfully', async () => {
-    const testDbPath = path.join(__dirname, '../prisma/mig_test.db');
-    const env = { ...process.env, DATABASE_URL: `file:./mig_test.db` };
+    const baseDbUrl = process.env.TEST_DATABASE_URL || process.env.DATABASE_URL || "postgresql://postgres:admin@localhost:5432/lms_test?schema=public";
+    const schemaName = `mig_test_${Date.now()}`;
+    const urlObj = new URL(baseDbUrl);
+    urlObj.searchParams.set("schema", schemaName);
+    const isolatedUrl = urlObj.toString();
+    const env = { ...process.env, DATABASE_URL: isolatedUrl };
 
-    if (fs.existsSync(testDbPath)) {
-      fs.unlinkSync(testDbPath);
-    }
+    // Deploy all migrations on a fresh schema
+    execSync('node node_modules/prisma/build/index.js migrate deploy', { env, stdio: 'pipe' });
 
-    // Deploy all migrations on a fresh database
-    execSync('npx prisma migrate deploy', { env, stdio: 'pipe' });
-
-    const migDb = new PrismaClient({ datasources: { db: { url: `file:./mig_test.db` } } });
+    const migDb = new PrismaClient({ datasources: { db: { url: isolatedUrl } } });
 
     try {
       // Insert raw data simulating old records if we wanted, 
@@ -47,10 +47,8 @@ describe('Migration Test: deploy on clean DB', () => {
       expect(center?.phone).toBeNull();
       expect(center?.email).toBeNull();
     } finally {
+      await migDb.$executeRawUnsafe(`DROP SCHEMA IF EXISTS "${schemaName}" CASCADE`);
       await migDb.$disconnect();
-      if (fs.existsSync(testDbPath)) {
-        fs.unlinkSync(testDbPath);
-      }
     }
   }, 30000);
 });

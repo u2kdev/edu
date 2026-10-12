@@ -1,5 +1,4 @@
 import { NextResponse } from "next/server";
-import { getTenantDb } from "@/lib/db-tenant";
 import { getAuthSession } from "@/lib/auth";
 import { requireTenantAccess, logAuditEvent } from "@/lib/tenant";
 
@@ -11,8 +10,8 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
-    const tenantCtx = await requireTenantAccess();
-    const tenantDb = getTenantDb(tenantCtx.center.id);
+    const tenantCtx = await requireTenantAccess(req);
+    const tenantDb = tenantCtx.getTenantDb();
     const { testId, studentAnswers } = await req.json(); // studentAnswers: { questionId: string, answer: string | string[] }
 
     if (!testId || !studentAnswers) {
@@ -28,7 +27,14 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: "Test not found" }, { status: 404 });
     }
 
-    // Check attempts limit
+    if (!tenantCtx.membership?.id) {
+      return NextResponse.json(
+        { error: "Only student members can submit test attempts" },
+        { status: 403 }
+      );
+    }
+
+    const studentMembershipId = tenantCtx.membership.id;
     const existingAttempts = await tenantDb.testAttempt.count({
       where: {
         testId: test.id,
@@ -56,8 +62,8 @@ export async function POST(req: Request) {
       if (q.questionType === "SINGLE_CHOICE" || q.questionType === "MULTIPLE_CHOICE") {
         if (q.optionsJson) {
           try {
-            const options = JSON.parse(q.optionsJson); // [{ text: string, isCorrect: boolean }]
-            const correctOptionTexts = options.filter((o: any) => o.isCorrect).map((o: any) => o.text);
+            const options = JSON.parse(q.optionsJson) as { text?: string; isCorrect?: boolean }[];
+            const correctOptionTexts = options.filter((o) => o.isCorrect && o.text).map((o) => o.text as string);
 
             if (Array.isArray(studentAns)) {
               const isMatch =
@@ -86,7 +92,7 @@ export async function POST(req: Request) {
       data: {
         centerId: tenantCtx.center.id,
         testId: test.id,
-        studentMembershipId: tenantCtx.membership?.id!,
+        studentMembershipId,
         answersJson: JSON.stringify(studentAnswers),
         scorePercent,
         scorePoints: earnedPoints,
@@ -99,7 +105,7 @@ export async function POST(req: Request) {
     // Also log activity
     await tenantDb.activityLog.create({
       data: {
-        userMembershipId: tenantCtx.membership?.id!,
+        userMembershipId: studentMembershipId,
         centerId: tenantCtx.center.id,
         activityType: "COMPLETE_TEST",
         resourceType: "Test",
@@ -113,8 +119,9 @@ export async function POST(req: Request) {
       attempt,
       passed: scorePercent >= test.passingScorePercent,
     });
-  } catch (err: any) {
+  } catch (err: unknown) {
     console.error("Test submit attempt error:", err);
-    return NextResponse.json({ error: err.message || "Server error" }, { status: 500 });
+    const error = err as { message?: string; status?: number };
+    return NextResponse.json({ error: error.message || "Server error" }, { status: error.status || 500 });
   }
 }

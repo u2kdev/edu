@@ -44,7 +44,7 @@ describe("Email Confirmation API", () => {
     await db.platformUser.deleteMany({ where: { email: { startsWith: "expired-" } } });
   });
 
-  const mockReq = (body: any) =>
+  const mockReq = (body: unknown) =>
     new Request(`http://localhost/api/auth/confirm-email`, {
       method: "POST",
       headers: { "x-forwarded-for": "1.1.1.1" },
@@ -106,7 +106,7 @@ describe("Email Resend and Sensitive Actions", () => {
       },
       sessionId: "mock-session-id",
       memberships: []
-    } as any);
+    } as unknown as Awaited<ReturnType<typeof auth.getAuthSession>>);
 
     const req = new Request(`http://localhost/api/auth/password/change`, {
       method: "POST", headers: { "x-forwarded-for": "1.1.1.1" }, body: JSON.stringify({ currentPassword: "pwd", newPassword: "pwd2" })

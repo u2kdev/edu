@@ -83,7 +83,7 @@ describe("True Tenant Isolation (Real SQLite DB)", () => {
     
     await expect(
       dbA.course.update({ where: { id: courseB }, data: { title: "Hacked" } })
-    ).rejects.toThrow();
+    ).rejects.toThrow("Record not found or access denied");
 
     const updatedMany = await dbA.course.updateMany({
       where: { id: courseB },
@@ -100,7 +100,7 @@ describe("True Tenant Isolation (Real SQLite DB)", () => {
     
     await expect(
       dbA.course.delete({ where: { id: courseB } })
-    ).rejects.toThrow();
+    ).rejects.toThrow("Record not found or access denied");
 
     const deletedMany = await dbA.course.deleteMany({
       where: { id: courseB }
@@ -115,9 +115,9 @@ describe("True Tenant Isolation (Real SQLite DB)", () => {
       dbA.course.upsert({
         where: { id: courseB },
         update: { title: "Hacked B" },
-        create: { id: courseB, title: "Hacked B", createdByMembershipId: memberA } as any,
+        create: { id: courseB, title: "Hacked B", createdByMembershipId: memberA, centerId: centerA },
       })
-    ).rejects.toThrow();
+    ).rejects.toThrow("Record not found or access denied");
   });
 
   it("create / createMany strictly enforces centerId (spoofing prevented)", async () => {
@@ -128,13 +128,13 @@ describe("True Tenant Isolation (Real SQLite DB)", () => {
         title: "Spoof Test",
         centerId: centerB, // Attempt to spoof
         createdByMembershipId: memberA
-      } as any
+      }
     });
     expect(created.centerId).toBe(centerA); // Forced to Center A
 
     await dbA.course.createMany({
       data: [
-        { title: "Spoof Test 2", centerId: centerB, createdByMembershipId: memberA } as any
+        { title: "Spoof Test 2", centerId: centerB, createdByMembershipId: memberA }
       ]
     });
     const c2 = await db.course.findFirst({ where: { title: "Spoof Test 2" } });
@@ -159,7 +159,8 @@ describe("True Tenant Isolation (Real SQLite DB)", () => {
         name: "Nested Group",
         courseId: courseA,
         maxStudents: 10,
-      } as any
+        centerId: centerA,
+      }
     });
     expect(g.centerId).toBe(centerA);
   });

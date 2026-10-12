@@ -49,7 +49,7 @@ function ResetPasswordForm() {
           router.push("/login");
         }, 3000);
       }
-    } catch (err: any) {
+    } catch {
       setError(t("auth.error", locale));
     } finally {
       setLoading(false);

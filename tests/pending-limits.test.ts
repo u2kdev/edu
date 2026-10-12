@@ -48,7 +48,7 @@ describe("PendingInvite Limits (POST /api/auth/register)", () => {
     // Wait, checkRateLimit increments. If we want to bypass it, we can just delete its key in rateLimits.
   });
 
-  const mockReq = (body: any, ip: string = "1.1.1.1") =>
+  const mockReq = (body: unknown, ip: string = "1.1.1.1") =>
     new Request(`http://localhost/api/auth/register`, {
       method: "POST",
       headers: { "x-forwarded-for": ip },

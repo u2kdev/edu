@@ -1,12 +1,11 @@
 import { NextResponse } from "next/server";
-import { getTenantDb } from "@/lib/db-tenant";
 import { requireTenantAccess, logAuditEvent } from "@/lib/tenant";
 import { sendNotification } from "@/lib/notifications";
 
 export async function GET(req: Request) {
   try {
-    const tenantCtx = await requireTenantAccess();
-    const tenantDb = getTenantDb(tenantCtx.center.id);
+    const tenantCtx = await requireTenantAccess(req);
+    const tenantDb = tenantCtx.getTenantDb();
     const { searchParams } = new URL(req.url);
     const groupId = searchParams.get("groupId");
     const studentId = searchParams.get("studentMembershipId");
@@ -14,7 +13,7 @@ export async function GET(req: Request) {
     const page = Math.max(1, parseInt(searchParams.get("page") || "1"));
     const pageSize = Math.min(100, parseInt(searchParams.get("pageSize") || "50"));
 
-    let whereCondition: any = {
+    const whereCondition: Record<string, unknown> = {
       deletedAt: null, // exclude soft-deleted
     };
 
@@ -46,6 +45,9 @@ export async function GET(req: Request) {
         where: { id: groupId },
       });
       if (!group) return NextResponse.json({ error: "Group not found" }, { status: 404 });
+      if (tenantCtx.role === "TEACHER" && tenantCtx.membership && group.teacherMembershipId !== tenantCtx.membership.id) {
+        return NextResponse.json({ error: "Forbidden: You do not teach this group" }, { status: 403 });
+      }
       whereCondition.groupId = groupId;
     }
 
@@ -54,6 +56,17 @@ export async function GET(req: Request) {
         where: { id: studentId },
       });
       if (!studentMem) return NextResponse.json({ error: "Student not found" }, { status: 404 });
+      if (tenantCtx.role === "STUDENT" && tenantCtx.membership && studentId !== tenantCtx.membership.id) {
+        return NextResponse.json({ error: "Forbidden: You can only view your own grades" }, { status: 403 });
+      }
+      if (tenantCtx.role === "PARENT" && tenantCtx.membership) {
+        const isChild = await tenantDb.parentLink.findFirst({
+          where: { parentMembershipId: tenantCtx.membership.id, studentMembershipId: studentId, status: "CONFIRMED" },
+        });
+        if (!isChild) {
+          return NextResponse.json({ error: "Forbidden: Not your child" }, { status: 403 });
+        }
+      }
       whereCondition.studentMembershipId = studentId;
     }
 
@@ -78,15 +91,16 @@ export async function GET(req: Request) {
     ]);
 
     return NextResponse.json({ grades, total, page, pageSize });
-  } catch (err: any) {
-    return NextResponse.json({ error: err.message || "Server error" }, { status: 400 });
+  } catch (err: unknown) {
+    const error = err as { message?: string; status?: number; code?: string };
+    return NextResponse.json({ error: error?.message || "Server error", code: error?.code }, { status: error?.status || 400 });
   }
 }
 
 export async function POST(req: Request) {
   try {
-    const tenantCtx = await requireTenantAccess();
-    const tenantDb = getTenantDb(tenantCtx.center.id);
+    const tenantCtx = await requireTenantAccess(req);
+    const tenantDb = tenantCtx.getTenantDb();
 
     if (
       tenantCtx.role !== "DIRECTOR" &&
@@ -129,6 +143,10 @@ export async function POST(req: Request) {
       if (!group) return NextResponse.json({ error: "Group not found" }, { status: 404 });
     }
 
+    if (!tenantCtx.membership?.id) {
+      return NextResponse.json({ error: "Could not resolve your membership in this center. Platform staff must not perform member-specific academic actions directly." }, { status: 403 });
+    }
+
     const numericValue = parseFloat(value);
     const numericMax = parseFloat(maxValue || "100");
 
@@ -142,7 +160,7 @@ export async function POST(req: Request) {
         studentMembershipId,
         groupId: groupId || null,
         lessonId: lessonId || null,
-        teacherMembershipId: tenantCtx.membership!.id,
+        teacherMembershipId: tenantCtx.membership.id,
         gradeType,
         value: numericValue,
         maxValue: numericMax,
@@ -161,15 +179,16 @@ export async function POST(req: Request) {
     });
 
     return NextResponse.json({ success: true, grade });
-  } catch (err: any) {
-    return NextResponse.json({ error: err.message || "Server error" }, { status: 400 });
+  } catch (err: unknown) {
+    const error = err as { message?: string; status?: number };
+    return NextResponse.json({ error: error?.message || "Server error" }, { status: error?.status || 400 });
   }
 }
 
 export async function PATCH(req: Request) {
   try {
-    const tenantCtx = await requireTenantAccess();
-    const tenantDb = getTenantDb(tenantCtx.center.id);
+    const tenantCtx = await requireTenantAccess(req);
+    const tenantDb = tenantCtx.getTenantDb();
     const { id, value, maxValue, comment, lifecycle } = await req.json();
 
     if (!id) return NextResponse.json({ error: "Grade ID required" }, { status: 400 });
@@ -210,7 +229,7 @@ export async function PATCH(req: Request) {
       }
     }
 
-    const updateData: any = {
+    const updateData: Record<string, unknown> = {
       value: value !== undefined ? parseFloat(value) : existing.value,
       maxValue: maxValue !== undefined ? parseFloat(maxValue) : existing.maxValue,
       comment: comment !== undefined ? comment?.trim() || null : existing.comment,
@@ -257,15 +276,16 @@ export async function PATCH(req: Request) {
     }
 
     return NextResponse.json({ success: true, grade });
-  } catch (err: any) {
-    return NextResponse.json({ error: err.message || "Server error" }, { status: 400 });
+  } catch (err: unknown) {
+    const error = err as { message?: string; status?: number };
+    return NextResponse.json({ error: error?.message || "Server error" }, { status: error?.status || 400 });
   }
 }
 
 export async function DELETE(req: Request) {
   try {
-    const tenantCtx = await requireTenantAccess();
-    const tenantDb = getTenantDb(tenantCtx.center.id);
+    const tenantCtx = await requireTenantAccess(req);
+    const tenantDb = tenantCtx.getTenantDb();
 
     if (tenantCtx.role !== "DIRECTOR" && !tenantCtx.isPlatformStaff) {
       return NextResponse.json({ error: "Only directors can delete grades" }, { status: 403 });
@@ -300,7 +320,8 @@ export async function DELETE(req: Request) {
     });
 
     return NextResponse.json({ success: true });
-  } catch (err: any) {
-    return NextResponse.json({ error: err.message || "Server error" }, { status: 400 });
+  } catch (err: unknown) {
+    const error = err as { message?: string; status?: number };
+    return NextResponse.json({ error: error?.message || "Server error" }, { status: error?.status || 400 });
   }
 }

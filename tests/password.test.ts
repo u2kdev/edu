@@ -36,7 +36,7 @@ describe("Password Reset & Change API", () => {
     await db.platformUser.deleteMany({ where: { id: user } });
   });
 
-  const mockReq = (url: string, body: any) => new Request(`http://localhost${url}`, {
+  const mockReq = (url: string, body: unknown) => new Request(`http://localhost${url}`, {
     method: "POST",
     headers: { "x-forwarded-for": "1.1.1.1" },
     body: JSON.stringify(body)

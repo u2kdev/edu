@@ -1,12 +1,11 @@
-import { requireTenantAccess } from "@/lib/tenant";
+import { requireTenantPageAccess } from "@/lib/tenant";
 import { getAuthSession } from "@/lib/auth";
-import { getTenantDb } from "@/lib/db-tenant";
 import { redirect } from "next/navigation";
 import { User, Mail, Phone, Calendar, ShieldCheck, CreditCard } from "lucide-react";
 import { t, formatDateLocalized } from "@/i18n";
 
 export default async function CenterProfilePage() {
-  const tenantCtx = await requireTenantAccess();
+  const tenantCtx = await requireTenantPageAccess();
 
   const session = await getAuthSession();
   if (!session) redirect("/login");
@@ -18,14 +17,14 @@ export default async function CenterProfilePage() {
   const activeRole = session.activeCenterRole || "";
 
   // Get user details
-  const user = await getTenantDb(tenantCtx.center.id).platformUser.findUnique({
+  const user = await tenantCtx.getTenantDb().platformUser.findUnique({
     where: { id: session.user.id },
   });
 
   if (!user) redirect("/login");
 
   // Get center membership
-  const membership = await getTenantDb(tenantCtx.center.id).centerMembership.findFirst({
+  const membership = await tenantCtx.getTenantDb().centerMembership.findFirst({
     where: { userId: user.id, centerId },
     include: {
       center: true,
@@ -84,7 +83,7 @@ export default async function CenterProfilePage() {
             {membership.enrollments.length === 0 ? (
               <p className="text-slate-400">Вы пока не состоите ни в одной группе.</p>
             ) : (
-              membership.enrollments.map((en: any) => (
+              membership.enrollments.map((en) => (
                 <div key={en.id} className="glass-panel p-5 rounded-2xl border border-slate-800">
                   <div className="font-bold text-white">{en.group.name}</div>
                   <div className="text-sm text-slate-400 mt-1">
@@ -104,7 +103,7 @@ export default async function CenterProfilePage() {
             {membership.parentLinksAsParent.length === 0 ? (
               <p className="text-slate-400">У вас нет привязанных учеников.</p>
             ) : (
-              membership.parentLinksAsParent.map((link: any) => (
+              membership.parentLinksAsParent.map((link) => (
                 <div key={link.id} className="glass-panel p-5 rounded-2xl border border-slate-800">
                   <div className="font-bold text-white">{link.student.user.fullName}</div>
                   <div className="text-sm text-slate-400 mt-1">

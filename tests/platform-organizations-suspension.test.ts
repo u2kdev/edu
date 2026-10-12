@@ -7,7 +7,7 @@ import { signJWT } from "../src/lib/auth";
 import * as authObj from "../src/lib/auth";
 import { vi } from "vitest";
 
-const mockRequest = (url: string, body?: any) => {
+const mockRequest = (url: string, body?: unknown) => {
   return new Request(`http://localhost${url}`, {
     method: body ? "POST" : "GET",
     headers: { "Content-Type": "application/json" },
@@ -43,9 +43,9 @@ describe("Platform Organizations - Advanced Suspension", () => {
     superAdminId = admin.id;
 
     // Create Center A
-    const uDirA = await db.platformUser.create({ data: { email: `dira-${Date.now()}@x.com`, passwordHash: "x", fullName: "x" } });
-    const uTeacherA = await db.platformUser.create({ data: { email: `teacha-${Date.now()}@x.com`, passwordHash: "x", fullName: "x" } });
-    const uStudentA = await db.platformUser.create({ data: { email: `studa-${Date.now()}@x.com`, passwordHash: "x", fullName: "x" } });
+    const uDirA = await db.platformUser.create({ data: { email: `dira-${Date.now()}@x.com`, passwordHash: "x", fullName: "x", emailVerified: new Date() } });
+    const uTeacherA = await db.platformUser.create({ data: { email: `teacha-${Date.now()}@x.com`, passwordHash: "x", fullName: "x", emailVerified: new Date() } });
+    const uStudentA = await db.platformUser.create({ data: { email: `studa-${Date.now()}@x.com`, passwordHash: "x", fullName: "x", emailVerified: new Date() } });
     dirAId = uDirA.id; teacherAId = uTeacherA.id; studentAId = uStudentA.id;
 
     const cA = await db.learningCenter.create({
@@ -63,7 +63,7 @@ describe("Platform Organizations - Advanced Suspension", () => {
     centerAId = cA.id;
 
     // Create Center B
-    const uDirB = await db.platformUser.create({ data: { email: `dirb-${Date.now()}@x.com`, passwordHash: "x", fullName: "x" } });
+    const uDirB = await db.platformUser.create({ data: { email: `dirb-${Date.now()}@x.com`, passwordHash: "x", fullName: "x", emailVerified: new Date() } });
     dirBId = uDirB.id;
     const cB = await db.learningCenter.create({
       data: {

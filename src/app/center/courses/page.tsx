@@ -1,11 +1,10 @@
-import { requireTenantAccess } from "@/lib/tenant";
+import { requireTenantPageAccess } from "@/lib/tenant";
 import { getAuthSession } from "@/lib/auth";
-import { getTenantDb } from "@/lib/db-tenant";
 import { redirect } from "next/navigation";
 import CourseManager from "@/components/CourseManager";
 
 export default async function CenterCoursesPage() {
-  const tenantCtx = await requireTenantAccess();
+  const tenantCtx = await requireTenantPageAccess();
 
   const session = await getAuthSession();
   if (!session) redirect("/login");
@@ -13,7 +12,7 @@ export default async function CenterCoursesPage() {
   const centerId = session.activeCenterId;
   if (!centerId) redirect("/center");
 
-  const courses = await getTenantDb(tenantCtx.center.id).course.findMany({
+  const courses = await tenantCtx.getTenantDb().course.findMany({
     where: { centerId },
     include: {
       modules: {

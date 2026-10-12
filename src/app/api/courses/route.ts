@@ -1,12 +1,11 @@
 import { NextResponse } from "next/server";
-import { getTenantDb } from "@/lib/db-tenant";
 import { requireTenantAccess, logAuditEvent } from "@/lib/tenant";
 import { checkSubscriptionLimit } from "@/lib/limits";
 
 export async function GET(req: Request) {
   try {
-    const tenantCtx = await requireTenantAccess();
-    const tenantDb = getTenantDb(tenantCtx.center.id);
+    const tenantCtx = await requireTenantAccess(req);
+    const tenantDb = tenantCtx.getTenantDb();
 
     const courses = await tenantDb.course.findMany({
       include: {
@@ -31,17 +30,22 @@ export async function GET(req: Request) {
     });
 
     return NextResponse.json({ courses });
-  } catch (err: any) {
-    return NextResponse.json({ error: err.message || "Ошибка загрузки курсов" }, { status: err.status || 400 });
+  } catch (err: unknown) {
+    const error = err as { message?: string; code?: string; status?: number };
+    return NextResponse.json({ error: error.message || "Ошибка загрузки курсов", code: error.code }, { status: error.status || 400 });
   }
 }
 
 export async function POST(req: Request) {
   try {
-    const tenantCtx = await requireTenantAccess();
-    const tenantDb = getTenantDb(tenantCtx.center.id);
+    const tenantCtx = await requireTenantAccess(req);
+    const tenantDb = tenantCtx.getTenantDb();
 
-    if (tenantCtx.role !== "DIRECTOR" && tenantCtx.role !== "CENTER_ADMIN") {
+    if (
+      tenantCtx.role !== "DIRECTOR" &&
+      tenantCtx.role !== "CENTER_ADMIN" &&
+      !tenantCtx.isPlatformStaff
+    ) {
       return NextResponse.json({ error: "Недостаточно прав для создания курсов" }, { status: 403 });
     }
 
@@ -74,7 +78,8 @@ export async function POST(req: Request) {
     });
 
     return NextResponse.json({ success: true, course });
-  } catch (err: any) {
-    return NextResponse.json({ error: err.message || "Ошибка создания курса" }, { status: err.status || 400 });
+  } catch (err: unknown) {
+    const error = err as { message?: string; code?: string; status?: number };
+    return NextResponse.json({ error: error.message || "Ошибка создания курса", code: error.code }, { status: error.status || 400 });
   }
 }

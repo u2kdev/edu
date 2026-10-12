@@ -1,19 +1,18 @@
-import { requireTenantAccess } from "@/lib/tenant";
+import { requireTenantPageAccess } from "@/lib/tenant";
 import { getAuthSession } from "@/lib/auth";
-import { getTenantDb } from "@/lib/db-tenant";
 import { redirect } from "next/navigation";
 import { HelpCircle, MessageSquare, Plus, Clock } from "lucide-react";
 import { t, formatDateLocalized } from "@/i18n";
 
 export default async function CenterSupportPage() {
-  const tenantCtx = await requireTenantAccess();
+  const tenantCtx = await requireTenantPageAccess();
 
   const session = await getAuthSession();
   if (!session) redirect("/login");
 
   const locale = session.user.preferredLanguage;
 
-  const tickets = await getTenantDb(tenantCtx.center.id).supportTicket.findMany({
+  const tickets = await tenantCtx.getTenantDb().supportTicket.findMany({
     where: {
       OR: [
         { creatorUserId: session.user.id },

@@ -8,7 +8,7 @@ export async function GET() {
       return NextResponse.json({ authenticated: false }, { status: 401 });
     }
     return NextResponse.json({ authenticated: true, session });
-  } catch (err: any) {
+  } catch (err: unknown) {
     return NextResponse.json({ error: "Server error" }, { status: 500 });
   }
 }

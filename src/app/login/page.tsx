@@ -33,8 +33,8 @@ export default function LoginPage() {
         if (data.error) {
           if (data.error.code === "VALIDATION_ERROR" && Array.isArray(data.error.details)) {
             const errs: Record<string, string> = {};
-            data.error.details.forEach((issue: any) => {
-              if (issue.path && issue.path.length > 0) {
+            data.error.details.forEach((issue: { path?: string[]; message?: string }) => {
+              if (issue.path && issue.path.length > 0 && issue.message) {
                 // issue.message contains the i18n key (e.g. auth.email.invalid)
                 errs[issue.path[0]] = t(locale, issue.message);
               }
@@ -54,8 +54,8 @@ export default function LoginPage() {
 
       router.push("/dashboard");
       router.refresh();
-    } catch (err: any) {
-      setErrorBanner(err.message);
+    } catch (err: unknown) {
+      setErrorBanner(err instanceof Error ? err.message : "Ошибка при входе");
     } finally {
       setLoading(false);
     }

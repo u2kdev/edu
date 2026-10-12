@@ -1,12 +1,11 @@
-import { requireTenantAccess } from "@/lib/tenant";
+import { requireTenantPageAccess } from "@/lib/tenant";
 import { getAuthSession } from "@/lib/auth";
-import { getTenantDb } from "@/lib/db-tenant";
 import { redirect } from "next/navigation";
 import { BarChart3, CreditCard, Users, AlertTriangle, Sparkles, MessageSquare, Phone } from "lucide-react";
 import { t, formatCurrencyLocalized } from "@/i18n";
 
 export default async function CenterReportsPage() {
-  const tenantCtx = await requireTenantAccess();
+  const tenantCtx = await requireTenantPageAccess();
 
   const session = await getAuthSession();
   if (!session) redirect("/login");
@@ -21,26 +20,26 @@ export default async function CenterReportsPage() {
 
   const locale = session.user.preferredLanguage;
 
-  const paidSum = await getTenantDb(tenantCtx.center.id).centerPayment.aggregate({
+  const paidSum = await tenantCtx.getTenantDb().centerPayment.aggregate({
     where: { centerId, status: "PAID" },
     _sum: { amount: true },
     _count: true,
   });
 
-  const pendingSum = await getTenantDb(tenantCtx.center.id).centerPayment.aggregate({
+  const pendingSum = await tenantCtx.getTenantDb().centerPayment.aggregate({
     where: { centerId, status: "PENDING" },
     _sum: { amount: true },
     _count: true,
   });
 
-  const activeStudentsCount = await getTenantDb(tenantCtx.center.id).centerMembership.count({
+  const activeStudentsCount = await tenantCtx.getTenantDb().centerMembership.count({
     where: { centerId, role: "STUDENT", status: "ACTIVE" },
   });
 
   const avgPayment = paidSum._count > 0 ? (paidSum._sum.amount || 0) / paidSum._count : 150000;
   const expectedMRR = Math.round(activeStudentsCount * avgPayment);
 
-  const debtors = await getTenantDb(tenantCtx.center.id).centerPayment.findMany({
+  const debtors = await tenantCtx.getTenantDb().centerPayment.findMany({
     where: { centerId, status: "PENDING" },
     include: {
       student: { include: { user: { select: { fullName: true, email: true, phone: true } } } },
@@ -50,7 +49,7 @@ export default async function CenterReportsPage() {
   });
 
   // Teacher hours report
-  const teachers = await getTenantDb(tenantCtx.center.id).centerMembership.findMany({
+  const teachers = await tenantCtx.getTenantDb().centerMembership.findMany({
     where: { centerId, role: "TEACHER" },
     include: {
       user: { select: { fullName: true, email: true } },

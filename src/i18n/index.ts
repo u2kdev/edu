@@ -22,9 +22,9 @@ export const LOCALE_META: Record<
 export const DEFAULT_LOCALE: SupportedLocale = "ru";
 
 // All translations indexed by locale
-const translations: Record<SupportedLocale, Record<string, any>> = {
-  ru: ruTranslations,
-  "uz-Latn": uzLatnTranslations,
+const translations: Record<SupportedLocale, Record<string, unknown>> = {
+  ru: ruTranslations as Record<string, unknown>,
+  "uz-Latn": uzLatnTranslations as Record<string, unknown>,
 };
 
 /**
@@ -48,11 +48,11 @@ export function t(
 
   // Navigate the nested object by key path
   const parts = key.split(".");
-  let value: any = localeData;
+  let value: unknown = localeData;
 
   for (const part of parts) {
     if (value && typeof value === "object" && part in value) {
-      value = value[part];
+      value = (value as Record<string, unknown>)[part];
     } else {
       // Fallback to Russian if key not found in current locale
       if (validLocale !== "ru") {

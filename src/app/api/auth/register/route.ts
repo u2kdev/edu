@@ -5,23 +5,16 @@ import { db } from "@/lib/db";
 import { hashPassword } from "@/lib/auth";
 import { apiError, apiSuccess, handleApiError } from "@/lib/api-response";
 import { checkRateLimit } from "@/lib/rate-limit";
+import { getClientIp } from "@/lib/ip";
 import { logAuditEvent } from "@/lib/tenant";
 import { sendEmail } from "@/lib/email";
-import { z } from "zod";
+import { registerSchema } from "@/lib/validation/auth";
 import crypto from "crypto";
 import { REGISTER_CONFIG } from "@/lib/config";
 
-const registerSchema = z.object({
-  email: z.string().email(),
-  password: z.string().min(6),
-  fullName: z.string().min(2),
-  phone: z.string().optional(),
-  inviteCode: z.string().min(3),
-});
-
 export async function POST(req: Request) {
   try {
-    const ip = req.headers.get("x-forwarded-for") || "unknown";
+    const ip = getClientIp(req);
 
     const body = await req.json().catch(() => ({}));
     const rawCode = typeof body.inviteCode === "string" ? body.inviteCode.toUpperCase().trim() : "UNKNOWN";
@@ -83,8 +76,12 @@ export async function POST(req: Request) {
         return apiError("Too many pending invites from this IP", "RATE_LIMITED", 429);
       }
 
+      // Determine language: locale/lang param or Accept-Language or user preferredLanguage
+      const rawLang = parsed.data.locale || parsed.data.lang || req.headers.get("accept-language")?.slice(0, 2) || user.preferredLanguage || "ru";
+      const lang = rawLang.startsWith("uz") ? "uz" : "ru";
+
       // Do NOT consume invite usesCount yet.
-      await db.pendingInvite.create({
+      const pendingInvite = await db.pendingInvite.create({
         data: {
           email,
           inviteCodeId: invite.id,
@@ -93,8 +90,14 @@ export async function POST(req: Request) {
         }
       });
 
+      const acceptUrl = `/auth/invites/accept?pendingInviteId=${pendingInvite.id}&lang=${lang}`;
+      const subject = lang === "uz" ? "O'quv markaziga taklifnoma" : "Приглашение в учебный центр";
+      const emailBody = lang === "uz"
+        ? `Siz o'quv markaziga taklif qilindingiz. Qabul qilish uchun havolani bosing: ${acceptUrl}`
+        : `Вас пригласили в учебный центр. Для принятия перейдите по ссылке: ${acceptUrl}`;
+
       // Fire and forget email safely
-      void sendEmail(user.email, "Invited", "Please check").catch(err => {
+      void sendEmail(user.email, subject, emailBody).catch(err => {
         db.auditLog.create({
           data: {
             action: "EMAIL_FAILED",
@@ -107,60 +110,75 @@ export async function POST(req: Request) {
       return apiSuccess({ message: "Registration successful. Please check your email to confirm." });
     }
 
-    // 4. Atomic increment of invite uses for NEW user
-    let updateCount;
-    if (invite.maxUses !== null) {
-      updateCount = await db.inviteCode.updateMany({
-        where: { id: invite.id, usesCount: { lt: invite.maxUses } },
-        data: { usesCount: { increment: 1 } },
-      });
-    } else {
-      updateCount = await db.inviteCode.updateMany({
-        where: { id: invite.id },
-        data: { usesCount: { increment: 1 } },
-      });
-    }
-
-    if (updateCount.count === 0) {
-      return consumeAndReturnInvalidError();
-    }
-
-    // 5. New User Logic
+    // 4. Atomic Registration Transaction for NEW user
     const passwordHash = await hashPassword(password);
     const confirmToken = crypto.randomBytes(32).toString("hex");
     const confirmTokenHash = crypto.createHash("sha256").update(confirmToken).digest("hex");
     const confirmExpires = new Date(Date.now() + 24 * 60 * 60 * 1000); // 24h
 
-    user = await db.platformUser.create({
-      data: {
-        email,
-        passwordHash,
-        fullName,
-        phone,
-        emailConfirmToken: confirmTokenHash,
-        emailConfirmExpires: confirmExpires,
-      },
-    });
-
-    // Create membership only for new users
-    const membership = await db.centerMembership.create({
-      data: {
-        userId: user.id,
-        centerId: invite.centerId,
-        role: invite.targetRole,
-        status: "ACTIVE",
-      }
-    });
-
-    if (invite.groupId) {
-      await db.enrollment.create({
-        data: {
-          centerId: invite.centerId,
-          studentMembershipId: membership.id,
-          groupId: invite.groupId,
-          status: "ACTIVE"
+    try {
+      user = await db.$transaction(async (tx) => {
+        // Atomic increment of invite uses inside transaction
+        let updateCount;
+        if (invite.maxUses !== null) {
+          updateCount = await tx.inviteCode.updateMany({
+            where: { id: invite.id, usesCount: { lt: invite.maxUses } },
+            data: { usesCount: { increment: 1 } },
+          });
+        } else {
+          updateCount = await tx.inviteCode.updateMany({
+            where: { id: invite.id },
+            data: { usesCount: { increment: 1 } },
+          });
         }
+
+        if (updateCount.count === 0) {
+          throw new Error("INVITE_EXHAUSTED");
+        }
+
+        const newUser = await tx.platformUser.create({
+          data: {
+            email,
+            passwordHash,
+            fullName,
+            phone,
+            emailConfirmToken: confirmTokenHash,
+            emailConfirmExpires: confirmExpires,
+          },
+        });
+
+        const membership = await tx.centerMembership.create({
+          data: {
+            userId: newUser.id,
+            centerId: invite.centerId,
+            role: invite.targetRole,
+            status: "ACTIVE",
+          },
+        });
+
+        if (invite.groupId) {
+          await tx.enrollment.create({
+            data: {
+              centerId: invite.centerId,
+              studentMembershipId: membership.id,
+              groupId: invite.groupId,
+              status: "ACTIVE",
+            },
+          });
+        }
+
+        return newUser;
       });
+    } catch (txError: unknown) {
+      const err = txError as { code?: string; message?: string };
+      if (err?.message === "INVITE_EXHAUSTED") {
+        return consumeAndReturnInvalidError();
+      }
+      if (err?.code === "P2002") {
+        // Concurrent user registration for the same email: handle gracefully without 500
+        return apiError("A user with this email already exists or is being registered", "BAD_REQUEST", 409);
+      }
+      throw txError;
     }
 
     await logAuditEvent({
@@ -172,7 +190,15 @@ export async function POST(req: Request) {
       details: { inviteCode: invite.code, isNewUser: true },
     });
 
-    void sendEmail(user.email, "Confirm", "Please confirm").catch(err => {
+    const rawLang = parsed.data.locale || parsed.data.lang || req.headers.get("accept-language")?.slice(0, 2) || "ru";
+    const lang = rawLang.startsWith("uz") ? "uz" : "ru";
+    const confirmUrl = `/auth/confirm-email?token=${confirmToken}&lang=${lang}`;
+    const confirmSubject = lang === "uz" ? "Email manzilingizni tasdiqlang" : "Подтвердите ваш email";
+    const confirmBody = lang === "uz"
+      ? `Ro'yxatdan o'tishni yakunlash uchun havola orqali o'ting: ${confirmUrl}`
+      : `Для подтверждения регистрации перейдите по ссылке: ${confirmUrl}`;
+
+    void sendEmail(user.email, confirmSubject, confirmBody).catch(err => {
       db.auditLog.create({
         data: {
           action: "EMAIL_FAILED",
@@ -183,7 +209,7 @@ export async function POST(req: Request) {
     });
 
     return apiSuccess({ message: "Registration successful. Please check your email to confirm." });
-  } catch (err: any) {
+  } catch (err: unknown) {
     return handleApiError(err);
   }
 }

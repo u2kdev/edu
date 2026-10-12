@@ -1,12 +1,12 @@
-import { requireTenantAccess } from "@/lib/tenant";
+import { requireTenantPageAccess } from "@/lib/tenant";
 import { getAuthSession } from "@/lib/auth";
-import { getTenantDb } from "@/lib/db-tenant";
 import { redirect } from "next/navigation";
 import { ClipboardCheck, CheckCircle2, XCircle, Clock, AlertCircle } from "lucide-react";
 import { t, formatDateLocalized } from "@/i18n";
+import { Prisma } from "@prisma/client";
 
 export default async function CenterAttendancePage() {
-  const tenantCtx = await requireTenantAccess();
+  const tenantCtx = await requireTenantPageAccess();
 
   const session = await getAuthSession();
   if (!session) redirect("/login");
@@ -18,14 +18,14 @@ export default async function CenterAttendancePage() {
   const activeRole = session.activeCenterRole || "";
   const currentMembership = session.memberships.find(m => m.centerId === centerId);
 
-  let whereCondition: any = {
+  const whereCondition: Prisma.AttendanceWhereInput = {
     lesson: { module: { course: { centerId } } },
   };
 
   if (activeRole === "STUDENT" && currentMembership) {
     whereCondition.studentMembershipId = currentMembership.id;
   } else if (activeRole === "PARENT" && currentMembership) {
-    const childLinks = await getTenantDb(tenantCtx.center.id).parentLink.findMany({
+    const childLinks = await tenantCtx.getTenantDb().parentLink.findMany({
       where: { parentMembershipId: currentMembership.id, status: "CONFIRMED" },
       select: { studentMembershipId: true },
     });
@@ -40,7 +40,7 @@ export default async function CenterAttendancePage() {
     };
   }
 
-  const attendances = await getTenantDb(tenantCtx.center.id).attendance.findMany({
+  const attendances = await tenantCtx.getTenantDb().attendance.findMany({
     where: whereCondition,
     include: {
       lesson: { select: { title: true, scheduledAt: true } },

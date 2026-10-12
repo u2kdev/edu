@@ -35,8 +35,8 @@ function RegisterContent() {
         throw new Error(data.error || "Failed to register");
       }
       setSuccess(true);
-    } catch (err: any) {
-      setError(err.message);
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : "Failed to register");
     } finally {
       setLoading(false);
     }

@@ -1,11 +1,10 @@
-import { requireTenantAccess } from "@/lib/tenant";
+import { requireTenantPageAccess } from "@/lib/tenant";
 import { getAuthSession } from "@/lib/auth";
-import { getTenantDb } from "@/lib/db-tenant";
 import { redirect } from "next/navigation";
 import { Building2, MapPin, Phone, Mail, Users, CheckCircle2, XCircle } from "lucide-react";
 
 export default async function BranchesPage() {
-  const tenantCtx = await requireTenantAccess();
+  const tenantCtx = await requireTenantPageAccess();
 
   const session = await getAuthSession();
   if (!session) redirect("/login");
@@ -20,7 +19,7 @@ export default async function BranchesPage() {
     redirect("/center");
   }
 
-  const branches = await getTenantDb(tenantCtx.center.id).branch.findMany({
+  const branches = await tenantCtx.getTenantDb().branch.findMany({
     where: { centerId },
     include: {
       _count: { select: { groups: true } },

@@ -39,7 +39,7 @@ export default function ChangePasswordPage() {
         setCurrentPassword("");
         setNewPassword("");
       }
-    } catch (err: any) {
+    } catch {
       setError(t("auth.error", locale));
     } finally {
       setLoading(false);

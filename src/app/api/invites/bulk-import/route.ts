@@ -1,13 +1,12 @@
 import { NextResponse } from "next/server";
 import { requireTenantAccess, logAuditEvent } from "@/lib/tenant";
 import { hashPassword } from "@/lib/auth";
-import { getTenantDb } from "@/lib/db-tenant";
 import crypto from "crypto";
 
 // POST /api/invites/bulk-import - Bulk import students from CSV data (fullName, email, phone)
 export async function POST(req: Request) {
   try {
-    const tenantCtx = await requireTenantAccess();
+    const tenantCtx = await requireTenantAccess(req);
     if (tenantCtx.role !== "DIRECTOR" && tenantCtx.role !== "CENTER_ADMIN" && !tenantCtx.isPlatformStaff) {
       return NextResponse.json({ error: "Forbidden" }, { status: 403 });
     }
@@ -24,7 +23,7 @@ export async function POST(req: Request) {
       errors: [] as string[],
     };
 
-    const tenantDb = getTenantDb(tenantCtx.center.id);
+    const tenantDb = tenantCtx.getTenantDb();
 
     for (const item of students) {
       const email = item.email?.toLowerCase().trim();
@@ -97,7 +96,8 @@ export async function POST(req: Request) {
     });
 
     return NextResponse.json({ success: true, results });
-  } catch (err: any) {
-    return NextResponse.json({ error: err.message || "Server error" }, { status: 500 });
+  } catch (err: unknown) {
+    const errorObj = err as { message?: string; status?: number };
+    return NextResponse.json({ error: errorObj.message || "Server error" }, { status: errorObj.status || 500 });
   }
 }

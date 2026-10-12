@@ -1,12 +1,11 @@
 import { NextResponse } from "next/server";
-import { getTenantDb } from "@/lib/db-tenant";
 import { requireTenantAccess, logAuditEvent } from "@/lib/tenant";
 
 // POST /api/attendance/bulk - Mark attendance for all students in a group for a lesson in one batch
 export async function POST(req: Request) {
   try {
-    const tenantCtx = await requireTenantAccess();
-    const tenantDb = getTenantDb(tenantCtx.center.id);
+    const tenantCtx = await requireTenantAccess(req);
+    const tenantDb = tenantCtx.getTenantDb();
     if (tenantCtx.role !== "DIRECTOR" && tenantCtx.role !== "CENTER_ADMIN" && tenantCtx.role !== "TEACHER" && !tenantCtx.isPlatformStaff) {
       return NextResponse.json({ error: "Forbidden" }, { status: 403 });
     }
@@ -18,8 +17,21 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: "lessonId and groupId are required" }, { status: 400 });
     }
 
+    if (tenantCtx.role === "TEACHER" && tenantCtx.membership) {
+      const isTeacherGroup = await tenantDb.group.findFirst({
+        where: { id: groupId, teacherMembershipId: tenantCtx.membership.id },
+      });
+      if (!isTeacherGroup) {
+        return NextResponse.json({ error: "You can only mark attendance for your own groups" }, { status: 403 });
+      }
+    }
+
     const enrollments = await tenantDb.enrollment.findMany({
-      where: { groupId, status: "ACTIVE" },
+      where: {
+        groupId,
+        status: "ACTIVE",
+        student: { status: "ACTIVE" },
+      },
       select: { studentMembershipId: true },
     });
 
@@ -53,8 +65,9 @@ export async function POST(req: Request) {
                markedByMembershipId: markerId,
              }
           });
-        } catch (e: any) {
-          if (e.code === 'P2002') {
+        } catch (e: unknown) {
+          const err = e as { code?: string };
+          if (err?.code === 'P2002') {
             await tenantDb.attendance.updateMany({
                where: { lessonId, studentMembershipId: en.studentMembershipId },
                data: {
@@ -81,8 +94,9 @@ export async function POST(req: Request) {
     });
 
     return NextResponse.json({ success: true, count: enrollments.length });
-  } catch (err: any) {
+  } catch (err: unknown) {
+    const error = err as { message?: string };
     console.error("Bulk attendance error:", err);
-    return NextResponse.json({ error: err.message || "Server error" }, { status: 500 });
+    return NextResponse.json({ error: error?.message || "Server error" }, { status: (err as { status?: number })?.status || 500 });
   }
 }

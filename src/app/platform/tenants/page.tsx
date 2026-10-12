@@ -5,8 +5,17 @@ import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { t } from '@/lib/i18n';
 
+interface CenterListItem {
+  id: string;
+  name: string;
+  slug: string;
+  email?: string | null;
+  phone?: string | null;
+  status: string;
+}
+
 export default function TenantsPage() {
-  const [centers, setCenters] = useState<any[]>([]);
+  const [centers, setCenters] = useState<CenterListItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [page, setPage] = useState(1);
@@ -110,7 +119,7 @@ export default function TenantsPage() {
               </tr>
             </thead>
             <tbody className="bg-white divide-y divide-gray-200">
-              {centers.map((center: any) => (
+              {centers.map((center) => (
                 <tr key={center.id} className="hover:bg-gray-50">
                   <td className="px-6 py-4 whitespace-nowrap">
                     <div className="font-medium text-gray-900">{center.name}</div>

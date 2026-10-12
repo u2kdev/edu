@@ -10,7 +10,7 @@ interface AppNotification {
   type: string;
   titleKey: string;
   bodyKey: string;
-  bodyParams: any;
+  bodyParams: unknown;
   channel: string;
   isRead: boolean;
   createdAt: string;
@@ -37,8 +37,8 @@ export default function NotificationsPage() {
       setNotifications(data.notifications || []);
       setTotal(data.total || 0);
       setUnreadCount(data.unreadCount || 0);
-    } catch (err: any) {
-      setError(err.message);
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : "Failed to fetch notifications");
     } finally {
       setIsLoading(false);
     }
@@ -97,7 +97,7 @@ export default function NotificationsPage() {
   };
 
   const translateTitle = (key: string) => {
-    const dict: any = {
+    const dict: Record<string, string> = {
       "notifications.newHomework": "Новое домашнее задание",
       "notifications.gradePosted": "Оценка выставлена",
       "notifications.scheduleChanged": "Изменение в расписании",
@@ -108,14 +108,21 @@ export default function NotificationsPage() {
     return dict[key] || key;
   };
 
-  const translateBody = (key: string, params: any) => {
-    const p = typeof params === "string" ? JSON.parse(params) : params || {};
-    const dict: any = {
-      "notifications.newHomeworkBody": `Вам задали домашнее задание: ${p.title}`,
-      "notifications.gradePostedBody": `Оценка: ${p.value} / ${p.maxValue}`,
-      "notifications.scheduleBody": `Изменения для группы: ${p.groupName}`,
-      "notification.attendanceAbsent.body": `Ученик ${p.studentName || ""} отсутствовал на занятии.`,
-      "notification.attendanceLate.body": `Ученик ${p.studentName || ""} опоздал на занятие.`,
+  const translateBody = (key: string, params: unknown) => {
+    let p: Record<string, unknown> = {};
+    if (typeof params === "string") {
+      try {
+        p = JSON.parse(params) as Record<string, unknown>;
+      } catch {}
+    } else if (params && typeof params === "object") {
+      p = params as Record<string, unknown>;
+    }
+    const dict: Record<string, string> = {
+      "notifications.newHomeworkBody": `Вам задали домашнее задание: ${String(p.title || "")}`,
+      "notifications.gradePostedBody": `Оценка: ${String(p.value || "")} / ${String(p.maxValue || "")}`,
+      "notifications.scheduleBody": `Изменения для группы: ${String(p.groupName || "")}`,
+      "notification.attendanceAbsent.body": `Ученик ${String(p.studentName || "")} отсутствовал на занятии.`,
+      "notification.attendanceLate.body": `Ученик ${String(p.studentName || "")} опоздал на занятие.`,
     };
     return dict[key] || key;
   };

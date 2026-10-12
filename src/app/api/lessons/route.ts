@@ -1,12 +1,12 @@
 import { NextResponse } from "next/server";
-import { getTenantDb } from "@/lib/db-tenant";
 import { requireTenantAccess, logAuditEvent } from "@/lib/tenant";
+import { Prisma } from "@prisma/client";
 
 // POST /api/lessons - Create a lesson inside a module
 export async function POST(req: Request) {
   try {
-    const tenantCtx = await requireTenantAccess();
-    const tenantDb = getTenantDb(tenantCtx.center.id);
+    const tenantCtx = await requireTenantAccess(req);
+    const tenantDb = tenantCtx.getTenantDb();
     if (tenantCtx.role !== "DIRECTOR" && tenantCtx.role !== "CENTER_ADMIN" && tenantCtx.role !== "TEACHER" && !tenantCtx.isPlatformStaff) {
       return NextResponse.json({ error: "Forbidden" }, { status: 403 });
     }
@@ -53,16 +53,17 @@ export async function POST(req: Request) {
     });
 
     return NextResponse.json({ success: true, lesson });
-  } catch (err: any) {
-    return NextResponse.json({ error: err.message || "Server error" }, { status: 500 });
+  } catch (err: unknown) {
+    const error = err as { message?: string; status?: number };
+    return NextResponse.json({ error: error.message || "Server error" }, { status: error.status || 500 });
   }
 }
 
 // PATCH /api/lessons - Update a lesson or soft-archive it
 export async function PATCH(req: Request) {
   try {
-    const tenantCtx = await requireTenantAccess();
-    const tenantDb = getTenantDb(tenantCtx.center.id);
+    const tenantCtx = await requireTenantAccess(req);
+    const tenantDb = tenantCtx.getTenantDb();
     if (tenantCtx.role !== "DIRECTOR" && tenantCtx.role !== "CENTER_ADMIN" && tenantCtx.role !== "TEACHER" && !tenantCtx.isPlatformStaff) {
       return NextResponse.json({ error: "Forbidden" }, { status: 403 });
     }
@@ -73,7 +74,7 @@ export async function PATCH(req: Request) {
       return NextResponse.json({ error: "Lesson ID is required" }, { status: 400 });
     }
 
-    const updateData: any = {};
+    const updateData: Prisma.LessonUncheckedUpdateInput = {};
     if (title !== undefined) updateData.title = title;
     if (lessonType !== undefined) updateData.lessonType = lessonType;
     if (status !== undefined) updateData.status = status; // ACTIVE or ARCHIVED (soft exclusion)
@@ -94,7 +95,8 @@ export async function PATCH(req: Request) {
     const lesson = await tenantDb.lesson.findFirst({ where: { id: lessonId } });
 
     return NextResponse.json({ success: true, lesson });
-  } catch (err: any) {
-    return NextResponse.json({ error: err.message || "Server error" }, { status: 500 });
+  } catch (err: unknown) {
+    const error = err as { message?: string; status?: number };
+    return NextResponse.json({ error: error.message || "Server error" }, { status: error.status || 500 });
   }
 }

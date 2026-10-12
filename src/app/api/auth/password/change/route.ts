@@ -4,12 +4,13 @@ import { z } from "zod";
 import { db } from "@/lib/db";
 import { getAuthSession, comparePassword, hashPassword } from "@/lib/auth";
 import { checkRateLimit } from "@/lib/rate-limit";
+import { getClientIp } from "@/lib/ip";
 import { apiError, apiSuccess, handleApiError } from "@/lib/api-response";
 import { passwordChangeSchema } from "@/lib/validation/auth";
 
 export async function POST(req: Request) {
   try {
-    const ip = req.headers.get("x-forwarded-for") || "unknown";
+    const ip = getClientIp(req);
     
     if (!checkRateLimit(ip + "_change_pwd")) {
       return apiError("auth.rate_limited", "RATE_LIMITED", 429);
@@ -83,7 +84,7 @@ export async function POST(req: Request) {
     });
 
     return apiSuccess({ success: true });
-  } catch (err: any) {
+  } catch (err: unknown) {
     return handleApiError(err);
   }
 }

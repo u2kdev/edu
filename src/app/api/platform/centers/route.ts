@@ -31,7 +31,7 @@ export async function GET(req: Request) {
 
     const { page, pageSize, q, status, sortBy } = parsedParams.data;
 
-    const where: any = {};
+    const where: Record<string, unknown> = {};
     if (q) {
       where.OR = [
         { name: { contains: q } },
@@ -57,8 +57,9 @@ export async function GET(req: Request) {
     ]);
 
     return NextResponse.json({ items, total });
-  } catch (err: any) {
-    return NextResponse.json({ error: err.message || "Internal Error" }, { status: 500 });
+  } catch (err: unknown) {
+    const message = err instanceof Error ? err.message : "Internal Error";
+    return NextResponse.json({ error: message }, { status: 500 });
   }
 }
 
@@ -74,6 +75,7 @@ const postBodySchema = z.object({
   trialEndsAt: z.string().optional(),
   directorEmail: z.string().email(),
   directorFullName: z.string().min(2),
+  planId: z.string().optional(),
 });
 
 const RESERVED_SLUGS = ["admin", "api", "platform", "login", "auth", "system"];
@@ -141,8 +143,8 @@ export async function POST(req: Request) {
       });
 
       let plan = null;
-      if ((body as any).planId) {
-        plan = await tx.subscriptionPlan.findUnique({ where: { id: (body as any).planId } });
+      if (data.planId) {
+        plan = await tx.subscriptionPlan.findUnique({ where: { id: data.planId } });
       } else {
         plan = await tx.subscriptionPlan.findFirst({ where: { isActive: true } });
       }
@@ -201,7 +203,8 @@ export async function POST(req: Request) {
       director: { id: result.user.id, email: result.user.email, fullName: result.user.fullName },
       membership: result.membership 
     });
-  } catch (err: any) {
-    return NextResponse.json({ error: err.message || "Internal error" }, { status: 500 });
+  } catch (err: unknown) {
+    const message = err instanceof Error ? err.message : "Internal error";
+    return NextResponse.json({ error: message }, { status: 500 });
   }
 }

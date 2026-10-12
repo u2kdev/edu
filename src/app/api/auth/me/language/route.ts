@@ -38,10 +38,11 @@ export async function PATCH(req: Request) {
       success: true,
       preferredLanguage: updatedUser.preferredLanguage,
     });
-  } catch (err: any) {
+  } catch (err: unknown) {
     console.error("Language update error:", err);
+    const message = err instanceof Error ? err.message : "Server error";
     return NextResponse.json(
-      { error: err.message || "Server error" },
+      { error: message },
       { status: 500 }
     );
   }

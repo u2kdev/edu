@@ -12,6 +12,10 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: "Авторизуйтесь для создания центра" }, { status: 401 });
     }
 
+    if (session.user.platformRole === "PLATFORM_SUPPORT") {
+      return NextResponse.json({ error: "Forbidden: Platform support cannot create centers" }, { status: 403 });
+    }
+
     const { name, slug, centerType } = await req.json();
 
     if (!name || !slug) {
@@ -97,7 +101,7 @@ export async function POST(req: Request) {
     });
 
     return response;
-  } catch (err: any) {
+  } catch (err: unknown) {
     console.error("Onboarding error:", err);
     return NextResponse.json({ error: "Ошибка при создании центра" }, { status: 500 });
   }

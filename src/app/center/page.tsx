@@ -1,6 +1,5 @@
-import { requireTenantAccess } from "@/lib/tenant";
+import { requireTenantPageAccess } from "@/lib/tenant";
 import { getAuthSession } from "@/lib/auth";
-import { getTenantDb } from "@/lib/db-tenant";
 import { redirect } from "next/navigation";
 import Link from "next/link";
 import {
@@ -11,7 +10,7 @@ import {
 import { t, formatCurrencyLocalized, formatDateLocalized } from "@/i18n";
 
 export default async function CenterDashboardPage() {
-  const tenantCtx = await requireTenantAccess();
+  const tenantCtx = await requireTenantPageAccess();
 
   const session = await getAuthSession();
   if (!session) redirect("/login");
@@ -28,7 +27,7 @@ export default async function CenterDashboardPage() {
     );
   }
 
-  const center = await getTenantDb(tenantCtx.center.id).learningCenter.findUnique({
+  const center = await tenantCtx.getTenantDb().learningCenter.findUnique({
     where: { id: activeCenterId },
     include: {
       subscriptions: {
@@ -41,29 +40,53 @@ export default async function CenterDashboardPage() {
 
   if (!center) redirect("/login");
 
+interface StudentEnrollmentItem {
+  id: string;
+  group: {
+    name: string;
+    course: { title: string };
+    teacher?: { user: { fullName: string } } | null;
+  };
+}
+
+interface ParentChildItem {
+  id: string;
+  student: {
+    user: { fullName: string; email: string };
+    enrollments: Array<{ id: string; group: { name: string; course: { title: string } } }>;
+    payments: Array<{ id: string; amount: number; status: string }>;
+  };
+}
+
+interface UrgentHomeworkItem {
+  id: string;
+  title: string;
+  dueDate?: Date | null;
+}
+
   let activeStudentsCount = 0;
   let activeTeachersCount = 0;
   let coursesCount = 0;
   let totalRevenue = 0;
-  let studentEnrollments: any[] = [];
-  let parentChildren: any[] = [];
+  let studentEnrollments: StudentEnrollmentItem[] = [];
+  let parentChildren: ParentChildItem[] = [];
   let pendingHomeworksCount = 0;
-  let urgentHomeworks: any[] = [];
+  let urgentHomeworks: UrgentHomeworkItem[] = [];
   let attendanceRate: number | null = null;
 
-  activeStudentsCount = await getTenantDb(tenantCtx.center.id).centerMembership.count({
+  activeStudentsCount = await tenantCtx.getTenantDb().centerMembership.count({
     where: { centerId: activeCenterId, role: "STUDENT", status: "ACTIVE" },
   });
 
-  activeTeachersCount = await getTenantDb(tenantCtx.center.id).centerMembership.count({
+  activeTeachersCount = await tenantCtx.getTenantDb().centerMembership.count({
     where: { centerId: activeCenterId, role: "TEACHER", status: "ACTIVE" },
   });
 
-  coursesCount = await getTenantDb(tenantCtx.center.id).course.count({
+  coursesCount = await tenantCtx.getTenantDb().course.count({
     where: { centerId: activeCenterId },
   });
 
-  const payments = await getTenantDb(tenantCtx.center.id).centerPayment.aggregate({
+  const payments = await tenantCtx.getTenantDb().centerPayment.aggregate({
     where: { centerId: activeCenterId, status: "PAID" },
     _sum: { amount: true },
   });
@@ -71,7 +94,7 @@ export default async function CenterDashboardPage() {
 
   // Teacher specific pending homework reviews
   if (activeRole === "TEACHER") {
-    pendingHomeworksCount = await getTenantDb(tenantCtx.center.id).homeworkSubmission.count({
+    pendingHomeworksCount = await tenantCtx.getTenantDb().homeworkSubmission.count({
       where: {
         homework: { lesson: { module: { course: { centerId: activeCenterId } } } },
         grade: null,
@@ -83,7 +106,7 @@ export default async function CenterDashboardPage() {
   if (activeRole === "STUDENT") {
     const studentMem = session.memberships.find((m) => m.centerId === activeCenterId);
     if (studentMem) {
-      studentEnrollments = await getTenantDb(tenantCtx.center.id).enrollment.findMany({
+      studentEnrollments = await tenantCtx.getTenantDb().enrollment.findMany({
         where: { studentMembershipId: studentMem.id },
         include: {
           group: {
@@ -95,7 +118,7 @@ export default async function CenterDashboardPage() {
         },
       });
 
-      urgentHomeworks = await getTenantDb(tenantCtx.center.id).homework.findMany({
+      urgentHomeworks = await tenantCtx.getTenantDb().homework.findMany({
         where: {
           lesson: { module: { course: { centerId: activeCenterId } } },
           dueDate: { gte: new Date() },
@@ -104,7 +127,7 @@ export default async function CenterDashboardPage() {
         orderBy: { dueDate: "asc" },
       });
 
-      const studentAttendances = await getTenantDb(tenantCtx.center.id).attendance.findMany({
+      const studentAttendances = await tenantCtx.getTenantDb().attendance.findMany({
         where: { studentMembershipId: studentMem.id },
       });
       const presentCount = studentAttendances.filter(a => a.status === "PRESENT").length;
@@ -117,7 +140,7 @@ export default async function CenterDashboardPage() {
   if (activeRole === "PARENT") {
     const parentMem = session.memberships.find((m) => m.centerId === activeCenterId);
     if (parentMem) {
-      parentChildren = await getTenantDb(tenantCtx.center.id).parentLink.findMany({
+      parentChildren = await tenantCtx.getTenantDb().parentLink.findMany({
         where: { parentMembershipId: parentMem.id, status: "CONFIRMED" },
         include: {
           student: {
@@ -216,7 +239,7 @@ export default async function CenterDashboardPage() {
             </div>
           ) : (
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-              {studentEnrollments.map((en: any) => (
+              {studentEnrollments.map((en) => (
                 <div key={en.id} className="glass-panel p-6 rounded-2xl border border-slate-800 space-y-4">
                   <div className="flex justify-between items-start">
                     <div>
@@ -251,7 +274,7 @@ export default async function CenterDashboardPage() {
               <p className="text-xs text-slate-500">{t(locale, "parent.getInviteCode")}</p>
             </div>
           ) : (
-            parentChildren.map((link: any) => (
+            parentChildren.map((link) => (
               <div key={link.id} className="glass-panel p-6 rounded-2xl border border-slate-800 space-y-6">
                 <div className="flex items-center justify-between border-b border-slate-800 pb-4">
                   <div className="flex items-center gap-3">
@@ -278,7 +301,7 @@ export default async function CenterDashboardPage() {
                       {t(locale, "parent.coursesAndGroups")}
                     </span>
                     <ul className="mt-2 space-y-2 text-sm">
-                      {link.student.enrollments.map((e: any) => (
+                      {link.student.enrollments.map((e) => (
                         <li key={e.id} className="text-slate-200 font-medium flex justify-between">
                           <span>{e.group.course.title}</span>
                           <span className="text-xs text-brand-400 font-semibold">{e.group.name}</span>
@@ -292,7 +315,7 @@ export default async function CenterDashboardPage() {
                       {t(locale, "parent.paymentHistory")}
                     </span>
                     <ul className="mt-2 space-y-2 text-sm">
-                      {link.student.payments.map((p: any) => (
+                      {link.student.payments.map((p) => (
                         <li key={p.id} className="text-slate-200 flex justify-between">
                           <span>{formatCurrencyLocalized(p.amount, locale, "UZS")}</span>
                           <span className="text-xs text-emerald-400 font-semibold">{p.status}</span>

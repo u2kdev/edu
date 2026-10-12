@@ -17,10 +17,14 @@ export async function POST(req: Request) {
 
     // Action 1: Admin generates a parent invite code tied to a specific student
     if (action === "INITIATE_BY_ADMIN") {
-      const tenantCtx = await requireTenantAccess();
-      const tenantDb = getTenantDb(tenantCtx.center.id);
+      const tenantCtx = await requireTenantAccess(req);
+      const tenantDb = tenantCtx.getTenantDb();
       
-      if (tenantCtx.role !== "DIRECTOR" && tenantCtx.role !== "CENTER_ADMIN") {
+      if (
+        tenantCtx.role !== "DIRECTOR" &&
+        tenantCtx.role !== "CENTER_ADMIN" &&
+        !tenantCtx.isPlatformStaff
+      ) {
         return NextResponse.json({ error: "Forbidden" }, { status: 403 });
       }
 
@@ -36,13 +40,24 @@ export async function POST(req: Request) {
       // Generate a parent invite code linked to this specific student
       const code = `PARENT-${studentMem.id.slice(0, 5).toUpperCase()}-${Math.floor(1000 + Math.random() * 9000)}`;
 
+      let createdByMembershipId = tenantCtx.membership?.id;
+      if (!createdByMembershipId) {
+        const directorMem = await tenantDb.centerMembership.findFirst({
+          where: { role: "DIRECTOR" },
+        });
+        createdByMembershipId = directorMem?.id;
+      }
+      if (!createdByMembershipId) {
+        return NextResponse.json({ error: "Could not resolve creator membership" }, { status: 403 });
+      }
+
       const parentInvite = await tenantDb.inviteCode.create({
         data: {
           centerId: tenantCtx.center.id,
           code,
           targetRole: "PARENT",
           maxUses: 2, // Allow up to 2 parents (e.g. mom and dad)
-          createdByMembershipId: tenantCtx.membership?.id || tenantCtx.center.ownerId,
+          createdByMembershipId,
         },
       });
 
@@ -117,8 +132,9 @@ export async function POST(req: Request) {
                    confirmedAt: new Date(),
                  }
                });
-            } catch (e: any) {
-              if (e.code === 'P2002') {
+            } catch (e: unknown) {
+              const error = e as { code?: string };
+              if (error.code === 'P2002') {
                 await tenantDb.parentLink.updateMany({
                   where: { parentMembershipId: parentMem.id, studentMembershipId: studentMem.id },
                   data: { status: "CONFIRMED", confirmedAt: new Date() }
@@ -139,7 +155,8 @@ export async function POST(req: Request) {
     }
 
     return NextResponse.json({ error: "Invalid action" }, { status: 400 });
-  } catch (err: any) {
-    return NextResponse.json({ error: err.message || "Ошибка сервера" }, { status: 500 });
+  } catch (err: unknown) {
+    const error = err as { message?: string; status?: number };
+    return NextResponse.json({ error: error.message || "Ошибка сервера" }, { status: error.status || 500 });
   }
 }

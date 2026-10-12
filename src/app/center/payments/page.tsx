@@ -1,11 +1,11 @@
-import { requireTenantAccess } from "@/lib/tenant";
+import { requireTenantPageAccess } from "@/lib/tenant";
 import { getAuthSession } from "@/lib/auth";
-import { getTenantDb } from "@/lib/db-tenant";
 import { redirect } from "next/navigation";
 import PaymentsManager from "@/components/PaymentsManager";
+import { Prisma } from "@prisma/client";
 
 export default async function CenterPaymentsPage() {
-  const tenantCtx = await requireTenantAccess();
+  const tenantCtx = await requireTenantPageAccess();
 
   const session = await getAuthSession();
   if (!session) redirect("/login");
@@ -16,14 +16,14 @@ export default async function CenterPaymentsPage() {
   const activeRole = session.activeCenterRole || "";
   const currentMembership = session.memberships.find(m => m.centerId === centerId);
 
-  let whereCondition: any = { centerId };
-  let studentsWhereCondition: any = { centerId, role: "STUDENT" };
+  const whereCondition: Prisma.CenterPaymentWhereInput = { centerId };
+  const studentsWhereCondition: Prisma.CenterMembershipWhereInput = { centerId, role: "STUDENT" };
 
   if (activeRole === "STUDENT" && currentMembership) {
     whereCondition.studentMembershipId = currentMembership.id;
     studentsWhereCondition.id = currentMembership.id;
   } else if (activeRole === "PARENT" && currentMembership) {
-    const childLinks = await getTenantDb(tenantCtx.center.id).parentLink.findMany({
+    const childLinks = await tenantCtx.getTenantDb().parentLink.findMany({
       where: { parentMembershipId: currentMembership.id, status: "CONFIRMED" },
       select: { studentMembershipId: true },
     });
@@ -35,7 +35,7 @@ export default async function CenterPaymentsPage() {
     redirect("/center");
   }
 
-  const payments = await getTenantDb(tenantCtx.center.id).centerPayment.findMany({
+  const payments = await tenantCtx.getTenantDb().centerPayment.findMany({
     where: whereCondition,
     include: {
       student: { include: { user: { select: { fullName: true, email: true } } } },
@@ -44,12 +44,12 @@ export default async function CenterPaymentsPage() {
     orderBy: { createdAt: "desc" },
   });
 
-  const students = await getTenantDb(tenantCtx.center.id).centerMembership.findMany({
+  const students = await tenantCtx.getTenantDb().centerMembership.findMany({
     where: studentsWhereCondition,
     include: { user: { select: { fullName: true, email: true } } },
   });
 
-  const groups = await getTenantDb(tenantCtx.center.id).group.findMany({
+  const groups = await tenantCtx.getTenantDb().group.findMany({
     where: { course: { centerId } },
     select: { id: true, name: true },
   });

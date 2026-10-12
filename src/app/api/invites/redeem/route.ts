@@ -7,11 +7,12 @@ import { getTenantDb } from "@/lib/db-tenant";
 import { logAuditEvent } from "@/lib/tenant";
 import { checkSubscriptionLimit } from "@/lib/limits";
 import { checkRateLimit } from "@/lib/rate-limit";
+import { getClientIp } from "@/lib/ip";
 import { apiError, handleApiError } from "@/lib/api-response";
 
 export async function POST(req: Request) {
   try {
-    const ip = req.headers.get("x-forwarded-for") || "unknown";
+    const ip = getClientIp(req);
     if (!checkRateLimit(ip)) {
       return apiError("Too many attempts", "RATE_LIMITED", 429);
     }
@@ -233,10 +234,11 @@ export async function POST(req: Request) {
     });
 
     return response;
-  } catch (err: any) {
+  } catch (err: unknown) {
     console.error("Invite redeem error:", err);
+    const message = err instanceof Error ? err.message : "Error redeeming invite";
     return NextResponse.json(
-      { error: err.message || "Error redeeming invite" },
+      { error: message },
       { status: 500 }
     );
   }

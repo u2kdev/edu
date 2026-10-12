@@ -3,8 +3,17 @@
 import { useEffect, useState } from "react";
 import { Users, ShieldAlert, Check, Plus } from "lucide-react";
 
+interface PlatformOwnerItem {
+  id: string;
+  email: string;
+  fullName: string;
+  platformRole: string;
+  isActive: boolean;
+  createdAt: string;
+}
+
 export default function PlatformOwnersPage() {
-  const [owners, setOwners] = useState<any[]>([]);
+  const [owners, setOwners] = useState<PlatformOwnerItem[]>([]);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {

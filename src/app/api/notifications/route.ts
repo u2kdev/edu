@@ -15,7 +15,7 @@ export async function GET(req: Request) {
     const pageSize = Math.min(50, parseInt(searchParams.get("pageSize") || "20"));
     const unreadOnly = searchParams.get("unreadOnly") === "true";
 
-    const whereCondition: any = {
+    const whereCondition: Record<string, unknown> = {
       userId: session.user.id,
       // Show notifications for the active center or global (centerId: null) ones
       ...(session.activeCenterId
@@ -47,8 +47,9 @@ export async function GET(req: Request) {
     ]);
 
     return NextResponse.json({ notifications, total, page, pageSize, unreadCount });
-  } catch (err: any) {
-    return NextResponse.json({ error: err.message || "Server error" }, { status: 500 });
+  } catch (err: unknown) {
+    const message = err instanceof Error ? err.message : "Server error";
+    return NextResponse.json({ error: message }, { status: 500 });
   }
 }
 
@@ -91,7 +92,8 @@ export async function PATCH(req: Request) {
     }
 
     return NextResponse.json({ error: "Provide notificationId or markAllRead: true" }, { status: 400 });
-  } catch (err: any) {
-    return NextResponse.json({ error: err.message || "Server error" }, { status: 500 });
+  } catch (err: unknown) {
+    const message = err instanceof Error ? err.message : "Server error";
+    return NextResponse.json({ error: message }, { status: 500 });
   }
 }

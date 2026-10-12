@@ -1,32 +1,28 @@
 import { NextResponse } from "next/server";
-import { getTenantDb } from "@/lib/db-tenant";
 import { requireTenantAccess, logAuditEvent } from "@/lib/tenant";
+import { Prisma } from "@prisma/client";
 
 // GET /api/tenant/announcements
 export async function GET(req: Request) {
   try {
-    const tenantCtx = await requireTenantAccess();
-    const tenantDb = getTenantDb(tenantCtx.center.id);
+    const tenantCtx = await requireTenantAccess(req);
+    const tenantDb = tenantCtx.getTenantDb();
     const { searchParams } = new URL(req.url);
     const groupId = searchParams.get("groupId");
     const page = Math.max(1, parseInt(searchParams.get("page") || "1"));
     const pageSize = Math.min(50, parseInt(searchParams.get("pageSize") || "20"));
     const now = new Date();
 
-    let whereCondition: any = {
+    const whereCondition: Prisma.AnnouncementWhereInput = {
       publishAt: { lte: now }, // Only published
       OR: [{ expiresAt: null }, { expiresAt: { gte: now } }], // Not expired
     };
 
     // Role-based filtering: show announcements targeted to this role or all
     if (tenantCtx.role !== "DIRECTOR" && tenantCtx.role !== "CENTER_ADMIN") {
-      whereCondition.AND = [
-        {
-          OR: [
-            { targetRole: null }, // Announcements for everyone
-            { targetRole: tenantCtx.role }, // Announcements for this role
-          ],
-        },
+      const roleOrConditions: Prisma.AnnouncementWhereInput[] = [
+        { targetRole: null },
+        { targetRole: tenantCtx.role },
       ];
 
       // Student/Parent: also filter by enrolled groups
@@ -54,8 +50,10 @@ export async function GET(req: Request) {
           relevantGroupIds = childEnrollments.map((e) => e.groupId);
         }
 
-        whereCondition.AND[0].OR.push({ groupId: { in: relevantGroupIds } });
+        roleOrConditions.push({ groupId: { in: relevantGroupIds } });
       }
+
+      whereCondition.AND = [{ OR: roleOrConditions }];
     }
 
     if (groupId) {
@@ -81,16 +79,17 @@ export async function GET(req: Request) {
     ]);
 
     return NextResponse.json({ announcements, total, page, pageSize });
-  } catch (err: any) {
-    return NextResponse.json({ error: err.message || "Server error" }, { status: 400 });
+  } catch (err: unknown) {
+    const error = err as { message?: string; status?: number };
+    return NextResponse.json({ error: error.message || "Server error" }, { status: error.status || 400 });
   }
 }
 
 // POST /api/tenant/announcements
 export async function POST(req: Request) {
   try {
-    const tenantCtx = await requireTenantAccess();
-    const tenantDb = getTenantDb(tenantCtx.center.id);
+    const tenantCtx = await requireTenantAccess(req);
+    const tenantDb = tenantCtx.getTenantDb();
 
     // Teachers can create announcements for their own groups only
     if (
@@ -155,16 +154,17 @@ export async function POST(req: Request) {
     });
 
     return NextResponse.json({ success: true, announcement });
-  } catch (err: any) {
-    return NextResponse.json({ error: err.message || "Server error" }, { status: 400 });
+  } catch (err: unknown) {
+    const error = err as { message?: string; status?: number };
+    return NextResponse.json({ error: error.message || "Server error" }, { status: error.status || 400 });
   }
 }
 
 // PATCH /api/tenant/announcements
 export async function PATCH(req: Request) {
   try {
-    const tenantCtx = await requireTenantAccess();
-    const tenantDb = getTenantDb(tenantCtx.center.id);
+    const tenantCtx = await requireTenantAccess(req);
+    const tenantDb = tenantCtx.getTenantDb();
     const { id, title, body, targetRole, groupId, isPinned, publishAt, expiresAt } = await req.json();
 
     if (!id) return NextResponse.json({ error: "Announcement ID required" }, { status: 400 });
@@ -208,16 +208,17 @@ export async function PATCH(req: Request) {
     const announcement = await tenantDb.announcement.findFirst({ where: { id } });
 
     return NextResponse.json({ success: true, announcement });
-  } catch (err: any) {
-    return NextResponse.json({ error: err.message || "Server error" }, { status: 400 });
+  } catch (err: unknown) {
+    const error = err as { message?: string; status?: number };
+    return NextResponse.json({ error: error.message || "Server error" }, { status: error.status || 400 });
   }
 }
 
 // DELETE /api/tenant/announcements
 export async function DELETE(req: Request) {
   try {
-    const tenantCtx = await requireTenantAccess();
-    const tenantDb = getTenantDb(tenantCtx.center.id);
+    const tenantCtx = await requireTenantAccess(req);
+    const tenantDb = tenantCtx.getTenantDb();
     const { id } = await req.json();
     if (!id) return NextResponse.json({ error: "Announcement ID required" }, { status: 400 });
 
@@ -249,7 +250,8 @@ export async function DELETE(req: Request) {
     });
 
     return NextResponse.json({ success: true });
-  } catch (err: any) {
-    return NextResponse.json({ error: err.message || "Server error" }, { status: 400 });
+  } catch (err: unknown) {
+    const error = err as { message?: string; status?: number };
+    return NextResponse.json({ error: error.message || "Server error" }, { status: error.status || 400 });
   }
 }

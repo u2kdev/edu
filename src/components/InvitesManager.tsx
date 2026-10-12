@@ -4,10 +4,30 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { KeyRound, Plus, Copy, Check, Users, Shield, Link2 } from "lucide-react";
 
+export interface InviteItem {
+  id: string;
+  code: string;
+  targetRole: string;
+  usesCount: number;
+  maxUses: number | null;
+  course?: { title: string } | null;
+  group?: { name: string } | null;
+}
+
+export interface CourseSelectItem {
+  id: string;
+  title: string;
+}
+
+export interface GroupSelectItem {
+  id: string;
+  name: string;
+}
+
 interface InvitesManagerProps {
-  initialInvites: any[];
-  courses: any[];
-  groups: any[];
+  initialInvites: InviteItem[];
+  courses: CourseSelectItem[];
+  groups: GroupSelectItem[];
   role?: string;
 }
 

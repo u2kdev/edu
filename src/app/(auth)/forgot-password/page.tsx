@@ -30,7 +30,7 @@ export default function ForgotPasswordPage() {
       } else {
         setSuccess(true);
       }
-    } catch (err: any) {
+    } catch {
       setError(t("auth.error", locale));
     } finally {
       setLoading(false);

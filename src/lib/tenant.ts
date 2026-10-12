@@ -1,5 +1,6 @@
 import { db } from "./db";
 import { getAuthSession } from "./auth";
+import { getTenantDb } from "./db-tenant";
 
 export async function logAuditEvent(params: {
   centerId?: string;
@@ -7,7 +8,7 @@ export async function logAuditEvent(params: {
   action: string;
   resource: string;
   resourceId?: string;
-  details?: Record<string, any>;
+  details?: Record<string, unknown>;
   ipAddress?: string;
 }) {
   try {
@@ -27,40 +28,200 @@ export async function logAuditEvent(params: {
   }
 }
 
-export async function requireTenantAccess(expectedCenterId?: string) {
+export class TenantAccessError extends Error {
+  status: number;
+  code: string;
+  constructor(message: string, code: string, status: number = 403) {
+    super(message);
+    this.name = "TenantAccessError";
+    this.code = code;
+    this.status = status;
+  }
+}
+
+export class TenantUnauthorizedError extends TenantAccessError {
+  constructor(message: string = "Unauthorized: No session found") {
+    super(message, "UNAUTHORIZED", 401);
+    this.name = "TenantUnauthorizedError";
+  }
+}
+
+export class TenantNotFoundError extends TenantAccessError {
+  constructor(message: string = "Tenant center not found") {
+    super(message, "TENANT_NOT_FOUND", 404);
+    this.name = "TenantNotFoundError";
+  }
+}
+
+export class TenantSuspendedError extends TenantAccessError {
+  constructor(status: string) {
+    super(`Forbidden: Tenant suspended: ${status}`, "CENTER_SUSPENDED", 403);
+    this.name = "TenantSuspendedError";
+  }
+}
+
+export class TenantMembershipError extends TenantAccessError {
+  constructor(message: string = "Forbidden: Active membership required", code: string = "MEMBERSHIP_INACTIVE") {
+    super(message, code, 403);
+    this.name = "TenantMembershipError";
+  }
+}
+
+export const CENTER_SUSPENDED_STATUSES = ["BLOCKED", "CANCELLED", "PAUSED", "OVERDUE"] as const;
+
+async function extractReason(
+  req: Request,
+  options?: { reason?: string }
+): Promise<string | undefined> {
+  if (options?.reason && typeof options.reason === "string" && options.reason.trim()) {
+    return options.reason.trim();
+  }
+  const headerReason = req.headers.get("x-action-reason") || req.headers.get("x-reason");
+  if (headerReason && headerReason.trim()) {
+    return headerReason.trim();
+  }
+  try {
+    const url = new URL(req.url);
+    const queryReason = url.searchParams.get("reason");
+    if (queryReason && queryReason.trim()) return queryReason.trim();
+  } catch {}
+  try {
+    const cloned = req.clone();
+    const body = await cloned.json();
+    if (body && typeof body.reason === "string" && body.reason.trim()) {
+      return body.reason.trim();
+    }
+  } catch {}
+  return undefined;
+}
+
+export async function requireTenantAccess(
+  req: Request,
+  expectedCenterIdOrOptions?: string | { isWrite?: boolean; allowSuspended?: boolean; reason?: string },
+  maybeOptions?: { isWrite?: boolean; allowSuspended?: boolean; reason?: string }
+) {
+  if (!req || typeof req !== "object" || !("method" in req)) {
+    throw new Error("requireTenantAccess requires a Request object as its first argument");
+  }
+
+  const expectedCenterId =
+    typeof expectedCenterIdOrOptions === "string" ? expectedCenterIdOrOptions : undefined;
+  const options =
+    typeof expectedCenterIdOrOptions === "object" ? expectedCenterIdOrOptions : maybeOptions;
+
+  let isWrite = options?.isWrite;
+  if (isWrite === undefined) {
+    const method = req.method?.toUpperCase();
+    isWrite = ["POST", "PUT", "PATCH", "DELETE"].includes(method);
+  }
+
   const session = await getAuthSession();
   if (!session) {
-    throw new Error("Unauthorized: No session found");
+    throw new TenantUnauthorizedError();
   }
 
   const targetCenterId = expectedCenterId || session.activeCenterId;
   if (!targetCenterId) {
-    throw new Error("Bad Request: No active learning center selected");
+    throw new TenantAccessError("Bad Request: No active learning center selected", "BAD_REQUEST", 400);
   }
 
-  // DEVELOPER, SUPERADMIN & Platform Support bypass tenant isolation for impersonation/support
-  if (
+  // DEVELOPER, SUPERADMIN & PLATFORM_SUPPORT bypass tenant isolation
+  const isPlatformRole =
     session.user.platformRole === "DEVELOPER" ||
     session.user.platformRole === "SUPERADMIN" ||
-    session.user.platformRole === "PLATFORM_SUPPORT" ||
-    session.user.platformRole === "FULL_ACCESS"
-  ) {
+    session.user.platformRole === "PLATFORM_SUPPORT";
+
+  if (isPlatformRole) {
     const center = await db.learningCenter.findUnique({
       where: { id: targetCenterId },
     });
-    if (!center) throw new Error("Tenant center not found");
+    if (!center) throw new TenantNotFoundError();
+
+    const isBlockedOrCancelled = center.status === "BLOCKED" || center.status === "CANCELLED";
+    if (isBlockedOrCancelled) {
+      if (session.user.platformRole !== "SUPERADMIN" && session.user.platformRole !== "DEVELOPER") {
+        throw new TenantAccessError(
+          `Forbidden: Platform access to ${center.status} centers is restricted to SUPERADMIN and DEVELOPER`,
+          "SUSPENDED_ACCESS_DENIED",
+          403
+        );
+      }
+
+      if (isWrite) {
+        const reason = await extractReason(req, options);
+        if (!reason) {
+          throw new TenantAccessError(
+            `A reason is required for write operations on ${center.status} centers`,
+            "REASON_REQUIRED",
+            400
+          );
+        }
+
+        await logAuditEvent({
+          centerId: targetCenterId,
+          actorUserId: session.user.id,
+          action: "PLATFORM_SUSPENDED_TENANT_WRITE",
+          resource: "LearningCenter",
+          resourceId: targetCenterId,
+          details: {
+            platformRole: session.user.platformRole,
+            centerStatus: center.status,
+            reason,
+          },
+        });
+      }
+    }
+
+    if (session.user.platformRole === "PLATFORM_SUPPORT") {
+      if (isWrite) {
+        throw new TenantAccessError("Forbidden: Platform support has read-only access", "SUPPORT_READ_ONLY", 403);
+      }
+    }
+
+    await logAuditEvent({
+      centerId: targetCenterId,
+      actorUserId: session.user.id,
+      action: "PLATFORM_TENANT_ACCESS",
+      resource: "LearningCenter",
+      resourceId: targetCenterId,
+      details: {
+        platformRole: session.user.platformRole,
+        isWrite: !!isWrite,
+      },
+    });
+
+    const isSupport = session.user.platformRole === "PLATFORM_SUPPORT";
+    const platformRole = session.user.platformRole;
+
     return {
       session,
       center,
-      role: session.activeCenterRole || "DIRECTOR",
+      membership: undefined,
+      role: platformRole,
       isPlatformStaff: true,
+      isReadOnly: isSupport,
+      getTenantDb: () => getTenantDb(center.id, { isReadOnly: isSupport }),
     };
   }
 
-  // Standard user check membership in target center
-  const membership = session.memberships.find((m) => m.centerId === targetCenterId);
+  // Standard user check membership in target center from DB
+  const membership = await db.centerMembership.findFirst({
+    where: {
+      userId: session.user.id,
+      centerId: targetCenterId,
+    },
+  });
+
   if (!membership) {
-    throw new Error("Forbidden: You do not have access to this learning center");
+    throw new TenantMembershipError("Forbidden: You do not have access to this learning center", "FORBIDDEN");
+  }
+
+  if (membership.status !== "ACTIVE") {
+    throw new TenantMembershipError("Forbidden: Membership is not active", "MEMBERSHIP_INACTIVE");
+  }
+
+  if (!session.user.emailVerified) {
+    throw new TenantAccessError("Forbidden: Email verification required", "EMAIL_NOT_VERIFIED", 403);
   }
 
   const center = await db.learningCenter.findUnique({
@@ -68,22 +229,21 @@ export async function requireTenantAccess(expectedCenterId?: string) {
   });
 
   if (!center) {
-    throw new Error("Tenant center not found");
+    throw new TenantNotFoundError();
   }
 
-  // Check center status
-  if (["BLOCKED", "CANCELLED", "PAUSED", "OVERDUE", "FROZEN"].includes(center.status)) {
-    // If it's a specific status that some roles can still access, allow them
-    if ((center.status === "PAUSED" || center.status === "OVERDUE" || center.status === "FROZEN") && 
-        (membership.role === "DIRECTOR" || membership.role === "CENTER_ADMIN")) {
-      // allow
+  const isSuspendedAllowed = CENTER_SUSPENDED_STATUSES.includes(center.status as (typeof CENTER_SUSPENDED_STATUSES)[number]);
+  if (isSuspendedAllowed) {
+    if (["PAUSED", "OVERDUE"].includes(center.status) && options?.allowSuspended) {
+      if (isWrite) {
+        throw new TenantAccessError("Forbidden: Learning center is suspended for write operations", "CENTER_SUSPENDED_WRITE", 403);
+      }
     } else {
-      const err: any = new Error(`Forbidden: Tenant suspended: ${center.status}`);
-      err.status = 403;
-      err.code = "CENTER_SUSPENDED";
-      throw err;
+      throw new TenantSuspendedError(center.status);
     }
   }
+
+  const isReadOnly = isSuspendedAllowed;
 
   return {
     session,
@@ -91,5 +251,14 @@ export async function requireTenantAccess(expectedCenterId?: string) {
     membership,
     role: membership.role,
     isPlatformStaff: false,
+    isReadOnly,
+    getTenantDb: () => getTenantDb(center.id, { isReadOnly }),
   };
+}
+
+export async function requireTenantPageAccess(
+  options?: { expectedCenterId?: string; allowSuspended?: boolean }
+) {
+  const req = new Request("http://localhost/rsc", { method: "GET" });
+  return requireTenantAccess(req, options);
 }

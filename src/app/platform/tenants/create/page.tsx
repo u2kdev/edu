@@ -81,8 +81,8 @@ export default function CreateTenantPage() {
       } else {
         router.push('/platform/tenants');
       }
-    } catch (error: any) {
-      setSubmitError(error.message);
+    } catch (error: unknown) {
+      setSubmitError(error instanceof Error ? error.message : "Failed to create center");
       setIsSubmitting(false);
     }
   };

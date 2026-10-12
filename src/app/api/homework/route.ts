@@ -1,17 +1,17 @@
 import { NextResponse } from "next/server";
-import { getTenantDb } from "@/lib/db-tenant";
 import { requireTenantAccess, logAuditEvent } from "@/lib/tenant";
 import { sendNotification } from "@/lib/notifications";
+import { Prisma } from "@prisma/client";
 
 // GET /api/homework?lessonId=xxx - List homeworks for a lesson (tenant-scoped)
 export async function GET(req: Request) {
   try {
-    const tenantCtx = await requireTenantAccess();
-    const tenantDb = getTenantDb(tenantCtx.center.id);
+    const tenantCtx = await requireTenantAccess(req);
+    const tenantDb = tenantCtx.getTenantDb();
     const { searchParams } = new URL(req.url);
     const lessonId = searchParams.get("lessonId");
 
-    let whereCondition: any = {
+    let whereCondition: Prisma.HomeworkWhereInput = {
       lesson: { module: { course: { centerId: tenantCtx.center.id } } },
     };
 
@@ -64,16 +64,17 @@ export async function GET(req: Request) {
     });
 
     return NextResponse.json({ homeworks });
-  } catch (err: any) {
-    return NextResponse.json({ error: err.message || "Server error" }, { status: 500 });
+  } catch (err: unknown) {
+    const error = err as { message?: string; status?: number };
+    return NextResponse.json({ error: error.message || "Server error" }, { status: error.status || 500 });
   }
 }
 
 // POST /api/homework - Create homework linked to a lesson
 export async function POST(req: Request) {
   try {
-    const tenantCtx = await requireTenantAccess();
-    const tenantDb = getTenantDb(tenantCtx.center.id);
+    const tenantCtx = await requireTenantAccess(req);
+    const tenantDb = tenantCtx.getTenantDb();
 
     if (
       tenantCtx.role !== "DIRECTOR" &&
@@ -181,16 +182,17 @@ export async function POST(req: Request) {
     }
 
     return NextResponse.json({ success: true, homework });
-  } catch (err: any) {
-    return NextResponse.json({ error: err.message || "Server error" }, { status: 500 });
+  } catch (err: unknown) {
+    const error = err as { message?: string; status?: number };
+    return NextResponse.json({ error: error.message || "Server error" }, { status: error.status || 500 });
   }
 }
 
 // PATCH /api/homework - Submit or Grade homework
 export async function PATCH(req: Request) {
   try {
-    const tenantCtx = await requireTenantAccess();
-    const tenantDb = getTenantDb(tenantCtx.center.id);
+    const tenantCtx = await requireTenantAccess(req);
+    const tenantDb = tenantCtx.getTenantDb();
     const { action, homeworkId, submissionText, filesJson, grade, feedback, studentMembershipId } = await req.json();
 
     if (!homeworkId) {
@@ -304,7 +306,7 @@ export async function PATCH(req: Request) {
         data: {
           grade: grade !== undefined ? parseInt(grade) : null,
           feedback: feedback || null,
-          gradedByMembershipId: tenantCtx.membership?.id,
+          gradedByMembershipId: tenantCtx.membership?.id || null,
           gradedAt: new Date(),
         },
       });
@@ -326,7 +328,8 @@ export async function PATCH(req: Request) {
     }
 
     return NextResponse.json({ error: "Invalid action" }, { status: 400 });
-  } catch (err: any) {
-    return NextResponse.json({ error: err.message || "Server error" }, { status: 500 });
+  } catch (err: unknown) {
+    const error = err as { message?: string; status?: number };
+    return NextResponse.json({ error: error.message || "Server error" }, { status: error.status || 500 });
   }
 }

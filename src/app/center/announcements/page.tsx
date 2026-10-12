@@ -1,12 +1,12 @@
-import { requireTenantAccess } from "@/lib/tenant";
+import { requireTenantPageAccess } from "@/lib/tenant";
 import { getAuthSession } from "@/lib/auth";
-import { getTenantDb } from "@/lib/db-tenant";
 import { redirect } from "next/navigation";
 import { Megaphone, Pin, Clock, Users, BookOpen } from "lucide-react";
 import { t, formatDateLocalized } from "@/i18n";
+import { Prisma } from "@prisma/client";
 
 export default async function AnnouncementsPage() {
-  const tenantCtx = await requireTenantAccess();
+  const tenantCtx = await requireTenantPageAccess();
 
   const session = await getAuthSession();
   if (!session) redirect("/login");
@@ -21,7 +21,7 @@ export default async function AnnouncementsPage() {
   const now = new Date();
 
   // Role-scoped query
-  let whereCondition: any = {
+  const whereCondition: Prisma.AnnouncementWhereInput = {
     centerId,
     publishAt: { lte: now },
     OR: [{ expiresAt: null }, { expiresAt: { gte: now } }],
@@ -38,7 +38,7 @@ export default async function AnnouncementsPage() {
     ];
   }
 
-  const announcements = await getTenantDb(tenantCtx.center.id).announcement.findMany({
+  const announcements = await tenantCtx.getTenantDb().announcement.findMany({
     where: whereCondition,
     include: {
       author: { include: { user: { select: { fullName: true } } } },
@@ -126,13 +126,24 @@ export default async function AnnouncementsPage() {
   );
 }
 
+interface AnnouncementItem {
+  id?: string;
+  title: string;
+  body: string;
+  targetRole?: string | null;
+  publishAt: Date | string;
+  expiresAt?: Date | string | null;
+  group?: { name: string } | null;
+  author: { user: { fullName: string } };
+}
+
 function AnnouncementCard({
   announcement,
   locale,
   roleLabels,
   isPinned = false,
 }: {
-  announcement: any;
+  announcement: AnnouncementItem;
   locale: string;
   roleLabels: Record<string, string>;
   isPinned?: boolean;

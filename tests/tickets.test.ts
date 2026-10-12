@@ -41,16 +41,16 @@ describe("Platform Support Tickets IDOR Check", () => {
     await db.platformUser.deleteMany({ where: { id: { in: [userA, userB] } } });
   });
 
-  const mockReq = (url: string, method = "GET", body?: any) => 
+  const mockReq = (url: string, method = "GET", body?: unknown) => 
     new Request(`http://localhost${url}`, { method, body: body ? JSON.stringify(body) : undefined });
 
   it("User A cannot view User B ticket in the list", async () => {
     mockToken = signJWT({ userId: userA, email: "a", platformRole: "NONE", activeCenterId: centerA, activeCenterRole: "DIRECTOR" });
     const res = await getTickets(mockReq(`/api/tickets`));
-    const data = await res.json();
+    const data = (await res.json()) as { tickets: { id: string }[] };
     
     expect(res.status).toBe(200);
-    expect(data.tickets.some((t: any) => t.id === ticketB)).toBe(false);
+    expect(data.tickets.some((t: { id: string }) => t.id === ticketB)).toBe(false);
   });
 
   it("User A cannot view User B ticket by ID (GET)", async () => {

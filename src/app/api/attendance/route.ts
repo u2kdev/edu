@@ -1,13 +1,12 @@
 import { NextResponse } from "next/server";
-import { getTenantDb } from "@/lib/db-tenant";
 import { requireTenantAccess, logAuditEvent } from "@/lib/tenant";
 import { sendNotification } from "@/lib/notifications";
 
 // GET /api/attendance?lessonId=xxx - Get attendance for a lesson
 export async function GET(req: Request) {
   try {
-    const tenantCtx = await requireTenantAccess();
-    const tenantDb = getTenantDb(tenantCtx.center.id);
+    const tenantCtx = await requireTenantAccess(req);
+    const tenantDb = tenantCtx.getTenantDb();
     const { searchParams } = new URL(req.url);
     const lessonId = searchParams.get("lessonId");
 
@@ -26,8 +25,43 @@ export async function GET(req: Request) {
       return NextResponse.json({ error: "Lesson not found or access denied" }, { status: 404 });
     }
 
+    const whereCondition: {
+      lessonId: string;
+      studentMembershipId?: string | { in: string[] };
+    } = { lessonId };
+
+    if (tenantCtx.role === "STUDENT" && tenantCtx.membership) {
+      whereCondition.studentMembershipId = tenantCtx.membership.id;
+    } else if (tenantCtx.role === "PARENT" && tenantCtx.membership) {
+      const childLinks = await tenantDb.parentLink.findMany({
+        where: { parentMembershipId: tenantCtx.membership.id, status: "CONFIRMED" },
+        select: { studentMembershipId: true },
+      });
+      whereCondition.studentMembershipId = { in: childLinks.map((l: { studentMembershipId: string }) => l.studentMembershipId) };
+    } else if (tenantCtx.role === "TEACHER" && tenantCtx.membership) {
+      const teacherGroups = await tenantDb.group.findMany({
+        where: { teacherMembershipId: tenantCtx.membership.id },
+        select: { id: true },
+      });
+      const groupEnrollments = await tenantDb.enrollment.findMany({
+        where: { groupId: { in: teacherGroups.map((g: { id: string }) => g.id) } },
+        select: { studentMembershipId: true },
+      });
+      whereCondition.studentMembershipId = { in: groupEnrollments.map((e: { studentMembershipId: string }) => e.studentMembershipId) };
+    } else if (tenantCtx.role === "TEACHER_ASSISTANT" && tenantCtx.membership) {
+      const assistantGroups = await tenantDb.group.findMany({
+        where: { assistantMembershipId: tenantCtx.membership.id },
+        select: { id: true },
+      });
+      const groupEnrollments = await tenantDb.enrollment.findMany({
+        where: { groupId: { in: assistantGroups.map((g: { id: string }) => g.id) } },
+        select: { studentMembershipId: true },
+      });
+      whereCondition.studentMembershipId = { in: groupEnrollments.map((e: { studentMembershipId: string }) => e.studentMembershipId) };
+    }
+
     const attendances = await tenantDb.attendance.findMany({
-      where: { lessonId },
+      where: whereCondition,
       include: {
         student: {
           include: {
@@ -38,16 +72,17 @@ export async function GET(req: Request) {
     });
 
     return NextResponse.json({ attendances });
-  } catch (err: any) {
-    return NextResponse.json({ error: err.message || "Server error" }, { status: 500 });
+  } catch (err: unknown) {
+    const error = err as { message?: string };
+    return NextResponse.json({ error: error?.message || "Server error" }, { status: (err as { status?: number })?.status || 500 });
   }
 }
 
 // POST /api/attendance - Mark attendance for students (PRESENT, ABSENT, EXCUSED, LATE)
 export async function POST(req: Request) {
   try {
-    const tenantCtx = await requireTenantAccess();
-    const tenantDb = getTenantDb(tenantCtx.center.id);
+    const tenantCtx = await requireTenantAccess(req);
+    const tenantDb = tenantCtx.getTenantDb();
     if (
       tenantCtx.role !== "DIRECTOR" &&
       tenantCtx.role !== "CENTER_ADMIN" &&
@@ -76,19 +111,25 @@ export async function POST(req: Request) {
     }
 
     // SECURITY: Verify all studentMembershipIds belong to this tenant
-    if (records.length > 0) {
-      const membershipIds = records.map((r: any) => r.studentMembershipId);
-      const validMemberships = await tenantDb.centerMembership.findMany({
-        where: {
-          id: { in: membershipIds },
-          role: "STUDENT",
-        },
+    interface AttendanceRecordInput {
+      studentMembershipId: string;
+      status: string;
+    }
+    const attendanceRecords = records as AttendanceRecordInput[];
+    // SECURITY: If teacher, verify students belong to teacher's groups
+    if (tenantCtx.role === "TEACHER" && tenantCtx.membership && attendanceRecords.length > 0) {
+      const teacherGroups = await tenantDb.group.findMany({
+        where: { teacherMembershipId: tenantCtx.membership.id },
         select: { id: true },
       });
-      const validIds = new Set(validMemberships.map((m: any) => m.id));
-      const invalidRecord = records.find((r: any) => !validIds.has(r.studentMembershipId));
-      if (invalidRecord) {
-        return NextResponse.json({ error: "One or more student memberships are invalid or cross-tenant" }, { status: 403 });
+      const allowedEnrollments = await tenantDb.enrollment.findMany({
+        where: { groupId: { in: teacherGroups.map((g: { id: string }) => g.id) } },
+        select: { studentMembershipId: true },
+      });
+      const allowedStudentIds = new Set(allowedEnrollments.map((e: { studentMembershipId: string }) => e.studentMembershipId));
+      const unauthorizedRecord = attendanceRecords.find((r) => !allowedStudentIds.has(r.studentMembershipId));
+      if (unauthorizedRecord) {
+        return NextResponse.json({ error: "Teachers can only mark attendance for students in their own groups" }, { status: 403 });
       }
     }
 
@@ -98,8 +139,24 @@ export async function POST(req: Request) {
     }
     const markerId = tenantCtx.membership.id;
 
+    // Check if any student in records is ARCHIVED
+    const targetStudents = await tenantDb.centerMembership.findMany({
+      where: {
+        id: { in: attendanceRecords.map((r) => r.studentMembershipId) },
+        role: "STUDENT",
+      },
+      select: { id: true, status: true },
+    });
+    const archivedStudent = targetStudents.find((m) => m.status === "ARCHIVED");
+    if (archivedStudent) {
+      return NextResponse.json(
+        { error: "Cannot mark attendance for archived student" },
+        { status: 400 }
+      );
+    }
+
     // Use updateMany for UPSERT simulation with getTenantDb because prisma extension doesn't fully intercept compound where upserts well yet.
-    for (const r of records) {
+    for (const r of attendanceRecords) {
       const existing = await tenantDb.attendance.findFirst({
         where: { lessonId, studentMembershipId: r.studentMembershipId }
       });
@@ -122,8 +179,9 @@ export async function POST(req: Request) {
                markedByMembershipId: markerId,
              }
           });
-        } catch (e: any) {
-          if (e.code === 'P2002') {
+        } catch (e: unknown) {
+          const err = e as { code?: string };
+          if (err?.code === 'P2002') {
             await tenantDb.attendance.updateMany({
                where: { lessonId, studentMembershipId: r.studentMembershipId },
                data: {
@@ -140,7 +198,7 @@ export async function POST(req: Request) {
     }
 
     // Auto notification for ABSENT or LATE students to Parents
-    for (const r of records) {
+    for (const r of attendanceRecords) {
       if (r.status === "ABSENT" || r.status === "LATE") {
         const parentLinks = await tenantDb.parentLink.findMany({
           where: { studentMembershipId: r.studentMembershipId, status: "CONFIRMED" },
@@ -170,12 +228,12 @@ export async function POST(req: Request) {
       action: "ATTENDANCE_MARKED",
       resource: "Lesson",
       resourceId: lessonId,
-      details: { count: records.length },
+      details: { count: attendanceRecords.length },
     });
 
-    return NextResponse.json({ success: true, count: records.length });
-  } catch (err: any) {
-    console.error("Attendance mark error:", err);
-    return NextResponse.json({ error: err.message || "Server error" }, { status: 500 });
+    return NextResponse.json({ success: true, count: attendanceRecords.length });
+  } catch (err: unknown) {
+    const error = err as { message?: string; status?: number };
+    return NextResponse.json({ error: error?.message || "Server error" }, { status: error?.status || 400 });
   }
 }

@@ -4,9 +4,24 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { Shield, Building2, Plus, UserPlus, AlertCircle } from "lucide-react";
 
+export interface PlanOption {
+  id: string;
+  name: string;
+  priceMonthly?: number;
+}
+
+export interface AdminCenterItem {
+  id: string;
+  name: string;
+  slug: string;
+  status: string;
+  owner?: { fullName?: string | null; email?: string | null } | null;
+  subscriptions: Array<{ plan?: { name: string } | null }>;
+}
+
 interface PlatformAdminManagerProps {
-  initialCenters: any[];
-  plans: any[];
+  initialCenters: AdminCenterItem[];
+  plans: PlanOption[];
   metrics: {
     totalCenters: number;
     activeCenters: number;
@@ -72,7 +87,7 @@ export default function PlatformAdminManager({ initialCenters, plans, metrics }:
       } else {
         setError(data.error || "Ошибка при создании центра");
       }
-    } catch (err: any) {
+    } catch {
       setError("Ошибка сети");
     } finally {
       setLoading(false);
