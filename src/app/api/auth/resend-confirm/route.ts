@@ -12,7 +12,7 @@ export async function POST(req: Request) {
     const ip = getClientIp(req);
     
     // Strict rate limit for resending emails
-    if (!checkRateLimit(ip + "_resend_email", 3, 60 * 60 * 1000)) {
+    if (!(await checkRateLimit(ip + "_resend_email", 3, 60 * 60 * 1000))) {
       return apiError("Too many attempts. Please try again later.", "RATE_LIMITED", 429);
     }
 

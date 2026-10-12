@@ -18,7 +18,7 @@ export async function POST(req: Request) {
     const ip = getClientIp(req);
     const userAgent = req.headers.get("user-agent") || "unknown";
 
-    if (!checkRateLimit(ip)) {
+    if (!(await checkRateLimit(ip))) {
       return apiError("Too many attempts", "RATE_LIMITED", 429);
     }
 

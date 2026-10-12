@@ -36,7 +36,10 @@ describe("User Sessions API", () => {
     await db.platformUser.deleteMany({ where: { id: user } });
   });
 
-  const mockReq = (url: string) => new Request(`http://localhost${url}`);
+  const mockReq = (url: string) =>
+    new Request(`http://localhost${url}`, {
+      headers: { "x-forwarded-for": `10.5.${Math.floor(Math.random() * 200)}.${Math.floor(Math.random() * 200)}` },
+    });
 
   it("should list active sessions", async () => {
     mockToken = signJWT({ userId: user, email: "test", platformRole: "NONE" }, "7d", "jti1");
@@ -130,8 +133,9 @@ describe("User Sessions API", () => {
   it("d. cannot revoke someone else's session, DB unchanged", async () => {
     // Session 5 belongs to another user
     const otherUser = await db.platformUser.create({ data: { email: `other-${Date.now()}@test.com`, passwordHash: "x", fullName: "Other" } });
+    const otherJti = `jti5_${Date.now()}_${Math.random()}`;
     const s5 = await db.userSession.create({
-      data: { userId: otherUser.id, jtiHash: hashJti("jti5"), expiresAt: new Date(Date.now() + 100000) }
+      data: { userId: otherUser.id, jtiHash: hashJti(otherJti), expiresAt: new Date(Date.now() + 100000) }
     });
 
     mockToken = signJWT({ userId: user, email: "test", platformRole: "NONE" }, "7d", "jti4"); // current user is user, not otherUser
@@ -141,6 +145,7 @@ describe("User Sessions API", () => {
     const checkS5 = await db.userSession.findUnique({ where: { id: s5.id } });
     expect(checkS5?.revokedAt).toBeNull(); // Unchanged
     
+    await db.userSession.deleteMany({ where: { userId: otherUser.id } });
     await db.platformUser.delete({ where: { id: otherUser.id } });
   });
 

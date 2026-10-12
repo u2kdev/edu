@@ -19,19 +19,19 @@ export async function POST(req: Request) {
     const body = await req.json().catch(() => ({}));
     const rawCode = typeof body.inviteCode === "string" ? body.inviteCode.toUpperCase().trim() : "UNKNOWN";
 
-    if (!checkRateLimit(ip + "_register", REGISTER_CONFIG.IP_HOURLY_LIMIT, 3600000)) {
+    if (!(await checkRateLimit(ip + "_register", REGISTER_CONFIG.IP_HOURLY_LIMIT, 3600000))) {
       return apiError("Too many registration attempts from this IP", "RATE_LIMITED", 429);
     }
-    if (!checkRateLimit(rawCode + "_register", REGISTER_CONFIG.CODE_HOURLY_LIMIT, 3600000)) {
+    if (!(await checkRateLimit(rawCode + "_register", REGISTER_CONFIG.CODE_HOURLY_LIMIT, 3600000))) {
       return apiError("Too many registrations for this code", "RATE_LIMITED", 429);
     }
-    if (!checkRateLimit(ip + "_" + rawCode + "_register", REGISTER_CONFIG.CODE_IP_HOURLY_LIMIT, 3600000, false)) {
+    if (!(await checkRateLimit(ip + "_" + rawCode + "_register", REGISTER_CONFIG.CODE_IP_HOURLY_LIMIT, 3600000, false))) {
       return apiError("Too many registration attempts for this code from this IP", "RATE_LIMITED", 429);
     }
 
     const parsed = registerSchema.safeParse(body);
     if (!parsed.success) {
-      checkRateLimit(ip + "_" + rawCode + "_register", REGISTER_CONFIG.CODE_IP_HOURLY_LIMIT, 3600000, true);
+      await checkRateLimit(ip + "_" + rawCode + "_register", REGISTER_CONFIG.CODE_IP_HOURLY_LIMIT, 3600000, true);
       return apiError("Invalid data", "BAD_REQUEST", 400);
     }
     const { email: rawEmail, password, fullName, phone, inviteCode } = parsed.data;
@@ -44,19 +44,19 @@ export async function POST(req: Request) {
       include: { center: { select: { name: true } } },
     });
 
-    const consumeAndReturnInvalidError = () => {
-      checkRateLimit(ip + "_" + rawCode + "_register", REGISTER_CONFIG.CODE_IP_HOURLY_LIMIT, 3600000, true);
+    const consumeAndReturnInvalidError = async () => {
+      await checkRateLimit(ip + "_" + rawCode + "_register", REGISTER_CONFIG.CODE_IP_HOURLY_LIMIT, 3600000, true);
       return apiError("Invalid, expired, or exhausted invite code", "INVALID_INVITE", 400);
     };
 
-    if (!invite) return consumeAndReturnInvalidError();
-    if (invite.expiresAt && invite.expiresAt < new Date()) return consumeAndReturnInvalidError();
-    if (invite.maxUses !== null && invite.usesCount >= invite.maxUses) return consumeAndReturnInvalidError();
+    if (!invite) return await consumeAndReturnInvalidError();
+    if (invite.expiresAt && invite.expiresAt < new Date()) return await consumeAndReturnInvalidError();
+    if (invite.maxUses !== null && invite.usesCount >= invite.maxUses) return await consumeAndReturnInvalidError();
     
     // 2. Roles check
     const allowedRoles = ["CENTER_ADMIN", "TEACHER", "TEACHER_ASSISTANT", "CENTER_SUPPORT", "STUDENT", "PARENT"];
     if (!allowedRoles.includes(invite.targetRole)) {
-      return consumeAndReturnInvalidError();
+      return await consumeAndReturnInvalidError();
     }
 
     // 3. Check existing user
@@ -68,11 +68,11 @@ export async function POST(req: Request) {
       await hashPassword(password);
 
       // DoS protection: Limit PendingInvite by (IP, Center) and IP
-      if (!checkRateLimit(ip + "_" + invite.centerId + "_pending", 10, 3600000)) {
+      if (!(await checkRateLimit(ip + "_" + invite.centerId + "_pending", 10, 3600000))) {
         return apiError("Too many pending invites for this center", "RATE_LIMITED", 429);
       }
       
-      if (!checkRateLimit(ip + "_pending", 20, 3600000)) {
+      if (!(await checkRateLimit(ip + "_pending", 20, 3600000))) {
         return apiError("Too many pending invites from this IP", "RATE_LIMITED", 429);
       }
 

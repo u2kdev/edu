@@ -41,7 +41,10 @@ describe("Organizations Role Matrix", () => {
   const mockRequest = (url: string, method = "GET", body?: unknown) => {
     return new Request(`http://localhost${url}`, {
       method,
-      headers: body ? { "Content-Type": "application/json" } : undefined,
+      headers: {
+        ...(body ? { "Content-Type": "application/json" } : {}),
+        "x-forwarded-for": `10.0.${Math.floor(Math.random() * 200)}.${Math.floor(Math.random() * 200)}`,
+      },
       body: body ? JSON.stringify(body) : undefined,
     });
   };

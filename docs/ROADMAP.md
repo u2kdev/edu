@@ -68,7 +68,7 @@
 
 ## БЛОК 6 — Боевая инфраструктура и устранение блокеров Vercel
 - [ ] 2a: Объектное хранилище (S3/R2/Vercel Blob) для файлов ДЗ и аватаров.
-- [ ] 2b: Rate limiter и lockout в таблице БД / Redis, без состояния в памяти.
+- [x] 2b: Rate limiter и lockout в таблице БД (PostgreSQL RateLimitRecord), протестировано на мульти-инстансах без состояния в памяти.
 - [ ] 2c: Почтовый транспорт (Resend / SMTP) с шаблонами ru/uz и очередью.
 - [ ] 2d: Production-сборка, Dockerfile, docker-compose.prod.yml, healthcheck.
 

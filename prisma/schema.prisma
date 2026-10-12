@@ -929,6 +929,18 @@ model LoginAttempt {
   @@unique([email, ip])
 }
 
+model RateLimitRecord {
+  id        String   @id @default(uuid())
+  key       String   @unique
+  count     Int      @default(1)
+  expiresAt DateTime
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([key])
+  @@index([expiresAt])
+}
+
 model PendingInvite {
   id           String       @id @default(uuid())
   email        String
