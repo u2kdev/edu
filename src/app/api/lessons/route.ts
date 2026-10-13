@@ -18,6 +18,34 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: "Module ID and title are required" }, { status: 400 });
     }
 
+    const courseModule = await tenantDb.courseModule.findUnique({
+      where: { id: moduleId },
+      select: { id: true, courseId: true },
+    });
+
+    if (!courseModule) {
+      return NextResponse.json({ error: "Module not found" }, { status: 404 });
+    }
+
+    if (tenantCtx.role === "TEACHER" && tenantCtx.membership) {
+      const teacherGroup = await tenantDb.group.findFirst({
+        where: {
+          courseId: courseModule.courseId,
+          OR: [
+            { teacherMembershipId: tenantCtx.membership.id },
+            { assistantMembershipId: tenantCtx.membership.id },
+          ],
+        },
+      });
+
+      if (!teacherGroup) {
+        return NextResponse.json(
+          { error: "Forbidden: Teachers can only create lessons in courses of their groups" },
+          { status: 403 }
+        );
+      }
+    }
+
     if (substituteTeacherMembershipId) {
       const subTeacher = await tenantDb.centerMembership.findFirst({
         where: { id: substituteTeacherMembershipId, role: "TEACHER", status: "ACTIVE" },
