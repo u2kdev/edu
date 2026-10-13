@@ -48,8 +48,20 @@ describe("CORE-5 Role Dashboards & Cabinets Hardening", () => {
   beforeAll(async () => {
     const passwordHash = await hashPassword("Password123!");
     const now = new Date();
-    const plan = await db.subscriptionPlan.findFirst();
-    const planId = plan ? plan.id : "plan-pro";
+    let plan = await db.subscriptionPlan.findFirst();
+    if (!plan) {
+      plan = await db.subscriptionPlan.create({
+        data: {
+          name: "Dashboard Test Plan",
+          maxStudents: 50,
+          maxTeachers: 5,
+          maxCourses: 5,
+          maxBranches: 1,
+          priceMonthly: 0,
+        },
+      });
+    }
+    const planId = plan.id;
 
     // Center A
     const dirA = await db.platformUser.create({

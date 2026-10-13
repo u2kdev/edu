@@ -48,8 +48,20 @@ describe("CORE-4 Homework Lifecycle & Testing System", () => {
   beforeAll(async () => {
     const passwordHash = await hashPassword("Password123!");
     const now = new Date();
-    const plan = await db.subscriptionPlan.findFirst();
-    const planId = plan ? plan.id : "plan-id";
+    let plan = await db.subscriptionPlan.findFirst();
+    if (!plan) {
+      plan = await db.subscriptionPlan.create({
+        data: {
+          name: "Homework Test Plan",
+          maxStudents: 50,
+          maxTeachers: 5,
+          maxCourses: 5,
+          maxBranches: 1,
+          priceMonthly: 0,
+        },
+      });
+    }
+    const planId = plan.id;
 
     // Center A
     const dirA = await db.platformUser.create({

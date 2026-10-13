@@ -56,8 +56,20 @@ describe("Core Students and Groups Management", () => {
     const passwordHash = await hashPassword(defaultPassword);
     const now = new Date();
 
-    const plan = await db.subscriptionPlan.findFirst();
-    defaultPlanId = plan ? plan.id : "plan-id";
+    let plan = await db.subscriptionPlan.findFirst();
+    if (!plan) {
+      plan = await db.subscriptionPlan.create({
+        data: {
+          name: "Students Test Plan",
+          maxStudents: 50,
+          maxTeachers: 5,
+          maxCourses: 5,
+          maxBranches: 1,
+          priceMonthly: 0,
+        },
+      });
+    }
+    defaultPlanId = plan.id;
 
     // Director Center A
     const dirUserA = await db.platformUser.create({
@@ -313,9 +325,12 @@ describe("Core Students and Groups Management", () => {
   });
 
   afterAll(async () => {
-    await db.learningCenter.deleteMany({
-      where: { id: { in: [centerAId, centerBId] } },
-    });
+    const ids = [centerAId, centerBId].filter(Boolean);
+    if (ids.length > 0) {
+      await db.learningCenter.deleteMany({
+        where: { id: { in: ids } },
+      });
+    }
   });
 
   it("1. Tenant isolation: Center A does not see students from Center B", async () => {
