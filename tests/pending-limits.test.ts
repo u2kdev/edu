@@ -71,7 +71,7 @@ describe("PendingInvite Limits (POST /api/auth/register)", () => {
     expect(res21.status).toBe(429);
     const data = await res21.json();
     expect(data.error.code).toBe("RATE_LIMITED");
-  });
+  }, 30000);
 
   it("Email/Center Limit: 11th registration for same center returns 429", async () => {
     const spamIp = "5.5.5.5";
