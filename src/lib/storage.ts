@@ -123,9 +123,17 @@ export interface PresignedUrlResult {
   expiresIn: number;
 }
 
+export function isUploadsEnabled(): boolean {
+  return process.env.FEATURE_UPLOADS === "true" || process.env.NEXT_PUBLIC_FEATURE_UPLOADS === "true";
+}
+
 export async function generatePresignedUploadUrl(
   options: PresignedUrlOptions
 ): Promise<PresignedUrlResult> {
+  if (!isUploadsEnabled()) {
+    throw new StorageValidationError("Uploads are disabled (FEATURE_UPLOADS=false)");
+  }
+
   const validated = validateFileUpload(options);
   const { centerId, category } = options;
 
@@ -139,29 +147,16 @@ export async function generatePresignedUploadUrl(
     "https://cdn.e-darschi.uz";
   const fileUrl = `${publicDomain.replace(/\/$/, "")}/${key}`;
 
-  const provider = (process.env.STORAGE_PROVIDER || "memory").toLowerCase();
+  const provider = (process.env.STORAGE_PROVIDER || "").toLowerCase();
 
   if (provider === "s3" || provider === "r2") {
-    const bucket = process.env.STORAGE_BUCKET || "e-darschi-uploads";
-    const endpoint = (process.env.STORAGE_ENDPOINT || "https://s3.amazonaws.com").replace(/\/$/, "");
-    const uploadUrl = `${endpoint}/${bucket}/${key}?X-Amz-Expires=${expiresIn}&X-Amz-Signature=mock-presigned-sig`;
-
-    return {
-      uploadUrl,
-      fileUrl,
-      key,
-      expiresIn,
-    };
+    const bucket = process.env.STORAGE_BUCKET;
+    const endpoint = process.env.STORAGE_ENDPOINT;
+    if (!bucket || !endpoint) {
+      throw new StorageValidationError("S3 storage requires valid STORAGE_BUCKET and STORAGE_ENDPOINT configuration");
+    }
+    throw new StorageValidationError("Real S3 uploads require AWS SDK presigner and credentials. Mock signatures are disabled.");
   }
 
-  // Fallback / memory / local driver
-  const baseUrl = process.env.NEXTAUTH_URL || "http://localhost:3000";
-  const uploadUrl = `${baseUrl}/api/upload/direct?key=${encodeURIComponent(key)}&token=mock-token-${timestamp}`;
-
-  return {
-    uploadUrl,
-    fileUrl,
-    key,
-    expiresIn,
-  };
+  throw new StorageValidationError("No active storage provider configured");
 }

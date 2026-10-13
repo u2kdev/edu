@@ -1,9 +1,16 @@
 import { NextResponse } from "next/server";
 import { requireTenantAccess } from "@/lib/tenant";
-import { generatePresignedUploadUrl, StorageValidationError, StorageCategory } from "@/lib/storage";
+import { generatePresignedUploadUrl, StorageValidationError, StorageCategory, isUploadsEnabled } from "@/lib/storage";
 
 export async function POST(req: Request) {
   try {
+    if (!isUploadsEnabled()) {
+      return NextResponse.json(
+        { error: "Uploads are disabled (FEATURE_UPLOADS=false)" },
+        { status: 403 }
+      );
+    }
+
     const tenantCtx = await requireTenantAccess(req);
 
     const body = (await req.json()) as {

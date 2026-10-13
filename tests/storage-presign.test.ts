@@ -80,25 +80,35 @@ describe("Object Storage and Presigned URLs (Block 6.2a)", () => {
   });
 
   describe("Presigned URL Generation", () => {
-    it("generates presigned upload URL and public URL with expiration", async () => {
+    it("rejects presigned upload URL generation when FEATURE_UPLOADS is disabled (by default)", async () => {
+      delete process.env.FEATURE_UPLOADS;
+
+      await expect(
+        generatePresignedUploadUrl({
+          centerId: "center-123",
+          category: "HOMEWORK",
+          fileName: "essay.pdf",
+          contentType: "application/pdf",
+          sizeBytes: 1024 * 50,
+        })
+      ).rejects.toThrow(StorageValidationError);
+    });
+
+    it("rejects mock signatures even if FEATURE_UPLOADS=true without real S3 AWS presigner credentials", async () => {
+      process.env.FEATURE_UPLOADS = "true";
       process.env.STORAGE_PROVIDER = "s3";
       process.env.STORAGE_BUCKET = "e-darschi-uploads";
       process.env.STORAGE_ENDPOINT = "https://s3.eu-central-1.amazonaws.com";
-      process.env.STORAGE_PUBLIC_DOMAIN = "https://cdn.e-darschi.uz";
 
-      const presigned = await generatePresignedUploadUrl({
-        centerId: "center-123",
-        category: "HOMEWORK",
-        fileName: "essay.pdf",
-        contentType: "application/pdf",
-        sizeBytes: 1024 * 50,
-      });
-
-      expect(presigned.uploadUrl).toBeDefined();
-      expect(presigned.fileUrl).toContain("https://cdn.e-darschi.uz/");
-      expect(presigned.fileUrl).toContain("center-123");
-      expect(presigned.fileUrl).toContain("essay.pdf");
-      expect(presigned.expiresIn).toBe(900); // 15 mins default
+      await expect(
+        generatePresignedUploadUrl({
+          centerId: "center-123",
+          category: "HOMEWORK",
+          fileName: "essay.pdf",
+          contentType: "application/pdf",
+          sizeBytes: 1024 * 50,
+        })
+      ).rejects.toThrow(/Real S3 uploads require AWS SDK presigner and credentials/i);
     });
   });
 });
