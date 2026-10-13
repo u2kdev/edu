@@ -1,5 +1,15 @@
 import { NextResponse } from "next/server";
 import { requireTenantAccess, logAuditEvent } from "@/lib/tenant";
+import { z } from "zod";
+
+const AttendanceStatusEnum = z.enum(["PRESENT", "ABSENT", "EXCUSED", "LATE"]);
+
+const BulkAttendanceSchema = z.object({
+  lessonId: z.string().min(1, "lessonId is required"),
+  groupId: z.string().min(1, "groupId is required"),
+  defaultStatus: AttendanceStatusEnum.optional(),
+  studentStatusMap: z.record(z.string(), AttendanceStatusEnum).optional(),
+});
 
 // POST /api/attendance/bulk - Mark attendance for all students in a group for a lesson in one batch
 export async function POST(req: Request) {
@@ -10,12 +20,16 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: "Forbidden" }, { status: 403 });
     }
 
-    const { lessonId, groupId, defaultStatus, studentStatusMap } = await req.json();
-    // studentStatusMap: { [studentMembershipId: string]: 'PRESENT' | 'ABSENT' | 'EXCUSED' | 'LATE' }
-
-    if (!lessonId || !groupId) {
-      return NextResponse.json({ error: "lessonId and groupId are required" }, { status: 400 });
+    const rawBody = await req.json();
+    const parsed = BulkAttendanceSchema.safeParse(rawBody);
+    if (!parsed.success) {
+      return NextResponse.json(
+        { error: "Invalid attendance parameters", details: parsed.error.format() },
+        { status: 400 }
+      );
     }
+
+    const { lessonId, groupId, defaultStatus, studentStatusMap } = parsed.data;
 
     if (tenantCtx.role === "TEACHER" && tenantCtx.membership) {
       const isTeacherGroup = await tenantDb.group.findFirst({
@@ -26,6 +40,37 @@ export async function POST(req: Request) {
       }
     }
 
+    // Verify lesson belongs to the group and center
+    const lesson = await tenantDb.lesson.findFirst({
+      where: { id: lessonId, centerId: tenantCtx.center.id },
+      include: {
+        module: { select: { courseId: true, centerId: true } },
+        scheduleSlot: { select: { groupId: true, centerId: true } },
+      },
+    });
+
+    if (!lesson) {
+      return NextResponse.json({ error: "Lesson not found in this center" }, { status: 404 });
+    }
+
+    const group = await tenantDb.group.findFirst({
+      where: { id: groupId, centerId: tenantCtx.center.id },
+      select: { id: true, courseId: true },
+    });
+
+    if (!group) {
+      return NextResponse.json({ error: "Group not found in this center" }, { status: 404 });
+    }
+
+    const matchesCourse = lesson.module.courseId === group.courseId;
+    const matchesSlot = !lesson.scheduleSlot?.groupId || lesson.scheduleSlot.groupId === groupId;
+    if (!matchesCourse || !matchesSlot) {
+      return NextResponse.json(
+        { error: "Lesson does not belong to the specified group and center" },
+        { status: 400 }
+      );
+    }
+
     const enrollments = await tenantDb.enrollment.findMany({
       where: {
         groupId,
@@ -34,6 +79,19 @@ export async function POST(req: Request) {
       },
       select: { studentMembershipId: true },
     });
+
+    const activeStudentIds = new Set(enrollments.map((e) => e.studentMembershipId));
+
+    if (studentStatusMap) {
+      for (const studentId of Object.keys(studentStatusMap)) {
+        if (!activeStudentIds.has(studentId)) {
+          return NextResponse.json(
+            { error: `Student ${studentId} is not an active non-archived member of group ${groupId}` },
+            { status: 400 }
+          );
+        }
+      }
+    }
 
     const markerId = tenantCtx.membership?.id || tenantCtx.center.ownerId;
 
