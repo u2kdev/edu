@@ -12,7 +12,7 @@ describe('Migration Test: deploy on clean DB', () => {
     const urlObj = new URL(baseDbUrl);
     urlObj.searchParams.set("schema", schemaName);
     const isolatedUrl = urlObj.toString();
-    const env = { ...process.env, DATABASE_URL: isolatedUrl };
+    const env = { ...process.env, DATABASE_URL: isolatedUrl, DIRECT_URL: isolatedUrl };
 
     // Deploy all migrations on a fresh schema
     execSync('node node_modules/prisma/build/index.js migrate deploy', { env, stdio: 'pipe' });

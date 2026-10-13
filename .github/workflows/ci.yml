@@ -32,6 +32,7 @@ jobs:
 
     env:
       DATABASE_URL: "postgresql://postgres:password@localhost:5432/lms_test?schema=public"
+      DIRECT_URL: "postgresql://postgres:password@localhost:5432/lms_test?schema=public"
       TEST_DATABASE_URL: "postgresql://postgres:password@localhost:5432/lms_test?schema=public"
       JWT_SECRET: "ci-dummy-jwt-secret-key-32-chars-long!"
       DEV_LOGIN: "false"
