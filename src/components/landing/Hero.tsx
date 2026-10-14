@@ -14,6 +14,9 @@ import {
   GraduationCap,
   Calendar,
   Award,
+  TrendingUp,
+  CreditCard,
+  Users,
 } from "lucide-react";
 import { LandingLocale } from "../../types/landing";
 import { getLandingMessages } from "../../lib/landing-i18n";
@@ -31,29 +34,23 @@ export const Hero: React.FC<HeroProps> = ({
   const t = getLandingMessages(locale);
 
   return (
-    <section className="relative pt-12 pb-20 md:pt-20 md:pb-32 overflow-hidden">
-      {/* Background Floating Blurred Gradient Orbs */}
-      <div className="absolute top-1/4 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[600px] h-[600px] bg-blue-500/15 dark:bg-blue-600/10 blur-[130px] rounded-full pointer-events-none animate-float-slow -z-10" />
-      <div className="absolute top-1/3 right-5 w-[400px] h-[400px] bg-indigo-500/10 dark:bg-indigo-600/15 blur-[120px] rounded-full pointer-events-none -z-10" />
-
-      {/* Subtle Grid overlay */}
-      <div
-        className="absolute inset-0 bg-[linear-gradient(to_right,#8080800a_1px,transparent_1px),linear-gradient(to_bottom,#8080800a_1px,transparent_1px)] bg-[size:32px_32px] pointer-events-none -z-10"
-        aria-hidden="true"
-      />
+    <section className="relative pt-10 pb-20 md:pt-16 md:pb-28 overflow-hidden font-strict">
+      {/* Background Floating Blurred Gradient Mesh Orbs */}
+      <div className="absolute top-1/4 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[700px] h-[700px] bg-gradient-to-tr from-blue-400/20 via-indigo-300/15 to-transparent blur-[140px] rounded-full pointer-events-none -z-10" />
+      <div className="absolute top-1/3 right-5 w-[450px] h-[450px] bg-gradient-to-bl from-teal-400/15 via-blue-300/15 to-transparent blur-[120px] rounded-full pointer-events-none -z-10" />
 
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
         <div className="grid grid-cols-1 lg:grid-cols-12 gap-12 lg:gap-8 items-center">
           {/* Left Column: Hero Copy & Actions */}
-          <div className="lg:col-span-7 text-center lg:text-left">
+          <div className="lg:col-span-6 text-center lg:text-left">
             {/* 14 Days Free Badge */}
             <motion.div
               initial={{ opacity: 0, y: 16 }}
               animate={{ opacity: 1, y: 0 }}
-              transition={{ duration: 0.6 }}
-              className="inline-flex items-center gap-2 px-3.5 py-1.5 rounded-full bg-blue-500/10 dark:bg-blue-500/20 text-blue-700 dark:text-blue-300 border border-blue-500/30 text-xs font-semibold uppercase tracking-wider mb-6"
+              transition={{ duration: 0.5, ease: "easeOut" }}
+              className="inline-flex items-center gap-2 px-3.5 py-1.5 rounded-full bg-blue-50 text-blue-700 border border-blue-200/80 text-xs font-bold uppercase tracking-wider mb-6 shadow-xs"
             >
-              <Sparkles className="w-3.5 h-3.5 text-blue-600 dark:text-blue-400" />
+              <Sparkles className="w-3.5 h-3.5 text-blue-600" />
               <span>{t.hero.badge}</span>
             </motion.div>
 
@@ -61,11 +58,11 @@ export const Hero: React.FC<HeroProps> = ({
             <motion.h1
               initial={{ opacity: 0, y: 20 }}
               animate={{ opacity: 1, y: 0 }}
-              transition={{ duration: 0.7, delay: 0.1 }}
-              className="text-4xl sm:text-5xl lg:text-6xl font-black tracking-tight text-slate-900 dark:text-white leading-[1.12] mb-6"
+              transition={{ duration: 0.6, delay: 0.1, ease: "easeOut" }}
+              className="text-4xl sm:text-5xl lg:text-6xl font-black tracking-tight text-slate-900 leading-[1.12] mb-6"
             >
               {t.hero.title}{" "}
-              <span className="block text-transparent bg-clip-text bg-gradient-to-r from-blue-600 via-indigo-600 to-blue-500 dark:from-blue-400 dark:via-indigo-300 dark:to-blue-500">
+              <span className="block text-transparent bg-clip-text bg-gradient-to-r from-blue-600 via-indigo-600 to-teal-600">
                 {t.hero.titleHighlight}
               </span>
             </motion.h1>
@@ -74,17 +71,17 @@ export const Hero: React.FC<HeroProps> = ({
             <motion.p
               initial={{ opacity: 0, y: 20 }}
               animate={{ opacity: 1, y: 0 }}
-              transition={{ duration: 0.7, delay: 0.2 }}
-              className="text-base sm:text-lg text-slate-600 dark:text-slate-300 max-w-2xl mx-auto lg:mx-0 leading-relaxed mb-8"
+              transition={{ duration: 0.6, delay: 0.2, ease: "easeOut" }}
+              className="text-base sm:text-lg text-slate-600 max-w-2xl mx-auto lg:mx-0 leading-relaxed mb-8"
             >
               {t.hero.subtitle}
             </motion.p>
 
-            {/* CTA Button */}
+            {/* CTA Buttons */}
             <motion.div
               initial={{ opacity: 0, y: 20 }}
               animate={{ opacity: 1, y: 0 }}
-              transition={{ duration: 0.7, delay: 0.3 }}
+              transition={{ duration: 0.6, delay: 0.3, ease: "easeOut" }}
               className="flex flex-col sm:flex-row items-center justify-center lg:justify-start gap-4 mb-10"
             >
               <AnimatedButton
@@ -92,54 +89,61 @@ export const Hero: React.FC<HeroProps> = ({
                 variant="gradient"
                 glow
                 onClick={onOpenLeadModal}
-                className="w-full sm:w-auto"
+                className="w-full sm:w-auto shadow-lg shadow-blue-500/25"
               >
                 <span>{t.hero.ctaStart}</span>
                 <ArrowRight className="w-4 h-4 ml-1" />
               </AnimatedButton>
+
+              <a
+                href="#ilovalari"
+                className="w-full sm:w-auto px-6 py-3 rounded-xl border border-slate-300 bg-white hover:bg-slate-50 text-slate-700 text-sm font-semibold transition-all shadow-xs flex items-center justify-center gap-2 hover:border-slate-400"
+              >
+                <span>{locale === "uz" ? "Platforma imkoniyatlari" : "Возможности платформы"}</span>
+              </a>
             </motion.div>
 
             {/* Trust Block: Architecture, Data Isolation & Role Security */}
             <motion.div
               initial={{ opacity: 0, y: 20 }}
               animate={{ opacity: 1, y: 0 }}
-              transition={{ duration: 0.7, delay: 0.4 }}
-              className="pt-8 border-t border-slate-200 dark:border-white/10 max-w-xl mx-auto lg:mx-0"
+              transition={{ duration: 0.6, delay: 0.4, ease: "easeOut" }}
+              className="pt-8 border-t border-slate-200/90 max-w-xl mx-auto lg:mx-0"
             >
               <div className="flex items-center justify-center lg:justify-start gap-2 mb-4">
-                <ShieldCheck className="w-4 h-4 text-emerald-500" />
-                <span className="text-xs font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">
+                <ShieldCheck className="w-4 h-4 text-emerald-600" />
+                <span className="text-xs font-bold uppercase tracking-wider text-slate-500">
                   {t.hero.trust.badge}
                 </span>
               </div>
 
               <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 text-left">
-                <div className="p-3 rounded-xl bg-slate-50 dark:bg-white/5 border border-slate-200/80 dark:border-white/10">
-                  <div className="flex items-center gap-1.5 font-bold text-xs text-slate-900 dark:text-white mb-1">
-                    <Database className="w-3.5 h-3.5 text-blue-500 shrink-0" />
+                <div className="p-3 rounded-xl bg-white border border-slate-200 shadow-xs hover:border-blue-400/50 transition-colors">
+                  <div className="flex items-center gap-1.5 font-bold text-xs text-slate-900 mb-1">
+                    <Database className="w-3.5 h-3.5 text-blue-600 shrink-0" />
                     <span>{t.hero.trust.isolation.title}</span>
                   </div>
-                  <p className="text-[11px] text-slate-600 dark:text-slate-400 leading-snug">
+                  <p className="text-[11px] text-slate-500 leading-snug">
                     {t.hero.trust.isolation.description}
                   </p>
                 </div>
 
-                <div className="p-3 rounded-xl bg-slate-50 dark:bg-white/5 border border-slate-200/80 dark:border-white/10">
-                  <div className="flex items-center gap-1.5 font-bold text-xs text-slate-900 dark:text-white mb-1">
-                    <Lock className="w-3.5 h-3.5 text-indigo-500 shrink-0" />
+                <div className="p-3 rounded-xl bg-white border border-slate-200 shadow-xs hover:border-indigo-400/50 transition-colors">
+                  <div className="flex items-center gap-1.5 font-bold text-xs text-slate-900 mb-1">
+                    <Lock className="w-3.5 h-3.5 text-indigo-600 shrink-0" />
                     <span>{t.hero.trust.roles.title}</span>
                   </div>
-                  <p className="text-[11px] text-slate-600 dark:text-slate-400 leading-snug">
+                  <p className="text-[11px] text-slate-500 leading-snug">
                     {t.hero.trust.roles.description}
                   </p>
                 </div>
 
-                <div className="p-3 rounded-xl bg-slate-50 dark:bg-white/5 border border-slate-200/80 dark:border-white/10">
-                  <div className="flex items-center gap-1.5 font-bold text-xs text-slate-900 dark:text-white mb-1">
-                    <Shield className="w-3.5 h-3.5 text-emerald-500 shrink-0" />
+                <div className="p-3 rounded-xl bg-white border border-slate-200 shadow-xs hover:border-emerald-400/50 transition-colors">
+                  <div className="flex items-center gap-1.5 font-bold text-xs text-slate-900 mb-1">
+                    <Shield className="w-3.5 h-3.5 text-emerald-600 shrink-0" />
                     <span>{t.hero.trust.audit.title}</span>
                   </div>
-                  <p className="text-[11px] text-slate-600 dark:text-slate-400 leading-snug">
+                  <p className="text-[11px] text-slate-500 leading-snug">
                     {t.hero.trust.audit.description}
                   </p>
                 </div>
@@ -147,90 +151,134 @@ export const Hero: React.FC<HeroProps> = ({
             </motion.div>
           </div>
 
-          {/* Right Column: Platform Showcase Card with Capability Modules */}
+          {/* Right Column: High-Res Photo Showcase & Tactile UI Floating Cards */}
           <motion.div
-            initial={{ opacity: 0, scale: 0.94 }}
+            initial={{ opacity: 0, scale: 0.96 }}
             animate={{ opacity: 1, scale: 1 }}
-            transition={{ duration: 0.85, delay: 0.2 }}
-            className="lg:col-span-5 relative"
+            transition={{ duration: 0.8, delay: 0.25, ease: [0.16, 1, 0.3, 1] }}
+            className="lg:col-span-6 relative"
           >
-            {/* Glowing Accent Border */}
-            <div className="relative rounded-3xl p-1 bg-gradient-to-tr from-blue-600 via-indigo-500 to-cyan-400 shadow-glow-lg">
-              <div className="relative rounded-[22px] overflow-hidden bg-[#0A1128] aspect-[4/3] sm:aspect-[16/10] flex flex-col justify-between p-6">
-                {/* Header Bar */}
-                <div className="flex items-center justify-between border-b border-white/10 pb-3">
+            {/* Background glowing frame */}
+            <div className="relative rounded-3xl p-2 bg-gradient-to-tr from-blue-500/20 via-indigo-500/20 to-teal-400/20 shadow-2xl">
+              <div className="relative rounded-2xl overflow-hidden bg-white border border-slate-200 shadow-xl">
+                {/* Window top bar */}
+                <div className="px-4 py-3 bg-slate-50 border-b border-slate-200/90 flex items-center justify-between">
                   <div className="flex items-center gap-2">
-                    <div className="w-2.5 h-2.5 rounded-full bg-rose-500/80" />
-                    <div className="w-2.5 h-2.5 rounded-full bg-amber-500/80" />
-                    <div className="w-2.5 h-2.5 rounded-full bg-emerald-500/80" />
-                    <span className="text-xs font-semibold text-white/80 ml-2">e-darschi LMS</span>
+                    <div className="w-3 h-3 rounded-full bg-rose-400/80" />
+                    <div className="w-3 h-3 rounded-full bg-amber-400/80" />
+                    <div className="w-3 h-3 rounded-full bg-emerald-400/80" />
+                    <span className="text-xs font-bold text-slate-700 ml-2">e-darischi LMS • Toshkent</span>
                   </div>
-                  <div className="flex items-center gap-1 px-2.5 py-1 rounded-full bg-emerald-500/10 border border-emerald-500/30 text-[10px] font-medium text-emerald-400">
-                    <ShieldCheck className="w-3 h-3" />
-                    <span>{locale === "uz" ? "Xavfsiz tezant" : "Изолированный тенант"}</span>
+                  <div className="flex items-center gap-1.5 px-2.5 py-0.5 rounded-full bg-emerald-50 text-emerald-700 border border-emerald-200 text-[11px] font-semibold">
+                    <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
+                    <span>{locale === "uz" ? "Jonli darslar" : "Онлайн-уроки"}</span>
                   </div>
                 </div>
 
-                {/* Modules Grid */}
-                <div className="grid grid-cols-2 gap-3 my-4">
-                  <div className="p-3 rounded-xl bg-white/5 border border-white/10 hover:border-blue-500/40 transition-colors">
-                    <div className="flex items-center gap-2 text-blue-400 mb-1.5">
+                {/* Photo Element: Modern Collaborative Education with Students */}
+                <div className="relative h-64 sm:h-80 w-full overflow-hidden bg-slate-100">
+                  <img
+                    src="https://images.unsplash.com/photo-1522202176988-66273c2fd55f?auto=format&fit=crop&w=1200&q=80"
+                    alt="e-darischi o'quv markazida talabalar va o'qituvchilar interaktiv ta'lim jarayoni"
+                    className="w-full h-full object-cover object-center transform hover:scale-105 transition-transform duration-700 ease-out"
+                    loading="eager"
+                  />
+                  {/* Subtle photo gradient vignette */}
+                  <div className="absolute inset-0 bg-gradient-to-t from-slate-900/60 via-transparent to-transparent pointer-events-none" />
+
+                  {/* Photo overlay badge */}
+                  <div className="absolute bottom-3 left-4 right-4 flex items-center justify-between text-white text-xs">
+                    <div className="flex items-center gap-2 bg-slate-900/80 backdrop-blur-md px-3 py-1.5 rounded-xl border border-white/15">
+                      <GraduationCap className="w-4 h-4 text-blue-400" />
+                      <span className="font-semibold">{locale === "uz" ? "IELTS & IT Bo'limi" : "Факультет Языков и IT"}</span>
+                    </div>
+                    <div className="bg-emerald-600/90 backdrop-blur-md px-3 py-1.5 rounded-xl font-bold flex items-center gap-1 shadow-sm">
+                      <TrendingUp className="w-3.5 h-3.5" />
+                      <span>+34% {locale === "uz" ? "O'sish" : "Прирост"}</span>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Sub-card live modules showcase */}
+                <div className="p-4 sm:p-5 bg-white grid grid-cols-2 gap-3 border-t border-slate-100">
+                  <div className="p-3 rounded-xl bg-slate-50 border border-slate-200/80 hover:border-blue-300 transition-colors">
+                    <div className="flex items-center gap-2 text-blue-600 mb-1">
                       <Calendar className="w-4 h-4" />
-                      <span className="text-xs font-bold text-white">{locale === "uz" ? "Dars jadvali" : "Расписание"}</span>
+                      <span className="text-xs font-bold text-slate-800">{locale === "uz" ? "Aqlli jadval" : "Умное расписание"}</span>
                     </div>
-                    <div className="text-[10px] text-slate-400">{locale === "uz" ? "Xonalar va o'qituvchilar filtri" : "Контроль аудиторий и смен"}</div>
+                    <div className="text-[11px] text-slate-500">{locale === "uz" ? "Afg'on xonasi • 14:00" : "Аудитория 4 • 14:00"}</div>
                   </div>
 
-                  <div className="p-3 rounded-xl bg-white/5 border border-white/10 hover:border-indigo-500/40 transition-colors">
-                    <div className="flex items-center gap-2 text-indigo-400 mb-1.5">
-                      <GraduationCap className="w-4 h-4" />
-                      <span className="text-xs font-bold text-white">{locale === "uz" ? "Davomat va Jurnal" : "Посещаемость"}</span>
-                    </div>
-                    <div className="text-[10px] text-slate-400">{locale === "uz" ? "Tezkor QR va belgilash" : "Отметка за 5 секунд"}</div>
-                  </div>
-
-                  <div className="p-3 rounded-xl bg-white/5 border border-white/10 hover:border-emerald-500/40 transition-colors">
-                    <div className="flex items-center gap-2 text-emerald-400 mb-1.5">
+                  <div className="p-3 rounded-xl bg-slate-50 border border-slate-200/80 hover:border-emerald-300 transition-colors">
+                    <div className="flex items-center gap-2 text-emerald-600 mb-1">
                       <Award className="w-4 h-4" />
-                      <span className="text-xs font-bold text-white">{locale === "uz" ? "Baholash tizimi" : "Журнал оценок"}</span>
+                      <span className="text-xs font-bold text-slate-800">{locale === "uz" ? "Davomat va Jurnal" : "Посещаемость"}</span>
                     </div>
-                    <div className="text-[10px] text-slate-400">{locale === "uz" ? "Final baholar blokirovkasi" : "Фиксация и аудит оценок"}</div>
+                    <div className="text-[11px] text-slate-500">{locale === "uz" ? "24/25 o'quvchi darsda" : "96% явка сегодня"}</div>
                   </div>
-
-                  <div className="p-3 rounded-xl bg-white/5 border border-white/10 hover:border-cyan-500/40 transition-colors">
-                    <div className="flex items-center gap-2 text-cyan-400 mb-1.5">
-                      <Layers className="w-4 h-4" />
-                      <span className="text-xs font-bold text-white">{locale === "uz" ? "Guruhlar boshqaruvi" : "Группы и курсы"}</span>
-                    </div>
-                    <div className="text-[10px] text-slate-400">{locale === "uz" ? "Talabalar o'tkazmasi" : "Переводы и лимиты"}</div>
-                  </div>
-                </div>
-
-                {/* Footer status */}
-                <div className="flex items-center justify-between pt-2 border-t border-white/10 text-[11px] text-slate-400">
-                  <span className="flex items-center gap-1.5">
-                    <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
-                    {locale === "uz" ? "Tizim to'liq tayyor" : "Система активна"}
-                  </span>
-                  <span>{locale === "uz" ? "100% Ma'lumotlar xavfsizligi" : "100% Защита данных"}</span>
                 </div>
               </div>
             </div>
 
-            {/* Floating verification badge */}
-            <div className="hidden sm:flex absolute -bottom-5 -left-5 bg-white dark:bg-[#13224D] rounded-2xl p-3.5 shadow-xl border border-blue-100 dark:border-white/10 items-center gap-3">
-              <div className="w-10 h-10 rounded-xl bg-emerald-500/10 text-emerald-500 flex items-center justify-center">
-                <CheckCircle2 className="w-6 h-6" />
+            {/* Floating Tactile Card 1: Live Student Attendance with Real Photo Avatars */}
+            <motion.div
+              initial={{ opacity: 0, x: -20, y: 20 }}
+              animate={{ opacity: 1, x: 0, y: 0 }}
+              transition={{ duration: 0.7, delay: 0.45 }}
+              whileHover={{ y: -4, transition: { duration: 0.2 } }}
+              className="absolute -bottom-6 -left-6 bg-white/95 backdrop-blur-md rounded-2xl p-4 shadow-xl border border-slate-200/90 flex items-center gap-3.5 hidden sm:flex z-20"
+            >
+              {/* Stacked Real Avatar Photos */}
+              <div className="flex -space-x-2.5 overflow-hidden">
+                <img
+                  className="inline-block h-9 w-9 rounded-full ring-2 ring-white object-cover"
+                  src="https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&w=160&q=80"
+                  alt="Aziza"
+                />
+                <img
+                  className="inline-block h-9 w-9 rounded-full ring-2 ring-white object-cover"
+                  src="https://images.unsplash.com/photo-1539571696357-5a69c17a67c6?auto=format&fit=crop&w=160&q=80"
+                  alt="Jamshid"
+                />
+                <img
+                  className="inline-block h-9 w-9 rounded-full ring-2 ring-white object-cover"
+                  src="https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?auto=format&fit=crop&w=160&q=80"
+                  alt="Bekzod"
+                />
+              </div>
+
+              <div className="text-left">
+                <div className="flex items-center gap-1.5 text-xs font-bold text-slate-900">
+                  <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600" />
+                  <span>{locale === "uz" ? "98.4% Davomat" : "98.4% Посещаемость"}</span>
+                </div>
+                <div className="text-[11px] text-slate-500">
+                  {locale === "uz" ? "QR orqali tasdiqlandi" : "Подтверждено по QR"}
+                </div>
+              </div>
+            </motion.div>
+
+            {/* Floating Tactile Card 2: Quick Billing / Payment badge */}
+            <motion.div
+              initial={{ opacity: 0, x: 20, y: -20 }}
+              animate={{ opacity: 1, x: 0, y: 0 }}
+              transition={{ duration: 0.7, delay: 0.55 }}
+              whileHover={{ y: -4, transition: { duration: 0.2 } }}
+              className="absolute -top-6 -right-6 bg-white/95 backdrop-blur-md rounded-2xl p-3.5 shadow-xl border border-slate-200/90 flex items-center gap-3 hidden sm:flex z-20"
+            >
+              <div className="w-10 h-10 rounded-xl bg-blue-50 text-blue-600 flex items-center justify-center font-black">
+                <CreditCard className="w-5 h-5" />
               </div>
               <div className="text-left">
-                <div className="text-xs font-bold text-slate-900 dark:text-white">
+                <div className="text-xs font-bold text-slate-900">
                   Payme & Click & Uzum
                 </div>
-                <div className="text-[11px] text-slate-500 dark:text-slate-400">
-                  {locale === "uz" ? "Avtomatik to'lovlar integratsiyasi" : "Интеграция оплат в один клик"}
+                <div className="text-[11px] text-emerald-600 font-semibold flex items-center gap-1">
+                  <span className="w-1.5 h-1.5 rounded-full bg-emerald-500" />
+                  <span>{locale === "uz" ? "1-klikda to'lov" : "Оплата в 1 клик"}</span>
                 </div>
               </div>
-            </div>
+            </motion.div>
           </motion.div>
         </div>
       </div>

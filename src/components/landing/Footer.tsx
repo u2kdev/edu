@@ -16,7 +16,7 @@ export const Footer: React.FC<FooterProps> = ({ locale }) => {
   const t = getLandingMessages(locale);
 
   return (
-    <footer className="bg-slate-50 dark:bg-[#070D1F] border-t border-slate-200 dark:border-white/10 pt-16 pb-12 text-slate-600 dark:text-slate-400">
+    <footer className="bg-white border-t border-slate-200/90 pt-16 pb-12 text-slate-600 font-strict">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-12 gap-10 lg:gap-8 mb-12">
           {/* Col 1: Brand & Description */}

@@ -29,7 +29,12 @@ export const LandingView: React.FC<LandingViewProps> = ({ locale }) => {
 
   return (
     <ThemeProvider>
-      <div className="min-h-screen bg-white dark:bg-[#0A1128] text-slate-900 dark:text-slate-100 selection:bg-blue-600 selection:text-white transition-colors duration-400">
+      <div className="min-h-screen bg-slate-50 text-slate-900 selection:bg-blue-600 selection:text-white transition-colors duration-300 font-strict particles-bg relative overflow-x-hidden">
+        {/* Ambient Top Mesh Glows */}
+        <div className="absolute top-0 left-1/2 -translate-x-1/2 w-[1000px] h-[550px] bg-gradient-to-b from-blue-400/15 via-indigo-300/10 to-transparent blur-[140px] pointer-events-none -z-10" />
+        <div className="absolute top-[800px] -right-32 w-[600px] h-[600px] bg-gradient-to-bl from-teal-400/10 via-blue-400/10 to-transparent blur-[140px] pointer-events-none -z-10" />
+        <div className="absolute top-[2200px] -left-32 w-[600px] h-[600px] bg-gradient-to-tr from-indigo-400/10 via-purple-300/10 to-transparent blur-[140px] pointer-events-none -z-10" />
+
         <Header
           locale={locale}
           onOpenLeadModal={() => handleOpenLead()}

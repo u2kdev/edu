@@ -38,9 +38,9 @@ export const Header: React.FC<HeaderProps> = ({ locale, onOpenLeadModal }) => {
 
   return (
     <header
-      className={`sticky top-0 z-40 transition-all duration-300 ${
+      className={`sticky top-0 z-40 transition-all duration-300 font-strict ${
         isScrolled
-          ? "bg-white/85 dark:bg-[#0A1128]/85 backdrop-blur-md shadow-sm border-b border-blue-100 dark:border-white/10 py-3"
+          ? "bg-white/90 backdrop-blur-md shadow-xs border-b border-slate-200/80 py-3"
           : "bg-transparent py-4 border-b border-transparent"
       }`}
     >
