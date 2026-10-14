@@ -29,7 +29,7 @@ declare global {
 const mockRequest = (url: string, body?: unknown, ip?: string) =>
   new Request(`http://localhost${url}`, {
     method: body ? (url.includes('PATCH') ? 'PATCH' : 'POST') : 'GET',
-    headers: { "Content-Type": "application/json", "x-forwarded-for": ip || `127.0.0.${Math.floor(Math.random() * 255)}` },
+    headers: { "Content-Type": "application/json", "x-forwarded-for": ip || `10.${Math.floor(Math.random() * 200)}.${Math.floor(Math.random() * 200)}.${Math.floor(Math.random() * 200)}` },
     body: body ? JSON.stringify(body) : undefined,
   });
 

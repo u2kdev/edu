@@ -1,0 +1,350 @@
+{
+  "meta": {
+    "title": "e-darschi — O'quv markazlari va maktablar uchun zamonaviy LMS platforma ijarasi",
+    "description": "Toshkent va O'zbekiston bo'ylab o'quv markazlari, xususiy maktablar va kollejlar uchun tayyor LMS. Davomat, baholar, jadval, mobil ilovalar, Payme va Click integratsiyasi. 14 kun bepul!",
+    "keywords": "LMS O'zbekiston, o'quv markazi dasturi, maktab boshqaruvi, elektron jurnal, davomat nazorati, e-darschi, Toshkent"
+  },
+  "header": {
+    "brandName": "e-darschi",
+    "brandSubtitle": "LMS Platformasi",
+    "nav": {
+      "features": "Imkoniyatlar",
+      "whyUs": "Nega biz",
+      "apps": "Ilovalar",
+      "pricing": "Tariflar",
+      "steps": "Qanday boshlash",
+      "faq": "FAQ",
+      "contact": "Aloqa"
+    },
+    "login": "Kirish",
+    "startFree": "Bepul boshlash",
+    "menuToggle": "Menyuni ochish"
+  },
+  "hero": {
+    "badge": "14 kun bepul sinov muddati",
+    "title": "O'quv markazingiz uchun",
+    "titleHighlight": "zamonaviy LMS tizimi ijarasi",
+    "subtitle": "Qimmat dasturchilar jamoasisiz to'liq avtomatlashtirish: talabalar, dars jadvallari, davomat, baholar, ota-onalar ilovasi va to'lovlar monitoringi bir joyda. 10 daqiqada ishga tushiring.",
+    "ctaStart": "Bepul boshlash",
+    "ctaDemo": "Demo ko'rish",
+    "trust": {
+      "badge": "Xavfsizlik va arxitektura",
+      "isolation": {
+        "title": "Ma'lumotlar izolyatsiyasi",
+        "description": "Har bir o'quv markazi ma'lumotlari MB darajasida to'liq ajratilgan"
+      },
+      "roles": {
+        "title": "Rollar nazorati",
+        "description": "Direktor, o'qituvchi, talaba va ota-onalar uchun alohida ruxsatlar"
+      },
+      "audit": {
+        "title": "Audit va ishonchlilik",
+        "description": "Muhim amallarning qat'iy jurnali va xavfsiz sessiya himoyasi"
+      }
+    }
+  },
+  "whyUs": {
+    "badge": "Nega aynan e-darschi?",
+    "title": "Markazingizni yangi bosqichga olib chiqadigan",
+    "titleHighlight": "10 ta kuchli afzallik",
+    "subtitle": "Biz faqat dastur bermaymiz — biz ta'lim biznesingiz samaradorligini va o'quvchilar sonini oshirishga yordam beramiz.",
+    "items": [
+      {
+        "id": "mobile-apps",
+        "title": "O'quvchilar va ota-onalar ilovasi",
+        "description": "Dars jadvali, uy vazifalari, baholar va davomat bir teginishda smartfonda ko'rinadi.",
+        "icon": "Smartphone"
+      },
+      {
+        "id": "teacher-cabinet",
+        "title": "O'qituvchilar uchun qulay kabinet",
+        "description": "Bir necha soniyada davomat belgilash, uy vazifalarini tekshirish va baholash jurnali.",
+        "icon": "GraduationCap"
+      },
+      {
+        "id": "attendance-realtime",
+        "title": "Real vaqtda davomat va monitoring",
+        "description": "Davomati 80% dan past o'quvchilar avtomatik xavf zonasiga tushadi va tahlil qilinadi.",
+        "icon": "UserCheck"
+      },
+      {
+        "id": "parent-notifications",
+        "title": "Ota-onalarga tezkor bildirishnomalar",
+        "description": "Telegram-bot, SMS va Push orqali dars qoldirilishi yoki yangi baho haqida xabarlar.",
+        "icon": "Bell"
+      },
+      {
+        "id": "payments-billing",
+        "title": "Onlayn to'lov va to'lovlar nazorati",
+        "description": "Payme, Click, Uzum orqali avtomatik to'lov qabul qilish va qarzdorlik hisobi.",
+        "icon": "CreditCard"
+      },
+      {
+        "id": "director-analytics",
+        "title": "Direktor uchun chuqur tahlil va hisobotlar",
+        "description": "Tushum, guruhlar to'laligi, o'qituvchilar samaradorligi va filiallarni boshqarish paneli.",
+        "icon": "BarChart3"
+      },
+      {
+        "id": "schedule-conflicts",
+        "title": "Aql bovar qilmas dars jadvali",
+        "description": "Xonalar va o'qituvchilar to'qnashuvini (conflict detection) avtomatik oldini olish.",
+        "icon": "Calendar"
+      },
+      {
+        "id": "data-security",
+        "title": "Ma'lumotlar xavfsizligi va zaxiralash",
+        "description": "Har bir markaz uchun to'liq izolyatsiya, kunlik avtomatik zaxira nusxalari.",
+        "icon": "ShieldCheck"
+      },
+      {
+        "id": "local-support",
+        "title": "O'zbek va rus tillarida jonli qo'llab-quvvatlash",
+        "description": "Toshkentdagi texnik jamoamiz xodimlaringizni o'qitadi va 24/7 yordam beradi.",
+        "icon": "Headphones"
+      },
+      {
+        "id": "no-code-launch",
+        "title": "Dasturlashsiz 10 daqiqada ishga tushirish",
+        "description": "Server sozlash yoki kod yozish shart emas — kiring, filialingizni ulang va ishlang.",
+        "icon": "Zap"
+      }
+    ]
+  },
+  "apps": {
+    "badge": "Mobil ekotizim",
+    "title": "Ta'lim jarayonining barcha ishtirokchilari uchun",
+    "titleHighlight": "qulay mobil ilovalar",
+    "subtitle": "O'quvchi, o'qituvchi va ota-ona uchun maxsus moslashtirilgan interfeyslar.",
+    "tabs": {
+      "student": "O'quvchi ilovasi",
+      "teacher": "O'qituvchi ilovasi",
+      "parent": "Ota-ona ilovasi"
+    },
+    "studentFeatures": [
+      "Interaktiv dars jadvali va dars xonalari",
+      "Uy vazifalarini topshirish va natijalarini ko'rish",
+      "Onlayn testlar va darhol baholash",
+      "Shaxsiy GPA va o'zlashtirish grafigi"
+    ],
+    "teacherFeatures": [
+      "Tezkor davomat: bir teginishda barcha o'quvchilarni belgilash",
+      "Uy vazifalarini tekshirish va ovozli/matnli izoh qoldirish",
+      "Guruhlar jurnali va dars almashtirish imkoniyati",
+      "Shaxsiy darslar jadvali va xabarnomalar"
+    ],
+    "parentFeatures": [
+      "Farzandining davomati va kechikishlari bo'yicha hisobot",
+      "Baholar va o'qituvchilarning izohlari",
+      "Dars to'lovlari holati va to'lov kvitansiyalari",
+      "Bir nechta farzandni bitta akkauntda kuzatish"
+    ],
+    "downloadPrompt": "iOS va Android uchun ilovalar yaqinda mavjud bo'ladi. Hozirda to'liq moslashuvchan PWA veb-versiyasi ishlamoqda."
+  },
+  "pricing": {
+    "badge": "Hamyonbop ijara tariflari",
+    "headerNote": "Barcha tariflarda 14 kun bepul sinov muddati!",
+    "title": "Markazingiz o'lchamiga mos",
+    "titleHighlight": "shaffof narxlar",
+    "subtitle": "Katta investitsiya va server xarajatlarisiz — oylik ijara to'lang va barcha yangilanishlarni tekinga oling.",
+    "perMonth": "oyiga",
+    "popular": "Eng ommabop",
+    "tryFree": "14 kun bepul sinab ko'rish",
+    "plans": [
+      {
+        "id": "starter",
+        "name": "Starter",
+        "price": 400000,
+        "description": "Kichik va yangi ochilgan o'quv markazlari uchun ideal boshlanish.",
+        "features": [
+          "100 nafargacha faol o'quvchi",
+          "1 ta filial",
+          "Dars jadvali va elektron jurnal",
+          "Davomat va baholar hisobi",
+          "Uy vazifalari moduli",
+          "Email orqali texnik ko'mak"
+        ],
+        "cta": "Starter bilan boshlash"
+      },
+      {
+        "id": "business",
+        "name": "Business",
+        "price": 900000,
+        "description": "Faol o'sayotgan o'quv markazlari va o'rta maktablar uchun.",
+        "isPopular": true,
+        "features": [
+          "500 nafargacha faol o'quvchi",
+          "3 tagacha filialni boshqarish",
+          "Barcha Starter imkoniyatlari",
+          "O'quvchilar va ota-onalar mobil ilovasi",
+          "Telegram va SMS bildirishnomalar",
+          "Onlayn testlar va avto-tekshirish",
+          "Direktor uchun to'liq moliya va tahlil",
+          "Ustuvor Telegram texnik ko'mak"
+        ],
+        "cta": "Business tarifini tanlash"
+      },
+      {
+        "id": "premium",
+        "name": "Premium",
+        "price": 1500000,
+        "description": "Yirik o'quv tarmoqlari, xususiy maktablar va kollejlar uchun.",
+        "features": [
+          "Cheksiz o'quvchilar soni",
+          "Cheksiz filiallar",
+          "White-label: o'z brendingiz va domeningiz",
+          "Payme, Click va Uzum integratsiyasi",
+          "Shaxsiy menejer va xodimlarni o'qitish",
+          "Shaxsiy talablar asosida integratsiyalar",
+          "24/7 telefon orqali VIP qo'llab-quvvatlash"
+        ],
+        "cta": "Premium bilan bog'lanish"
+      }
+    ]
+  },
+  "steps": {
+    "badge": "Qanday boshlash kerak?",
+    "title": "Bor-yo'g'i 3 ta oddiy qadamda",
+    "titleHighlight": "markazingizni raqamlashtiring",
+    "subtitle": "Hech qanday murakkab texnik sozlamalarsiz, biz sizga har bir qadamda yordam beramiz.",
+    "items": [
+      {
+        "step": 1,
+        "title": "Ariza qoldiring",
+        "description": "Saytda ariza qoldiring yoki telefon qiling. 15 daqiqada siz uchun shaxsiy LMS tizimini tayyorlaymiz.",
+        "highlight": "15 daqiqa"
+      },
+      {
+        "step": 2,
+        "title": "Sozlash va o'qitish",
+        "description": "Mutaxassisimiz guruhlar va o'quvchilaringizni bepul ko'chirib beradi, xodimlaringizga tizimni o'rgatadi.",
+        "highlight": "1 kun"
+      },
+      {
+        "step": 3,
+        "title": "Muvaffaqiyatli ishga tushirish",
+        "description": "Darslarni boshqaring, to'lovlarni nazorat qiling va o'quvchilar sonini oshiring.",
+        "highlight": "Natija"
+      }
+    ]
+  },
+  "testimonials": {
+    "badge": "Mijozlarimiz fikrlari",
+    "title": "O'zbekistondagi 100 dan ortiq markazlar",
+    "titleHighlight": "bizga ishonadi",
+    "subtitle": "Haqiqiy rahbarlarning e-darschi tizimiga o'tgandan keyingi tajribalari.",
+    "items": [
+      {
+        "id": "t1",
+        "author": "Alisher Qodirov",
+        "role": "Bosh direktor",
+        "centerName": "«Alpha Academy» o'quv markazi",
+        "city": "Toshkent",
+        "quote": "Avval dars jadvallari va to'lovlarni Excelda yuritardik, juda ko'p chalkashliklar bo'lardi. e-darschi tizimiga o'tganimizdan so'ng, qarzdorliklar 40% ga kamaydi, ota-onalarning ishonchi oshdi.",
+        "metric": "Qarzdorlik 40% ga kamaydi"
+      },
+      {
+        "id": "t2",
+        "author": "Nilufar Rahimova",
+        "role": "Akademik direktor",
+        "centerName": "«Cambridge Learning Hub»",
+        "city": "Samarqand",
+        "quote": "O'qituvchilarimiz davomatni qog'oz jurnalda to'ldirishga ketadigan vaqtni tejab, ta'lim sifatiga e'tibor qarata boshladilar. Test sinovlari va uy vazifalarini tekshirish nihoyatda qulay.",
+        "metric": "Kuniga 2 soat vaqt tejaldi"
+      },
+      {
+        "id": "t3",
+        "author": "Jasurbek Mahmudov",
+        "role": "Asoschi",
+        "centerName": "«Progress IT School»",
+        "city": "Farg'ona",
+        "quote": "3 ta filialimiz bor. Har kuni filiallar bo'yicha tushum va o'quvchilar sonini monitoring qilish osonlashdi. 14 kunlik bepul muddatda tizim o'zini to'liq oqladi.",
+        "metric": "3 filial to'liq nazoratda"
+      }
+    ]
+  },
+  "faq": {
+    "badge": "Savollaringiz bormi?",
+    "title": "Ko'p beriladigan",
+    "titleHighlight": "savollarga javoblar",
+    "subtitle": "Agar savolingizga javob topa olmasangiz, qo'llab-quvvatlash xizmatimizga murojaat qiling.",
+    "items": [
+      {
+        "id": "faq1",
+        "question": "LMS ijarasi nima va u qanday ishlaydi?",
+        "answer": "Siz qimmat server sotib olmaysiz yoki dasturchi yollamaysiz. Siz tayyor, xavfsiz va to'liq sozlangan e-darschi platformasidan oylik qulay to'lov evaziga foydalanasiz. Barcha texnik xizmat, yangilanishlar va xavfsizlik bizning zimmamizda."
+      },
+      {
+        "id": "faq2",
+        "question": "Eski tizim yoki Exceldan ma'lumotlarni ko'chirish mumkinmi?",
+        "answer": "Ha, albatta! Bizda o'quvchilar, guruhlar va kurslarni CSV/Excel orqali ommaviy import qilish imkoniyati mavjud. Shuningdek, mutaxassislarimiz ma'lumotlaringizni tizimga bepul o'tkazib beradi."
+      },
+      {
+        "id": "faq3",
+        "question": "14 kunlik bepul sinov muddatidan keyin nima bo'ladi?",
+        "answer": "14 kun davomida siz barcha imkoniyatlardan cheklovlarsiz bepul foydalanasiz. Muddat tugagach, sizga mos keladigan tarifni tanlab, to'lov qilasiz. Ma'lumotlaringiz to'liq saqlanib qoladi."
+      },
+      {
+        "id": "faq4",
+        "question": "Qanday to'lov usullari mavjud?",
+        "answer": "Biz O'zbekistondagi barcha qulay to'lov usullarini qabul qilamiz: Payme, Click, Uzum Bank, shuningdek, yuridik shaxslar uchun bank hisob raqami orqali shartnoma asosida to'lov."
+      },
+      {
+        "id": "faq5",
+        "question": "Xodimlarimizni o'qitish bo'yicha yordam berasizmi?",
+        "answer": "Albatta. Ulanishingiz bilanoq administrator, o'qituvchi va rahbarlaringiz uchun onlayn yoki jonli o'quv mashg'uloti o'tkazamiz, shuningdek, video-qo'llanmalar taqdim etamiz."
+      },
+      {
+        "id": "faq6",
+        "question": "Keyinchalik tarifni kattaroq yoki kichikroqqa o'zgartirish mumkinmi?",
+        "answer": "Ha, siz istalgan vaqtda shaxsiy kabinetingiz orqali tarifingizni o'zgartirishingiz mumkin. Markazingiz kengayishi bilan tarifingiz moslashib boradi."
+      }
+    ]
+  },
+  "cta": {
+    "badge": "Vaqtni boy bermang",
+    "title": "14 kun bepul — hozir boshlang",
+    "subtitle": "Arizangizni qoldiring, 15 daqiqada markazingiz uchun LMS ochib beramiz va barcha savollaringizga javob beramiz.",
+    "form": {
+      "nameLabel": "Ism va familiyangiz",
+      "namePlaceholder": "Masalan: Azamat Zokirov",
+      "phoneLabel": "Telefon raqamingiz",
+      "phonePlaceholder": "+998 90 123 45 67",
+      "orgLabel": "O'quv markazi yoki maktab nomi",
+      "orgPlaceholder": "Masalan: Smart Education",
+      "notesLabel": "Qo'shimcha izoh (ixtiyoriy)",
+      "notesPlaceholder": "O'quvchilar soni, filiallaringiz haqida...",
+      "submit": "14 kun bepul boshlash",
+      "submitting": "Yuborilmoqda...",
+      "successTitle": "Arizangiz qabul qilindi!",
+      "successMessage": "Rahmat! Menejerimiz tez orada siz bilan bog'lanadi va tizimga kirish ma'lumotlarini taqdim etadi.",
+      "errorMessage": "Xatolik yuz berdi. Iltimos, ma'lumotlarni tekshirib qayta urinib ko'ring yoki to'g'ridan-to'g'ri qo'ng'iroq qiling.",
+      "guarantee": "Hech qanday bank kartasi talab qilinmaydi. 14 kun 100% bepul."
+    }
+  },
+  "footer": {
+    "brandDescription": "e-darschi — O'zbekistondagi o'quv markazlari va ta'lim muassasalari uchun ijaraga beriladigan eng zamonaviy va xavfsiz LMS platformasi.",
+    "sections": {
+      "product": "Mahsulot",
+      "company": "Kompaniya",
+      "contacts": "Aloqa"
+    },
+    "links": {
+      "features": "Imkoniyatlar",
+      "pricing": "Tariflar",
+      "apps": "Ilovalar",
+      "faq": "Savol-javoblar",
+      "about": "Biz haqimizda",
+      "terms": "Foydalanish shartlari",
+      "privacy": "Maxfiylik siyosati"
+    },
+    "contacts": {
+      "city": "Toshkent shahri, O'zbekiston",
+      "address": "Amir Temur shoh ko'chasi, 107-B",
+      "phone": "+998 71 200 45 00",
+      "email": "info@e-darschi.uz",
+      "telegram": "@edarschi_support"
+    },
+    "rights": "Barcha huquqlar himoyalangan."
+  }
+}

@@ -19,7 +19,7 @@ const deleteSessionSchema = z.object({
 export async function GET(req: Request) {
   try {
     const ip = getClientIp(req);
-    if (!checkRateLimit(ip)) return apiError("Too many requests", "RATE_LIMITED", 429);
+    if (!(await checkRateLimit(ip))) return apiError("Too many requests", "RATE_LIMITED", 429);
 
     const session = await getAuthSession();
     if (!session) return apiError("Unauthorized", "UNAUTHORIZED", 401);
@@ -50,7 +50,7 @@ export async function GET(req: Request) {
 export async function DELETE(req: Request) {
   try {
     const ip = getClientIp(req);
-    if (!checkRateLimit(ip)) return apiError("Too many requests", "RATE_LIMITED", 429);
+    if (!(await checkRateLimit(ip))) return apiError("Too many requests", "RATE_LIMITED", 429);
 
     const session = await getAuthSession();
     if (!session) return apiError("Unauthorized", "UNAUTHORIZED", 401);

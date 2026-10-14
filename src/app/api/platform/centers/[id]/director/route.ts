@@ -14,7 +14,7 @@ const schema = z.object({
 export async function POST(req: Request, { params }: { params: { id: string } }) {
   try {
     const ip = getClientIp(req);
-    if (!checkRateLimit(ip, 5, 60000)) return NextResponse.json({error: 'Too many requests'}, {status: 429});
+    if (!(await checkRateLimit(ip, 5, 60000))) return NextResponse.json({error: 'Too many requests'}, {status: 429});
     const session = await getAuthSession();
     if (!session || !hasPermission("platform.centers.write", session.user.platformRole)) {
       return NextResponse.json({ error: "Forbidden" }, { status: 403 });

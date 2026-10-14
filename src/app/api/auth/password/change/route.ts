@@ -12,7 +12,7 @@ export async function POST(req: Request) {
   try {
     const ip = getClientIp(req);
     
-    if (!checkRateLimit(ip + "_change_pwd")) {
+    if (!(await checkRateLimit(ip + "_change_pwd"))) {
       return apiError("auth.rate_limited", "RATE_LIMITED", 429);
     }
 

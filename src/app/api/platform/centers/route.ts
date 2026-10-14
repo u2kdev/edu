@@ -88,7 +88,7 @@ export async function POST(req: Request) {
     }
 
     const ip = getClientIp(req);
-    if (!checkRateLimit(ip, 5, 60000)) {
+    if (!(await checkRateLimit(ip, 5, 60000))) {
       return NextResponse.json({ error: "Too many requests" }, { status: 429 });
     }
 
@@ -111,6 +111,15 @@ export async function POST(req: Request) {
 
     if (existingSlug) {
       return NextResponse.json({ error: "Slug already in use" }, { status: 400 });
+    }
+
+    if (data.planId) {
+      const planExists = await db.subscriptionPlan.findUnique({
+        where: { id: data.planId },
+      });
+      if (!planExists) {
+        return NextResponse.json({ error: "Указанный тарифный план не найден" }, { status: 400 });
+      }
     }
 
     const result = await db.$transaction(async (tx) => {

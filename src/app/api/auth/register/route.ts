@@ -7,7 +7,7 @@ import { apiError, apiSuccess, handleApiError } from "@/lib/api-response";
 import { checkRateLimit } from "@/lib/rate-limit";
 import { getClientIp } from "@/lib/ip";
 import { logAuditEvent } from "@/lib/tenant";
-import { sendEmail } from "@/lib/email";
+import { sendEmail, enqueueEmailOutbox } from "@/lib/email";
 import { registerSchema } from "@/lib/validation/auth";
 import crypto from "crypto";
 import { REGISTER_CONFIG } from "@/lib/config";
@@ -19,19 +19,19 @@ export async function POST(req: Request) {
     const body = await req.json().catch(() => ({}));
     const rawCode = typeof body.inviteCode === "string" ? body.inviteCode.toUpperCase().trim() : "UNKNOWN";
 
-    if (!checkRateLimit(ip + "_register", REGISTER_CONFIG.IP_HOURLY_LIMIT, 3600000)) {
+    if (!(await checkRateLimit(ip + "_register", REGISTER_CONFIG.IP_HOURLY_LIMIT, 3600000))) {
       return apiError("Too many registration attempts from this IP", "RATE_LIMITED", 429);
     }
-    if (!checkRateLimit(rawCode + "_register", REGISTER_CONFIG.CODE_HOURLY_LIMIT, 3600000)) {
+    if (!(await checkRateLimit(rawCode + "_register", REGISTER_CONFIG.CODE_HOURLY_LIMIT, 3600000))) {
       return apiError("Too many registrations for this code", "RATE_LIMITED", 429);
     }
-    if (!checkRateLimit(ip + "_" + rawCode + "_register", REGISTER_CONFIG.CODE_IP_HOURLY_LIMIT, 3600000, false)) {
+    if (!(await checkRateLimit(ip + "_" + rawCode + "_register", REGISTER_CONFIG.CODE_IP_HOURLY_LIMIT, 3600000, false))) {
       return apiError("Too many registration attempts for this code from this IP", "RATE_LIMITED", 429);
     }
 
     const parsed = registerSchema.safeParse(body);
     if (!parsed.success) {
-      checkRateLimit(ip + "_" + rawCode + "_register", REGISTER_CONFIG.CODE_IP_HOURLY_LIMIT, 3600000, true);
+      await checkRateLimit(ip + "_" + rawCode + "_register", REGISTER_CONFIG.CODE_IP_HOURLY_LIMIT, 3600000, true);
       return apiError("Invalid data", "BAD_REQUEST", 400);
     }
     const { email: rawEmail, password, fullName, phone, inviteCode } = parsed.data;
@@ -44,19 +44,19 @@ export async function POST(req: Request) {
       include: { center: { select: { name: true } } },
     });
 
-    const consumeAndReturnInvalidError = () => {
-      checkRateLimit(ip + "_" + rawCode + "_register", REGISTER_CONFIG.CODE_IP_HOURLY_LIMIT, 3600000, true);
+    const consumeAndReturnInvalidError = async () => {
+      await checkRateLimit(ip + "_" + rawCode + "_register", REGISTER_CONFIG.CODE_IP_HOURLY_LIMIT, 3600000, true);
       return apiError("Invalid, expired, or exhausted invite code", "INVALID_INVITE", 400);
     };
 
-    if (!invite) return consumeAndReturnInvalidError();
-    if (invite.expiresAt && invite.expiresAt < new Date()) return consumeAndReturnInvalidError();
-    if (invite.maxUses !== null && invite.usesCount >= invite.maxUses) return consumeAndReturnInvalidError();
+    if (!invite) return await consumeAndReturnInvalidError();
+    if (invite.expiresAt && invite.expiresAt < new Date()) return await consumeAndReturnInvalidError();
+    if (invite.maxUses !== null && invite.usesCount >= invite.maxUses) return await consumeAndReturnInvalidError();
     
     // 2. Roles check
     const allowedRoles = ["CENTER_ADMIN", "TEACHER", "TEACHER_ASSISTANT", "CENTER_SUPPORT", "STUDENT", "PARENT"];
     if (!allowedRoles.includes(invite.targetRole)) {
-      return consumeAndReturnInvalidError();
+      return await consumeAndReturnInvalidError();
     }
 
     // 3. Check existing user
@@ -68,11 +68,11 @@ export async function POST(req: Request) {
       await hashPassword(password);
 
       // DoS protection: Limit PendingInvite by (IP, Center) and IP
-      if (!checkRateLimit(ip + "_" + invite.centerId + "_pending", 10, 3600000)) {
+      if (!(await checkRateLimit(ip + "_" + invite.centerId + "_pending", 10, 3600000))) {
         return apiError("Too many pending invites for this center", "RATE_LIMITED", 429);
       }
       
-      if (!checkRateLimit(ip + "_pending", 20, 3600000)) {
+      if (!(await checkRateLimit(ip + "_pending", 20, 3600000))) {
         return apiError("Too many pending invites from this IP", "RATE_LIMITED", 429);
       }
 
@@ -96,16 +96,26 @@ export async function POST(req: Request) {
         ? `Siz o'quv markaziga taklif qilindingiz. Qabul qilish uchun havolani bosing: ${acceptUrl}`
         : `Вас пригласили в учебный центр. Для принятия перейдите по ссылке: ${acceptUrl}`;
 
-      // Fire and forget email safely
-      void sendEmail(user.email, subject, emailBody).catch(err => {
-        db.auditLog.create({
+      // Synchronous email with outbox fallback on failure
+      try {
+        await sendEmail(user.email, subject, emailBody);
+      } catch (err: unknown) {
+        await enqueueEmailOutbox({
+          to: user.email,
+          subject,
+          body: emailBody,
+          lastError: err instanceof Error ? err.message : String(err),
+          attempts: 1,
+        }).catch(() => {});
+
+        await db.auditLog.create({
           data: {
             action: "EMAIL_FAILED",
             resource: "PlatformUser",
             detailsJson: JSON.stringify({ error: String(err), email })
           }
         }).catch(() => {});
-      });
+      }
 
       return apiSuccess({ message: "Registration successful. Please check your email to confirm." });
     }
@@ -198,15 +208,26 @@ export async function POST(req: Request) {
       ? `Ro'yxatdan o'tishni yakunlash uchun havola orqali o'ting: ${confirmUrl}`
       : `Для подтверждения регистрации перейдите по ссылке: ${confirmUrl}`;
 
-    void sendEmail(user.email, confirmSubject, confirmBody).catch(err => {
-      db.auditLog.create({
+    // Synchronous email with outbox fallback on failure
+    try {
+      await sendEmail(user.email, confirmSubject, confirmBody);
+    } catch (err: unknown) {
+      await enqueueEmailOutbox({
+        to: user.email,
+        subject: confirmSubject,
+        body: confirmBody,
+        lastError: err instanceof Error ? err.message : String(err),
+        attempts: 1,
+      }).catch(() => {});
+
+      await db.auditLog.create({
         data: {
           action: "EMAIL_FAILED",
           resource: "PlatformUser",
-          detailsJson: JSON.stringify({ error: String(err), email: user!.email })
-        }
+          detailsJson: JSON.stringify({ error: String(err), email: user!.email }),
+        },
       }).catch(() => {});
-    });
+    }
 
     return apiSuccess({ message: "Registration successful. Please check your email to confirm." });
   } catch (err: unknown) {

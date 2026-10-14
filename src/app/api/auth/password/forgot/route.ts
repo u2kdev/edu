@@ -13,7 +13,7 @@ export async function POST(req: Request) {
     const ip = getClientIp(req);
     
     // Custom rate limit for password reset (more strict: limit IP & email)
-    if (!checkRateLimit(ip + "_forgot_pwd")) {
+    if (!(await checkRateLimit(ip + "_forgot_pwd"))) {
       return apiError("auth.rate_limited", "RATE_LIMITED", 429);
     }
 

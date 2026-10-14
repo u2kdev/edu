@@ -13,7 +13,7 @@ import { apiError, handleApiError } from "@/lib/api-response";
 export async function POST(req: Request) {
   try {
     const ip = getClientIp(req);
-    if (!checkRateLimit(ip)) {
+    if (!(await checkRateLimit(ip))) {
       return apiError("Too many attempts", "RATE_LIMITED", 429);
     }
 

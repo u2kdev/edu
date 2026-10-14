@@ -13,7 +13,8 @@ export type ApiErrorCode =
   | "INVALID_TOKEN"
   | "INVALID_INVITE"
   | "ROLE_CONFLICT"
-  | "EMAIL_NOT_VERIFIED";
+  | "EMAIL_NOT_VERIFIED"
+  | "SERVICE_UNAVAILABLE";
 
 export interface ApiErrorResponse {
   success: false;
@@ -48,9 +49,16 @@ export function apiSuccess<T>(data: T, status: number = 200) {
 }
 
 export function handleApiError(error: unknown): NextResponse<ApiErrorResponse> {
-  const err = error as { message?: string } | null | undefined;
+  const err = error as { name?: string; message?: string } | null | undefined;
   if (error instanceof ZodError) {
     return apiError("Ошибка валидации данных", "VALIDATION_ERROR", 400, error.issues);
+  }
+
+  if (
+    err?.name === "RateLimiterDatabaseError" ||
+    (typeof err?.message === "string" && err.message.includes("Rate limiter storage failed"))
+  ) {
+    return apiError("Сервис временно недоступен. Попробуйте позже.", "SERVICE_UNAVAILABLE", 503);
   }
 
   if (err?.message && err.message.includes("Unauthorized")) {

@@ -1,6 +1,7 @@
 datasource db {
-  provider = "postgresql"
-  url      = env("DATABASE_URL")
+  provider  = "postgresql"
+  url       = env("DATABASE_URL")
+  directUrl = env("DIRECT_URL")
 }
 
 generator client {
@@ -929,6 +930,18 @@ model LoginAttempt {
   @@unique([email, ip])
 }
 
+model RateLimitRecord {
+  id        String   @id @default(uuid())
+  key       String   @unique
+  count     Int      @default(1)
+  expiresAt DateTime
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([key])
+  @@index([expiresAt])
+}
+
 model PendingInvite {
   id           String       @id @default(uuid())
   email        String
@@ -941,4 +954,23 @@ model PendingInvite {
   inviteCode   InviteCode   @relation(fields: [inviteCodeId], references: [id], onDelete: Cascade)
 
   @@index([email])
+}
+
+model EmailOutbox {
+  id          String    @id @default(uuid())
+  to          String
+  subject     String
+  body        String
+  html        String?
+  status      String    @default("PENDING") // PENDING, SENT, FAILED
+  attempts    Int       @default(0)
+  maxAttempts Int       @default(5)
+  lastError   String?
+  nextRetryAt DateTime  @default(now())
+  sentAt      DateTime?
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  @@index([status, nextRetryAt])
+  @@index([createdAt])
 }

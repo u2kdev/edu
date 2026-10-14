@@ -4,14 +4,42 @@
 
 :root {
   --font-sans: 'Inter', system-ui, -apple-system, sans-serif;
+  --bg-main: #FFFFFF;
+  --bg-alt: #F4F8FF;
+  --bg-card: #FFFFFF;
+  --border-card: rgba(30, 58, 138, 0.12);
+  --text-main: #0F172A;
+  --text-muted: #475569;
+  --primary: #2563EB;
+  --primary-hover: #1D4ED8;
+  --accent: #1E3A8A;
+  --glow-color: rgba(37, 99, 235, 0.15);
+}
+
+.dark {
+  --bg-main: #0A1128;
+  --bg-alt: #0F1B3D;
+  --bg-card: #13224D;
+  --border-card: rgba(255, 255, 255, 0.12);
+  --text-main: #E2E8F0;
+  --text-muted: #94A3B8;
+  --primary: #3B82F6;
+  --primary-hover: #60A5FA;
+  --accent: #1E3A8A;
+  --glow-color: rgba(59, 130, 246, 0.35);
+}
+
+html {
+  transition: background-color 400ms ease, color 400ms ease;
 }
 
 body {
   font-family: var(--font-sans);
-  background-color: #0b0f19;
-  color: #f3f4f6;
+  background-color: var(--bg-main);
+  color: var(--text-main);
   min-height: 100vh;
   overflow-x: hidden;
+  transition: background-color 400ms ease, color 400ms ease;
 }
 
 /* Glassmorphism & Modern UI utilities */
@@ -22,14 +50,30 @@ body {
   border: 1px solid rgba(255, 255, 255, 0.08);
 }
 
+.glass-panel-light {
+  background: rgba(255, 255, 255, 0.92);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+  border: 1px solid rgba(226, 232, 240, 0.85);
+  box-shadow: 0 1px 3px 0 rgba(0, 0, 0, 0.04), 0 1px 2px -1px rgba(0, 0, 0, 0.04);
+}
+
 .glass-panel-hover {
-  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
 }
 
 .glass-panel-hover:hover {
   background: rgba(25, 37, 61, 0.85);
   border-color: rgba(79, 110, 247, 0.3);
   transform: translateY(-2px);
+}
+
+/* Apple & Emil Design Engineering tactile press feedback */
+button:active:not(:disabled),
+.btn-interactive:active:not(:disabled),
+[role="button"]:active {
+  transform: scale(0.97);
+  transition: transform 100ms ease-out;
 }
 
 .gradient-border {
@@ -40,7 +84,7 @@ body {
 }
 
 .gradient-text {
-  background: linear-gradient(135deg, #60a5fa 0%, #a855f7 50%, #ec4899 100%);
+  background: linear-gradient(135deg, #2563eb 0%, #4f46e5 50%, #7c3aed 100%);
   -webkit-background-clip: text;
   -webkit-text-fill-color: transparent;
 }
@@ -52,14 +96,42 @@ body {
 }
 
 ::-webkit-scrollbar-track {
-  background: #0b0f19;
+  background: #f1f5f9;
 }
 
 ::-webkit-scrollbar-thumb {
-  background: #1f293d;
+  background: #cbd5e1;
   border-radius: 9999px;
 }
 
 ::-webkit-scrollbar-thumb:hover {
-  background: #374151;
+  background: #94a3b8;
 }
+
+/* Strict Typography utility */
+.font-strict {
+  font-family: var(--font-sans);
+  font-feature-settings: "cv02", "cv03", "cv04", "cv11", "tnum";
+  letter-spacing: -0.018em;
+}
+
+/* Mesh Gradients */
+.mesh-gradient-light {
+  background-color: #ffffff;
+  background-image:
+    radial-gradient(at 0% 0%, rgba(219, 234, 254, 0.7) 0px, transparent 50%),
+    radial-gradient(at 100% 0%, rgba(224, 231, 255, 0.7) 0px, transparent 50%),
+    radial-gradient(at 100% 100%, rgba(243, 232, 255, 0.5) 0px, transparent 50%),
+    radial-gradient(at 0% 100%, rgba(224, 242, 254, 0.5) 0px, transparent 50%);
+}
+
+.mesh-gradient-card {
+  background: linear-gradient(135deg, rgba(255, 255, 255, 0.95) 0%, rgba(248, 250, 252, 0.85) 100%);
+}
+
+/* Background Particles Grid */
+.particles-bg {
+  background-image: radial-gradient(rgba(148, 163, 184, 0.22) 1px, transparent 1px);
+  background-size: 24px 24px;
+}
+
