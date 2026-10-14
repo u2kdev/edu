@@ -50,14 +50,30 @@ body {
   border: 1px solid rgba(255, 255, 255, 0.08);
 }
 
+.glass-panel-light {
+  background: rgba(255, 255, 255, 0.92);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+  border: 1px solid rgba(226, 232, 240, 0.85);
+  box-shadow: 0 1px 3px 0 rgba(0, 0, 0, 0.04), 0 1px 2px -1px rgba(0, 0, 0, 0.04);
+}
+
 .glass-panel-hover {
-  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
 }
 
 .glass-panel-hover:hover {
   background: rgba(25, 37, 61, 0.85);
   border-color: rgba(79, 110, 247, 0.3);
   transform: translateY(-2px);
+}
+
+/* Apple & Emil Design Engineering tactile press feedback */
+button:active:not(:disabled),
+.btn-interactive:active:not(:disabled),
+[role="button"]:active {
+  transform: scale(0.97);
+  transition: transform 100ms ease-out;
 }
 
 .gradient-border {
@@ -68,7 +84,7 @@ body {
 }
 
 .gradient-text {
-  background: linear-gradient(135deg, #60a5fa 0%, #a855f7 50%, #ec4899 100%);
+  background: linear-gradient(135deg, #2563eb 0%, #4f46e5 50%, #7c3aed 100%);
   -webkit-background-clip: text;
   -webkit-text-fill-color: transparent;
 }
@@ -80,14 +96,14 @@ body {
 }
 
 ::-webkit-scrollbar-track {
-  background: #0b0f19;
+  background: #f1f5f9;
 }
 
 ::-webkit-scrollbar-thumb {
-  background: #1f293d;
+  background: #cbd5e1;
   border-radius: 9999px;
 }
 
 ::-webkit-scrollbar-thumb:hover {
-  background: #374151;
+  background: #94a3b8;
 }

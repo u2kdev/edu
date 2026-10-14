@@ -1,6 +1,7 @@
 {
   "common": {
-    "appName": "AcademiaSaaS",
+    "brandName": "e-darischi",
+    "appName": "e-darischi",
     "appTagline": "Multi-tenant LMS платформа",
     "loading": "Загрузка...",
     "save": "Сохранить",
@@ -500,6 +501,8 @@
     "churn": "Churn Rate",
     "impersonate": "Войти как пользователь",
     "auditLog": "Журнал аудита",
+    "support": "Поддержка платформы",
+    "settings": "Настройки платформы",
     "offline": "Офлайн",
     "online": "Онлайн",
     "hybrid": "Гибрид",
