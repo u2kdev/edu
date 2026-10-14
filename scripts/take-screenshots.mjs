@@ -265,6 +265,30 @@ async function main() {
         viewport: { width: 1280, height: 800 },
         desc: "System Global Audit Log (SUPERADMIN)",
       },
+      {
+        name: "09_landing_page_desktop",
+        url: `http://localhost:${port}/ru`,
+        viewport: { width: 1280, height: 900 },
+        desc: "Landing Page Desktop (strict font, photo preview, mesh gradients, particles)",
+      },
+      {
+        name: "10_landing_page_mobile",
+        url: `http://localhost:${port}/ru`,
+        viewport: { width: 375, height: 812 },
+        desc: "Landing Page Mobile (responsive hero, strict typography, clean cards)",
+      },
+      {
+        name: "11_login_page",
+        url: `http://localhost:${port}/login`,
+        viewport: { width: 1280, height: 800 },
+        desc: "Client Login Page (light theme, strict font, password toggle, brand e-darischi)",
+      },
+      {
+        name: "12_register_page",
+        url: `http://localhost:${port}/register`,
+        viewport: { width: 1280, height: 850 },
+        desc: "Client Registration Page (invite code, password strength meter, strict font)",
+      },
     ];
 
     console.log("\n📸 Capturing screenshots:");
