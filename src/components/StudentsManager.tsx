@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import Link from "next/link";
 import {
   Users,
@@ -102,7 +102,7 @@ export default function StudentsManager({
 
   const canManage = role === "DIRECTOR" || role === "CENTER_ADMIN";
 
-  const fetchStudents = async () => {
+  const fetchStudents = useCallback(async () => {
     setLoading(true);
     setError(null);
     try {
@@ -131,12 +131,11 @@ export default function StudentsManager({
     } finally {
       setLoading(false);
     }
-  };
+  }, [page, search, selectedGroup, selectedStatus, sortBy, sortOrder, locale]);
 
   useEffect(() => {
     fetchStudents();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [page, search, selectedGroup, selectedStatus, sortBy, sortOrder]);
+  }, [fetchStudents]);
 
   const handleAddSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
