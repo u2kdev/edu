@@ -6,7 +6,6 @@ import { GraduationCap, Menu, X, ArrowRight } from "lucide-react";
 import { LandingLocale } from "../../types/landing";
 import { getLandingMessages } from "../../lib/landing-i18n";
 import { LangSwitcher } from "./LangSwitcher";
-import { ThemeToggle } from "./ThemeToggle";
 import { AnimatedButton } from "./AnimatedButton";
 
 interface HeaderProps {
@@ -52,25 +51,25 @@ export const Header: React.FC<HeaderProps> = ({ locale, onOpenLeadModal }) => {
               <GraduationCap className="w-5 h-5" />
             </div>
             <div>
-              <span className="text-xl font-extrabold tracking-tight text-slate-900 dark:text-white flex items-center">
-                e-darschi
-                <span className="ml-1 text-[10px] font-bold px-1.5 py-0.5 rounded-full bg-blue-500/10 text-blue-600 dark:text-blue-400">
+              <span className="text-xl font-extrabold tracking-tight text-slate-900 flex items-center">
+                e-darischi
+                <span className="ml-1 text-[10px] font-bold px-1.5 py-0.5 rounded-full bg-blue-500/10 text-blue-600">
                   LMS
                 </span>
               </span>
-              <span className="hidden sm:block text-[10px] tracking-wider uppercase text-slate-500 dark:text-slate-400 font-medium">
+              <span className="hidden sm:block text-[10px] tracking-wider uppercase text-slate-500 font-medium">
                 {"Toshkent, O'zbekiston"}
               </span>
             </div>
           </Link>
 
           {/* Desktop Navigation */}
-          <nav className="hidden lg:flex items-center gap-7 text-sm font-medium text-slate-600 dark:text-slate-300">
+          <nav className="hidden lg:flex items-center gap-7 text-sm font-medium text-slate-600">
             {navLinks.map((link) => (
               <a
                 key={link.href}
                 href={link.href}
-                className="hover:text-blue-600 dark:hover:text-blue-400 transition-colors"
+                className="hover:text-blue-600 transition-colors"
               >
                 {link.label}
               </a>
@@ -80,11 +79,10 @@ export const Header: React.FC<HeaderProps> = ({ locale, onOpenLeadModal }) => {
           {/* Right Controls */}
           <div className="hidden sm:flex items-center gap-3">
             <LangSwitcher currentLocale={locale} />
-            <ThemeToggle />
 
             <Link
               href="/login"
-              className="text-xs font-semibold px-3 py-2 rounded-xl text-slate-700 dark:text-slate-200 hover:text-blue-600 dark:hover:text-white hover:bg-slate-100 dark:hover:bg-white/5 transition-colors"
+              className="text-xs font-semibold px-3 py-2 rounded-xl text-slate-700 hover:text-blue-600 hover:bg-slate-100 transition-colors"
             >
               {t.header.login}
             </Link>
@@ -104,11 +102,10 @@ export const Header: React.FC<HeaderProps> = ({ locale, onOpenLeadModal }) => {
           {/* Mobile Menu Button */}
           <div className="flex lg:hidden items-center gap-2">
             <LangSwitcher currentLocale={locale} />
-            <ThemeToggle />
             <button
               onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
               aria-label={t.header.menuToggle}
-              className="p-2 rounded-xl text-slate-700 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-white/10 transition-colors"
+              className="p-2 rounded-xl text-slate-700 hover:bg-slate-100 transition-colors"
             >
               {mobileMenuOpen ? <X className="w-6 h-6" /> : <Menu className="w-6 h-6" />}
             </button>
@@ -118,25 +115,25 @@ export const Header: React.FC<HeaderProps> = ({ locale, onOpenLeadModal }) => {
 
       {/* Mobile Drawer */}
       {mobileMenuOpen && (
-        <div className="lg:hidden bg-white/95 dark:bg-[#0A1128]/95 backdrop-blur-xl border-b border-slate-200 dark:border-white/10 px-6 py-5 space-y-4 animate-fade-in shadow-xl">
+        <div className="lg:hidden bg-white/95 backdrop-blur-xl border-b border-slate-200 px-6 py-5 space-y-4 animate-fade-in shadow-xl">
           <nav className="flex flex-col space-y-3">
             {navLinks.map((link) => (
               <a
                 key={link.href}
                 href={link.href}
                 onClick={() => setMobileMenuOpen(false)}
-                className="text-base font-medium text-slate-800 dark:text-slate-200 hover:text-blue-600 dark:hover:text-blue-400 py-1 transition-colors"
+                className="text-base font-medium text-slate-800 hover:text-blue-600 py-1 transition-colors"
               >
                 {link.label}
               </a>
             ))}
           </nav>
 
-          <div className="pt-3 border-t border-slate-100 dark:border-white/10 flex flex-col gap-2.5">
+          <div className="pt-3 border-t border-slate-100 flex flex-col gap-2.5">
             <Link
               href="/login"
               onClick={() => setMobileMenuOpen(false)}
-              className="w-full text-center py-2.5 text-sm font-semibold rounded-xl bg-slate-100 dark:bg-[#13224D] text-slate-900 dark:text-white"
+              className="w-full text-center py-2.5 text-sm font-semibold rounded-xl bg-slate-100 text-slate-900"
             >
               {t.header.login}
             </Link>

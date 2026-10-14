@@ -17,6 +17,7 @@ import {
   TrendingUp,
   CreditCard,
   Users,
+  Check,
 } from "lucide-react";
 import { LandingLocale } from "../../types/landing";
 import { getLandingMessages } from "../../lib/landing-i18n";
@@ -34,13 +35,13 @@ export const Hero: React.FC<HeroProps> = ({
   const t = getLandingMessages(locale);
 
   return (
-    <section className="relative pt-10 pb-20 md:pt-16 md:pb-28 overflow-hidden font-strict">
-      {/* Background Floating Blurred Gradient Mesh Orbs */}
-      <div className="absolute top-1/4 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[700px] h-[700px] bg-gradient-to-tr from-blue-400/20 via-indigo-300/15 to-transparent blur-[140px] rounded-full pointer-events-none -z-10" />
-      <div className="absolute top-1/3 right-5 w-[450px] h-[450px] bg-gradient-to-bl from-teal-400/15 via-blue-300/15 to-transparent blur-[120px] rounded-full pointer-events-none -z-10" />
+    <section className="relative pt-12 pb-24 md:pt-20 md:pb-32 overflow-hidden font-strict">
+      {/* Background Soft Mesh Ambient Lighting */}
+      <div className="absolute top-1/4 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[850px] h-[850px] bg-gradient-to-tr from-blue-400/20 via-indigo-300/15 to-transparent blur-[140px] rounded-full pointer-events-none -z-10" />
+      <div className="absolute top-1/3 right-5 w-[500px] h-[500px] bg-gradient-to-bl from-teal-400/15 via-blue-300/15 to-transparent blur-[120px] rounded-full pointer-events-none -z-10" />
 
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-        <div className="grid grid-cols-1 lg:grid-cols-12 gap-12 lg:gap-8 items-center">
+        <div className="grid grid-cols-1 lg:grid-cols-12 gap-12 lg:gap-10 items-center">
           {/* Left Column: Hero Copy & Actions */}
           <div className="lg:col-span-6 text-center lg:text-left">
             {/* 14 Days Free Badge */}
@@ -89,7 +90,7 @@ export const Hero: React.FC<HeroProps> = ({
                 variant="gradient"
                 glow
                 onClick={onOpenLeadModal}
-                className="w-full sm:w-auto shadow-lg shadow-blue-500/25"
+                className="w-full sm:w-auto shadow-lg shadow-blue-500/25 cursor-pointer"
               >
                 <span>{t.hero.ctaStart}</span>
                 <ArrowRight className="w-4 h-4 ml-1" />
@@ -97,7 +98,7 @@ export const Hero: React.FC<HeroProps> = ({
 
               <a
                 href="#ilovalari"
-                className="w-full sm:w-auto px-6 py-3 rounded-xl border border-slate-300 bg-white hover:bg-slate-50 text-slate-700 text-sm font-semibold transition-all shadow-xs flex items-center justify-center gap-2 hover:border-slate-400"
+                className="w-full sm:w-auto px-6 py-3 rounded-xl border border-slate-300 bg-white hover:bg-slate-50 text-slate-700 text-sm font-semibold transition-all shadow-xs flex items-center justify-center gap-2 hover:border-slate-400 cursor-pointer active:scale-[0.98]"
               >
                 <span>{locale === "uz" ? "Platforma imkoniyatlari" : "Возможности платформы"}</span>
               </a>
@@ -118,7 +119,7 @@ export const Hero: React.FC<HeroProps> = ({
               </div>
 
               <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 text-left">
-                <div className="p-3 rounded-xl bg-white border border-slate-200 shadow-xs hover:border-blue-400/50 transition-colors">
+                <div className="p-3.5 rounded-2xl bg-white border border-slate-200/90 shadow-xs hover:border-blue-300 transition-colors">
                   <div className="flex items-center gap-1.5 font-bold text-xs text-slate-900 mb-1">
                     <Database className="w-3.5 h-3.5 text-blue-600 shrink-0" />
                     <span>{t.hero.trust.isolation.title}</span>
@@ -128,7 +129,7 @@ export const Hero: React.FC<HeroProps> = ({
                   </p>
                 </div>
 
-                <div className="p-3 rounded-xl bg-white border border-slate-200 shadow-xs hover:border-indigo-400/50 transition-colors">
+                <div className="p-3.5 rounded-2xl bg-white border border-slate-200/90 shadow-xs hover:border-indigo-300 transition-colors">
                   <div className="flex items-center gap-1.5 font-bold text-xs text-slate-900 mb-1">
                     <Lock className="w-3.5 h-3.5 text-indigo-600 shrink-0" />
                     <span>{t.hero.trust.roles.title}</span>
@@ -138,7 +139,7 @@ export const Hero: React.FC<HeroProps> = ({
                   </p>
                 </div>
 
-                <div className="p-3 rounded-xl bg-white border border-slate-200 shadow-xs hover:border-emerald-400/50 transition-colors">
+                <div className="p-3.5 rounded-2xl bg-white border border-slate-200/90 shadow-xs hover:border-emerald-300 transition-colors">
                   <div className="flex items-center gap-1.5 font-bold text-xs text-slate-900 mb-1">
                     <Shield className="w-3.5 h-3.5 text-emerald-600 shrink-0" />
                     <span>{t.hero.trust.audit.title}</span>
@@ -155,23 +156,23 @@ export const Hero: React.FC<HeroProps> = ({
           <motion.div
             initial={{ opacity: 0, scale: 0.96 }}
             animate={{ opacity: 1, scale: 1 }}
-            transition={{ duration: 0.8, delay: 0.25, ease: [0.16, 1, 0.3, 1] }}
+            transition={{ duration: 0.7, delay: 0.2, ease: [0.16, 1, 0.3, 1] }}
             className="lg:col-span-6 relative"
           >
             {/* Background glowing frame */}
-            <div className="relative rounded-3xl p-2 bg-gradient-to-tr from-blue-500/20 via-indigo-500/20 to-teal-400/20 shadow-2xl">
-              <div className="relative rounded-2xl overflow-hidden bg-white border border-slate-200 shadow-xl">
+            <div className="relative rounded-3xl p-2.5 bg-gradient-to-tr from-blue-500/15 via-indigo-500/15 to-teal-400/15 shadow-2xl">
+              <div className="relative rounded-2xl overflow-hidden bg-white border border-slate-200/90 shadow-xl">
                 {/* Window top bar */}
-                <div className="px-4 py-3 bg-slate-50 border-b border-slate-200/90 flex items-center justify-between">
+                <div className="px-4 py-3 bg-slate-50/90 backdrop-blur-sm border-b border-slate-200/90 flex items-center justify-between">
                   <div className="flex items-center gap-2">
-                    <div className="w-3 h-3 rounded-full bg-rose-400/80" />
-                    <div className="w-3 h-3 rounded-full bg-amber-400/80" />
-                    <div className="w-3 h-3 rounded-full bg-emerald-400/80" />
+                    <div className="w-3 h-3 rounded-full bg-rose-400/90" />
+                    <div className="w-3 h-3 rounded-full bg-amber-400/90" />
+                    <div className="w-3 h-3 rounded-full bg-emerald-400/90" />
                     <span className="text-xs font-bold text-slate-700 ml-2">e-darischi LMS • Toshkent</span>
                   </div>
                   <div className="flex items-center gap-1.5 px-2.5 py-0.5 rounded-full bg-emerald-50 text-emerald-700 border border-emerald-200 text-[11px] font-semibold">
                     <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
-                    <span>{locale === "uz" ? "Jonli darslar" : "Онлайн-уроки"}</span>
+                    <span>{locale === "uz" ? "Jonli tizim" : "Система онлайн"}</span>
                   </div>
                 </div>
 
@@ -188,7 +189,7 @@ export const Hero: React.FC<HeroProps> = ({
 
                   {/* Photo overlay badge */}
                   <div className="absolute bottom-3 left-4 right-4 flex items-center justify-between text-white text-xs">
-                    <div className="flex items-center gap-2 bg-slate-900/80 backdrop-blur-md px-3 py-1.5 rounded-xl border border-white/15">
+                    <div className="flex items-center gap-2 bg-slate-900/85 backdrop-blur-md px-3 py-1.5 rounded-xl border border-white/20">
                       <GraduationCap className="w-4 h-4 text-blue-400" />
                       <span className="font-semibold">{locale === "uz" ? "IELTS & IT Bo'limi" : "Факультет Языков и IT"}</span>
                     </div>
@@ -201,7 +202,7 @@ export const Hero: React.FC<HeroProps> = ({
 
                 {/* Sub-card live modules showcase */}
                 <div className="p-4 sm:p-5 bg-white grid grid-cols-2 gap-3 border-t border-slate-100">
-                  <div className="p-3 rounded-xl bg-slate-50 border border-slate-200/80 hover:border-blue-300 transition-colors">
+                  <div className="p-3.5 rounded-xl bg-slate-50 border border-slate-200/80 hover:border-blue-300 transition-colors">
                     <div className="flex items-center gap-2 text-blue-600 mb-1">
                       <Calendar className="w-4 h-4" />
                       <span className="text-xs font-bold text-slate-800">{locale === "uz" ? "Aqlli jadval" : "Умное расписание"}</span>
@@ -209,7 +210,7 @@ export const Hero: React.FC<HeroProps> = ({
                     <div className="text-[11px] text-slate-500">{locale === "uz" ? "Afg'on xonasi • 14:00" : "Аудитория 4 • 14:00"}</div>
                   </div>
 
-                  <div className="p-3 rounded-xl bg-slate-50 border border-slate-200/80 hover:border-emerald-300 transition-colors">
+                  <div className="p-3.5 rounded-xl bg-slate-50 border border-slate-200/80 hover:border-emerald-300 transition-colors">
                     <div className="flex items-center gap-2 text-emerald-600 mb-1">
                       <Award className="w-4 h-4" />
                       <span className="text-xs font-bold text-slate-800">{locale === "uz" ? "Davomat va Jurnal" : "Посещаемость"}</span>
@@ -224,7 +225,7 @@ export const Hero: React.FC<HeroProps> = ({
             <motion.div
               initial={{ opacity: 0, x: -20, y: 20 }}
               animate={{ opacity: 1, x: 0, y: 0 }}
-              transition={{ duration: 0.7, delay: 0.45 }}
+              transition={{ duration: 0.6, delay: 0.35, ease: "easeOut" }}
               whileHover={{ y: -4, transition: { duration: 0.2 } }}
               className="absolute -bottom-6 -left-6 bg-white/95 backdrop-blur-md rounded-2xl p-4 shadow-xl border border-slate-200/90 flex items-center gap-3.5 hidden sm:flex z-20"
             >
@@ -262,7 +263,7 @@ export const Hero: React.FC<HeroProps> = ({
             <motion.div
               initial={{ opacity: 0, x: 20, y: -20 }}
               animate={{ opacity: 1, x: 0, y: 0 }}
-              transition={{ duration: 0.7, delay: 0.55 }}
+              transition={{ duration: 0.6, delay: 0.45, ease: "easeOut" }}
               whileHover={{ y: -4, transition: { duration: 0.2 } }}
               className="absolute -top-6 -right-6 bg-white/95 backdrop-blur-md rounded-2xl p-3.5 shadow-xl border border-slate-200/90 flex items-center gap-3 hidden sm:flex z-20"
             >
