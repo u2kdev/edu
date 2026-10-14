@@ -11,7 +11,8 @@
     "prisma:generate": "prisma generate",
     "prisma:db-push": "prisma db push",
     "prisma:seed": "node --import tsx/esm prisma/seed.ts",
-    "setup:first-owner": "node --import tsx/esm scripts/first-owner.ts"
+    "setup:first-owner": "node --import tsx/esm scripts/first-owner.ts",
+    "screenshots": "node scripts/take-screenshots.mjs"
   },
   "dependencies": {
     "@prisma/client": "^5.21.0",

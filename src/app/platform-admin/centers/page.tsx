@@ -54,8 +54,8 @@ export default function PlatformCentersPage() {
       const res = await fetch(`/api/platform/centers?${query}`);
       if (!res.ok) throw new Error("Не удалось загрузить список центров");
       const json = await res.json();
-      setCenters(json.data || []);
-      setTotalPages(json.meta?.total_pages || json.meta?.totalPages || 1);
+      setCenters(json.items || json.data || []);
+      setTotalPages(Math.ceil((json.total || 0) / (json.pageSize || 10)) || json.meta?.totalPages || 1);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Неизвестная ошибка");
     } finally {
