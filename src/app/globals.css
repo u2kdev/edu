@@ -107,3 +107,31 @@ button:active:not(:disabled),
 ::-webkit-scrollbar-thumb:hover {
   background: #94a3b8;
 }
+
+/* Strict Typography utility */
+.font-strict {
+  font-family: var(--font-sans);
+  font-feature-settings: "cv02", "cv03", "cv04", "cv11", "tnum";
+  letter-spacing: -0.018em;
+}
+
+/* Mesh Gradients */
+.mesh-gradient-light {
+  background-color: #ffffff;
+  background-image:
+    radial-gradient(at 0% 0%, rgba(219, 234, 254, 0.7) 0px, transparent 50%),
+    radial-gradient(at 100% 0%, rgba(224, 231, 255, 0.7) 0px, transparent 50%),
+    radial-gradient(at 100% 100%, rgba(243, 232, 255, 0.5) 0px, transparent 50%),
+    radial-gradient(at 0% 100%, rgba(224, 242, 254, 0.5) 0px, transparent 50%);
+}
+
+.mesh-gradient-card {
+  background: linear-gradient(135deg, rgba(255, 255, 255, 0.95) 0%, rgba(248, 250, 252, 0.85) 100%);
+}
+
+/* Background Particles Grid */
+.particles-bg {
+  background-image: radial-gradient(rgba(148, 163, 184, 0.22) 1px, transparent 1px);
+  background-size: 24px 24px;
+}
+

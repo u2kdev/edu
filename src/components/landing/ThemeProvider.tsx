@@ -13,20 +13,18 @@ interface ThemeContextType {
 const ThemeContext = createContext<ThemeContextType | undefined>(undefined);
 
 export function ThemeProvider({ children }: { children: React.ReactNode }) {
-  const [theme, setThemeState] = useState<Theme>("dark");
+  const [theme, setThemeState] = useState<Theme>("light");
   const [mounted, setMounted] = useState(false);
 
   useEffect(() => {
-    // Check saved preference or system preference
+    // Check saved preference or default to light
     const saved = localStorage.getItem("edarschi-theme") as Theme | null;
     if (saved === "light" || saved === "dark") {
       setThemeState(saved);
       document.documentElement.classList.toggle("dark", saved === "dark");
     } else {
-      const prefersDark = window.matchMedia("(prefers-color-scheme: dark)").matches;
-      const initial = prefersDark ? "dark" : "light";
-      setThemeState(initial);
-      document.documentElement.classList.toggle("dark", initial === "dark");
+      setThemeState("light");
+      document.documentElement.classList.remove("dark");
     }
     setMounted(true);
   }, []);
