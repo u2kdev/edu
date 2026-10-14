@@ -374,3 +374,16 @@ export async function processEmailOutbox(options?: {
     failed,
   };
 }
+
+export async function cleanupEmailOutbox(retentionDays: number = 30): Promise<number> {
+  const cutoff = new Date(Date.now() - retentionDays * 24 * 60 * 60 * 1000);
+  const result = await db.emailOutbox.deleteMany({
+    where: {
+      OR: [
+        { status: "SENT", sentAt: { lt: cutoff } },
+        { status: "FAILED", updatedAt: { lt: cutoff } },
+      ],
+    },
+  });
+  return result.count;
+}
