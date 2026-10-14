@@ -47,3 +47,7 @@ console.log('\n=== VERIFY SUMMARY ===');
 for (const res of results) {
   console.log(`${res.name.padEnd(10)} | exit=${res.exitCode} | md5=${res.hash}`);
 }
+
+if (results.some((res) => res.exitCode !== 0)) {
+  process.exit(1);
+}

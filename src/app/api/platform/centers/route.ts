@@ -113,6 +113,15 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: "Slug already in use" }, { status: 400 });
     }
 
+    if (data.planId) {
+      const planExists = await db.subscriptionPlan.findUnique({
+        where: { id: data.planId },
+      });
+      if (!planExists) {
+        return NextResponse.json({ error: "Указанный тарифный план не найден" }, { status: 400 });
+      }
+    }
+
     const result = await db.$transaction(async (tx) => {
       let user = await tx.platformUser.findUnique({
         where: { email: data.directorEmail.toLowerCase().trim() },
