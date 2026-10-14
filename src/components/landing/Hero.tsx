@@ -1,8 +1,20 @@
 "use client";
 
-import React, { useState, useEffect } from "react";
-import { motion, useReducedMotion } from "framer-motion";
-import { Play, Sparkles, ArrowRight, ShieldCheck, CheckCircle2 } from "lucide-react";
+import React from "react";
+import { motion } from "framer-motion";
+import {
+  Sparkles,
+  ArrowRight,
+  ShieldCheck,
+  CheckCircle2,
+  Database,
+  Lock,
+  Shield,
+  Layers,
+  GraduationCap,
+  Calendar,
+  Award,
+} from "lucide-react";
 import { LandingLocale } from "../../types/landing";
 import { getLandingMessages } from "../../lib/landing-i18n";
 import { AnimatedButton } from "./AnimatedButton";
@@ -10,46 +22,13 @@ import { AnimatedButton } from "./AnimatedButton";
 interface HeroProps {
   locale: LandingLocale;
   onOpenLeadModal: () => void;
-  onOpenVideoModal: () => void;
 }
 
 export const Hero: React.FC<HeroProps> = ({
   locale,
   onOpenLeadModal,
-  onOpenVideoModal,
 }) => {
   const t = getLandingMessages(locale);
-  const shouldReduceMotion = useReducedMotion();
-
-  // Animated counters
-  const [centersCount, setCentersCount] = useState(0);
-  const [studentsCount, setStudentsCount] = useState(0);
-
-  useEffect(() => {
-    if (shouldReduceMotion) {
-      setCentersCount(t.hero.stats.centers.value);
-      setStudentsCount(t.hero.stats.students.value);
-      return;
-    }
-
-    const duration = 1800;
-    const steps = 40;
-    const intervalTime = duration / steps;
-    let step = 0;
-
-    const timer = setInterval(() => {
-      step++;
-      const progress = step / steps;
-      setCentersCount(Math.round(progress * t.hero.stats.centers.value));
-      setStudentsCount(Math.round(progress * t.hero.stats.students.value));
-
-      if (step >= steps) {
-        clearInterval(timer);
-      }
-    }, intervalTime);
-
-    return () => clearInterval(timer);
-  }, [shouldReduceMotion, t.hero.stats.centers.value, t.hero.stats.students.value]);
 
   return (
     <section className="relative pt-12 pb-20 md:pt-20 md:pb-32 overflow-hidden">
@@ -101,12 +80,12 @@ export const Hero: React.FC<HeroProps> = ({
               {t.hero.subtitle}
             </motion.p>
 
-            {/* CTA Buttons */}
+            {/* CTA Button */}
             <motion.div
               initial={{ opacity: 0, y: 20 }}
               animate={{ opacity: 1, y: 0 }}
               transition={{ duration: 0.7, delay: 0.3 }}
-              className="flex flex-col sm:flex-row items-center justify-center lg:justify-start gap-4 mb-12"
+              className="flex flex-col sm:flex-row items-center justify-center lg:justify-start gap-4 mb-10"
             >
               <AnimatedButton
                 size="lg"
@@ -118,66 +97,57 @@ export const Hero: React.FC<HeroProps> = ({
                 <span>{t.hero.ctaStart}</span>
                 <ArrowRight className="w-4 h-4 ml-1" />
               </AnimatedButton>
-
-              <AnimatedButton
-                size="lg"
-                variant="secondary"
-                onClick={onOpenVideoModal}
-                className="w-full sm:w-auto group"
-              >
-                <div className="w-6 h-6 rounded-full bg-blue-600 text-white flex items-center justify-center mr-1 group-hover:scale-110 transition-transform">
-                  <Play className="w-3 h-3 fill-current ml-0.5" />
-                </div>
-                <span>{t.hero.ctaDemo}</span>
-              </AnimatedButton>
             </motion.div>
 
-            {/* Mini Stats with Animated Counters */}
+            {/* Trust Block: Architecture, Data Isolation & Role Security */}
             <motion.div
               initial={{ opacity: 0, y: 20 }}
               animate={{ opacity: 1, y: 0 }}
               transition={{ duration: 0.7, delay: 0.4 }}
-              className="grid grid-cols-3 gap-4 pt-8 border-t border-slate-200 dark:border-white/10 max-w-lg mx-auto lg:mx-0 text-left"
+              className="pt-8 border-t border-slate-200 dark:border-white/10 max-w-xl mx-auto lg:mx-0"
             >
-              <div>
-                <div className="text-2xl sm:text-3xl font-black text-slate-900 dark:text-white">
-                  {centersCount}
-                  <span className="text-blue-600 dark:text-blue-400">
-                    {t.hero.stats.centers.suffix}
-                  </span>
-                </div>
-                <div className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
-                  {t.hero.stats.centers.label}
-                </div>
+              <div className="flex items-center justify-center lg:justify-start gap-2 mb-4">
+                <ShieldCheck className="w-4 h-4 text-emerald-500" />
+                <span className="text-xs font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">
+                  {t.hero.trust.badge}
+                </span>
               </div>
 
-              <div>
-                <div className="text-2xl sm:text-3xl font-black text-slate-900 dark:text-white">
-                  {studentsCount.toLocaleString()}
-                  <span className="text-blue-600 dark:text-blue-400">
-                    {t.hero.stats.students.suffix}
-                  </span>
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 text-left">
+                <div className="p-3 rounded-xl bg-slate-50 dark:bg-white/5 border border-slate-200/80 dark:border-white/10">
+                  <div className="flex items-center gap-1.5 font-bold text-xs text-slate-900 dark:text-white mb-1">
+                    <Database className="w-3.5 h-3.5 text-blue-500 shrink-0" />
+                    <span>{t.hero.trust.isolation.title}</span>
+                  </div>
+                  <p className="text-[11px] text-slate-600 dark:text-slate-400 leading-snug">
+                    {t.hero.trust.isolation.description}
+                  </p>
                 </div>
-                <div className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
-                  {t.hero.stats.students.label}
-                </div>
-              </div>
 
-              <div>
-                <div className="text-2xl sm:text-3xl font-black text-slate-900 dark:text-white">
-                  {t.hero.stats.uptime.value}
-                  <span className="text-blue-600 dark:text-blue-400">
-                    {t.hero.stats.uptime.suffix}
-                  </span>
+                <div className="p-3 rounded-xl bg-slate-50 dark:bg-white/5 border border-slate-200/80 dark:border-white/10">
+                  <div className="flex items-center gap-1.5 font-bold text-xs text-slate-900 dark:text-white mb-1">
+                    <Lock className="w-3.5 h-3.5 text-indigo-500 shrink-0" />
+                    <span>{t.hero.trust.roles.title}</span>
+                  </div>
+                  <p className="text-[11px] text-slate-600 dark:text-slate-400 leading-snug">
+                    {t.hero.trust.roles.description}
+                  </p>
                 </div>
-                <div className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
-                  {t.hero.stats.uptime.label}
+
+                <div className="p-3 rounded-xl bg-slate-50 dark:bg-white/5 border border-slate-200/80 dark:border-white/10">
+                  <div className="flex items-center gap-1.5 font-bold text-xs text-slate-900 dark:text-white mb-1">
+                    <Shield className="w-3.5 h-3.5 text-emerald-500 shrink-0" />
+                    <span>{t.hero.trust.audit.title}</span>
+                  </div>
+                  <p className="text-[11px] text-slate-600 dark:text-slate-400 leading-snug">
+                    {t.hero.trust.audit.description}
+                  </p>
                 </div>
               </div>
             </motion.div>
           </div>
 
-          {/* Right Column: Video & Platform Showcase Card with Glow */}
+          {/* Right Column: Platform Showcase Card with Capability Modules */}
           <motion.div
             initial={{ opacity: 0, scale: 0.94 }}
             animate={{ opacity: 1, scale: 1 }}
@@ -186,54 +156,63 @@ export const Hero: React.FC<HeroProps> = ({
           >
             {/* Glowing Accent Border */}
             <div className="relative rounded-3xl p-1 bg-gradient-to-tr from-blue-600 via-indigo-500 to-cyan-400 shadow-glow-lg">
-              <div className="relative rounded-[22px] overflow-hidden bg-[#0A1128] aspect-[4/3] sm:aspect-[16/10] flex items-center justify-center group">
-                {/* Visual poster / mock screen */}
-                <div className="absolute inset-0 bg-gradient-to-b from-blue-950/40 via-[#0A1128]/80 to-[#0A1128] z-10" />
-
-                {/* Simulated UI dashboard in hero frame */}
-                <div className="absolute inset-0 p-5 z-0 opacity-70">
-                  <div className="w-full h-8 rounded-lg bg-white/5 border border-white/10 flex items-center px-3 gap-2 mb-3">
+              <div className="relative rounded-[22px] overflow-hidden bg-[#0A1128] aspect-[4/3] sm:aspect-[16/10] flex flex-col justify-between p-6">
+                {/* Header Bar */}
+                <div className="flex items-center justify-between border-b border-white/10 pb-3">
+                  <div className="flex items-center gap-2">
                     <div className="w-2.5 h-2.5 rounded-full bg-rose-500/80" />
                     <div className="w-2.5 h-2.5 rounded-full bg-amber-500/80" />
                     <div className="w-2.5 h-2.5 rounded-full bg-emerald-500/80" />
-                    <div className="ml-3 h-3 w-40 rounded bg-white/10" />
+                    <span className="text-xs font-semibold text-white/80 ml-2">e-darschi LMS</span>
                   </div>
-                  <div className="grid grid-cols-3 gap-3 mb-3">
-                    <div className="h-16 rounded-xl bg-blue-600/20 border border-blue-500/30 p-2.5">
-                      <div className="text-[10px] text-blue-300">{"O'quvchilar"}</div>
-                      <div className="text-lg font-bold text-white">450+</div>
-                    </div>
-                    <div className="h-16 rounded-xl bg-indigo-600/20 border border-indigo-500/30 p-2.5">
-                      <div className="text-[10px] text-indigo-300">Davomat</div>
-                      <div className="text-lg font-bold text-white">96.4%</div>
-                    </div>
-                    <div className="h-16 rounded-xl bg-emerald-600/20 border border-emerald-500/30 p-2.5">
-                      <div className="text-[10px] text-emerald-300">Tushum (UZS)</div>
-                      <div className="text-lg font-bold text-white">42M+</div>
-                    </div>
-                  </div>
-                  <div className="h-28 rounded-xl bg-white/5 border border-white/10 p-3">
-                    <div className="h-3 w-28 bg-white/20 rounded mb-2" />
-                    <div className="space-y-1.5">
-                      <div className="h-2 w-full bg-blue-500/30 rounded" />
-                      <div className="h-2 w-3/4 bg-blue-500/20 rounded" />
-                      <div className="h-2 w-5/6 bg-blue-500/25 rounded" />
-                    </div>
+                  <div className="flex items-center gap-1 px-2.5 py-1 rounded-full bg-emerald-500/10 border border-emerald-500/30 text-[10px] font-medium text-emerald-400">
+                    <ShieldCheck className="w-3 h-3" />
+                    <span>{locale === "uz" ? "Xavfsiz tezant" : "Изолированный тенант"}</span>
                   </div>
                 </div>
 
-                {/* Central Play Trigger Button */}
-                <div className="relative z-20 text-center">
-                  <button
-                    onClick={onOpenVideoModal}
-                    aria-label="Videoni ko'rish"
-                    className="w-16 h-16 rounded-full bg-blue-600 hover:bg-blue-500 text-white flex items-center justify-center shadow-2xl shadow-blue-500/50 group-hover:scale-110 transition-all duration-300 mx-auto mb-3"
-                  >
-                    <Play className="w-7 h-7 fill-current ml-1" />
-                  </button>
-                  <p className="text-xs font-medium text-white/90 drop-shadow-md">
-                    {t.hero.videoCaption}
-                  </p>
+                {/* Modules Grid */}
+                <div className="grid grid-cols-2 gap-3 my-4">
+                  <div className="p-3 rounded-xl bg-white/5 border border-white/10 hover:border-blue-500/40 transition-colors">
+                    <div className="flex items-center gap-2 text-blue-400 mb-1.5">
+                      <Calendar className="w-4 h-4" />
+                      <span className="text-xs font-bold text-white">{locale === "uz" ? "Dars jadvali" : "Расписание"}</span>
+                    </div>
+                    <div className="text-[10px] text-slate-400">{locale === "uz" ? "Xonalar va o'qituvchilar filtri" : "Контроль аудиторий и смен"}</div>
+                  </div>
+
+                  <div className="p-3 rounded-xl bg-white/5 border border-white/10 hover:border-indigo-500/40 transition-colors">
+                    <div className="flex items-center gap-2 text-indigo-400 mb-1.5">
+                      <GraduationCap className="w-4 h-4" />
+                      <span className="text-xs font-bold text-white">{locale === "uz" ? "Davomat va Jurnal" : "Посещаемость"}</span>
+                    </div>
+                    <div className="text-[10px] text-slate-400">{locale === "uz" ? "Tezkor QR va belgilash" : "Отметка за 5 секунд"}</div>
+                  </div>
+
+                  <div className="p-3 rounded-xl bg-white/5 border border-white/10 hover:border-emerald-500/40 transition-colors">
+                    <div className="flex items-center gap-2 text-emerald-400 mb-1.5">
+                      <Award className="w-4 h-4" />
+                      <span className="text-xs font-bold text-white">{locale === "uz" ? "Baholash tizimi" : "Журнал оценок"}</span>
+                    </div>
+                    <div className="text-[10px] text-slate-400">{locale === "uz" ? "Final baholar blokirovkasi" : "Фиксация и аудит оценок"}</div>
+                  </div>
+
+                  <div className="p-3 rounded-xl bg-white/5 border border-white/10 hover:border-cyan-500/40 transition-colors">
+                    <div className="flex items-center gap-2 text-cyan-400 mb-1.5">
+                      <Layers className="w-4 h-4" />
+                      <span className="text-xs font-bold text-white">{locale === "uz" ? "Guruhlar boshqaruvi" : "Группы и курсы"}</span>
+                    </div>
+                    <div className="text-[10px] text-slate-400">{locale === "uz" ? "Talabalar o'tkazmasi" : "Переводы и лимиты"}</div>
+                  </div>
+                </div>
+
+                {/* Footer status */}
+                <div className="flex items-center justify-between pt-2 border-t border-white/10 text-[11px] text-slate-400">
+                  <span className="flex items-center gap-1.5">
+                    <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
+                    {locale === "uz" ? "Tizim to'liq tayyor" : "Система активна"}
+                  </span>
+                  <span>{locale === "uz" ? "100% Ma'lumotlar xavfsizligi" : "100% Защита данных"}</span>
                 </div>
               </div>
             </div>

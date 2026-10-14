@@ -9,12 +9,10 @@ import { Features } from "./Features";
 import { AppsSection } from "./AppsSection";
 import { Pricing } from "./Pricing";
 import { Steps } from "./Steps";
-import { Testimonials } from "./Testimonials";
 import { FAQ } from "./FAQ";
 import { CTA } from "./CTA";
 import { Footer } from "./Footer";
 import { LeadModal } from "./LeadModal";
-import { VideoModal } from "./VideoModal";
 
 interface LandingViewProps {
   locale: LandingLocale;
@@ -22,7 +20,6 @@ interface LandingViewProps {
 
 export const LandingView: React.FC<LandingViewProps> = ({ locale }) => {
   const [isLeadModalOpen, setIsLeadModalOpen] = useState(false);
-  const [isVideoModalOpen, setIsVideoModalOpen] = useState(false);
   const [selectedPlan, setSelectedPlan] = useState<string | undefined>(undefined);
 
   const handleOpenLead = (planId?: string) => {
@@ -42,7 +39,6 @@ export const LandingView: React.FC<LandingViewProps> = ({ locale }) => {
           <Hero
             locale={locale}
             onOpenLeadModal={() => handleOpenLead()}
-            onOpenVideoModal={() => setIsVideoModalOpen(true)}
           />
 
           <Features locale={locale} />
@@ -59,8 +55,6 @@ export const LandingView: React.FC<LandingViewProps> = ({ locale }) => {
             onOpenLeadModal={() => handleOpenLead()}
           />
 
-          <Testimonials locale={locale} />
-
           <FAQ locale={locale} />
 
           <CTA locale={locale} />
@@ -73,12 +67,6 @@ export const LandingView: React.FC<LandingViewProps> = ({ locale }) => {
           onClose={() => setIsLeadModalOpen(false)}
           locale={locale}
           selectedPlan={selectedPlan}
-        />
-
-        <VideoModal
-          isOpen={isVideoModalOpen}
-          onClose={() => setIsVideoModalOpen(false)}
-          locale={locale}
         />
       </div>
     </ThemeProvider>

@@ -27,22 +27,19 @@
     "subtitle": "Qimmat dasturchilar jamoasisiz to'liq avtomatlashtirish: talabalar, dars jadvallari, davomat, baholar, ota-onalar ilovasi va to'lovlar monitoringi bir joyda. 10 daqiqada ishga tushiring.",
     "ctaStart": "Bepul boshlash",
     "ctaDemo": "Demo ko'rish",
-    "videoCaption": "Platforma imkoniyatlari — 2 daqiqalik video sharh",
-    "stats": {
-      "centers": {
-        "value": 120,
-        "suffix": "+",
-        "label": "Faol o'quv markazi"
+    "trust": {
+      "badge": "Xavfsizlik va arxitektura",
+      "isolation": {
+        "title": "Ma'lumotlar izolyatsiyasi",
+        "description": "Har bir o'quv markazi ma'lumotlari MB darajasida to'liq ajratilgan"
       },
-      "students": {
-        "value": 25000,
-        "suffix": "+",
-        "label": "O'quvchi va talabalar"
+      "roles": {
+        "title": "Rollar nazorati",
+        "description": "Direktor, o'qituvchi, talaba va ota-onalar uchun alohida ruxsatlar"
       },
-      "uptime": {
-        "value": 99.9,
-        "suffix": "%",
-        "label": "Uzluksiz ishlash kafolati"
+      "audit": {
+        "title": "Audit va ishonchlilik",
+        "description": "Muhim amallarning qat'iy jurnali va xavfsiz sessiya himoyasi"
       }
     }
   },
