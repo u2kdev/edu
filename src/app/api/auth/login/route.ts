@@ -5,7 +5,7 @@ import { db } from "@/lib/db";
 import { comparePassword, signJWT, JWTPayload } from "@/lib/auth";
 import { checkRateLimit } from "@/lib/rate-limit";
 import { getClientIp } from "@/lib/ip";
-import { sendEmail } from '@/lib/email';
+import { sendEmail, enqueueEmailOutbox } from '@/lib/email';
 import { apiError, apiSuccess, handleApiError } from "@/lib/api-response";
 import { loginSchema } from "@/lib/validation/auth";
 import { v4 as uuidv4 } from "uuid";
@@ -97,7 +97,17 @@ export async function POST(req: Request) {
         
         // Send email only when ceiling is reached (or on first hit)
         if (delayMs >= 15 * 60 * 1000 && newGlobal.attempts === ACCOUNT_GLOBAL_DELAY_THRESHOLD + 10) {
-          void sendEmail(email, "Account Locked", "Your account is locked for 15 minutes due to multiple failed login attempts.").catch(() => {});
+          try {
+            await sendEmail(email, "Account Locked", "Your account is locked for 15 minutes due to multiple failed login attempts.");
+          } catch (err: unknown) {
+            await enqueueEmailOutbox({
+              to: email,
+              subject: "Account Locked",
+              body: "Your account is locked for 15 minutes due to multiple failed login attempts.",
+              lastError: err instanceof Error ? err.message : String(err),
+              attempts: 1,
+            }).catch(() => {});
+          }
         }
       }
 

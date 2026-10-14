@@ -6,7 +6,7 @@ process.env.DATABASE_URL = testDbUrl;
 
 export async function setup() {
   console.log("Setting up PostgreSQL test database...");
-  const env = { ...process.env, DATABASE_URL: testDbUrl };
+  const env = { ...process.env, DATABASE_URL: testDbUrl, DIRECT_URL: testDbUrl };
   execSync("node node_modules/prisma/build/index.js migrate deploy", { env, stdio: "inherit" });
 }
 

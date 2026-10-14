@@ -7,7 +7,7 @@ import { apiError, apiSuccess, handleApiError } from "@/lib/api-response";
 import { checkRateLimit } from "@/lib/rate-limit";
 import { getClientIp } from "@/lib/ip";
 import { logAuditEvent } from "@/lib/tenant";
-import { sendEmail } from "@/lib/email";
+import { sendEmail, enqueueEmailOutbox } from "@/lib/email";
 import { registerSchema } from "@/lib/validation/auth";
 import crypto from "crypto";
 import { REGISTER_CONFIG } from "@/lib/config";
@@ -96,16 +96,26 @@ export async function POST(req: Request) {
         ? `Siz o'quv markaziga taklif qilindingiz. Qabul qilish uchun havolani bosing: ${acceptUrl}`
         : `Вас пригласили в учебный центр. Для принятия перейдите по ссылке: ${acceptUrl}`;
 
-      // Fire and forget email safely
-      void sendEmail(user.email, subject, emailBody).catch(err => {
-        db.auditLog.create({
+      // Synchronous email with outbox fallback on failure
+      try {
+        await sendEmail(user.email, subject, emailBody);
+      } catch (err: unknown) {
+        await enqueueEmailOutbox({
+          to: user.email,
+          subject,
+          body: emailBody,
+          lastError: err instanceof Error ? err.message : String(err),
+          attempts: 1,
+        }).catch(() => {});
+
+        await db.auditLog.create({
           data: {
             action: "EMAIL_FAILED",
             resource: "PlatformUser",
             detailsJson: JSON.stringify({ error: String(err), email })
           }
         }).catch(() => {});
-      });
+      }
 
       return apiSuccess({ message: "Registration successful. Please check your email to confirm." });
     }
@@ -198,15 +208,26 @@ export async function POST(req: Request) {
       ? `Ro'yxatdan o'tishni yakunlash uchun havola orqali o'ting: ${confirmUrl}`
       : `Для подтверждения регистрации перейдите по ссылке: ${confirmUrl}`;
 
-    void sendEmail(user.email, confirmSubject, confirmBody).catch(err => {
-      db.auditLog.create({
+    // Synchronous email with outbox fallback on failure
+    try {
+      await sendEmail(user.email, confirmSubject, confirmBody);
+    } catch (err: unknown) {
+      await enqueueEmailOutbox({
+        to: user.email,
+        subject: confirmSubject,
+        body: confirmBody,
+        lastError: err instanceof Error ? err.message : String(err),
+        attempts: 1,
+      }).catch(() => {});
+
+      await db.auditLog.create({
         data: {
           action: "EMAIL_FAILED",
           resource: "PlatformUser",
-          detailsJson: JSON.stringify({ error: String(err), email: user!.email })
-        }
+          detailsJson: JSON.stringify({ error: String(err), email: user!.email }),
+        },
       }).catch(() => {});
-    });
+    }
 
     return apiSuccess({ message: "Registration successful. Please check your email to confirm." });
   } catch (err: unknown) {

@@ -1,3 +1,5 @@
+import { db } from "./db";
+
 export interface SentEmail {
   to: string;
   subject: string;
@@ -258,4 +260,117 @@ export function getSentEmails(): readonly SentEmail[] {
 
 export function clearSentEmails(): void {
   sentEmailsBuffer.length = 0;
+}
+
+export interface EnqueueEmailInput {
+  to: string;
+  subject: string;
+  body: string;
+  html?: string | null;
+  lastError?: string | null;
+  attempts?: number;
+  maxAttempts?: number;
+  nextRetryAt?: Date;
+}
+
+export async function enqueueEmailOutbox(input: EnqueueEmailInput) {
+  return db.emailOutbox.create({
+    data: {
+      to: input.to,
+      subject: input.subject,
+      body: input.body,
+      html: input.html ?? null,
+      status: "PENDING",
+      attempts: input.attempts ?? 1,
+      maxAttempts: input.maxAttempts ?? 5,
+      lastError: input.lastError ?? null,
+      nextRetryAt: input.nextRetryAt ?? new Date(Date.now() + 60_000),
+    },
+  });
+}
+
+export async function sendEmailWithOutbox(
+  to: string,
+  subject: string,
+  body: string,
+  html?: string
+): Promise<{ id?: string; queued: boolean; outboxId?: string }> {
+  try {
+    const res = await sendEmail(to, subject, body, html);
+    return { id: res.id, queued: false };
+  } catch (err: unknown) {
+    const errorMessage = err instanceof Error ? err.message : String(err);
+    const outbox = await enqueueEmailOutbox({
+      to,
+      subject,
+      body,
+      html,
+      lastError: errorMessage,
+      attempts: 1,
+    });
+    return { id: outbox.id, queued: true, outboxId: outbox.id };
+  }
+}
+
+export interface OutboxProcessResult {
+  processed: number;
+  succeeded: number;
+  failed: number;
+}
+
+export async function processEmailOutbox(options?: {
+  batchSize?: number;
+}): Promise<OutboxProcessResult> {
+  const batchSize = Math.max(1, Math.min(options?.batchSize ?? 50, 100));
+  const now = new Date();
+
+  const pendingEmails = await db.emailOutbox.findMany({
+    where: {
+      status: "PENDING",
+      nextRetryAt: { lte: now },
+    },
+    orderBy: { createdAt: "asc" },
+    take: batchSize,
+  });
+
+  let succeeded = 0;
+  let failed = 0;
+
+  for (const item of pendingEmails) {
+    try {
+      await sendEmail(item.to, item.subject, item.body, item.html ?? undefined);
+      await db.emailOutbox.update({
+        where: { id: item.id },
+        data: {
+          status: "SENT",
+          sentAt: new Date(),
+          updatedAt: new Date(),
+        },
+      });
+      succeeded++;
+    } catch (err: unknown) {
+      failed++;
+      const nextAttempt = item.attempts + 1;
+      const isExhausted = nextAttempt >= item.maxAttempts;
+      const backoffDelayMs = Math.min(60 * 60 * 1000, Math.pow(2, nextAttempt) * 60 * 1000);
+      const errorMessage = err instanceof Error ? err.message : String(err);
+
+      await db.emailOutbox.update({
+        where: { id: item.id },
+        data: {
+          status: isExhausted ? "FAILED" : "PENDING",
+          attempts: nextAttempt,
+          lastError: errorMessage,
+          nextRetryAt: new Date(Date.now() + backoffDelayMs),
+          updatedAt: new Date(),
+        },
+      });
+    }
+  }
+
+  return {
+    processed: pendingEmails.length,
+    succeeded,
+    failed,
+  };
 }
