@@ -30,16 +30,15 @@
     "language": "Язык",
     "settings": "Настройки",
     "profile": "Профиль",
-    "logout": "Выйти"
+    "logout": "Выйти",
+    "recordsCount": "{count} записей"
   },
-
   "languages": {
     "ru": "Русский",
     "uz-Latn": "Oʻzbekcha (Lotin)",
     "uz-Cyrl": "Ўзбекча (Кирилл)",
     "en": "English"
   },
-
   "auth": {
     "login": "Войти в систему",
     "register": "Регистрация",
@@ -66,7 +65,6 @@
     "fullName.max_100": "Имя не должно превышать 100 символов",
     "token.required": "Токен обязателен"
   },
-
   "nav": {
     "dashboard": "Главная",
     "courses": "Курсы",
@@ -84,9 +82,12 @@
     "settings": "Настройки",
     "platformAdmin": "Панель платформы",
     "reports": "Отчёты",
-    "notifications": "Уведомления"
+    "notifications": "Уведомления",
+    "center": "Центр",
+    "announcements": "Объявления",
+    "branches": "Филиалы",
+    "profile": "Профиль"
   },
-
   "roles": {
     "SUPERADMIN": "Суперадмин",
     "PLATFORM_ADMIN": "Админ платформы",
@@ -100,7 +101,6 @@
     "STUDENT": "Ученик",
     "PARENT": "Родитель"
   },
-
   "dashboard": {
     "welcome": "Здравствуйте, {name}! 👋",
     "selectCenter": "Выберите учебный центр в левом меню",
@@ -141,7 +141,7 @@
     "submissionFrom": "Сдано: {name}",
     "upcomingDeadlines": "Ближайшие дедлайны ДЗ",
     "noHomeworkDeadlines": "Все домашние задания выполнены или дедлайнов нет.",
-    "academicPerformance": "Успеваемость и оценки",
+    "academicPerformance": "Успеваемость",
     "averageGrade": "Средний балл",
     "recentGrades": "Последние оценки",
     "noGradesYet": "Оценок пока нет.",
@@ -157,9 +157,14 @@
     "childNoGrades": "Оценок пока нет",
     "parentPayNext": "Оплатить обучение",
     "parentNoChildrenLinked": "У вас пока нет привязанных детей в этом учебном центре.",
-    "parentLinkHint": "Запросите инвайт-код привязки у администратора учебного центра."
+    "parentLinkHint": "Запросите инвайт-код привязки у администратора учебного центра.",
+    "teacherAssistantCabinet": "Кабинет помощника",
+    "pendingHomeworks": "Непроверенные ДЗ",
+    "homeworksCount": "{count} работ",
+    "goToReview": "Перейти к проверке →",
+    "attendanceLowWarning": "Студенты с посещаемостью ниже 80% требуют внимания преподавателей и родителей.",
+    "attendanceSatisfactory": "Все активные студенты имеют удовлетворительный уровень посещаемости."
   },
-
   "courses": {
     "title": "Учебные Курсы",
     "description": "Просмотр расписания и материалов",
@@ -186,7 +191,6 @@
     "creating": "Создание...",
     "networkError": "Ошибка сети"
   },
-
   "groups": {
     "title": "Группы (потоки)",
     "createGroup": "Создать группу",
@@ -226,7 +230,6 @@
     "saveError": "Ошибка сохранения",
     "networkError": "Ошибка сети"
   },
-
   "students": {
     "title": "Студенты",
     "subtitle": "Управление учащимися центра",
@@ -285,7 +288,6 @@
     "transferHistory": "Из «{from}» в «{to}»",
     "reasonLabel": "Причина: {reason}"
   },
-
   "lessons": {
     "title": "Занятия",
     "createLesson": "Создать занятие",
@@ -299,7 +301,6 @@
     "meetingUrl": "Ссылка на конференцию",
     "location": "Аудитория"
   },
-
   "materials": {
     "title": "Материалы",
     "addMaterial": "Добавить материал",
@@ -312,7 +313,6 @@
     "bookDescription": "Файл для чтения",
     "testDescription": "Тест с автопроверкой"
   },
-
   "attendance": {
     "title": "Посещаемость",
     "markAttendance": "Отметить посещаемость",
@@ -329,9 +329,9 @@
     "markAllPresent": "Отметить всех",
     "saveAttendance": "Сохранить отметки",
     "note": "Заметка",
-    "savedSuccess": "Посещаемость успешно сохранена"
+    "savedSuccess": "Посещаемость успешно сохранена",
+    "classesCount": "{attended} / {total} занятий"
   },
-
   "grades": {
     "title": "Успеваемость и журнал оценок",
     "gradebookMatrix": "Матрица оценок",
@@ -342,9 +342,19 @@
     "exportCsv": "Экспорт в CSV",
     "lockedTooltip": "Оценка зафиксирована и не подлежит изменению",
     "selectGroup": "Выберите группу",
-    "noGrades": "Оценок пока нет"
+    "noGrades": "Оценок пока нет",
+    "teacherDescription": "Оценки учеников ваших групп",
+    "studentDescription": "Ваши оценки",
+    "parentDescription": "Оценки ваших детей",
+    "allDescription": "Все оценки учебного центра",
+    "averageScore": "Средний балл",
+    "passed": "✓ Сдан",
+    "failed": "✗ Не сдан",
+    "points": "баллов",
+    "gradeExcellent": "A (Отлично)",
+    "gradeGood": "B (Хорошо)",
+    "gradeSatisfactory": "C (Удовл.)"
   },
-
   "homework": {
     "title": "Домашние задания",
     "createHomework": "Создать ДЗ",
@@ -361,9 +371,28 @@
     "feedback": "Комментарий преподавателя",
     "links": "Внешние ссылки",
     "submitSuccess": "Задание успешно отправлено",
-    "gradeSuccess": "Оценка успешно выставлена"
+    "gradeSuccess": "Оценка успешно выставлена",
+    "assignmentFallback": "Задание",
+    "linkNamePlaceholder": "Название (например, Репозиторий)",
+    "solutionLabel": "Решение:",
+    "linksLabel": "Ссылки:",
+    "scoreLabel": "Балл (0 - 100)",
+    "scoreRange": "Оценка (0 — 100)",
+    "studentAnswer": "Ответ ученика:",
+    "noTextAnswer": "Текстовый ответ отсутствует",
+    "quickTemplates": "Быстрые шаблоны отзывов",
+    "templateExcellent": "Отличная работа! Все требования выполнены на 100%.",
+    "templateFormatting": "Хорошее решение, но обрати внимание на форматирование кода.",
+    "templateAccepted": "Принято! Можешь переходить к следующему уроку.",
+    "templateNeedsRevision": "Требуется доработка. Исправь указанные ошибки и ответь снова.",
+    "noPendingReview": "Нет работ, ожидающих проверки",
+    "saveGradeError": "Ошибка сохранения оценки",
+    "networkError": "Ошибка сети",
+    "reviewStreamTitle": "Поток проверки ДЗ ({current} из {total})",
+    "gradedSummary": "Оценено: {grade} / 100",
+    "teacherCommentPlaceholder": "Комментарий учителя для ученика...",
+    "saveAndNext": "Сохранить и Перейти к следующему (Enter)"
   },
-
   "testing": {
     "startTest": "Начать тестирование",
     "submitTest": "Завершить тест",
@@ -375,7 +404,6 @@
     "yourAnswer": "Ваш ответ",
     "correctAnswer": "Правильный ответ"
   },
-
   "payments": {
     "title": "Платежи и Оплата",
     "description": "История платежей и взносов",
@@ -393,9 +421,9 @@
     "debtors": "Должники",
     "totalCollected": "Собрано",
     "totalExpected": "Ожидается",
-    "totalOverdue": "Просрочено"
+    "totalOverdue": "Просрочено",
+    "noPaymentsYet": "Платежей пока нет"
   },
-
   "invites": {
     "title": "Инвайты и Доступ",
     "description": "Коды приглашения в центр",
@@ -412,7 +440,6 @@
     "bulkImport": "Массовый импорт (CSV)",
     "parentInvite": "Инвайт для родителя"
   },
-
   "staff": {
     "title": "Сотрудники центра",
     "addStaff": "Добавить сотрудника",
@@ -422,7 +449,6 @@
     "deactivate": "Деактивировать",
     "activate": "Активировать"
   },
-
   "parent": {
     "childProgress": "Успеваемость Ваших Детей",
     "noChildren": "У вас пока нет привязанных детей в этом центре.",
@@ -431,7 +457,6 @@
     "coursesAndGroups": "Курсы и Группы",
     "paymentHistory": "История Оплат"
   },
-
   "student": {
     "myCourses": "Мои Зачисленные Курсы & Потоки",
     "noCourses": "Вы пока не зачислены ни в одну группу.",
@@ -439,7 +464,6 @@
     "teacher": "Преподаватель",
     "assigningTeacher": "Назначается"
   },
-
   "performance": {
     "title": "Успеваемость",
     "averageGrade": "Средний балл",
@@ -450,7 +474,6 @@
     "trendDown": "Снижение",
     "trendStable": "Стабильно"
   },
-
   "activity": {
     "title": "Активность",
     "lastLogin": "Последний вход",
@@ -459,7 +482,6 @@
     "testCompleted": "Пройден тест",
     "homeworkSubmitted": "Сдано ДЗ"
   },
-
   "platform": {
     "title": "Панель Управления Платформой",
     "centerManagement": "Управление центрами",
@@ -486,7 +508,6 @@
     "frozen": "Заморожен",
     "blocked": "Заблокирован"
   },
-
   "subscription": {
     "title": "Подписка",
     "currentPlan": "Текущий тариф",
@@ -495,7 +516,6 @@
     "changePlan": "Сменить тариф",
     "trialEnds": "Пробный период заканчивается {date}"
   },
-
   "support": {
     "title": "Поддержка",
     "createTicket": "Создать обращение",
@@ -509,7 +529,6 @@
     "statusResolved": "Решён",
     "statusClosed": "Закрыт"
   },
-
   "notifications": {
     "title": "Уведомления",
     "markRead": "Прочитано",
@@ -523,7 +542,6 @@
     "gradePosted": "Выставлена оценка: {grade}",
     "subscriptionExpiring": "Подписка истекает {date}"
   },
-
   "landing": {
     "heroTitle": "Единое пространство для вашего",
     "heroHighlight": "учебного центра, учителей и учеников",
@@ -597,6 +615,7 @@
     "conflictWarning": "Конфликт расписания!",
     "online": "Онлайн",
     "offline": "Офлайн",
-    "meetingLink": "Ссылка на встречу"
+    "meetingLink": "Ссылка на встречу",
+    "day": "День"
   }
 }

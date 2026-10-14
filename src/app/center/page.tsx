@@ -353,7 +353,7 @@ interface UrgentHomeworkItem {
 
       studentRecentGrades = allGrades.slice(0, 5).map((g) => ({
         id: g.id,
-        title: g.homeworkSubmission?.homework?.title || g.lesson?.title || "Задание",
+        title: g.homeworkSubmission?.homework?.title || g.lesson?.title || t(locale, "homework.assignmentFallback"),
         score: g.value,
         maxScore: g.maxValue,
         letterGrade:
@@ -507,7 +507,7 @@ interface UrgentHomeworkItem {
           avgGradeScore,
           recentGrades: grades.map((g) => ({
             id: g.id,
-            title: g.homeworkSubmission?.homework?.title || g.lesson?.title || "Задание",
+            title: g.homeworkSubmission?.homework?.title || g.lesson?.title || t(locale, "homework.assignmentFallback"),
             score: g.value,
             maxScore: g.maxValue,
             letterGrade:
@@ -558,10 +558,10 @@ interface UrgentHomeworkItem {
 
           {activeRole === "TEACHER" && (
             <div className="glass-panel p-4 rounded-2xl border border-amber-500/30 bg-amber-950/20 text-right shrink-0">
-              <div className="text-xs text-slate-400 uppercase tracking-wider font-semibold">Непроверенные ДЗ</div>
-              <div className="text-2xl font-extrabold text-amber-400 mt-0.5">{pendingHomeworksCount} работ</div>
+              <div className="text-xs text-slate-400 uppercase tracking-wider font-semibold">{t(locale, "dashboard.pendingHomeworks")}</div>
+              <div className="text-2xl font-extrabold text-amber-400 mt-0.5">{t(locale, "dashboard.homeworksCount", { count: pendingHomeworksCount })}</div>
               <Link href="/center/homework" className="text-xs text-brand-400 hover:underline mt-1 inline-block">
-                Перейти к проверке →
+                {t(locale, "dashboard.goToReview")}
               </Link>
             </div>
           )}
@@ -570,11 +570,11 @@ interface UrgentHomeworkItem {
             <div className="glass-panel p-4 rounded-2xl border border-emerald-500/30 bg-emerald-950/20 text-right shrink-0 flex items-center gap-3">
               <ClipboardCheck className="w-8 h-8 text-emerald-400 shrink-0" />
               <div>
-                <div className="text-xs text-slate-400 uppercase tracking-wider font-semibold">Посещаемость</div>
+                <div className="text-xs text-slate-400 uppercase tracking-wider font-semibold">{t(locale, "nav.attendance")}</div>
                 <div className="text-xl font-bold text-white">
                   {attendanceRate !== null ? `${attendanceRate}%` : "—"}
                 </div>
-                <div className="text-[10px] text-emerald-400">Успеваемость</div>
+                <div className="text-[10px] text-emerald-400">{t(locale, "dashboard.academicPerformance")}</div>
               </div>
             </div>
           )}
@@ -625,7 +625,7 @@ interface UrgentHomeworkItem {
                       <div className="space-y-2">
                         <div className="flex items-center justify-between">
                           <span className="px-2.5 py-1 rounded-md text-xs font-bold bg-brand-500/10 text-brand-400 border border-brand-500/20">
-                            {dayNames[slot.dayOfWeek] || `День ${slot.dayOfWeek}`} • {slot.startTime} - {slot.endTime}
+                            {dayNames[slot.dayOfWeek] || `${t(locale, "schedule.day")} ${slot.dayOfWeek}`} • {slot.startTime} - {slot.endTime}
                           </span>
                           {slot.roomName && (
                             <span className="text-xs text-slate-400 bg-slate-900 px-2 py-0.5 rounded border border-slate-800">
@@ -732,7 +732,7 @@ interface UrgentHomeworkItem {
                     </span>
                     {studentAvgGradeScore !== null && (
                       <span className="px-2.5 py-0.5 rounded-full text-xs font-bold bg-brand-500/20 text-brand-300 border border-brand-500/30">
-                        {studentAvgGradeScore >= 90 ? "A (Отлично)" : studentAvgGradeScore >= 80 ? "B (Хорошо)" : studentAvgGradeScore >= 70 ? "C (Удовл.)" : "D/F"}
+                        {studentAvgGradeScore >= 90 ? t(locale, "grades.gradeExcellent") : studentAvgGradeScore >= 80 ? t(locale, "grades.gradeGood") : studentAvgGradeScore >= 70 ? t(locale, "grades.gradeSatisfactory") : "D/F"}
                       </span>
                     )}
                   </div>
@@ -854,7 +854,7 @@ interface UrgentHomeworkItem {
                     >
                       <div className="flex items-center justify-between">
                         <span className="px-2.5 py-1 rounded-md text-xs font-bold bg-brand-500/10 text-brand-400 border border-brand-500/20">
-                          {dayNames[slot.dayOfWeek] || `День ${slot.dayOfWeek}`} • {slot.startTime} - {slot.endTime}
+                          {dayNames[slot.dayOfWeek] || `${t(locale, "schedule.day")} ${slot.dayOfWeek}`} • {slot.startTime} - {slot.endTime}
                         </span>
                         {slot.roomName && (
                           <span className="text-xs text-slate-400 bg-slate-900 px-2 py-0.5 rounded border border-slate-800">
@@ -916,7 +916,7 @@ interface UrgentHomeworkItem {
                       <div className="space-y-1">
                         <div className="flex items-center justify-between text-xs mb-1">
                           <span className={`px-2 py-0.5 rounded text-[11px] font-bold border ${statusColors[hw.status] || statusColors.PENDING}`}>
-                            {hw.status === "GRADED" && `${t(locale, "homework.graded")}: ${hw.gradeScore} баллов`}
+                            {hw.status === "GRADED" && `${t(locale, "homework.graded")}: ${hw.gradeScore} ${t(locale, "grades.points")}`}
                             {hw.status === "SUBMITTED" && t(locale, "homework.submitted")}
                             {hw.status === "REVISION_REQUESTED" && t(locale, "homework.revisionRequested")}
                             {hw.status === "OVERDUE" && t(locale, "homework.overdue")}
@@ -1047,7 +1047,7 @@ interface UrgentHomeworkItem {
                         </div>
                         <div className="flex flex-col items-end gap-1">
                           <span className="px-2 py-0.5 rounded text-[11px] font-bold bg-slate-800 text-slate-300 border border-slate-700">
-                            {child.attendedClasses} / {child.totalClasses} занятий
+                            {t(locale, "attendance.classesCount", { attended: child.attendedClasses, total: child.totalClasses })}
                           </span>
                           {child.absentCount > 0 && (
                             <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-red-500/10 text-red-400 border border-red-500/20">
@@ -1140,7 +1140,7 @@ interface UrgentHomeworkItem {
                             >
                               <div className="flex items-center justify-between">
                                 <span className="font-bold text-brand-400">
-                                  {dayNames[slot.dayOfWeek] || `День ${slot.dayOfWeek}`} • {slot.startTime} - {slot.endTime}
+                                  {dayNames[slot.dayOfWeek] || `${t(locale, "schedule.day")} ${slot.dayOfWeek}`} • {slot.startTime} - {slot.endTime}
                                 </span>
                                 {slot.roomName && (
                                   <span className="text-[11px] text-slate-400 bg-slate-900 px-1.5 py-0.5 rounded">
@@ -1182,7 +1182,7 @@ interface UrgentHomeworkItem {
                           {t(locale, "parent.paymentHistory")}
                         </span>
                         {child.payments.length === 0 ? (
-                          <p className="text-xs text-slate-500 mt-2">Платежей пока нет</p>
+                          <p className="text-xs text-slate-500 mt-2">{t(locale, "payments.noPaymentsYet")}</p>
                         ) : (
                           <ul className="mt-2 space-y-2 text-sm">
                             {child.payments.map((p) => (
@@ -1316,8 +1316,8 @@ interface UrgentHomeworkItem {
 
               <p className="text-xs text-slate-400">
                 {atRiskStudentsCount > 0
-                  ? "Студенты с посещаемостью ниже 80% требуют внимания преподавателей и родителей."
-                  : "Все активные студенты имеют удовлетворительный уровень посещаемости."}
+                  ? t(locale, "dashboard.attendanceLowWarning")
+                  : t(locale, "dashboard.attendanceSatisfactory")}
               </p>
 
               <div className="flex items-center justify-between text-xs pt-1 border-t border-slate-800/80">
@@ -1380,7 +1380,7 @@ interface UrgentHomeworkItem {
                     >
                       <div className="flex items-center justify-between">
                         <span className="px-2.5 py-0.5 rounded-md text-xs font-bold bg-brand-500/10 text-brand-400 border border-brand-500/20">
-                          {dayNames[slot.dayOfWeek] || `День ${slot.dayOfWeek}`} • {slot.startTime} - {slot.endTime}
+                          {dayNames[slot.dayOfWeek] || `${t(locale, "schedule.day")} ${slot.dayOfWeek}`} • {slot.startTime} - {slot.endTime}
                         </span>
                         {slot.roomName && (
                           <span className="text-[11px] text-slate-400 bg-slate-900 px-2 py-0.5 rounded border border-slate-800">

@@ -30,16 +30,15 @@
     "language": "Til",
     "settings": "Sozlamalar",
     "profile": "Profil",
-    "logout": "Chiqish"
+    "logout": "Chiqish",
+    "recordsCount": "{count} ta yozuv"
   },
-
   "languages": {
     "ru": "Русский",
     "uz-Latn": "Oʻzbekcha (Lotin)",
     "uz-Cyrl": "Ўзбекча (Кирилл)",
     "en": "English"
   },
-
   "auth": {
     "login": "Tizimga kirish",
     "register": "Roʻyxatdan oʻtish",
@@ -66,7 +65,6 @@
     "fullName.max_100": "Ism 100 belgidan oshmasligi kerak",
     "token.required": "Token kiritish majburiy"
   },
-
   "nav": {
     "dashboard": "Bosh sahifa",
     "courses": "Kurslar",
@@ -84,9 +82,12 @@
     "settings": "Sozlamalar",
     "platformAdmin": "Platforma paneli",
     "reports": "Hisobotlar",
-    "notifications": "Bildirishnomalar"
+    "notifications": "Bildirishnomalar",
+    "center": "Markaz",
+    "announcements": "Eʼlonlar",
+    "branches": "Filiallar",
+    "profile": "Profil"
   },
-
   "roles": {
     "SUPERADMIN": "Superadmin",
     "PLATFORM_ADMIN": "Platforma admini",
@@ -100,7 +101,6 @@
     "STUDENT": "Oʻquvchi",
     "PARENT": "Ota-ona"
   },
-
   "dashboard": {
     "welcome": "Assalomu alaykum, {name}! 👋",
     "selectCenter": "Chap menyuda oʻquv markazini tanlang",
@@ -141,7 +141,7 @@
     "submissionFrom": "Topshirgan: {name}",
     "upcomingDeadlines": "Yaqinlashib kelayotgan uy vazifasi muddatlari",
     "noHomeworkDeadlines": "Barcha uy vazifalari bajarilgan yoki muddatlar yoʻq.",
-    "academicPerformance": "Oʻzlashtirish va baholar",
+    "academicPerformance": "Oʻzlashtirish",
     "averageGrade": "Oʻrtacha ball",
     "recentGrades": "Oxirgi baholar",
     "noGradesYet": "Hozircha baholar yoʻq.",
@@ -157,9 +157,14 @@
     "childNoGrades": "Hozircha baholar yoʻq",
     "parentPayNext": "Oʻqish toʻlovini amalga oshirish",
     "parentNoChildrenLinked": "Sizga ushbu oʻquv markazida biriktirilgan farzandlar yoʻq.",
-    "parentLinkHint": "Oʻquv markazi maʼmuriyatidan biriktirish kodini soʻrang."
+    "parentLinkHint": "Oʻquv markazi maʼmuriyatidan biriktirish kodini soʻrang.",
+    "teacherAssistantCabinet": "Yordamchi kabineti",
+    "pendingHomeworks": "Tekshirilmagan vazifalar",
+    "homeworksCount": "{count} ta vazifa",
+    "goToReview": "Tekshirishga oʻtish →",
+    "attendanceLowWarning": "Davomati 80% dan past boʻlgan oʻquvchilar oʻqituvchilar va ota-onalar eʼtiborini talab qiladi.",
+    "attendanceSatisfactory": "Barcha faol oʻquvchilar qoniqarli davomat darajasiga ega."
   },
-
   "courses": {
     "title": "Oʻquv Kurslari",
     "description": "Jadval va materiallarni koʻrish",
@@ -186,7 +191,6 @@
     "creating": "Yaratilmoqda...",
     "networkError": "Tarmoq xatosi"
   },
-
   "groups": {
     "title": "Guruhlar (oqimlar)",
     "createGroup": "Guruh yaratish",
@@ -226,7 +230,6 @@
     "saveError": "Saqlashda xatolik yuz berdi",
     "networkError": "Tarmoq xatosi"
   },
-
   "students": {
     "title": "Oʻquvchilar",
     "subtitle": "Markaz oʻquvchilarini boshqarish",
@@ -285,7 +288,6 @@
     "transferHistory": "«{from}» dan «{to}» ga",
     "reasonLabel": "Sabab: {reason}"
   },
-
   "lessons": {
     "title": "Darslar",
     "createLesson": "Dars yaratish",
@@ -299,7 +301,6 @@
     "meetingUrl": "Konferentsiya havolasi",
     "location": "Auditoriya"
   },
-
   "materials": {
     "title": "Materiallar",
     "addMaterial": "Material qoʻshish",
@@ -312,7 +313,6 @@
     "bookDescription": "Oʻqish uchun fayl",
     "testDescription": "Avtotekshiruvli test"
   },
-
   "attendance": {
     "title": "Davomat",
     "markAttendance": "Davomatni belgilash",
@@ -329,9 +329,9 @@
     "markAllPresent": "Barchani belgilash",
     "saveAttendance": "Davomatni saqlash",
     "note": "Eslatma",
-    "savedSuccess": "Davomat muvaffaqiyatli saqlandi"
+    "savedSuccess": "Davomat muvaffaqiyatli saqlandi",
+    "classesCount": "{attended} / {total} ta dars"
   },
-
   "grades": {
     "title": "Baholar jurnali va o'zlashtirish",
     "gradebookMatrix": "Baholar matritsasi",
@@ -342,9 +342,19 @@
     "exportCsv": "CSV ga eksport",
     "lockedTooltip": "Baho qulflangan va o'zgartirilmaydi",
     "selectGroup": "Guruhni tanlang",
-    "noGrades": "Hozircha baholar yo'q"
+    "noGrades": "Hozircha baholar yo'q",
+    "teacherDescription": "Guruhlaringiz oʻquvchilari baholari",
+    "studentDescription": "Sizning baholaringiz",
+    "parentDescription": "Farzandlaringiz baholari",
+    "allDescription": "Oʻquv markazining barcha baholari",
+    "averageScore": "Oʻrtacha ball",
+    "passed": "✓ Topshirildi",
+    "failed": "✗ Topshirilmadi",
+    "points": "ball",
+    "gradeExcellent": "A (Aʼlo)",
+    "gradeGood": "B (Yaxshi)",
+    "gradeSatisfactory": "C (Qoniqarli)"
   },
-
   "homework": {
     "title": "Uy Vazifalari",
     "createHomework": "UV yaratish",
@@ -361,9 +371,28 @@
     "feedback": "O'qituvchi izohi",
     "links": "Tashqi havolalar",
     "submitSuccess": "Vazifa muvaffaqiyatli yuborildi",
-    "gradeSuccess": "Baho muvaffaqiyatli qo'yildi"
+    "gradeSuccess": "Baho muvaffaqiyatli qo'yildi",
+    "assignmentFallback": "Vazifa",
+    "linkNamePlaceholder": "Nomi (masalan, Repozitoriy)",
+    "solutionLabel": "Yechim:",
+    "linksLabel": "Havolalar:",
+    "scoreLabel": "Ball (0 - 100)",
+    "scoreRange": "Baho (0 — 100)",
+    "studentAnswer": "Oʻquvchi javobi:",
+    "noTextAnswer": "Matnli javob yoʻq",
+    "quickTemplates": "Tezkor sharh shablonlari",
+    "templateExcellent": "Ajoyib ish! Barcha talablar 100% bajarilgan.",
+    "templateFormatting": "Yaxshi yechim, lekin kod formatlashiga eʼtibor bering.",
+    "templateAccepted": "Qabul qilindi! Keyingi darsga oʻtishingiz mumkin.",
+    "templateNeedsRevision": "Qayta ishlash talab etiladi. Xatolarni toʻgʻrilab qayta yuboring.",
+    "noPendingReview": "Tekshiruv kutilayotgan ishlar yoʻq",
+    "saveGradeError": "Bahoni saqlashda xatolik",
+    "networkError": "Tarmoq xatosi",
+    "reviewStreamTitle": "Vazifalarni tekshirish oqimi ({current} / {total})",
+    "gradedSummary": "Baholandi: {grade} / 100",
+    "teacherCommentPlaceholder": "Oʻqituvchining oʻquvchiga izohi...",
+    "saveAndNext": "Saqlash va keyingisiga oʻtish (Enter)"
   },
-
   "testing": {
     "startTest": "Testni boshlash",
     "submitTest": "Testni yakunlash",
@@ -375,7 +404,6 @@
     "yourAnswer": "Sizning javobingiz",
     "correctAnswer": "To'g'ri javob"
   },
-
   "payments": {
     "title": "Toʻlovlar",
     "description": "Toʻlovlar tarixi",
@@ -393,9 +421,9 @@
     "debtors": "Qarzdorlar",
     "totalCollected": "Yigʻilgan",
     "totalExpected": "Kutilmoqda",
-    "totalOverdue": "Muddati oʻtgan"
+    "totalOverdue": "Muddati oʻtgan",
+    "noPaymentsYet": "Hozircha toʻlovlar yoʻq"
   },
-
   "invites": {
     "title": "Taklifnomalar va Kirish",
     "description": "Markazga taklif kodlari",
@@ -412,7 +440,6 @@
     "bulkImport": "Ommaviy import (CSV)",
     "parentInvite": "Ota-ona uchun taklif"
   },
-
   "staff": {
     "title": "Markaz xodimlari",
     "addStaff": "Xodim qoʻshish",
@@ -422,7 +449,6 @@
     "deactivate": "Faolsizlantirish",
     "activate": "Faollashtirish"
   },
-
   "parent": {
     "childProgress": "Farzandlaringiz Oʻzlashtirishi",
     "noChildren": "Ushbu markazda sizga bogʻlangan farzandlar yoʻq.",
@@ -431,7 +457,6 @@
     "coursesAndGroups": "Kurslar va Guruhlar",
     "paymentHistory": "Toʻlovlar Tarixi"
   },
-
   "student": {
     "myCourses": "Mening Kurslarim va Oqimlarim",
     "noCourses": "Siz hali hech qanday guruhga yozilmadingiz.",
@@ -439,7 +464,6 @@
     "teacher": "Oʻqituvchi",
     "assigningTeacher": "Tayinlanmoqda"
   },
-
   "performance": {
     "title": "Oʻzlashtirish",
     "averageGrade": "Oʻrtacha baho",
@@ -450,7 +474,6 @@
     "trendDown": "Pasayish",
     "trendStable": "Barqaror"
   },
-
   "activity": {
     "title": "Faollik",
     "lastLogin": "Oxirgi kirish",
@@ -459,7 +482,6 @@
     "testCompleted": "Test topshirildi",
     "homeworkSubmitted": "UV topshirildi"
   },
-
   "platform": {
     "title": "Platforma Boshqaruv Paneli",
     "centerManagement": "Markazlarni boshqarish",
@@ -486,7 +508,6 @@
     "frozen": "Muzlatilgan",
     "blocked": "Bloklangan"
   },
-
   "subscription": {
     "title": "Obuna",
     "currentPlan": "Joriy tarif",
@@ -495,7 +516,6 @@
     "changePlan": "Tarifni oʻzgartirish",
     "trialEnds": "Sinov muddati {date} da tugaydi"
   },
-
   "support": {
     "title": "Qoʻllab-quvvatlash",
     "createTicket": "Murojaat yaratish",
@@ -509,7 +529,6 @@
     "statusResolved": "Hal qilingan",
     "statusClosed": "Yopilgan"
   },
-
   "notifications": {
     "title": "Bildirishnomalar",
     "markRead": "Oʻqilgan",
@@ -523,7 +542,6 @@
     "gradePosted": "Baho qoʻyildi: {grade}",
     "subscriptionExpiring": "Obuna {date} da tugaydi"
   },
-
   "landing": {
     "heroTitle": "Sizning uchun yagona makon",
     "heroHighlight": "oʻquv markazi, oʻqituvchilar va oʻquvchilar",
@@ -597,6 +615,7 @@
     "conflictWarning": "Jadval to'qnashuvi!",
     "online": "Onlayn",
     "offline": "Oflayn",
-    "meetingLink": "Uchrashuv havolasi"
+    "meetingLink": "Uchrashuv havolasi",
+    "day": "Kun"
   }
 }

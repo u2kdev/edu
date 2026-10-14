@@ -265,7 +265,7 @@ export default function HomeworkManager({
                 : "bg-slate-900 border-slate-800 text-slate-400 hover:bg-slate-800"
             }`}
           >
-            {st === "ALL" ? t(locale, "common.all") || "Все" : t(locale, `homework.${st === "REVISION_REQUESTED" ? "revisionRequested" : st.toLowerCase()}`) || st}
+            {st === "ALL" ? t(locale, "common.all") : t(locale, `homework.${st === "REVISION_REQUESTED" ? "revisionRequested" : st.toLowerCase()}`) || st}
           </button>
         ))}
       </div>
@@ -449,7 +449,7 @@ export default function HomeworkManager({
                     type="text"
                     value={linkTitle}
                     onChange={(e) => setLinkTitle(e.target.value)}
-                    placeholder="Название (например, Репозиторий)"
+                    placeholder={t(locale, "homework.linkNamePlaceholder")}
                     className="bg-slate-900 border border-slate-800 rounded-xl px-3 py-2 text-xs text-white focus:outline-none focus:border-brand-500"
                   />
                   <input
@@ -501,14 +501,14 @@ export default function HomeworkManager({
 
             {gradingSubmission.submissionText && (
               <div className="p-3 rounded-xl bg-slate-900 border border-slate-800 text-xs text-slate-300">
-                <span className="font-semibold text-slate-400 block mb-1">Решение:</span>
+                <span className="font-semibold text-slate-400 block mb-1">{t(locale, "homework.solutionLabel")}</span>
                 {gradingSubmission.submissionText}
               </div>
             )}
 
             {gradingSubmission.filesJson && (
               <div className="p-3 rounded-xl bg-slate-900 border border-slate-800 text-xs text-slate-300 space-y-1">
-                <span className="font-semibold text-slate-400 block mb-1">Ссылки:</span>
+                <span className="font-semibold text-slate-400 block mb-1">{t(locale, "homework.linksLabel")}</span>
                 {(() => {
                   try {
                     const parsed = JSON.parse(gradingSubmission.filesJson) as { links?: Array<{ url: string; title: string }> };
@@ -546,7 +546,7 @@ export default function HomeworkManager({
               <div className="grid grid-cols-2 gap-3">
                 <div>
                   <label className="block text-xs font-semibold text-slate-400 mb-1">
-                    Балл (0 - 100)
+                    {t(locale, "homework.scoreLabel")}
                   </label>
                   <input
                     type="number"
@@ -561,7 +561,7 @@ export default function HomeworkManager({
 
                 <div>
                   <label className="block text-xs font-semibold text-slate-400 mb-1">
-                    Статус
+                    {t(locale, "common.status")}
                   </label>
                   <select
                     value={gradeStatus}

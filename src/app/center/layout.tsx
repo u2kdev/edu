@@ -143,18 +143,18 @@ export default async function CenterLayout({
       ],
     },
     {
-      title: "Центр",
+      title: t(locale, "nav.center"),
       items: [
         {
           href: "/center/announcements",
           icon: Megaphone,
-          label: "Объявления",
+          label: t(locale, "nav.announcements"),
           roles: ["DIRECTOR", "CENTER_ADMIN", "TEACHER", "TEACHER_ASSISTANT", "CENTER_SUPPORT", "STUDENT", "PARENT"],
         },
         {
           href: "/center/branches",
           icon: Building2,
-          label: "Филиалы",
+          label: t(locale, "nav.branches"),
           roles: ["DIRECTOR", "CENTER_ADMIN"],
         },
       ],
@@ -165,7 +165,7 @@ export default async function CenterLayout({
         {
           href: "/center/profile",
           icon: User,
-          label: "Профиль",
+          label: t(locale, "nav.profile"),
           roles: ["DIRECTOR", "CENTER_ADMIN", "TEACHER", "TEACHER_ASSISTANT", "CENTER_SUPPORT", "STUDENT", "PARENT"],
         },
         {
@@ -207,7 +207,7 @@ export default async function CenterLayout({
     DIRECTOR: t(locale, "dashboard.directorCabinet"),
     CENTER_ADMIN: t(locale, "dashboard.adminCabinet"),
     TEACHER: t(locale, "dashboard.teacherCabinet"),
-    TEACHER_ASSISTANT: "Кабинет помощника",
+    TEACHER_ASSISTANT: t(locale, "dashboard.teacherAssistantCabinet"),
     CENTER_SUPPORT: t(locale, "support.title"),
     STUDENT: t(locale, "dashboard.studentCabinet"),
     PARENT: t(locale, "dashboard.parentCabinet"),
@@ -329,7 +329,7 @@ export default async function CenterLayout({
           <Link
             href="/center/notifications"
             className="relative p-2 rounded-xl hover:bg-slate-800/60 text-slate-400 hover:text-white transition-all"
-            title="Уведомления"
+            title={t(locale, "nav.notifications")}
           >
             <Bell className="w-5 h-5" />
             {unreadNotifCount > 0 && (

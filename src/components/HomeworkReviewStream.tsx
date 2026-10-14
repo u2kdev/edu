@@ -1,7 +1,8 @@
 "use client";
 
 import { useState } from "react";
-import { ChevronLeft, ChevronRight, CheckCircle2, FileText, Send, Sparkles, Loader2 } from "lucide-react";
+import { CheckCircle2, ChevronLeft, ChevronRight, Send, Loader2, FileText } from "lucide-react";
+import { t } from "@/i18n";
 
 interface Submission {
   id: string;
@@ -11,7 +12,6 @@ interface Submission {
   filesJson: string | null;
   grade: number | null;
   feedback: string | null;
-  submittedAt: string;
   student: {
     user: {
       fullName: string;
@@ -23,19 +23,14 @@ interface Submission {
 interface HomeworkReviewStreamProps {
   homeworkTitle: string;
   submissions: Submission[];
+  locale?: string;
   onGradedSuccess?: () => void;
 }
-
-const QUICK_FEEDBACKS = [
-  "Отличная работа! Все требования выполнены на 100%.",
-  "Хорошее решение, но обрати внимание на форматирование кода.",
-  "Принято! Можешь переходить к следующему уроку.",
-  "Требуется доработка. Исправь указанные ошибки и ответь снова.",
-];
 
 export default function HomeworkReviewStream({
   homeworkTitle,
   submissions,
+  locale = "ru",
   onGradedSuccess,
 }: HomeworkReviewStreamProps) {
   const [currentIndex, setCurrentIndex] = useState(0);
@@ -43,11 +38,18 @@ export default function HomeworkReviewStream({
   const [feedbackInput, setFeedbackInput] = useState<string>("");
   const [saving, setSaving] = useState(false);
 
+  const quickFeedbacks = [
+    t(locale, "homework.templateExcellent"),
+    t(locale, "homework.templateFormatting"),
+    t(locale, "homework.templateAccepted"),
+    t(locale, "homework.templateNeedsRevision"),
+  ];
+
   if (submissions.length === 0) {
     return (
       <div className="glass-panel p-8 rounded-2xl border border-slate-800 text-center">
         <FileText className="w-10 h-10 text-slate-600 mx-auto mb-3" />
-        <p className="text-slate-400">Нет работ, ожидающих проверки</p>
+        <p className="text-slate-400">{t(locale, "homework.noPendingReview")}</p>
       </div>
     );
   }
@@ -72,10 +74,12 @@ export default function HomeworkReviewStream({
 
   const handleGradeSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (!currentSub || saving) return;
+
     setSaving(true);
     try {
       const res = await fetch("/api/homework", {
-        method: "PATCH",
+        method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           action: "GRADE",
@@ -92,10 +96,10 @@ export default function HomeworkReviewStream({
           handleNext();
         }
       } else {
-        alert("Ошибка сохранения оценки");
+        alert(t(locale, "homework.saveGradeError"));
       }
-    } catch (err) {
-      alert("Ошибка сети");
+    } catch {
+      alert(t(locale, "homework.networkError"));
     } finally {
       setSaving(false);
     }
@@ -107,7 +111,7 @@ export default function HomeworkReviewStream({
       <div className="flex items-center justify-between border-b border-slate-800 pb-4">
         <div>
           <span className="text-xs font-semibold text-brand-400 uppercase tracking-wider">
-            Поток проверки ДЗ ({currentIndex + 1} из {submissions.length})
+            {t(locale, "homework.reviewStreamTitle", { current: currentIndex + 1, total: submissions.length })}
           </span>
           <h3 className="text-base font-bold text-white mt-0.5">{homeworkTitle}</h3>
         </div>
@@ -143,15 +147,15 @@ export default function HomeworkReviewStream({
             </div>
             {currentSub.grade !== null && (
               <span className="px-2.5 py-1 rounded-full bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 text-xs font-bold">
-                Оценено: {currentSub.grade} / 100
+                {t(locale, "homework.gradedSummary", { grade: currentSub.grade })}
               </span>
             )}
           </div>
 
           <div className="space-y-2">
-            <span className="text-xs font-semibold text-slate-400 uppercase tracking-wider">Ответ ученика:</span>
+            <span className="text-xs font-semibold text-slate-400 uppercase tracking-wider">{t(locale, "homework.studentAnswer")}</span>
             <div className="p-3 rounded-lg bg-slate-950 text-sm text-slate-200 whitespace-pre-wrap font-mono min-h-[100px]">
-              {currentSub.submissionText || "Текстовый ответ отсутствует"}
+              {currentSub.submissionText || t(locale, "homework.noTextAnswer")}
             </div>
           </div>
         </div>
@@ -160,7 +164,7 @@ export default function HomeworkReviewStream({
         <form onSubmit={handleGradeSubmit} className="space-y-4">
           <div>
             <label className="block text-xs font-semibold text-slate-300 uppercase tracking-wider mb-2">
-              Оценка (0 — 100)
+              {t(locale, "homework.scoreRange")}
             </label>
             <input
               type="number"
@@ -176,10 +180,10 @@ export default function HomeworkReviewStream({
 
           <div>
             <label className="block text-xs font-semibold text-slate-300 uppercase tracking-wider mb-2">
-              Быстрые шаблоны отзывов
+              {t(locale, "homework.quickTemplates")}
             </label>
             <div className="flex flex-wrap gap-2 mb-2">
-              {QUICK_FEEDBACKS.map((tf, i) => (
+              {quickFeedbacks.map((tf, i) => (
                 <button
                   key={i}
                   type="button"
@@ -195,7 +199,7 @@ export default function HomeworkReviewStream({
               rows={3}
               value={feedbackInput}
               onChange={(e) => setFeedbackInput(e.target.value)}
-              placeholder="Комментарий учителя для ученика..."
+              placeholder={t(locale, "homework.teacherCommentPlaceholder")}
               className="w-full px-4 py-2.5 bg-slate-900 border border-slate-700 rounded-xl text-white text-sm focus:outline-none focus:border-brand-500"
             />
           </div>
@@ -206,7 +210,7 @@ export default function HomeworkReviewStream({
             className="w-full py-3 bg-brand-600 hover:bg-brand-500 text-white font-bold rounded-xl text-sm shadow-lg shadow-brand-600/30 transition-all flex items-center justify-center gap-2 disabled:opacity-50"
           >
             {saving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Send className="w-4 h-4" />}
-            <span>Сохранить и Перейти к следующему (Enter)</span>
+            <span>{t(locale, "homework.saveAndNext")}</span>
           </button>
         </form>
       </div>
