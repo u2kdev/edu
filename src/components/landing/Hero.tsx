@@ -30,7 +30,7 @@ export const Hero: React.FC<HeroProps> = ({ locale, onOpenLeadModal }) => {
   ];
 
   return (
-    <section className="relative overflow-hidden bg-gradient-to-b from-[color:var(--grad-base)] via-[color:var(--grad-e)] to-[color:var(--grad-c)] pb-20 pt-14 font-strict md:pb-28 md:pt-20">
+    <section className="relative overflow-hidden bg-gradient-to-b from-[color:var(--grad-base)] via-[color:var(--grad-e)] to-[color:var(--grad-c)] pb-14 pt-14 font-strict md:pb-16 md:pt-20">
       <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
         <div className="grid grid-cols-1 items-center gap-14 lg:grid-cols-12 lg:gap-16">
           {/* Left: message and actions */}
