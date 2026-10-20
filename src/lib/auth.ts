@@ -18,7 +18,22 @@ export function validateJwtSecret(secret?: string, isProd: boolean = process.env
   return secret;
 }
 
-const JWT_SECRET = validateJwtSecret(process.env.JWT_SECRET, process.env.NODE_ENV === "production");
+let cachedJwtSecret: string | undefined;
+
+/**
+ * Resolves the signing secret on first use instead of at module load.
+ *
+ * `next build` runs with NODE_ENV=production while collecting page data for every
+ * route, so a module-scope check would force Docker/Vercel builds to carry the
+ * runtime secret. Validation still happens before the first sign/verify: a
+ * production process without JWT_SECRET fails closed on the first request.
+ */
+export function getJwtSecret(): string {
+  if (cachedJwtSecret === undefined) {
+    cachedJwtSecret = validateJwtSecret(process.env.JWT_SECRET, process.env.NODE_ENV === "production");
+  }
+  return cachedJwtSecret;
+}
 
 export type PlatformRole = "NONE" | "DEVELOPER" | "SUPERADMIN" | "PLATFORM_ADMIN" | "FULL_ACCESS" | "PLATFORM_SUPPORT" | "SEO_ADMIN";
 export type CenterRole = "DIRECTOR" | "CENTER_ADMIN" | "TEACHER" | "TEACHER_ASSISTANT" | "CENTER_SUPPORT" | "STUDENT" | "PARENT";
@@ -44,12 +59,12 @@ import crypto from "crypto";
 export function signJWT(payload: JWTPayload, expiresIn: jwt.SignOptions["expiresIn"] = "7d", jwtId?: string): string {
   const options: jwt.SignOptions = { expiresIn };
   if (jwtId) options.jwtid = jwtId;
-  return jwt.sign(payload, JWT_SECRET, options);
+  return jwt.sign(payload, getJwtSecret(), options);
 }
 
 export function verifyJWT(token: string): (JWTPayload & { jti?: string }) | null {
   try {
-    return jwt.verify(token, JWT_SECRET) as JWTPayload & { jti?: string };
+    return jwt.verify(token, getJwtSecret()) as JWTPayload & { jti?: string };
   } catch (err) {
     return null;
   }

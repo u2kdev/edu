@@ -17,6 +17,12 @@ const { pushMock, refreshMock, pathnameRef } = vi.hoisted(() => ({
   pathnameRef: { current: "/platform-admin" },
 }));
 
+// `window.location.reload` cannot be stubbed (non-configurable in jsdom), so the
+// component goes through `@/lib/reload` and the test observes that helper.
+const reloadMock = vi.hoisted(() => vi.fn());
+
+vi.mock("@/lib/reload", () => ({ reloadPage: reloadMock }));
+
 vi.mock("next/navigation", () => ({
   useRouter: () => ({
     push: pushMock,
@@ -55,14 +61,6 @@ vi.mock("next/link", async () => {
   };
 });
 
-let reloadMock = vi.fn();
-
-// jsdom keeps the `Location` implementation on the internal document; patching that
-// object is the only way to observe `window.location.reload()`.
-function locImpl(): object {
-  return (window as unknown as { _document: { _location: object } })._document._location;
-}
-
 beforeEach(() => {
   pushMock.mockReset();
   refreshMock.mockReset();
@@ -72,24 +70,10 @@ beforeEach(() => {
   vi.spyOn(window, "alert").mockImplementation(() => {});
   vi.spyOn(window, "confirm").mockImplementation(() => true);
 
-  reloadMock = vi.fn();
-  // `window.location` is non-configurable and its `reload` own property is neither
-  // writable nor configurable, so it cannot be shadowed on the wrapper. The generated
-  // wrapper delegates to the backing `LocationImpl` (`window._document._location`),
-  // which we can patch instead.
-  try {
-    (locImpl() as unknown as { reload: () => void }).reload = reloadMock;
-  } catch {
-    /* no-op: the component still runs, we just cannot observe the call */
-  }
+  reloadMock.mockReset();
 });
 
 afterEach(() => {
-  try {
-    delete (locImpl() as unknown as { reload?: unknown }).reload;
-  } catch {
-    /* no-op */
-  }
   document.documentElement.classList.remove("dark");
   cleanup();
   vi.restoreAllMocks();

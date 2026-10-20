@@ -19,19 +19,22 @@ describe("JWT_SECRET Configuration & Validation", () => {
     expect(validateJwtSecret(valid, false)).toBe(valid);
   });
 
-  it("throws error and terminates on module load in production without JWT_SECRET", () => {
-    expect(() => {
-      execSync('npx tsx -e "process.env.NODE_ENV=\'production\'; process.env.JWT_SECRET=\'\'; require(\'./src/lib/auth.ts\')"', {
-        stdio: "pipe",
-      });
-    }).toThrow();
+  it("imports cleanly in production without JWT_SECRET (build phase safety)", () => {
+    // `next build` runs with NODE_ENV=production while collecting page data, and
+    // Docker/Vercel builds must not require the runtime secret just to compile.
+    const output = execSync(
+      'npx tsx -e "process.env.NODE_ENV=\'production\'; process.env.JWT_SECRET=\'\'; require(\'./src/lib/auth.ts\'); console.log(\'MODULE_LOAD_OK\')"',
+      { encoding: "utf8" }
+    );
+    expect(output).toContain("MODULE_LOAD_OK");
   }, 60000);
 
-  it("throws error and terminates on module load in production with short JWT_SECRET", () => {
+  it("fails closed on first signing call in production without JWT_SECRET", () => {
     expect(() => {
-      execSync('npx tsx -e "process.env.NODE_ENV=\'production\'; process.env.JWT_SECRET=\'short\'; require(\'./src/lib/auth.ts\')"', {
-        stdio: "pipe",
-      });
+      execSync(
+        'npx tsx -e "process.env.NODE_ENV=\'production\'; process.env.JWT_SECRET=\'\'; const { signJWT } = require(\'./src/lib/auth.ts\'); signJWT({ userId: \'u\', email: \'e@example.com\' })"',
+        { stdio: "pipe" }
+      );
     }).toThrow();
   }, 60000);
 

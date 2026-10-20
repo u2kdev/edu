@@ -3,6 +3,7 @@
 import { useState, useRef, useEffect } from "react";
 import { Globe } from "lucide-react";
 import { SUPPORTED_LOCALES, LOCALE_META, type SupportedLocale } from "@/i18n";
+import { reloadPage } from "@/lib/reload";
 
 interface LanguageSwitcherProps {
   currentLocale: string;
@@ -74,7 +75,7 @@ export default function LanguageSwitcher({
 
     // Reload to apply language change across all server components
     if (persist) {
-      window.location.reload();
+      reloadPage();
     }
   }
 
