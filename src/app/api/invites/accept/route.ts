@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 // Reason: Exception: Invite validation requires global search before center context is known.
 // eslint-disable-next-line no-restricted-imports
 import { db } from "@/lib/db";
-import { getAuthSession, signJWT } from "@/lib/auth";
+import { getAuthSession, createSessionToken } from "@/lib/auth";
 import { getTenantDb } from "@/lib/db-tenant";
 import { checkRateLimit } from "@/lib/rate-limit";
 import { getClientIp } from "@/lib/ip";
@@ -11,7 +11,7 @@ import { apiError, handleApiError } from "@/lib/api-response";
 export async function POST(req: Request) {
   try {
     const ip = getClientIp(req);
-    if (!checkRateLimit(ip)) {
+    if (!(await checkRateLimit(ip))) {
       return apiError("Too many attempts", "RATE_LIMITED", 429);
     }
 
@@ -112,14 +112,21 @@ export async function POST(req: Request) {
       },
     });
 
-    // Update active session token to switch to this center
-    const token = signJWT({
-      userId: session.user.id,
-      email: session.user.email,
-      platformRole: session.user.platformRole,
-      activeCenterId: invite.centerId,
-      activeCenterRole: invite.targetRole,
-    });
+    // Update active session token to switch to this center (persisted, revocable, with jti)
+    const token = await createSessionToken(
+      {
+        userId: session.user.id,
+        email: session.user.email,
+        platformRole: session.user.platformRole,
+        activeCenterId: invite.centerId,
+        activeCenterRole: invite.targetRole,
+      },
+      {
+        maxAgeSeconds: 7 * 24 * 60 * 60,
+        ipAddress: ip,
+        userAgent: req.headers.get("user-agent") || undefined,
+      }
+    );
 
     const response = NextResponse.json({
       success: true,

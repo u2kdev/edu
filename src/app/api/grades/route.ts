@@ -2,6 +2,31 @@ import { NextResponse } from "next/server";
 import { requireTenantAccess, logAuditEvent } from "@/lib/tenant";
 import { sendNotification } from "@/lib/notifications";
 
+interface TenantDbWithAudit {
+  auditLog: {
+    findFirst: (args: {
+      where: {
+        resource: string;
+        resourceId: string;
+        action: { in: string[] };
+      };
+      orderBy: { createdAt: "desc" };
+    }) => Promise<{ action: string } | null>;
+  };
+}
+
+async function isAssessmentPeriodLocked(tenantDb: TenantDbWithAudit, groupId: string): Promise<boolean> {
+  const latestAction = await tenantDb.auditLog.findFirst({
+    where: {
+      resource: "Group",
+      resourceId: groupId,
+      action: { in: ["PERIOD_FINALIZED", "PERIOD_UNLOCKED"] },
+    },
+    orderBy: { createdAt: "desc" },
+  });
+  return latestAction?.action === "PERIOD_FINALIZED";
+}
+
 export async function GET(req: Request) {
   try {
     const tenantCtx = await requireTenantAccess(req);
@@ -141,6 +166,14 @@ export async function POST(req: Request) {
         where: { id: groupId },
       });
       if (!group) return NextResponse.json({ error: "Group not found" }, { status: 404 });
+
+      if (await isAssessmentPeriodLocked(tenantDb, groupId)) {
+        if (tenantCtx.role !== "DIRECTOR" && !tenantCtx.isPlatformStaff) {
+          return NextResponse.json({
+            error: "Cannot create grades in a locked assessment period.",
+          }, { status: 403 });
+        }
+      }
     }
 
     if (!tenantCtx.membership?.id) {
@@ -193,17 +226,40 @@ export async function PATCH(req: Request) {
 
     if (!id) return NextResponse.json({ error: "Grade ID required" }, { status: 400 });
 
+    // SECURITY: students and parents must not modify the gradebook.
+    if (["STUDENT", "PARENT"].includes(tenantCtx.role) && !tenantCtx.isPlatformStaff) {
+      return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+    }
+
     const existing = await tenantDb.grade.findFirst({
       where: { id, deletedAt: null },
     });
     if (!existing) return NextResponse.json({ error: "Grade not found" }, { status: 404 });
 
+    // Capture the lifecycle before control-flow narrowing (the FINAL guard below
+    // narrows `existing.lifecycle`, which would make the later comparisons dead).
+    const oldLifecycle = existing.lifecycle;
+
     if (existing.lifecycle === "FINAL") {
       if (tenantCtx.role !== "DIRECTOR" && !tenantCtx.isPlatformStaff) {
         return NextResponse.json({
-          error: "Cannot modify a finalized grade. Contact the center director.",
+          error: "Cannot modify a finalized grade. Contact the center director to unlock it.",
         }, { status: 403 });
       }
+      return NextResponse.json({
+        error: "Finalized grades cannot be modified directly. An explicit unlock action by the director is required.",
+      }, { status: 409 });
+    }
+
+    if (existing.groupId && await isAssessmentPeriodLocked(tenantDb, existing.groupId)) {
+      if (tenantCtx.role !== "DIRECTOR" && !tenantCtx.isPlatformStaff) {
+        return NextResponse.json({
+          error: "Cannot modify grades in a locked assessment period.",
+        }, { status: 403 });
+      }
+      return NextResponse.json({
+        error: "Cannot modify grades in a locked assessment period. An explicit unlock action is required.",
+      }, { status: 409 });
     }
 
     if (tenantCtx.role === "TEACHER" && tenantCtx.membership) {
@@ -212,7 +268,7 @@ export async function PATCH(req: Request) {
       }
     }
 
-    if (existing.lifecycle === "FINAL" && lifecycle && lifecycle !== "FINAL") {
+    if (oldLifecycle === "FINAL" && lifecycle && lifecycle !== "FINAL") {
       return NextResponse.json({ error: "Cannot revert a finalized grade" }, { status: 400 });
     }
 
@@ -229,6 +285,14 @@ export async function PATCH(req: Request) {
       }
     }
 
+    // SECURITY / DATA INTEGRITY: reject non-numeric values instead of writing NaN.
+    if (
+      (value !== undefined && !Number.isFinite(parseFloat(value))) ||
+      (maxValue !== undefined && !Number.isFinite(parseFloat(maxValue)))
+    ) {
+      return NextResponse.json({ error: "value and maxValue must be valid numbers" }, { status: 400 });
+    }
+
     const updateData: Record<string, unknown> = {
       value: value !== undefined ? parseFloat(value) : existing.value,
       maxValue: maxValue !== undefined ? parseFloat(maxValue) : existing.maxValue,
@@ -236,7 +300,7 @@ export async function PATCH(req: Request) {
       lifecycle: lifecycle || existing.lifecycle,
     };
 
-    if (lifecycle === "FINAL" && existing.lifecycle !== "FINAL") {
+    if (lifecycle === "FINAL" && oldLifecycle !== "FINAL") {
       updateData.finalizedAt = new Date();
       updateData.finalizedById = tenantCtx.membership?.id || null;
     }
@@ -258,7 +322,7 @@ export async function PATCH(req: Request) {
       },
     });
 
-    if (lifecycle === "FINAL" && existing.lifecycle !== "FINAL") {
+    if (lifecycle === "FINAL" && oldLifecycle !== "FINAL") {
       const studentMembership = await tenantDb.centerMembership.findFirst({
         where: { id: existing.studentMembershipId },
         select: { userId: true },
@@ -301,8 +365,14 @@ export async function DELETE(req: Request) {
 
     if (existing.lifecycle === "FINAL") {
       return NextResponse.json({
-        error: "Cannot delete a finalized grade. Unfinalize it first if you have permission.",
-      }, { status: 403 });
+        error: "Finalized grades cannot be deleted directly. An explicit unlock action by the director is required.",
+      }, { status: 409 });
+    }
+
+    if (existing.groupId && await isAssessmentPeriodLocked(tenantDb, existing.groupId)) {
+      return NextResponse.json({
+        error: "Cannot delete grades in a locked assessment period. An explicit unlock action by the director is required.",
+      }, { status: 409 });
     }
 
     await tenantDb.grade.updateMany({

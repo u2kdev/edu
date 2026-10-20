@@ -4,6 +4,7 @@ import { db } from "@/lib/db";
 import { getAuthSession } from "@/lib/auth";
 import { hasPermission } from "@/lib/permissions";
 import { z } from "zod";
+import { CenterStatus } from "@prisma/client";
 
 export async function GET(req: Request, { params }: { params: { id: string } }) {
   try {
@@ -54,6 +55,7 @@ const patchSchema = z.object({
   email: z.string().email().optional(),
   timeZone: z.string().optional(),
   brandingConfig: z.string().optional(),
+  status: z.nativeEnum(CenterStatus).optional(),
 });
 
 export async function PATCH(req: Request, { params }: { params: { id: string } }) {
@@ -84,14 +86,16 @@ export async function PATCH(req: Request, { params }: { params: { id: string } }
       phone: existing.phone,
       email: existing.email,
       timeZone: existing.timeZone,
-      brandingConfig: existing.brandingConfig
+      brandingConfig: existing.brandingConfig,
+      status: existing.status,
     };
     const after = {
       name: updated.name,
       phone: updated.phone,
       email: updated.email,
       timeZone: updated.timeZone,
-      brandingConfig: updated.brandingConfig
+      brandingConfig: updated.brandingConfig,
+      status: updated.status,
     };
 
     await db.auditLog.create({

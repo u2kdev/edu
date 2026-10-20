@@ -46,7 +46,7 @@ describe("PendingInvite API", () => {
         slug: `test-center-${Date.now()}`,
         owner: { connect: { id: ownerId } },
         memberships: {
-          create: { userId: ownerId, role: "OWNER" }
+          create: { userId: ownerId, role: "DIRECTOR" }
         }
       },
       include: { memberships: true }

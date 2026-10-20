@@ -51,7 +51,7 @@ export async function GET(req: Request, { params }: { params: { id: string } }) 
 export async function PATCH(req: Request, { params }: { params: { id: string } }) {
   try {
     const ip = getClientIp(req);
-    if (!checkRateLimit(ip + "_ticket_patch")) {
+    if (!(await checkRateLimit(ip + "_ticket_patch"))) {
       return apiError("Rate limited", "RATE_LIMITED", 429);
     }
 

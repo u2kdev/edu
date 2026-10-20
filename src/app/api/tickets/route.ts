@@ -4,6 +4,10 @@ import { NextResponse } from "next/server";
 import { db } from "@/lib/db";
 import { getAuthSession } from "@/lib/auth";
 import { logAuditEvent } from "@/lib/tenant";
+import type { TicketPriority, TicketScope } from "@prisma/client";
+
+const TICKET_PRIORITIES: TicketPriority[] = ["LOW", "MEDIUM", "HIGH", "URGENT"];
+const TICKET_SCOPES: TicketScope[] = ["TENANT", "PLATFORM"];
 
 // GET /api/tickets - List support tickets for current user or tenant/platform
 export async function GET(req: Request) {
@@ -67,8 +71,8 @@ export async function POST(req: Request) {
         centerId: session.activeCenterId || null,
         creatorUserId: session.user.id,
         subject,
-        priority: priority || "MEDIUM",
-        scope: scope || "TENANT",
+        priority: TICKET_PRIORITIES.includes(priority) ? priority : "MEDIUM",
+        scope: TICKET_SCOPES.includes(scope) ? scope : "TENANT",
         status: "OPEN",
         messages: {
           create: {

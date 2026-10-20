@@ -6,6 +6,8 @@ import { checkRateLimit } from "@/lib/rate-limit";
 import { getClientIp } from "@/lib/ip";
 import { apiError, apiSuccess, handleApiError } from "@/lib/api-response";
 import { passwordResetRequestSchema } from "@/lib/validation/auth";
+import { renderEmailTemplate, sendEmailWithOutbox } from "@/lib/email";
+import { toEmailLang } from "@/lib/language";
 import crypto from "crypto";
 
 export async function POST(req: Request) {
@@ -13,7 +15,7 @@ export async function POST(req: Request) {
     const ip = getClientIp(req);
     
     // Custom rate limit for password reset (more strict: limit IP & email)
-    if (!checkRateLimit(ip + "_forgot_pwd")) {
+    if (!(await checkRateLimit(ip + "_forgot_pwd"))) {
       return apiError("auth.rate_limited", "RATE_LIMITED", 429);
     }
 
@@ -59,13 +61,23 @@ export async function POST(req: Request) {
         }
       });
 
-      // Send email via dev driver (console log)
-      const resetLink = `${process.env.NEXT_PUBLIC_URL || "http://localhost:3000"}/reset-password?token=${rawToken}`;
-      console.log(`\n\n=== DEV EMAIL DRIVER ===`);
-      console.log(`To: ${email}`);
-      console.log(`Subject: Сброс пароля (LMS)`);
-      console.log(`Link: ${resetLink}`);
-      console.log(`========================\n\n`);
+      // Deliver the reset link through the real email transport (with outbox fallback).
+      const appUrl = process.env.APP_URL || process.env.NEXT_PUBLIC_URL || "http://localhost:3000";
+      const resetLink = `${appUrl}/reset-password?token=${rawToken}`;
+      const emailLang = toEmailLang(user.preferredLanguage);
+      const emailContent = renderEmailTemplate("PASSWORD_RESET", {
+        lang: emailLang,
+        fullName: user.fullName,
+        url: resetLink,
+      });
+      await sendEmailWithOutbox(
+        user.email,
+        emailContent.subject,
+        emailContent.text,
+        emailContent.html
+      ).catch((sendErr: unknown) => {
+        console.error("Failed to send password reset email:", sendErr);
+      });
     } else {
       // Fake work to mitigate timing attacks
       crypto.randomBytes(32).toString("hex");

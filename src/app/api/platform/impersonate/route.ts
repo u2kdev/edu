@@ -2,7 +2,8 @@ import { NextResponse } from "next/server";
 // Reason: Exception: Platform routes manage global models.
 // eslint-disable-next-line no-restricted-imports
 import { db } from "@/lib/db";
-import { getAuthSession, signJWT } from "@/lib/auth";
+import { getAuthSession, createSessionToken } from "@/lib/auth";
+import { getClientIp } from "@/lib/ip";
 import { logAuditEvent } from "@/lib/tenant";
 
 // POST /api/platform/impersonate - Platform support / Superadmin impersonates a user with mandatory audit log
@@ -55,14 +56,21 @@ export async function POST(req: Request) {
       },
     });
 
-    // Create session token as target user
-    const token = signJWT({
-      userId: targetUser.id,
-      email: targetUser.email,
-      platformRole: targetUser.platformRole,
-      activeCenterId: activeMem?.centerId,
-      activeCenterRole: activeMem?.role,
-    });
+    // Start an impersonation session for the target user (persisted, revocable, with jti)
+    const token = await createSessionToken(
+      {
+        userId: targetUser.id,
+        email: targetUser.email,
+        platformRole: targetUser.platformRole,
+        activeCenterId: activeMem?.centerId,
+        activeCenterRole: activeMem?.role,
+      },
+      {
+        maxAgeSeconds: 1 * 24 * 60 * 60, // 1 day for impersonation session
+        ipAddress: getClientIp(req),
+        userAgent: req.headers.get("user-agent") || undefined,
+      }
+    );
 
     const response = NextResponse.json({
       success: true,

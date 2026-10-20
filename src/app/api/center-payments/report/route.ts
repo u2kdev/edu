@@ -60,6 +60,6 @@ export async function GET(req: Request) {
     });
   } catch (err: unknown) {
     const errorObj = err as { message?: string; status?: number };
-    return NextResponse.json({ error: errorObj.message || "Server error" }, { status: errorObj.status || 500 });
+    return NextResponse.json({ error: errorObj.status ? errorObj.message : "Server error" }, { status: errorObj.status || 500 });
   }
 }

@@ -21,6 +21,7 @@ export default function DeveloperDashboard() {
     fetch("/api/developer/health")
       .then((res) => res.json())
       .then((json) => setHealth(json.health))
+      .catch(() => setHealth(null))
       .finally(() => setLoading(false));
   }, []);
 

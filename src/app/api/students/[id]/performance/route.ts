@@ -122,6 +122,6 @@ export async function GET(
     });
   } catch (err: unknown) {
     const error = err as { message?: string; status?: number };
-    return NextResponse.json({ error: error.message || "Server error" }, { status: error.status || 500 });
+    return NextResponse.json({ error: error.status ? error.message : "Server error" }, { status: error.status || 500 });
   }
 }

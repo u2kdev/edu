@@ -3,6 +3,7 @@ import { getAuthSession } from "@/lib/auth";
 import { redirect } from "next/navigation";
 import { Megaphone, Pin, Clock, Users, BookOpen } from "lucide-react";
 import { t, formatDateLocalized } from "@/i18n";
+import { isCenterRole } from "@/lib/permissions";
 import { Prisma } from "@prisma/client";
 
 export default async function AnnouncementsPage() {
@@ -28,12 +29,13 @@ export default async function AnnouncementsPage() {
   };
 
   if (activeRole !== "DIRECTOR" && activeRole !== "CENTER_ADMIN") {
+    const roleOr: Prisma.AnnouncementWhereInput[] = [{ targetRole: null }];
+    if (isCenterRole(activeRole)) {
+      roleOr.push({ targetRole: activeRole });
+    }
     whereCondition.AND = [
       {
-        OR: [
-          { targetRole: null },
-          { targetRole: activeRole },
-        ],
+        OR: roleOr,
       },
     ];
   }

@@ -18,6 +18,7 @@
 # misc
 .DS_Store
 *.pem
+*.bak
 
 # debug
 npm-debug.log*
@@ -26,21 +27,28 @@ yarn-error.log*
 .pnpm-debug.log*
 
 # local env files
-.env*.local
 .env
+.env*.local
 
 # vercel
 .vercel
 
 # typescript
 *.tsbuildinfo
-next-env.d.ts
-reports/ 
-reports/ 
-*.db  
-*.db-journal  
-reports/ 
 
-build.log
+# local databases & generated quality reports
+*.db
+*.db-journal
 reports/
 scratch/
+build.log
+
+# python bytecode (tooling skills)
+__pycache__/
+*.pyc
+
+# Telegram dev-transmitter bot (contains live secrets — keep out of VCS)
+transmitter/
+
+# local agent tooling (skills, reach tooling, cookies) — never publish
+.agents/

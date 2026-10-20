@@ -3,7 +3,11 @@ import { NextResponse } from "next/server";
 // eslint-disable-next-line no-restricted-imports
 import { db } from "@/lib/db";
 import { getTenantDb } from "@/lib/db-tenant";
-import { getAuthSession, signJWT } from "@/lib/auth";
+import { getAuthSession, createSessionToken } from "@/lib/auth";
+import { getClientIp } from "@/lib/ip";
+import type { CenterType } from "@prisma/client";
+
+const CENTER_TYPES: CenterType[] = ["OFFLINE", "ONLINE", "HYBRID"];
 
 export async function POST(req: Request) {
   try {
@@ -46,7 +50,7 @@ export async function POST(req: Request) {
       data: {
         name,
         slug: cleanSlug,
-        centerType: centerType || "HYBRID",
+        centerType: CENTER_TYPES.includes(centerType) ? centerType : "HYBRID",
         status: "TRIAL",
         ownerId: session.user.id,
       },
@@ -77,14 +81,21 @@ export async function POST(req: Request) {
       },
     });
 
-    // Update JWT token with new active center
-    const token = signJWT({
-      userId: session.user.id,
-      email: session.user.email,
-      platformRole: session.user.platformRole,
-      activeCenterId: center.id,
-      activeCenterRole: "DIRECTOR",
-    });
+    // Update the session to point at the freshly created center (persisted, revocable, with jti)
+    const token = await createSessionToken(
+      {
+        userId: session.user.id,
+        email: session.user.email,
+        platformRole: session.user.platformRole,
+        activeCenterId: center.id,
+        activeCenterRole: "DIRECTOR",
+      },
+      {
+        maxAgeSeconds: 7 * 24 * 60 * 60,
+        ipAddress: getClientIp(req),
+        userAgent: req.headers.get("user-agent") || undefined,
+      }
+    );
 
     const response = NextResponse.json({
       success: true,

@@ -8,7 +8,7 @@ export async function GET(req: Request) {
   try {
     await requireDeveloper();
     const { searchParams } = new URL(req.url);
-    const take = Number(searchParams.get("limit")) || 100;
+    const take = Math.min(500, Math.max(1, Number(searchParams.get("limit")) || 100));
     const centerId = searchParams.get("centerId");
     
     const whereClause: { centerId?: string } = {};

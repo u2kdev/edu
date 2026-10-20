@@ -18,7 +18,7 @@ export async function GET(req: Request) {
     return NextResponse.json({ branches });
   } catch (err: unknown) {
     const error = err as { message?: string; status?: number };
-    return NextResponse.json({ error: error.message || "Server error" }, { status: error.status || 400 });
+    return NextResponse.json({ error: error.status ? error.message : "Server error" }, { status: error.status || 400 });
   }
 }
 
@@ -65,7 +65,7 @@ export async function POST(req: Request) {
     return NextResponse.json({ success: true, branch });
   } catch (err: unknown) {
     const error = err as { message?: string; status?: number };
-    return NextResponse.json({ error: error.message || "Server error" }, { status: error.status || 400 });
+    return NextResponse.json({ error: error.status ? error.message : "Server error" }, { status: error.status || 400 });
   }
 }
 
@@ -109,7 +109,7 @@ export async function PATCH(req: Request) {
     return NextResponse.json({ success: true, branch });
   } catch (err: unknown) {
     const error = err as { message?: string; status?: number };
-    return NextResponse.json({ error: error.message || "Server error" }, { status: error.status || 400 });
+    return NextResponse.json({ error: error.status ? error.message : "Server error" }, { status: error.status || 400 });
   }
 }
 
@@ -152,6 +152,6 @@ export async function DELETE(req: Request) {
     return NextResponse.json({ success: true });
   } catch (err: unknown) {
     const error = err as { message?: string; status?: number };
-    return NextResponse.json({ error: error.message || "Server error" }, { status: error.status || 400 });
+    return NextResponse.json({ error: error.status ? error.message : "Server error" }, { status: error.status || 400 });
   }
 }

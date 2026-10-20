@@ -46,22 +46,47 @@ export function t(
   const validLocale = isValidLocale(locale) ? locale : DEFAULT_LOCALE;
   const localeData = translations[validLocale];
 
-  // Navigate the nested object by key path
+  // Navigate the nested object by key path.
+  // We also accept literal keys that themselves contain dots (e.g. a key
+  // "password.min_8" nested under "auth"), which is how validation messages
+  // and a few legacy entries are stored.
   const parts = key.split(".");
   let value: unknown = localeData;
+  let index = 0;
+  let found = true;
 
-  for (const part of parts) {
-    if (value && typeof value === "object" && part in value) {
-      value = (value as Record<string, unknown>)[part];
-    } else {
-      // Fallback to Russian if key not found in current locale
-      if (validLocale !== "ru") {
-        return t("ru", key, params);
-      }
-      // Return key itself if not found in any locale
-      console.warn(`[i18n] Missing translation key: "${key}" for locale "${validLocale}"`);
-      return key;
+  while (index < parts.length) {
+    if (!value || typeof value !== "object") {
+      found = false;
+      break;
     }
+
+    const obj = value as Record<string, unknown>;
+    const remaining = parts.slice(index).join(".");
+    if (remaining in obj) {
+      value = obj[remaining];
+      index = parts.length;
+      break;
+    }
+
+    const part = parts[index];
+    if (part in obj) {
+      value = obj[part];
+      index += 1;
+    } else {
+      found = false;
+      break;
+    }
+  }
+
+  if (!found) {
+    // Fallback to Russian if key not found in current locale
+    if (validLocale !== "ru") {
+      return t("ru", key, params);
+    }
+    // Return key itself if not found in any locale
+    console.warn(`[i18n] Missing translation key: "${key}" for locale "${validLocale}"`);
+    return key;
   }
 
   if (typeof value !== "string") {

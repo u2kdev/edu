@@ -97,17 +97,17 @@ async function extractReason(
 
 export async function requireTenantAccess(
   req: Request,
-  expectedCenterIdOrOptions?: string | { isWrite?: boolean; allowSuspended?: boolean; reason?: string },
-  maybeOptions?: { isWrite?: boolean; allowSuspended?: boolean; reason?: string }
+  expectedCenterIdOrOptions?: string | { isWrite?: boolean; allowSuspended?: boolean; reason?: string; expectedCenterId?: string },
+  maybeOptions?: { isWrite?: boolean; allowSuspended?: boolean; reason?: string; expectedCenterId?: string }
 ) {
   if (!req || typeof req !== "object" || !("method" in req)) {
     throw new Error("requireTenantAccess requires a Request object as its first argument");
   }
 
-  const expectedCenterId =
-    typeof expectedCenterIdOrOptions === "string" ? expectedCenterIdOrOptions : undefined;
   const options =
     typeof expectedCenterIdOrOptions === "object" ? expectedCenterIdOrOptions : maybeOptions;
+  const expectedCenterId =
+    typeof expectedCenterIdOrOptions === "string" ? expectedCenterIdOrOptions : options?.expectedCenterId;
 
   let isWrite = options?.isWrite;
   if (isWrite === undefined) {

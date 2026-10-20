@@ -1,12 +1,14 @@
 {
   "common": {
-    "appName": "AcademiaSaaS",
+    "brandName": "e-darischi",
+    "appName": "e-darischi",
     "appTagline": "Multi-tenant LMS platforma",
     "loading": "Yuklanmoqda...",
     "save": "Saqlash",
     "cancel": "Bekor qilish",
     "delete": "Oʻchirish",
     "edit": "Tahrirlash",
+    "viewAll": "Barchasini koʻrish",
     "create": "Yaratish",
     "search": "Qidirish",
     "filter": "Filtr",
@@ -30,16 +32,15 @@
     "language": "Til",
     "settings": "Sozlamalar",
     "profile": "Profil",
-    "logout": "Chiqish"
+    "logout": "Chiqish",
+    "recordsCount": "{count} ta yozuv"
   },
-
   "languages": {
     "ru": "Русский",
     "uz-Latn": "Oʻzbekcha (Lotin)",
     "uz-Cyrl": "Ўзбекча (Кирилл)",
     "en": "English"
   },
-
   "auth": {
     "login": "Tizimga kirish",
     "register": "Roʻyxatdan oʻtish",
@@ -64,9 +65,53 @@
     "password.max_50": "Parol 50 belgidan oshmasligi kerak",
     "fullName.min_2": "Ism kamida 2 ta belgidan iborat bo'lishi kerak",
     "fullName.max_100": "Ism 100 belgidan oshmasligi kerak",
-    "token.required": "Token kiritish majburiy"
+    "token.required": "Token kiritish majburiy",
+    "password.required": "Parolni kiriting",
+    "password.min_10": "Parol kamida 10 ta belgidan iborat bo'lishi kerak",
+    "password.max_128": "Parol 128 belgidan oshmasligi kerak",
+    "changePassword": "Parolni o'zgartirish",
+    "changePasswordSuccess": "Parol muvaffaqiyatli o'zgartirildi",
+    "currentPassword": "Joriy parol",
+    "newPassword": "Yangi parol",
+    "passwordHint": "Kamida 8 ta belgi",
+    "backToLogin": "Kirishga qaytish",
+    "resetLinkSent": "Parolni tiklash havolasi pochtangizga yuborildi",
+    "resetSuccess": "Parol muvaffaqiyatli o'zgartirildi",
+    "redirecting": "Kirish sahifasiga o'tilmoqda...",
+    "requestNewReset": "Yangi havola so'rash",
+    "forgot": {
+      "title": "Parolni tiklash",
+      "subtitle": "Email manzilingizni kiriting, biz parolni tiklash havolasini yuboramiz",
+      "submit": "Havolani yuborish"
+    },
+    "reset": {
+      "title": "Yangi parol",
+      "subtitle": "Hisobingiz uchun yangi parol o'ylab toping",
+      "submit": "Parolni saqlash"
+    },
+    "confirm": {
+      "title": "Pochtani tasdiqlash",
+      "loading": "Token tekshirilmoqda...",
+      "success": "Pochta muvaffaqiyatli tasdiqlandi!",
+      "error": "Noto'g'ri yoki muddati o'tgan token.",
+      "expired": "Havola muddati tugagan.",
+      "login": "Kirish",
+      "resend": "Xatni qayta yuborish",
+      "resend_success": "Xat yuborildi. Pochtangizni tekshiring.",
+      "resend_error": "Xatni yuborib bo'lmadi. Keyinroq urinib ko'ring."
+    }
   },
-
+  "profile": {
+    "changePassword": "Parolni o'zgartirish",
+    "myDevices": "Mening qurilmalarim",
+    "revokeAll": "Barcha seanslarni tugatish",
+    "revokeSession": "Seansni tugatish",
+    "confirmRevokeAll": "Boshqa barcha seanslarni tugatishni xohlaysizmi?",
+    "noDevices": "Faol qurilmalar yo'q",
+    "currentDevice": "Joriy qurilma",
+    "lastSeen": "Oxirgi faollik",
+    "loginDate": "Kirish sanasi"
+  },
   "nav": {
     "dashboard": "Bosh sahifa",
     "courses": "Kurslar",
@@ -84,9 +129,12 @@
     "settings": "Sozlamalar",
     "platformAdmin": "Platforma paneli",
     "reports": "Hisobotlar",
-    "notifications": "Bildirishnomalar"
+    "notifications": "Bildirishnomalar",
+    "center": "Markaz",
+    "announcements": "Eʼlonlar",
+    "branches": "Filiallar",
+    "profile": "Profil"
   },
-
   "roles": {
     "SUPERADMIN": "Superadmin",
     "PLATFORM_ADMIN": "Platforma admini",
@@ -100,7 +148,6 @@
     "STUDENT": "Oʻquvchi",
     "PARENT": "Ota-ona"
   },
-
   "dashboard": {
     "welcome": "Assalomu alaykum, {name}! 👋",
     "selectCenter": "Chap menyuda oʻquv markazini tanlang",
@@ -118,9 +165,53 @@
     "subscriptionPlan": "Platforma obuna tarifi",
     "activeUntil": "{date} gacha faol",
     "frozenAlert": "Oʻquv markazi obunasi toʻxtatilgan. Oʻquvchilar va oʻqituvchilar kirishi ijara toʻlanguncha cheklangan.",
-    "payRent": "Ijara toʻlash"
+    "payRent": "Ijara toʻlash",
+    "centerAttendanceRate": "Markaz davomati",
+    "atRiskCount": "Xavf guruhidagi oʻquvchilar (< 80%)",
+    "upcomingCenterSchedule": "Markazning yaqin darslari",
+    "viewSchedule": "Dars jadvalini ochish",
+    "viewAttendanceJournal": "Davomat jurnali",
+    "noUpcomingClasses": "Yaqin orada darslar rejalashtirilmagan.",
+    "noActiveStudents": "Markazda hali faol oʻquvchilar yoʻq.",
+    "noActiveTeachers": "Markazda hali oʻqituvchilar yoʻq.",
+    "noCoursesYet": "Markazda hali kurslar yaratilmagan.",
+    "createFirstCourse": "Birinchi kursni yaratish",
+    "addStudentsPrompt": "Oʻquvchilarni qoʻshish",
+    "setupSchedulePrompt": "Dars jadvalini tuzish",
+    "mySchedule": "Mening dars jadvalim",
+    "pendingReviews": "Tekshirilmagan uy vazifalari",
+    "noPendingReviews": "Barcha topshirilgan ishlar tekshirildi! Ajoyib natija.",
+    "noTeacherSchedule": "Sizga hali dars jadvalida darslar belgilanmagan.",
+    "quickAttendance": "Tezkor davomat belgilash",
+    "markAttendanceAction": "Belgilash",
+    "reviewAction": "Ishni tekshirish",
+    "submissionFrom": "Topshirgan: {name}",
+    "upcomingDeadlines": "Yaqinlashib kelayotgan uy vazifasi muddatlari",
+    "noHomeworkDeadlines": "Barcha uy vazifalari bajarilgan yoki muddatlar yoʻq.",
+    "academicPerformance": "Oʻzlashtirish",
+    "averageGrade": "Oʻrtacha ball",
+    "recentGrades": "Oxirgi baholar",
+    "noGradesYet": "Hozircha baholar yoʻq.",
+    "inRiskZoneWarning": "Diqqat: davomat 80% dan past! Attestatsiyaga qoʻyilmaslik xavfi.",
+    "goodAttendanceBadge": "Aʼlo davomat",
+    "submitHomeworkPrompt": "Ishni topshirish",
+    "childrenOverview": "Farzandlarning oʻzlashtirishi va dars jadvali",
+    "childAttendance": "Davomat: {rate}% ({attended}/{total} dars)",
+    "childAbsences": "Qoldirilgan darslar: {count}",
+    "childUpcomingClasses": "Dars jadvali",
+    "childRecentGrades": "Oxirgi baholar",
+    "childNoClasses": "Hozircha dars jadvalida darslar yoʻq",
+    "childNoGrades": "Hozircha baholar yoʻq",
+    "parentPayNext": "Oʻqish toʻlovini amalga oshirish",
+    "parentNoChildrenLinked": "Sizga ushbu oʻquv markazida biriktirilgan farzandlar yoʻq.",
+    "parentLinkHint": "Oʻquv markazi maʼmuriyatidan biriktirish kodini soʻrang.",
+    "teacherAssistantCabinet": "Yordamchi kabineti",
+    "pendingHomeworks": "Tekshirilmagan vazifalar",
+    "homeworksCount": "{count} ta vazifa",
+    "goToReview": "Tekshirishga oʻtish →",
+    "attendanceLowWarning": "Davomati 80% dan past boʻlgan oʻquvchilar oʻqituvchilar va ota-onalar eʼtiborini talab qiladi.",
+    "attendanceSatisfactory": "Barcha faol oʻquvchilar qoniqarli davomat darajasiga ega."
   },
-
   "courses": {
     "title": "Oʻquv Kurslari",
     "description": "Jadval va materiallarni koʻrish",
@@ -131,20 +222,119 @@
     "draft": "Qoralama",
     "modules": "Modullar",
     "lessons": "Darslar",
-    "materials": "Materiallar"
+    "materials": "Materiallar",
+    "addNewCourse": "Yangi kurs qoʻshish",
+    "noCoursesYet": "Ushbu oʻquv markazida hozircha kurslar qoʻshilmagan.",
+    "noDescription": "Tavsifsiz",
+    "modulesCount": "Modullar: {count}",
+    "groupsCount": "Guruhlar: {count}",
+    "curriculum": "Oʻquv dasturi (Modullar)",
+    "noModulesYet": "Kurs modullari hali yaratilmagan.",
+    "minutes": "daqiqa",
+    "createCourseModal": "Yangi kurs yaratish",
+    "titlePlaceholder": "Masalan: React asosida Frontend dasturlash",
+    "descPlaceholder": "Ushbu kursda talabalar nimani oʻrganadilar...",
+    "cancel": "Bekor qilish",
+    "creating": "Yaratilmoqda...",
+    "networkError": "Tarmoq xatosi"
   },
-
   "groups": {
     "title": "Guruhlar (oqimlar)",
     "createGroup": "Guruh yaratish",
+    "editGroup": "Guruhni tahrirlash",
     "groupName": "Guruh nomi",
     "assignTeacher": "Oʻqituvchi tayinlash",
+    "selectCourse": "Kursni tanlang",
+    "selectTeacher": "Oʻqituvchini tanlang",
     "maxStudents": "Maks. oʻquvchilar",
     "enrolled": "Roʻyxatga olingan",
     "startDate": "Boshlanish sanasi",
-    "endDate": "Tugash sanasi"
+    "endDate": "Tugash sanasi",
+    "capacity": "Sigʻim",
+    "studentsCount": "Oʻquvchilar: {count} / {max}",
+    "addStudent": "Oʻquvchi qoʻshish",
+    "removeStudent": "Oʻquvchini chetlatish",
+    "transferStudent": "Boshqa guruhga oʻtkazish",
+    "transferTarget": "Maqsadli guruh",
+    "dropReason": "Chetlatish sababi",
+    "dropReasonPrompt": "Chetlatish sababini koʻrsating:",
+    "archiveGroup": "Guruhni arxivlash",
+    "unarchiveGroup": "Arxivdan chiqarish",
+    "emptyRoster": "Ushbu guruhda hali oʻquvchilar yoʻq",
+    "groupFull": "Guruh toʻlgan",
+    "limitReached": "Tarif limiti toʻlgan",
+    "transferSuccess": "Talaba muvaffaqiyatli koʻchirildi",
+    "transferError": "Koʻchirishda xatolik yuz berdi",
+    "dropSuccess": "Talaba guruhdan chiqarildi",
+    "dropError": "Chiqarishda xatolik yuz berdi",
+    "teacherAssigned": "Oʻqituvchi: {name}",
+    "teacherNotAssigned": "Oʻqituvchi belgilanmagan",
+    "rosterTitle": "Biriktirilgan oʻquvchilar ({count})",
+    "noTeacher": "-- Oʻqituvchisiz --",
+    "studentLabel": "Talaba: {name}",
+    "transferReasonLabel": "Koʻchirish sababi",
+    "dropConfirm": "Haqiqatan ham {name} talabasini guruhdan chiqarmoqchimisiz?",
+    "saveError": "Saqlashda xatolik yuz berdi",
+    "networkError": "Tarmoq xatosi"
   },
-
+  "students": {
+    "title": "Oʻquvchilar",
+    "subtitle": "Markaz oʻquvchilarini boshqarish",
+    "totalCount": "Jami oʻquvchilar: {count}",
+    "addStudent": "Oʻquvchi qoʻshish",
+    "importCsv": "CSV dan import qilish",
+    "searchPlaceholder": "Ism yoki email boʻyicha qidiruv...",
+    "filterGroup": "Barcha guruhlar",
+    "filterStatus": "Barcha holatlar",
+    "statusActive": "Faol",
+    "statusArchived": "Arxivlangan",
+    "sortName": "Ism boʻyicha",
+    "sortDate": "Qoʻshilgan sana boʻyicha",
+    "emptyList": "Oʻquvchilar topilmadi",
+    "emptyListFilter": "Belgilangan filtrlar boʻyicha hech narsa topilmadi",
+    "loading": "Oʻquvchilar yuklanmoqda...",
+    "errorLoading": "Oʻquvchilarni yuklashda xatolik yuz berdi",
+    "retry": "Qayta urinish",
+    "fullName": "F.I.SH",
+    "email": "Email",
+    "phone": "Telefon",
+    "group": "Guruh",
+    "groups": "Guruhlar",
+    "status": "Holat",
+    "actions": "Amallar",
+    "viewProfile": "Oʻquvchi kartasi",
+    "profileTitle": "Oʻquvchi kartasi",
+    "profileSubtitle": "Shaxsiy maʼlumotlar, guruhlar, oʻzlashtirish va toʻlovlar",
+    "attendanceSummary": "Davomat",
+    "gradesSummary": "Baholar",
+    "parents": "Ota-onalar",
+    "payments": "Toʻlovlar (koʻrish)",
+    "enrollmentHistory": "Qabul tarixi",
+    "noGroups": "Hech qaysi guruhga biriktirilmagan",
+    "noParents": "Bogʻlangan ota-onalar yoʻq",
+    "noPayments": "Toʻlovlar hali yoʻq",
+    "noHistory": "Tarix boʻsh",
+    "inviteCodeNotice": "Taklif kodi bilan yaratish",
+    "csvPreview": "CSV koʻrib chiqish",
+    "csvUpload": "CSV faylni yuklash",
+    "csvRowsValid": "Toʻgʻri qatorlar: {count}",
+    "csvRowsError": "Xatolar: {count}",
+    "csvImportSuccess": "Muvaffaqiyatli import qilindi: {count}",
+    "csvImportErrorsTitle": "Xatolar hisoboti",
+    "csvHelp": "Format: F.I.SH, Email, Telefon (ixtiyoriy), Guruh ID (ixtiyoriy)",
+    "pageOf": "Sahifa {page} / {totalPages}",
+    "studentCreatedInvite": "Talaba muvaffaqiyatli yaratildi! Bir martalik taklif kodi:",
+    "noGroupSelected": "-- Guruhga biriktirmasdan --",
+    "sortAsc": "A-Z",
+    "sortDesc": "Z-A",
+    "sortNewest": "Yangilari",
+    "sortOldest": "Eskilari",
+    "csvErrorRow": "Qator {row}: {error}",
+    "teacherLabel": "Oʻqituvchi: {name}",
+    "lessonFallback": "Dars",
+    "transferHistory": "«{from}» dan «{to}» ga",
+    "reasonLabel": "Sabab: {reason}"
+  },
   "lessons": {
     "title": "Darslar",
     "createLesson": "Dars yaratish",
@@ -158,7 +348,6 @@
     "meetingUrl": "Konferentsiya havolasi",
     "location": "Auditoriya"
   },
-
   "materials": {
     "title": "Materiallar",
     "addMaterial": "Material qoʻshish",
@@ -171,7 +360,6 @@
     "bookDescription": "Oʻqish uchun fayl",
     "testDescription": "Avtotekshiruvli test"
   },
-
   "attendance": {
     "title": "Davomat",
     "markAttendance": "Davomatni belgilash",
@@ -179,9 +367,41 @@
     "absent": "Qatnashmadi",
     "excused": "Sababli",
     "late": "Kechikdi",
-    "attendanceRate": "% davomat"
+    "attendanceRate": "% davomat",
+    "exportCsv": "CSV ga eksport",
+    "riskList": "Xavf guruhi (< 80%)",
+    "riskListEmpty": "Xavf guruhida o'quvchilar yo'q",
+    "selectGroup": "Guruhni tanlang",
+    "selectLesson": "Darsni tanlang",
+    "markAllPresent": "Barchani belgilash",
+    "saveAttendance": "Davomatni saqlash",
+    "note": "Eslatma",
+    "savedSuccess": "Davomat muvaffaqiyatli saqlandi",
+    "classesCount": "{attended} / {total} ta dars"
   },
-
+  "grades": {
+    "title": "Baholar jurnali va o'zlashtirish",
+    "gradebookMatrix": "Baholar matritsasi",
+    "weightedScore": "Yakuniy ball",
+    "letterGrade": "Baho",
+    "finalizePeriod": "Davrni yakunlash",
+    "finalizedSuccess": "Davr baholari muvaffaqiyatli yakunlandi",
+    "exportCsv": "CSV ga eksport",
+    "lockedTooltip": "Baho qulflangan va o'zgartirilmaydi",
+    "selectGroup": "Guruhni tanlang",
+    "noGrades": "Hozircha baholar yo'q",
+    "teacherDescription": "Guruhlaringiz oʻquvchilari baholari",
+    "studentDescription": "Sizning baholaringiz",
+    "parentDescription": "Farzandlaringiz baholari",
+    "allDescription": "Oʻquv markazining barcha baholari",
+    "averageScore": "Oʻrtacha ball",
+    "passed": "✓ Topshirildi",
+    "failed": "✗ Topshirilmadi",
+    "points": "ball",
+    "gradeExcellent": "A (Aʼlo)",
+    "gradeGood": "B (Yaxshi)",
+    "gradeSatisfactory": "C (Qoniqarli)"
+  },
   "homework": {
     "title": "Uy Vazifalari",
     "createHomework": "UV yaratish",
@@ -192,9 +412,45 @@
     "graded": "Tekshirilgan",
     "overdue": "Muddati oʻtgan",
     "submitHomework": "Vazifani topshirish",
-    "gradeHomework": "Vazifani baholash"
+    "gradeHomework": "Vazifani baholash",
+    "accepted": "Qabul qilindi",
+    "revisionRequested": "Qayta ishlashga",
+    "feedback": "O'qituvchi izohi",
+    "links": "Tashqi havolalar",
+    "submitSuccess": "Vazifa muvaffaqiyatli yuborildi",
+    "gradeSuccess": "Baho muvaffaqiyatli qo'yildi",
+    "assignmentFallback": "Vazifa",
+    "linkNamePlaceholder": "Nomi (masalan, Repozitoriy)",
+    "solutionLabel": "Yechim:",
+    "linksLabel": "Havolalar:",
+    "scoreLabel": "Ball (0 - 100)",
+    "scoreRange": "Baho (0 — 100)",
+    "studentAnswer": "Oʻquvchi javobi:",
+    "noTextAnswer": "Matnli javob yoʻq",
+    "quickTemplates": "Tezkor sharh shablonlari",
+    "templateExcellent": "Ajoyib ish! Barcha talablar 100% bajarilgan.",
+    "templateFormatting": "Yaxshi yechim, lekin kod formatlashiga eʼtibor bering.",
+    "templateAccepted": "Qabul qilindi! Keyingi darsga oʻtishingiz mumkin.",
+    "templateNeedsRevision": "Qayta ishlash talab etiladi. Xatolarni toʻgʻrilab qayta yuboring.",
+    "noPendingReview": "Tekshiruv kutilayotgan ishlar yoʻq",
+    "saveGradeError": "Bahoni saqlashda xatolik",
+    "networkError": "Tarmoq xatosi",
+    "reviewStreamTitle": "Vazifalarni tekshirish oqimi ({current} / {total})",
+    "gradedSummary": "Baholandi: {grade} / 100",
+    "teacherCommentPlaceholder": "Oʻqituvchining oʻquvchiga izohi...",
+    "saveAndNext": "Saqlash va keyingisiga oʻtish (Enter)"
   },
-
+  "testing": {
+    "startTest": "Testni boshlash",
+    "submitTest": "Testni yakunlash",
+    "timeRemaining": "Qolgan vaqt",
+    "attemptsLeft": "Qolgan urinishlar",
+    "passed": "Test topshirildi",
+    "failed": "Test topshirilmadi",
+    "reviewTitle": "Javoblar tahlili",
+    "yourAnswer": "Sizning javobingiz",
+    "correctAnswer": "To'g'ri javob"
+  },
   "payments": {
     "title": "Toʻlovlar",
     "description": "Toʻlovlar tarixi",
@@ -212,9 +468,9 @@
     "debtors": "Qarzdorlar",
     "totalCollected": "Yigʻilgan",
     "totalExpected": "Kutilmoqda",
-    "totalOverdue": "Muddati oʻtgan"
+    "totalOverdue": "Muddati oʻtgan",
+    "noPaymentsYet": "Hozircha toʻlovlar yoʻq"
   },
-
   "invites": {
     "title": "Taklifnomalar va Kirish",
     "description": "Markazga taklif kodlari",
@@ -231,7 +487,6 @@
     "bulkImport": "Ommaviy import (CSV)",
     "parentInvite": "Ota-ona uchun taklif"
   },
-
   "staff": {
     "title": "Markaz xodimlari",
     "addStaff": "Xodim qoʻshish",
@@ -241,7 +496,6 @@
     "deactivate": "Faolsizlantirish",
     "activate": "Faollashtirish"
   },
-
   "parent": {
     "childProgress": "Farzandlaringiz Oʻzlashtirishi",
     "noChildren": "Ushbu markazda sizga bogʻlangan farzandlar yoʻq.",
@@ -250,7 +504,6 @@
     "coursesAndGroups": "Kurslar va Guruhlar",
     "paymentHistory": "Toʻlovlar Tarixi"
   },
-
   "student": {
     "myCourses": "Mening Kurslarim va Oqimlarim",
     "noCourses": "Siz hali hech qanday guruhga yozilmadingiz.",
@@ -258,7 +511,6 @@
     "teacher": "Oʻqituvchi",
     "assigningTeacher": "Tayinlanmoqda"
   },
-
   "performance": {
     "title": "Oʻzlashtirish",
     "averageGrade": "Oʻrtacha baho",
@@ -269,7 +521,6 @@
     "trendDown": "Pasayish",
     "trendStable": "Barqaror"
   },
-
   "activity": {
     "title": "Faollik",
     "lastLogin": "Oxirgi kirish",
@@ -278,7 +529,6 @@
     "testCompleted": "Test topshirildi",
     "homeworkSubmitted": "UV topshirildi"
   },
-
   "platform": {
     "title": "Platforma Boshqaruv Paneli",
     "centerManagement": "Markazlarni boshqarish",
@@ -297,15 +547,19 @@
     "churn": "Churn Rate",
     "impersonate": "Foydalanuvchi sifatida kirish",
     "auditLog": "Audit jurnali",
+    "support": "Platforma qoʻllab-quvvatlashi",
+    "settings": "Platforma sozlamalari",
     "offline": "Oflayn",
     "online": "Onlayn",
     "hybrid": "Gibrid",
     "trial": "Sinov",
     "active": "Faol",
     "frozen": "Muzlatilgan",
+    "paused": "To'xtatilgan",
+    "overdue": "Muddati o'tgan",
+    "cancelled": "Bekor qilingan",
     "blocked": "Bloklangan"
   },
-
   "subscription": {
     "title": "Obuna",
     "currentPlan": "Joriy tarif",
@@ -314,7 +568,6 @@
     "changePlan": "Tarifni oʻzgartirish",
     "trialEnds": "Sinov muddati {date} da tugaydi"
   },
-
   "support": {
     "title": "Qoʻllab-quvvatlash",
     "createTicket": "Murojaat yaratish",
@@ -328,7 +581,9 @@
     "statusResolved": "Hal qilingan",
     "statusClosed": "Yopilgan"
   },
-
+  "reports": {
+    "attendanceSummary": "Davomat hisoboti"
+  },
   "notifications": {
     "title": "Bildirishnomalar",
     "markRead": "Oʻqilgan",
@@ -342,7 +597,6 @@
     "gradePosted": "Baho qoʻyildi: {grade}",
     "subscriptionExpiring": "Obuna {date} da tugaydi"
   },
-
   "landing": {
     "heroTitle": "Sizning uchun yagona makon",
     "heroHighlight": "oʻquv markazi, oʻqituvchilar va oʻquvchilar",
@@ -361,5 +615,62 @@
     "connectPro": "Pro-ni ulash",
     "contactUs": "Biz bilan bogʻlanish",
     "copyright": "© 2026 AcademiaSaaS Platform. Barcha huquqlar himoyalangan. Oʻquv markazlari uchun yopiq LMS-tizim."
+  },
+  "schedule": {
+    "title": "Dars jadvali",
+    "subtitle": "Dars jadvalini boshqarish va ko'rish",
+    "dayView": "Kun",
+    "weekView": "Hafta",
+    "monthView": "Oy",
+    "allGroups": "Barcha guruhlar",
+    "allTeachers": "Barcha o'qituvchilar",
+    "searchPlaceholder": "Fan, guruh yoki xona bo'yicha qidiruv...",
+    "exportIcal": "iCal eksport",
+    "addSlot": "Dars qo'shish",
+    "editSlot": "Darsni tahrirlash",
+    "deleteSlot": "O'chirish",
+    "cancelSlot": "Darsni bekor qilish",
+    "group": "Guruh",
+    "teacher": "O'qituvchi",
+    "dayOfWeek": "Hafta kuni",
+    "startTime": "Boshlanish vaqti",
+    "endTime": "Tugash vaqti",
+    "room": "Xona",
+    "roomPlaceholder": "masalan, 101-xona",
+    "status": "Holat",
+    "active": "Faol",
+    "cancelled": "Bekor qilingan",
+    "cancelledReason": "Bekor qilish sababi",
+    "save": "Saqlash",
+    "cancel": "Bekor qilish",
+    "loading": "Dars jadvali yuklanmoqda...",
+    "emptyTitle": "Darslar topilmadi",
+    "emptySubtitle": "Tanlangan davr yoki filtrlar bo'yicha jadval yo'q",
+    "errorTitle": "Yuklashda xatolik",
+    "retry": "Qayta urinish",
+    "upcomingLessons": "Yaqinlashib kelayotgan darslar (haftalik)",
+    "substituteTeacher": "O'rinbosar",
+    "regularClassesCount": "{count} ta muntazam darslar",
+    "monday": "Dushanba",
+    "tuesday": "Seshanba",
+    "wednesday": "Chorshanba",
+    "thursday": "Payshanba",
+    "friday": "Juma",
+    "saturday": "Shanba",
+    "sunday": "Yakshanba",
+    "monShort": "Dush",
+    "tueShort": "Sesh",
+    "wedShort": "Chor",
+    "thuShort": "Pay",
+    "friShort": "Jum",
+    "satShort": "Shan",
+    "sunShort": "Yak",
+    "noClasses": "Darslar yo'q",
+    "confirmDelete": "Haqiqatan ham bu darsni jadvaldan o'chirmoqchimisiz?",
+    "conflictWarning": "Jadval to'qnashuvi!",
+    "online": "Onlayn",
+    "offline": "Oflayn",
+    "meetingLink": "Uchrashuv havolasi",
+    "day": "Kun"
   }
 }

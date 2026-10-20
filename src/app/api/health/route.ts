@@ -15,8 +15,9 @@ export async function GET() {
     await db.$queryRaw`SELECT 1`;
     checks.database = { status: "ok", latencyMs: Date.now() - start };
   } catch (err: unknown) {
-    const errorMsg = err instanceof Error ? err.message : "Database error";
-    checks.database = { status: "error", error: errorMsg };
+    // Never leak raw database errors from this unauthenticated endpoint.
+    console.error("Health check database error:", err);
+    checks.database = { status: "error", error: "Database unavailable" };
   }
 
   const allOk = Object.values(checks).every((c) => c.status === "ok");

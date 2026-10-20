@@ -1,9 +1,10 @@
 import { db } from "./db";
+import type { NotificationType } from "@prisma/client";
 
 export interface SendNotificationOptions {
   userId: string;
   centerId?: string;
-  type: string; // INVITE, NEW_HOMEWORK, SCHEDULE_CHANGE, PAYMENT_DUE, PAYMENT_OVERDUE, GRADE_POSTED, SUBSCRIPTION_EXPIRING, ABSENT_ALERT
+  type: NotificationType; // INVITE, NEW_HOMEWORK, SCHEDULE_CHANGE, ...
   titleKey: string;
   bodyKey: string;
   bodyParams?: Record<string, string | number>;

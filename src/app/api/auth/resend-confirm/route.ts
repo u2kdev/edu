@@ -5,6 +5,8 @@ import { db } from "@/lib/db";
 import { checkRateLimit } from "@/lib/rate-limit";
 import { getClientIp } from "@/lib/ip";
 import { apiError, apiSuccess, handleApiError } from "@/lib/api-response";
+import { renderEmailTemplate, sendEmailWithOutbox } from "@/lib/email";
+import { toEmailLang } from "@/lib/language";
 import crypto from "crypto";
 
 export async function POST(req: Request) {
@@ -12,7 +14,7 @@ export async function POST(req: Request) {
     const ip = getClientIp(req);
     
     // Strict rate limit for resending emails
-    if (!checkRateLimit(ip + "_resend_email", 3, 60 * 60 * 1000)) {
+    if (!(await checkRateLimit(ip + "_resend_email", 3, 60 * 60 * 1000))) {
       return apiError("Too many attempts. Please try again later.", "RATE_LIMITED", 429);
     }
 
@@ -43,12 +45,23 @@ export async function POST(req: Request) {
       },
     });
 
-    // 5. Send confirmation email (Dev driver)
-    console.log(`\n=== DEV EMAIL DRIVER ===`);
-    console.log(`To: ${user.email}`);
-    console.log(`Subject: Confirm your email (LMS)`);
-    console.log(`Link: http://localhost:3000/confirm-email?token=${confirmToken}`);
-    console.log(`========================\n`);
+    // Deliver the confirmation link through the real email transport (with outbox fallback).
+    const appUrl = process.env.APP_URL || process.env.NEXT_PUBLIC_URL || "http://localhost:3000";
+    const confirmLink = `${appUrl}/confirm-email?token=${confirmToken}`;
+    const emailLang = toEmailLang(user.preferredLanguage);
+    const emailContent = renderEmailTemplate("EMAIL_CONFIRMATION", {
+      lang: emailLang,
+      fullName: user.fullName,
+      url: confirmLink,
+    });
+    await sendEmailWithOutbox(
+      user.email,
+      emailContent.subject,
+      emailContent.text,
+      emailContent.html
+    ).catch((sendErr: unknown) => {
+      console.error("Failed to send confirmation email:", sendErr);
+    });
 
     return apiSuccess({ success: true, message: "If an unverified account exists, a confirmation link has been sent." });
   } catch (err: unknown) {

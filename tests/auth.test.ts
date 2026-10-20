@@ -56,21 +56,21 @@ describe("Authentication & Foundation Tests", () => {
   });
 
   describe("Rate Limiter", () => {
-    beforeEach(() => {
-      clearRateLimit("192.168.1.1");
+    beforeEach(async () => {
+      await clearRateLimit("192.168.1.1");
     });
 
-    it("should allow requests under the limit", () => {
+    it("should allow requests under the limit", async () => {
       for (let i = 0; i < 10; i++) {
-        expect(checkRateLimit("192.168.1.1")).toBe(true);
+        expect(await checkRateLimit("192.168.1.1")).toBe(true);
       }
     });
 
-    it("should block requests over the limit", () => {
+    it("should block requests over the limit", async () => {
       for (let i = 0; i < 10; i++) {
-        checkRateLimit("192.168.1.1");
+        await checkRateLimit("192.168.1.1");
       }
-      expect(checkRateLimit("192.168.1.1")).toBe(false); // 11th request blocked
+      expect(await checkRateLimit("192.168.1.1")).toBe(false); // 11th request blocked
     });
   });
 

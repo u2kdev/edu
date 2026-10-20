@@ -6,6 +6,16 @@ import { requireDeveloper, handlePlatformError } from "@/lib/platformAuth";
 import { hashPassword } from "@/lib/auth";
 import { logAuditEvent } from "@/lib/tenant";
 
+const ALLOWED_PLATFORM_ROLES = [
+  "NONE",
+  "SUPERADMIN",
+  "PLATFORM_ADMIN",
+  "FULL_ACCESS",
+  "PLATFORM_SUPPORT",
+  "DEVELOPER",
+  "SEO_ADMIN",
+] as const;
+
 export async function GET() {
   try {
     await requireDeveloper();
@@ -80,6 +90,12 @@ export async function PATCH(req: Request) {
     const { id, isActive, role } = await req.json();
 
     if (!id) return NextResponse.json({ error: "User ID required" }, { status: 400 });
+
+    // SECURITY: validate the requested platform role against the known set
+    // instead of trusting an arbitrary string from the request body.
+    if (role !== undefined && !(ALLOWED_PLATFORM_ROLES as readonly string[]).includes(role)) {
+      return NextResponse.json({ error: "Invalid platform role" }, { status: 400 });
+    }
 
     const targetUser = await db.platformUser.findUnique({ where: { id } });
     if (!targetUser) return NextResponse.json({ error: "User not found" }, { status: 404 });

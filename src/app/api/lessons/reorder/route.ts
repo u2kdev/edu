@@ -16,6 +16,39 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: "Invalid payload: items array required" }, { status: 400 });
     }
 
+    // Teachers may only reorder lessons that belong to courses they teach.
+    if (tenantCtx.role === "TEACHER" && tenantCtx.membership) {
+      const lessonIds = items.map((item: { id: string }) => item.id).filter(Boolean);
+
+      const lessons = await tenantDb.lesson.findMany({
+        where: { id: { in: lessonIds } },
+        select: { module: { select: { courseId: true } } },
+      });
+
+      const courseIds = Array.from(new Set(lessons.map((l) => l.module.courseId)));
+
+      const allowedGroups = courseIds.length
+        ? await tenantDb.group.findMany({
+            where: {
+              courseId: { in: courseIds },
+              OR: [
+                { teacherMembershipId: tenantCtx.membership.id },
+                { assistantMembershipId: tenantCtx.membership.id },
+              ],
+            },
+            select: { courseId: true },
+          })
+        : [];
+
+      const allowedCourseIds = new Set(allowedGroups.map((g) => g.courseId));
+      if (courseIds.some((courseId) => !allowedCourseIds.has(courseId))) {
+        return NextResponse.json(
+          { error: "Forbidden: Teachers can only reorder lessons in their own courses" },
+          { status: 403 }
+        );
+      }
+    }
+
     // tenantDb.$transaction isn't fully mocked for array of updateMany yet in some proxy setups, but we'll try sequential updateMany
     for (const item of items) {
        await tenantDb.lesson.updateMany({
@@ -27,6 +60,6 @@ export async function POST(req: Request) {
     return NextResponse.json({ success: true, updatedCount: items.length });
   } catch (err: unknown) {
     const errorObj = err as { message?: string; status?: number };
-    return NextResponse.json({ error: errorObj.message || "Server error" }, { status: errorObj.status || 500 });
+    return NextResponse.json({ error: errorObj.status ? errorObj.message : "Server error" }, { status: errorObj.status || 500 });
   }
 }

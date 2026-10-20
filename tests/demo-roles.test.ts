@@ -55,8 +55,8 @@ describe("Demo Roles: Login and Panel Access Verification", () => {
 
     // 3. Center 1 (ACTIVE) and Center 2 (TRIAL)
     const centers = [
-      { slug: "center-1", name: "Toshkent IT Academy", status: "ACTIVE", dEmail: "director1@example.com", dName: "Alisher Navoiyev", tPrefix: "c1", sPrefix: "c1", pPrefix: "c1" },
-      { slug: "center-2", name: "Samarqand Digital School", status: "TRIAL", dEmail: "director2@example.com", dName: "Bobur Mirzo", tPrefix: "c2", sPrefix: "c2", pPrefix: "c2" },
+      { slug: "center-1", name: "Toshkent IT Academy", status: "ACTIVE" as const, dEmail: "director1@example.com", dName: "Alisher Navoiyev", tPrefix: "c1", sPrefix: "c1", pPrefix: "c1" },
+      { slug: "center-2", name: "Samarqand Digital School", status: "TRIAL" as const, dEmail: "director2@example.com", dName: "Bobur Mirzo", tPrefix: "c2", sPrefix: "c2", pPrefix: "c2" },
     ];
 
     for (const c of centers) {

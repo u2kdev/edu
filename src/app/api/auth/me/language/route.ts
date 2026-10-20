@@ -4,6 +4,7 @@ import { NextResponse } from "next/server";
 import { db } from "@/lib/db";
 import { getAuthSession } from "@/lib/auth";
 import { isValidLocale } from "@/i18n";
+import { languageToLocale, localeToLanguage } from "@/lib/language";
 
 // PATCH /api/auth/me/language — Update user's preferred language
 export async function PATCH(req: Request) {
@@ -27,7 +28,7 @@ export async function PATCH(req: Request) {
 
     const updatedUser = await db.platformUser.update({
       where: { id: session.user.id },
-      data: { preferredLanguage: language },
+      data: { preferredLanguage: localeToLanguage(language) },
       select: {
         id: true,
         preferredLanguage: true,
@@ -36,7 +37,7 @@ export async function PATCH(req: Request) {
 
     return NextResponse.json({
       success: true,
-      preferredLanguage: updatedUser.preferredLanguage,
+      preferredLanguage: languageToLocale(updatedUser.preferredLanguage),
     });
   } catch (err: unknown) {
     console.error("Language update error:", err);

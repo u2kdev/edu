@@ -24,7 +24,7 @@ export default async function PlatformAdminPage() {
 
   const totalCenters = centers.length;
   const activeCenters = centers.filter((c) => c.status === "ACTIVE").length;
-  const frozenCenters = centers.filter((c) => c.status === "FROZEN").length;
+  const pausedCenters = centers.filter((c) => c.status === "PAUSED").length;
 
   return (
     <div className="space-y-6">
@@ -41,7 +41,7 @@ export default async function PlatformAdminPage() {
       <PlatformAdminManager
         initialCenters={centers}
         plans={plans}
-        metrics={{ totalCenters, activeCenters, frozenCenters }}
+        metrics={{ totalCenters, activeCenters, pausedCenters }}
       />
     </div>
   );

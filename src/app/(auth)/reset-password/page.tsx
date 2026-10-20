@@ -3,7 +3,9 @@
 import { useState, useEffect, Suspense } from "react";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
-import { t } from "@/lib/i18n";
+import { Lock, ArrowRight, CheckCircle2, AlertCircle } from "lucide-react";
+import { t } from "@/i18n";
+import { AuthShell } from "@/components/auth/AuthShell";
 
 function ResetPasswordForm() {
   const locale = "ru";
@@ -18,14 +20,14 @@ function ResetPasswordForm() {
 
   useEffect(() => {
     if (!token) {
-      setError(t("auth.token.required", locale));
+      setError(t(locale, "auth.token.required"));
     }
   }, [token]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!token) return;
-    
+
     setLoading(true);
     setError("");
 
@@ -39,9 +41,9 @@ function ResetPasswordForm() {
 
       if (!res.ok) {
         if (data.error?.code === "VALIDATION_ERROR") {
-          setError(t(data.error.details[0].message, locale));
+          setError(t(locale, data.error.details[0].message));
         } else {
-          setError(t(data.error?.message || "auth.error", locale));
+          setError(t(locale, data.error?.message || "common.error"));
         }
       } else {
         setSuccess(true);
@@ -50,7 +52,7 @@ function ResetPasswordForm() {
         }, 3000);
       }
     } catch {
-      setError(t("auth.error", locale));
+      setError(t(locale, "common.error"));
     } finally {
       setLoading(false);
     }
@@ -58,88 +60,92 @@ function ResetPasswordForm() {
 
   if (!token) {
     return (
-      <div className="flex min-h-screen items-center justify-center bg-gray-50 px-4">
-        <div className="w-full max-w-md bg-white p-8 shadow rounded-lg text-center space-y-4">
-          <h2 className="text-2xl font-bold text-red-600">{t("common.error", locale)}</h2>
-          <p className="text-gray-600">{error}</p>
-          <Link href="/forgot-password" className="inline-block text-blue-600 hover:underline">
-            {t("auth.requestNewReset", locale)}
+      <AuthShell>
+        <div className="space-y-4 text-center">
+          <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-2xl border border-rose-100 bg-rose-50 text-rose-600">
+            <AlertCircle className="h-7 w-7" />
+          </div>
+          <h1 className="text-xl font-bold tracking-tight text-slate-900">{t(locale, "common.error")}</h1>
+          <p className="text-sm text-ink-muted">{error}</p>
+          <Link
+            href="/forgot-password"
+            className="inline-block text-sm font-semibold text-[color:var(--brand)] hover:underline"
+          >
+            {t(locale, "auth.requestNewReset")}
           </Link>
         </div>
-      </div>
+      </AuthShell>
     );
   }
 
   return (
-    <div className="flex min-h-screen items-center justify-center bg-gray-50 px-4 sm:px-6 lg:px-8">
-      <div className="w-full max-w-md space-y-8 bg-white p-8 shadow rounded-lg">
-        <div>
-          <h2 className="text-center text-3xl font-bold tracking-tight text-gray-900">
-            {t("auth.resetPassword.title", locale)}
-          </h2>
-          <p className="mt-2 text-center text-sm text-gray-600">
-            {t("auth.resetPassword.subtitle", locale)}
-          </p>
+    <AuthShell title={t(locale, "auth.reset.title")} subtitle={t(locale, "auth.reset.subtitle")}>
+      {error && (
+        <div className="mb-5 flex items-center gap-2.5 rounded-xl border border-rose-200 bg-rose-50 p-3.5 text-sm text-rose-700">
+          <AlertCircle className="h-4 w-4 shrink-0 text-rose-500" />
+          <span>{error}</span>
         </div>
+      )}
 
-        {error && (
-          <div className="bg-red-50 text-red-600 p-3 rounded text-sm text-center">
-            {error}
+      {success ? (
+        <div className="space-y-4 text-center">
+          <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-2xl border border-emerald-100 bg-emerald-50 text-emerald-600">
+            <CheckCircle2 className="h-7 w-7" />
           </div>
-        )}
-
-        {success ? (
-          <div className="space-y-4 text-center">
-            <div className="bg-green-50 text-green-600 p-4 rounded text-center">
-              {t("auth.resetSuccess", locale)}
-            </div>
-            <p className="text-sm text-gray-500">
-              {t("auth.redirecting", locale)}
-            </p>
-            <Link href="/login" className="inline-block text-blue-600 hover:underline mt-4">
-              {t("auth.backToLogin", locale)}
-            </Link>
-          </div>
-        ) : (
-          <form className="mt-8 space-y-6" onSubmit={handleSubmit}>
-            <div>
-              <label htmlFor="password" className="block text-sm font-medium text-gray-700">
-                {t("auth.newPassword", locale)}
-              </label>
+          <p className="text-sm font-medium text-emerald-700">{t(locale, "auth.resetSuccess")}</p>
+          <p className="text-sm text-ink-muted">{t(locale, "auth.redirecting")}</p>
+          <Link
+            href="/login"
+            className="inline-block text-sm font-semibold text-[color:var(--brand)] hover:underline"
+          >
+            {t(locale, "auth.backToLogin")}
+          </Link>
+        </div>
+      ) : (
+        <form className="space-y-5" onSubmit={handleSubmit}>
+          <div>
+            <label htmlFor="password" className="mb-1.5 block text-xs font-semibold uppercase tracking-wider text-ink-soft">
+              {t(locale, "auth.newPassword")}
+            </label>
+            <div className="relative">
+              <Lock className="pointer-events-none absolute left-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-ink-faint" />
               <input
                 id="password"
                 name="password"
                 type="password"
                 required
-                className="mt-1 block w-full rounded-md border border-gray-300 px-3 py-2 shadow-sm focus:border-blue-500 focus:outline-none focus:ring-blue-500 sm:text-sm"
+                className="w-full rounded-xl border border-slate-200 bg-slate-50/70 py-2.5 pl-10 pr-4 text-sm text-slate-900 placeholder:text-ink-faint transition-colors focus:border-[color:var(--brand)] focus:outline-none focus:ring-4 focus:ring-[color:var(--brand-a12)]"
                 value={newPassword}
                 onChange={(e) => setNewPassword(e.target.value)}
                 disabled={loading}
               />
-              <p className="text-xs text-gray-500 mt-1">
-                {t("auth.passwordHint", locale)}
-              </p>
             </div>
+            <p className="mt-1.5 text-xs text-ink-faint">{t(locale, "auth.passwordHint")}</p>
+          </div>
 
-            <div>
-              <button
-                type="submit"
-                disabled={loading}
-                className="group relative flex w-full justify-center rounded-md border border-transparent bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 disabled:opacity-50"
-              >
-                {loading ? t("common.loading", locale) : t("auth.resetPassword.submit", locale)}
-              </button>
-            </div>
-          </form>
-        )}
-      </div>
-    </div>
+          <button
+            type="submit"
+            disabled={loading}
+            className="flex w-full cursor-pointer items-center justify-center gap-2 rounded-xl bg-[color:var(--brand)] px-4 py-3 text-sm font-semibold text-white shadow-[0_16px_36px_-16px_rgba(29,78,216,0.8)] transition-all hover:bg-[color:var(--brand-strong)] active:scale-[0.99] disabled:opacity-50"
+          >
+            <span>{loading ? t(locale, "common.loading") : t(locale, "auth.reset.submit")}</span>
+            <ArrowRight className="h-4 w-4" />
+          </button>
+        </form>
+      )}
+    </AuthShell>
   );
 }
 
 export default function ResetPasswordPage() {
   return (
-    <Suspense fallback={<div className="min-h-screen bg-gray-50 flex items-center justify-center">Loading...</div>}>
+    <Suspense
+      fallback={
+        <div data-theme="light" className="public-shell mesh-gradient-light flex min-h-screen items-center justify-center font-strict text-sm text-ink-muted">
+          {t("ru", "common.loading")}
+        </div>
+      }
+    >
       <ResetPasswordForm />
     </Suspense>
   );

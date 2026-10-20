@@ -157,6 +157,6 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: "Invalid action" }, { status: 400 });
   } catch (err: unknown) {
     const error = err as { message?: string; status?: number };
-    return NextResponse.json({ error: error.message || "Ошибка сервера" }, { status: error.status || 500 });
+    return NextResponse.json({ error: error.status ? error.message : "Ошибка сервера" }, { status: error.status || 500 });
   }
 }

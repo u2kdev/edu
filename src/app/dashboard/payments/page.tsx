@@ -4,10 +4,10 @@ import { redirect } from "next/navigation";
 import PaymentsManager from "@/components/PaymentsManager";
 
 export default async function PaymentsPage() {
-  const tenantCtx = await requireTenantPageAccess();
-
   const session = await getAuthSession();
   if (!session) redirect("/login");
+
+  const tenantCtx = await requireTenantPageAccess();
 
   const activeCenterId = session.activeCenterId;
   const activeRole = session.activeCenterRole;

@@ -22,6 +22,7 @@ export default function GlobalAuditLogsPage() {
     fetch("/api/developer/audit-logs?limit=200")
       .then((res) => res.json())
       .then((json) => setLogs(json.logs || []))
+      .catch(() => setLogs([]))
       .finally(() => setLoading(false));
   }, []);
 

@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { requireTenantAccess, logAuditEvent } from "@/lib/tenant";
+import { isCenterRole } from "@/lib/permissions";
 import { Prisma } from "@prisma/client";
 
 // GET /api/tenant/announcements
@@ -22,8 +23,10 @@ export async function GET(req: Request) {
     if (tenantCtx.role !== "DIRECTOR" && tenantCtx.role !== "CENTER_ADMIN") {
       const roleOrConditions: Prisma.AnnouncementWhereInput[] = [
         { targetRole: null },
-        { targetRole: tenantCtx.role },
       ];
+      if (isCenterRole(tenantCtx.role)) {
+        roleOrConditions.push({ targetRole: tenantCtx.role });
+      }
 
       // Student/Parent: also filter by enrolled groups
       if (
@@ -81,7 +84,7 @@ export async function GET(req: Request) {
     return NextResponse.json({ announcements, total, page, pageSize });
   } catch (err: unknown) {
     const error = err as { message?: string; status?: number };
-    return NextResponse.json({ error: error.message || "Server error" }, { status: error.status || 400 });
+    return NextResponse.json({ error: error.status ? error.message : "Server error" }, { status: error.status || 400 });
   }
 }
 
@@ -130,6 +133,10 @@ export async function POST(req: Request) {
       if (!group) return NextResponse.json({ error: "Group not found" }, { status: 404 });
     }
 
+    if (targetRole && !isCenterRole(targetRole)) {
+      return NextResponse.json({ error: "Invalid target role" }, { status: 400 });
+    }
+
     const announcement = await tenantDb.announcement.create({
       data: {
         centerId: tenantCtx.center.id,
@@ -156,7 +163,7 @@ export async function POST(req: Request) {
     return NextResponse.json({ success: true, announcement });
   } catch (err: unknown) {
     const error = err as { message?: string; status?: number };
-    return NextResponse.json({ error: error.message || "Server error" }, { status: error.status || 400 });
+    return NextResponse.json({ error: error.status ? error.message : "Server error" }, { status: error.status || 400 });
   }
 }
 
@@ -193,12 +200,16 @@ export async function PATCH(req: Request) {
       if (!group) return NextResponse.json({ error: "Group not found in this center" }, { status: 404 });
     }
 
+    if (targetRole !== undefined && targetRole !== null && targetRole !== "" && !isCenterRole(targetRole)) {
+      return NextResponse.json({ error: "Invalid target role" }, { status: 400 });
+    }
+
     await tenantDb.announcement.updateMany({
       where: { id },
       data: {
         title: title?.trim() || existing.title,
         body: body?.trim() || existing.body,
-        targetRole: targetRole !== undefined ? targetRole : existing.targetRole,
+        targetRole: targetRole !== undefined ? (targetRole || null) : existing.targetRole,
         groupId: groupId !== undefined ? groupId : existing.groupId,
         isPinned: isPinned !== undefined ? isPinned : existing.isPinned,
         publishAt: publishAt ? new Date(publishAt) : existing.publishAt,
@@ -210,7 +221,7 @@ export async function PATCH(req: Request) {
     return NextResponse.json({ success: true, announcement });
   } catch (err: unknown) {
     const error = err as { message?: string; status?: number };
-    return NextResponse.json({ error: error.message || "Server error" }, { status: error.status || 400 });
+    return NextResponse.json({ error: error.status ? error.message : "Server error" }, { status: error.status || 400 });
   }
 }
 
@@ -252,6 +263,6 @@ export async function DELETE(req: Request) {
     return NextResponse.json({ success: true });
   } catch (err: unknown) {
     const error = err as { message?: string; status?: number };
-    return NextResponse.json({ error: error.message || "Server error" }, { status: error.status || 400 });
+    return NextResponse.json({ error: error.status ? error.message : "Server error" }, { status: error.status || 400 });
   }
 }

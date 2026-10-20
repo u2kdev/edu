@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { t } from "@/lib/i18n";
+import { t } from "@/i18n";
 
 interface Session {
   id: string;
@@ -31,10 +31,10 @@ export default function MySessionsPage() {
       if (res.ok) {
         setSessions(data.success ? data.sessions : data.sessions);
       } else {
-        setError(t(data.error?.message || "common.error", locale));
+        setError(t(locale, data.error?.message || "common.error"));
       }
-    } catch (err) {
-      setError(t("common.error", locale));
+    } catch {
+      setError(t(locale, "common.error"));
     } finally {
       setLoading(false);
     }
@@ -48,18 +48,17 @@ export default function MySessionsPage() {
         setSessions((prev) => prev.filter((s) => s.id !== id));
       } else {
         const data = await res.json();
-        alert(t(data.error?.message || "common.error", locale));
+        alert(t(locale, data.error?.message || "common.error"));
       }
-    } catch (err) {
-      alert(t("common.error", locale));
+    } catch {
+      alert(t(locale, "common.error"));
     } finally {
       setRevokingId(null);
     }
   };
 
   const handleRevokeAll = async () => {
-    if (!confirm(t("profile.confirmRevokeAll", locale))) return;
-    
+    if (!confirm(t(locale, "profile.confirmRevokeAll"))) return;
     setRevokingAll(true);
     try {
       const res = await fetch("/api/auth/sessions?allButCurrent=true", { method: "DELETE" });
@@ -67,10 +66,10 @@ export default function MySessionsPage() {
         setSessions((prev) => prev.filter((s) => s.isCurrent));
       } else {
         const data = await res.json();
-        alert(t(data.error?.message || "common.error", locale));
+        alert(t(locale, data.error?.message || "common.error"));
       }
-    } catch (err) {
-      alert(t("common.error", locale));
+    } catch {
+      alert(t(locale, "common.error"));
     } finally {
       setRevokingAll(false);
     }
@@ -80,7 +79,7 @@ export default function MySessionsPage() {
     <div className="max-w-4xl mx-auto py-8 px-4 sm:px-6">
       <div className="flex flex-col sm:flex-row sm:items-center justify-between mb-6 gap-4">
         <h1 className="text-2xl font-bold text-gray-900">
-          {t("profile.myDevices", locale)}
+          {t(locale, "profile.myDevices")}
         </h1>
         {sessions.length > 1 && (
           <button
@@ -88,7 +87,7 @@ export default function MySessionsPage() {
             disabled={revokingAll}
             className="inline-flex items-center justify-center rounded-md border border-transparent bg-red-100 px-4 py-2 text-sm font-medium text-red-700 hover:bg-red-200 focus:outline-none focus:ring-2 focus:ring-red-500 focus:ring-offset-2 disabled:opacity-50"
           >
-            {revokingAll ? t("common.loading", locale) : t("profile.revokeAll", locale)}
+            {revokingAll ? t(locale, "common.loading") : t(locale, "profile.revokeAll")}
           </button>
         )}
       </div>
@@ -101,11 +100,11 @@ export default function MySessionsPage() {
 
       {loading ? (
         <div className="text-gray-500 text-center py-10">
-          {t("common.loading", locale)}
+          {t(locale, "common.loading")}
         </div>
       ) : sessions.length === 0 ? (
         <div className="text-gray-500 text-center py-10 bg-gray-50 rounded-lg border border-gray-100">
-          {t("profile.noDevices", locale)}
+          {t(locale, "profile.noDevices")}
         </div>
       ) : (
         <div className="grid gap-4 grid-cols-1 md:grid-cols-2 lg:grid-cols-3">
@@ -123,17 +122,17 @@ export default function MySessionsPage() {
                   </h3>
                   {session.isCurrent && (
                     <span className="inline-flex items-center rounded-full bg-blue-100 px-2.5 py-0.5 text-xs font-medium text-blue-800">
-                      {t("profile.currentDevice", locale)}
+                      {t(locale, "profile.currentDevice")}
                     </span>
                   )}
                 </div>
                 <div className="mt-1 text-sm text-gray-500 flex flex-col gap-1">
                   <span>IP: {session.ipAddress || "N/A"}</span>
-                  <span>{t("profile.lastSeen", locale)}: {new Date(session.lastSeenAt).toLocaleString()}</span>
-                  <span>{t("profile.loginDate", locale)}: {new Date(session.createdAt).toLocaleDateString()}</span>
+                  <span>{t(locale, "profile.lastSeen")}: {new Date(session.lastSeenAt).toLocaleString()}</span>
+                  <span>{t(locale, "profile.loginDate")}: {new Date(session.createdAt).toLocaleDateString()}</span>
                 </div>
               </div>
-              
+
               {!session.isCurrent && (
                 <div className="mt-4 pt-4 border-t border-gray-100">
                   <button
@@ -141,7 +140,7 @@ export default function MySessionsPage() {
                     disabled={revokingId === session.id}
                     className="text-sm font-medium text-red-600 hover:text-red-500 disabled:opacity-50"
                   >
-                    {revokingId === session.id ? t("common.loading", locale) : t("profile.revokeSession", locale)}
+                    {revokingId === session.id ? t(locale, "common.loading") : t(locale, "profile.revokeSession")}
                   </button>
                 </div>
               )}

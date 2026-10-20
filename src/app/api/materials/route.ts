@@ -23,10 +23,30 @@ export async function GET(req: Request) {
       orderBy: { orderIndex: "asc" },
     });
 
-    return NextResponse.json({ materials });
+    // SECURITY: never expose correct answers to students/parents.
+    // Teachers, center admins, directors and platform staff may see them.
+    const canSeeAnswers =
+      tenantCtx.isPlatformStaff ||
+      ["DIRECTOR", "CENTER_ADMIN", "TEACHER", "TEACHER_ASSISTANT"].includes(tenantCtx.role);
+
+    const sanitized = materials.map((material) => {
+      const test = material.test;
+      if (!test) return material;
+      return {
+        ...material,
+        test: {
+          ...test,
+          questions: test.questions.map((question) =>
+            canSeeAnswers ? question : { ...question, correctAnswer: null }
+          ),
+        },
+      };
+    });
+
+    return NextResponse.json({ materials: sanitized });
   } catch (err: unknown) {
     const error = err as { message?: string; status?: number };
-    return NextResponse.json({ error: error.message || "Server error" }, { status: error.status || 500 });
+    return NextResponse.json({ error: error.status ? error.message : "Server error" }, { status: error.status || 500 });
   }
 }
 
@@ -133,6 +153,6 @@ export async function POST(req: Request) {
   } catch (err: unknown) {
     console.error("Material create error:", err);
     const error = err as { message?: string; status?: number };
-    return NextResponse.json({ error: error.message || "Server error" }, { status: error.status || 500 });
+    return NextResponse.json({ error: error.status ? error.message : "Server error" }, { status: error.status || 500 });
   }
 }

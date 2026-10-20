@@ -2,12 +2,13 @@ import { requireTenantPageAccess } from "@/lib/tenant";
 import { getAuthSession } from "@/lib/auth";
 import { redirect } from "next/navigation";
 import CourseManager from "@/components/CourseManager";
+import { t } from "@/i18n";
 
 export default async function CoursesPage() {
-  const tenantCtx = await requireTenantPageAccess();
-
   const session = await getAuthSession();
   if (!session) redirect("/login");
+
+  const tenantCtx = await requireTenantPageAccess();
 
   const activeCenterId = session.activeCenterId;
   const activeRole = session.activeCenterRole;
@@ -37,16 +38,18 @@ export default async function CoursesPage() {
     orderBy: { createdAt: "desc" },
   });
 
+  const locale = session.user.preferredLanguage || "ru";
+
   return (
     <div className="space-y-6">
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
-          <h1 className="text-2xl font-bold text-white">Курсы и Уроки</h1>
-          <p className="text-sm text-slate-400 mt-1">Управление учебными программами, модулями и занятиями</p>
+          <h1 className="text-2xl font-bold text-white">{t(locale, "courses.title")}</h1>
+          <p className="text-sm text-slate-400 mt-1">{t(locale, "courses.description")}</p>
         </div>
       </div>
 
-      <CourseManager initialCourses={courses} role={activeRole} />
+      <CourseManager initialCourses={courses} role={activeRole} locale={locale} />
     </div>
   );
 }

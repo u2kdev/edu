@@ -1,12 +1,10 @@
 "use client";
 
 import { useState } from "react";
-import { useRouter } from "next/navigation";
-import { t } from "@/lib/i18n";
+import { t } from "@/i18n";
 
 export default function ChangePasswordPage() {
   const locale = "ru";
-  const router = useRouter();
 
   const [currentPassword, setCurrentPassword] = useState("");
   const [newPassword, setNewPassword] = useState("");
@@ -30,9 +28,9 @@ export default function ChangePasswordPage() {
 
       if (!res.ok) {
         if (data.error?.code === "VALIDATION_ERROR") {
-          setError(t(data.error.details[0].message, locale));
+          setError(t(locale, data.error.details[0].message));
         } else {
-          setError(t(data.error?.message || "auth.error", locale));
+          setError(t(locale, data.error?.message || "common.error"));
         }
       } else {
         setSuccess(true);
@@ -40,7 +38,7 @@ export default function ChangePasswordPage() {
         setNewPassword("");
       }
     } catch {
-      setError(t("auth.error", locale));
+      setError(t(locale, "common.error"));
     } finally {
       setLoading(false);
     }
@@ -49,7 +47,7 @@ export default function ChangePasswordPage() {
   return (
     <div className="max-w-md mx-auto py-8">
       <h1 className="text-2xl font-bold mb-6 text-gray-900">
-        {t("profile.changePassword", locale)}
+        {t(locale, "profile.changePassword")}
       </h1>
 
       {error && (
@@ -60,14 +58,14 @@ export default function ChangePasswordPage() {
 
       {success && (
         <div className="bg-green-50 text-green-600 p-4 rounded mb-4 text-sm">
-          {t("auth.changePasswordSuccess", locale)}
+          {t(locale, "auth.changePasswordSuccess")}
         </div>
       )}
 
       <form onSubmit={handleSubmit} className="space-y-5 bg-white p-6 rounded-lg shadow-sm border border-gray-200">
         <div>
           <label className="block text-sm font-medium text-gray-700">
-            {t("auth.currentPassword", locale)}
+            {t(locale, "auth.currentPassword")}
           </label>
           <input
             type="password"
@@ -81,7 +79,7 @@ export default function ChangePasswordPage() {
 
         <div>
           <label className="block text-sm font-medium text-gray-700">
-            {t("auth.newPassword", locale)}
+            {t(locale, "auth.newPassword")}
           </label>
           <input
             type="password"
@@ -92,7 +90,7 @@ export default function ChangePasswordPage() {
             disabled={loading}
           />
           <p className="text-xs text-gray-500 mt-1">
-            {t("auth.passwordHint", locale)}
+            {t(locale, "auth.passwordHint")}
           </p>
         </div>
 
@@ -102,7 +100,7 @@ export default function ChangePasswordPage() {
             disabled={loading}
             className="w-full justify-center rounded-md border border-transparent bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 disabled:opacity-50"
           >
-            {loading ? t("common.loading", locale) : t("auth.changePassword", locale)}
+            {loading ? t(locale, "common.loading") : t(locale, "auth.changePassword")}
           </button>
         </div>
       </form>

@@ -1,17 +1,19 @@
 import { NextResponse } from "next/server";
 // eslint-disable-next-line no-restricted-imports
 import { db } from "@/lib/db";
-import { getAuthSession } from "@/lib/auth";
+import { getAuthSession, hashPassword } from "@/lib/auth";
+import { renderEmailTemplate, sendEmailWithOutbox } from "@/lib/email";
 import { hasPermission } from "@/lib/permissions";
 import { checkRateLimit, getClientIp } from "@/lib/rate-limit";
 import { z } from "zod";
+import { CenterStatus } from "@prisma/client";
 import crypto from "crypto";
 
 const getQuerySchema = z.object({
   page: z.coerce.number().min(1).default(1),
   pageSize: z.coerce.number().min(1).max(100).default(10),
   q: z.string().optional(),
-  status: z.string().optional(),
+  status: z.nativeEnum(CenterStatus).optional(),
   sortBy: z.enum(["createdAt", "name"]).default("createdAt"),
 });
 
@@ -71,7 +73,7 @@ const postBodySchema = z.object({
     email: z.string().email().optional(),
   }).optional(),
   timeZone: z.string().default("Asia/Tashkent"),
-  status: z.string().default("TRIAL"),
+  status: z.nativeEnum(CenterStatus).default("TRIAL"),
   trialEndsAt: z.string().optional(),
   directorEmail: z.string().email(),
   directorFullName: z.string().min(2),
@@ -88,7 +90,7 @@ export async function POST(req: Request) {
     }
 
     const ip = getClientIp(req);
-    if (!checkRateLimit(ip, 5, 60000)) {
+    if (!(await checkRateLimit(ip, 5, 60000))) {
       return NextResponse.json({ error: "Too many requests" }, { status: 429 });
     }
 
@@ -113,18 +115,31 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: "Slug already in use" }, { status: 400 });
     }
 
+    if (data.planId) {
+      const planExists = await db.subscriptionPlan.findUnique({
+        where: { id: data.planId },
+      });
+      if (!planExists) {
+        return NextResponse.json({ error: "Указанный тарифный план не найден" }, { status: 400 });
+      }
+    }
+
     const result = await db.$transaction(async (tx) => {
       let user = await tx.platformUser.findUnique({
         where: { email: data.directorEmail.toLowerCase().trim() },
       });
 
       if (!user) {
-        const randomPassword = crypto.randomBytes(16).toString("hex");
+        // Create the director with a random, properly hashed password.
+        // The account stays unusable until the director sets their own password
+        // via the reset link we email after the transaction commits.
+        const randomPassword = crypto.randomBytes(32).toString("hex");
+        const passwordHash = await hashPassword(randomPassword);
         user = await tx.platformUser.create({
           data: {
             email: data.directorEmail.toLowerCase().trim(),
             fullName: data.directorFullName,
-            passwordHash: randomPassword,
+            passwordHash,
             emailVerified: new Date(),
           },
         });
@@ -181,8 +196,9 @@ export async function POST(req: Request) {
         },
       });
 
-      // Mock sending email
-      console.log(`Sending email to ${user.email} with reset token`);
+      // Build the password-reset link; the email itself is sent after commit.
+      const appUrl = process.env.APP_URL || process.env.NEXT_PUBLIC_URL || "http://localhost:3000";
+      const resetUrl = `${appUrl}/reset-password?token=${resetToken}`;
 
       await tx.auditLog.create({
         data: {
@@ -194,8 +210,21 @@ export async function POST(req: Request) {
         },
       });
 
-      return { center, user, membership };
+      return { center, user, membership, resetUrl };
     });
+
+    // Notify the director with a real password-reset link so they can sign in.
+    const resetEmail = renderEmailTemplate("PASSWORD_RESET", {
+      lang: "ru",
+      fullName: result.user.fullName,
+      url: result.resetUrl,
+    });
+    await sendEmailWithOutbox(
+      result.user.email,
+      resetEmail.subject,
+      resetEmail.text,
+      resetEmail.html
+    ).catch(() => {});
 
     return NextResponse.json({ 
       success: true, 

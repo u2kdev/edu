@@ -2,6 +2,7 @@ import jwt from "jsonwebtoken";
 import bcrypt from "bcryptjs";
 import { cookies } from "next/headers";
 import { db } from "./db";
+import { languageToLocale } from "./language";
 
 export function validateJwtSecret(secret?: string, isProd: boolean = process.env.NODE_ENV === "production"): string {
   if (!secret) {
@@ -56,6 +57,36 @@ export function verifyJWT(token: string): (JWTPayload & { jti?: string }) | null
 
 export function hashJti(jti: string): string {
   return crypto.createHash("sha256").update(jti).digest("hex");
+}
+
+/**
+ * Creates a JWT bound to a persisted UserSession (with `jti`) and returns the token.
+ *
+ * Every flow that starts or refreshes a login session MUST use this helper.
+ * `getAuthSession` rejects tokens without `jti` outside of the test environment,
+ * so signing a plain JWT (without a matching UserSession row) would immediately
+ * log the user out and break session revocation.
+ */
+export async function createSessionToken(
+  payload: JWTPayload,
+  options: { maxAgeSeconds: number; ipAddress?: string; userAgent?: string }
+): Promise<string> {
+  const jti = crypto.randomUUID();
+  const expiresAt = new Date(Date.now() + options.maxAgeSeconds * 1000);
+
+  const token = signJWT(payload, options.maxAgeSeconds, jti);
+
+  await db.userSession.create({
+    data: {
+      userId: payload.userId,
+      jtiHash: hashJti(jti),
+      expiresAt,
+      ipAddress: options.ipAddress,
+      userAgent: options.userAgent,
+    },
+  });
+
+  return token;
 }
 
 export async function getAuthSession(): Promise<{
@@ -180,7 +211,7 @@ export async function getAuthSession(): Promise<{
       fullName: user.fullName,
       platformRole: user.platformRole,
       avatarUrl: user.avatarUrl,
-      preferredLanguage: user.preferredLanguage || "ru",
+      preferredLanguage: languageToLocale(user.preferredLanguage),
       emailVerified: user.emailVerified,
     },
     activeCenterId,

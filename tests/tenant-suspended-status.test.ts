@@ -45,7 +45,7 @@ describe("TRUST-2 Item 7: requireTenantAccess PAUSED blocking, DB membership che
     inactiveMemberUserId = inactiveUser.id;
 
     await db.centerMembership.create({
-      data: { userId: inactiveUser.id, centerId: activeCenterId, role: "STUDENT", status: "BLOCKED" },
+      data: { userId: inactiveUser.id, centerId: activeCenterId, role: "STUDENT", status: "SUSPENDED" },
     });
   });
 

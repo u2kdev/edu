@@ -32,6 +32,7 @@ jobs:
 
     env:
       DATABASE_URL: "postgresql://postgres:password@localhost:5432/lms_test?schema=public"
+      DIRECT_URL: "postgresql://postgres:password@localhost:5432/lms_test?schema=public"
       TEST_DATABASE_URL: "postgresql://postgres:password@localhost:5432/lms_test?schema=public"
       JWT_SECRET: "ci-dummy-jwt-secret-key-32-chars-long!"
       DEV_LOGIN: "false"
@@ -68,8 +69,26 @@ jobs:
       - name: Lint
         run: npm run lint
 
-      - name: Run Tests (vitest)
-        run: npx vitest run
+      - name: Run Tests (vitest, with coverage)
+        run: npx vitest run --coverage
+
+      - name: Upload coverage report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: coverage-lcov
+          path: coverage/
+          if-no-files-found: ignore
 
       - name: Build Application
         run: npm run build
+
+  docker:
+    name: Docker build
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Build production image
+        run: docker build -t lms:ci .

@@ -13,7 +13,7 @@ export async function POST(req: Request) {
     const ip = getClientIp(req);
     
     // Rate limit specifically for email confirmation attempts
-    if (!checkRateLimit(ip + "_confirm_email", 10, 15 * 60 * 1000)) {
+    if (!(await checkRateLimit(ip + "_confirm_email", 10, 15 * 60 * 1000))) {
       return apiError("Too many attempts", "RATE_LIMITED", 429);
     }
 

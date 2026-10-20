@@ -63,7 +63,7 @@ export default function InvitesManager({ initialInvites, courses, groups, role }
         setShowGenerateModal(false);
         router.refresh();
       } else {
-        alert(data.error);
+        alert(typeof data.error === "string" && data.error ? data.error : "Не удалось создать код");
       }
     } catch (err) {
       alert("Ошибка сети");

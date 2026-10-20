@@ -1,12 +1,14 @@
 {
   "common": {
-    "appName": "AcademiaSaaS",
+    "brandName": "e-darischi",
+    "appName": "e-darischi",
     "appTagline": "Multi-tenant LMS платформа",
     "loading": "Загрузка...",
     "save": "Сохранить",
     "cancel": "Отмена",
     "delete": "Удалить",
     "edit": "Редактировать",
+    "viewAll": "Посмотреть все",
     "create": "Создать",
     "search": "Поиск",
     "filter": "Фильтр",
@@ -30,16 +32,15 @@
     "language": "Язык",
     "settings": "Настройки",
     "profile": "Профиль",
-    "logout": "Выйти"
+    "logout": "Выйти",
+    "recordsCount": "{count} записей"
   },
-
   "languages": {
     "ru": "Русский",
     "uz-Latn": "Oʻzbekcha (Lotin)",
     "uz-Cyrl": "Ўзбекча (Кирилл)",
     "en": "English"
   },
-
   "auth": {
     "login": "Войти в систему",
     "register": "Регистрация",
@@ -64,9 +65,53 @@
     "password.max_50": "Пароль не должен превышать 50 символов",
     "fullName.min_2": "Имя должно содержать минимум 2 символа",
     "fullName.max_100": "Имя не должно превышать 100 символов",
-    "token.required": "Токен обязателен"
+    "token.required": "Токен обязателен",
+    "password.required": "Введите пароль",
+    "password.min_10": "Пароль должен содержать минимум 10 символов",
+    "password.max_128": "Пароль не должен превышать 128 символов",
+    "changePassword": "Смена пароля",
+    "changePasswordSuccess": "Пароль успешно изменён",
+    "currentPassword": "Текущий пароль",
+    "newPassword": "Новый пароль",
+    "passwordHint": "Минимум 8 символов",
+    "backToLogin": "Вернуться ко входу",
+    "resetLinkSent": "Ссылка для сброса пароля отправлена на вашу почту",
+    "resetSuccess": "Пароль успешно изменён",
+    "redirecting": "Перенаправление на страницу входа...",
+    "requestNewReset": "Запросить новую ссылку",
+    "forgot": {
+      "title": "Восстановление пароля",
+      "subtitle": "Укажите email, и мы отправим ссылку для сброса пароля",
+      "submit": "Отправить ссылку"
+    },
+    "reset": {
+      "title": "Новый пароль",
+      "subtitle": "Придумайте новый пароль для вашего аккаунта",
+      "submit": "Сохранить пароль"
+    },
+    "confirm": {
+      "title": "Подтверждение почты",
+      "loading": "Проверка токена...",
+      "success": "Почта успешно подтверждена!",
+      "error": "Неверный или просроченный токен.",
+      "expired": "Срок действия ссылки истёк.",
+      "login": "Войти",
+      "resend": "Отправить письмо повторно",
+      "resend_success": "Письмо отправлено. Проверьте почту.",
+      "resend_error": "Не удалось отправить письмо. Попробуйте позже."
+    }
   },
-
+  "profile": {
+    "changePassword": "Смена пароля",
+    "myDevices": "Мои устройства",
+    "revokeAll": "Завершить все сеансы",
+    "revokeSession": "Завершить сеанс",
+    "confirmRevokeAll": "Завершить все другие сеансы?",
+    "noDevices": "Нет активных устройств",
+    "currentDevice": "Текущее устройство",
+    "lastSeen": "Последняя активность",
+    "loginDate": "Дата входа"
+  },
   "nav": {
     "dashboard": "Главная",
     "courses": "Курсы",
@@ -84,9 +129,12 @@
     "settings": "Настройки",
     "platformAdmin": "Панель платформы",
     "reports": "Отчёты",
-    "notifications": "Уведомления"
+    "notifications": "Уведомления",
+    "center": "Центр",
+    "announcements": "Объявления",
+    "branches": "Филиалы",
+    "profile": "Профиль"
   },
-
   "roles": {
     "SUPERADMIN": "Суперадмин",
     "PLATFORM_ADMIN": "Админ платформы",
@@ -100,7 +148,6 @@
     "STUDENT": "Ученик",
     "PARENT": "Родитель"
   },
-
   "dashboard": {
     "welcome": "Здравствуйте, {name}! 👋",
     "selectCenter": "Выберите учебный центр в левом меню",
@@ -118,9 +165,53 @@
     "subscriptionPlan": "Тариф подписки платформы",
     "activeUntil": "Активен до {date}",
     "frozenAlert": "Подписка учебного центра приостановлена. Доступ учеников и учителей ограничен до оплаты аренды.",
-    "payRent": "Оплатить аренду"
+    "payRent": "Оплатить аренду",
+    "centerAttendanceRate": "Посещаемость центра",
+    "atRiskCount": "Студентов в зоне риска (< 80%)",
+    "upcomingCenterSchedule": "Ближайшие занятия центра",
+    "viewSchedule": "Открыть расписание",
+    "viewAttendanceJournal": "Журнал посещаемости",
+    "noUpcomingClasses": "На ближайшее время занятий не запланировано.",
+    "noActiveStudents": "В центре еще нет активных студентов.",
+    "noActiveTeachers": "В центре еще нет преподавателей.",
+    "noCoursesYet": "В центре пока не созданы курсы.",
+    "createFirstCourse": "Создать первый курс",
+    "addStudentsPrompt": "Добавить студентов",
+    "setupSchedulePrompt": "Составить расписание",
+    "mySchedule": "Моё расписание",
+    "pendingReviews": "Непроверенные домашние задания",
+    "noPendingReviews": "Все сданные работы проверены! Отличная работа.",
+    "noTeacherSchedule": "У вас пока нет назначенных занятий в расписании.",
+    "quickAttendance": "Быстрый ввод посещаемости",
+    "markAttendanceAction": "Отметить",
+    "reviewAction": "Проверить работу",
+    "submissionFrom": "Сдано: {name}",
+    "upcomingDeadlines": "Ближайшие дедлайны ДЗ",
+    "noHomeworkDeadlines": "Все домашние задания выполнены или дедлайнов нет.",
+    "academicPerformance": "Успеваемость",
+    "averageGrade": "Средний балл",
+    "recentGrades": "Последние оценки",
+    "noGradesYet": "Оценок пока нет.",
+    "inRiskZoneWarning": "Внимание: посещаемость ниже 80%! Риск недопуска к аттестации.",
+    "goodAttendanceBadge": "Отличная посещаемость",
+    "submitHomeworkPrompt": "Сдать работу",
+    "childrenOverview": "Успеваемость и расписание детей",
+    "childAttendance": "Посещаемость: {rate}% ({attended}/{total} занятий)",
+    "childAbsences": "Пропусков: {count}",
+    "childUpcomingClasses": "Расписание занятий",
+    "childRecentGrades": "Последние оценки",
+    "childNoClasses": "Занятий в расписании пока нет",
+    "childNoGrades": "Оценок пока нет",
+    "parentPayNext": "Оплатить обучение",
+    "parentNoChildrenLinked": "У вас пока нет привязанных детей в этом учебном центре.",
+    "parentLinkHint": "Запросите инвайт-код привязки у администратора учебного центра.",
+    "teacherAssistantCabinet": "Кабинет помощника",
+    "pendingHomeworks": "Непроверенные ДЗ",
+    "homeworksCount": "{count} работ",
+    "goToReview": "Перейти к проверке →",
+    "attendanceLowWarning": "Студенты с посещаемостью ниже 80% требуют внимания преподавателей и родителей.",
+    "attendanceSatisfactory": "Все активные студенты имеют удовлетворительный уровень посещаемости."
   },
-
   "courses": {
     "title": "Учебные Курсы",
     "description": "Просмотр расписания и материалов",
@@ -131,20 +222,119 @@
     "draft": "Черновик",
     "modules": "Модули",
     "lessons": "Занятия",
-    "materials": "Материалы"
+    "materials": "Материалы",
+    "addNewCourse": "Добавить Новый Курс",
+    "noCoursesYet": "В этом учебном центре пока нет добавленных курсов.",
+    "noDescription": "Без описания",
+    "modulesCount": "Модулей: {count}",
+    "groupsCount": "Групп: {count}",
+    "curriculum": "Учебная Программа (Модули)",
+    "noModulesYet": "Модули курса еще не созданы.",
+    "minutes": "минут",
+    "createCourseModal": "Создать Новый Курс",
+    "titlePlaceholder": "Например: Frontend разработка на React",
+    "descPlaceholder": "Чему научатся студенты на этом курсе...",
+    "cancel": "Отмена",
+    "creating": "Создание...",
+    "networkError": "Ошибка сети"
   },
-
   "groups": {
     "title": "Группы (потоки)",
     "createGroup": "Создать группу",
+    "editGroup": "Редактировать группу",
     "groupName": "Название группы",
     "assignTeacher": "Назначить учителя",
+    "selectCourse": "Выберите курс",
+    "selectTeacher": "Выберите преподавателя",
     "maxStudents": "Макс. учеников",
     "enrolled": "Зачислено",
     "startDate": "Дата начала",
-    "endDate": "Дата окончания"
+    "endDate": "Дата окончания",
+    "capacity": "Вместимость",
+    "studentsCount": "Учеников: {count} / {max}",
+    "addStudent": "Добавить ученика",
+    "removeStudent": "Отчислить ученика",
+    "transferStudent": "Перевести в другую группу",
+    "transferTarget": "Целевая группа",
+    "dropReason": "Причина отчисления",
+    "dropReasonPrompt": "Укажите причину отчисления:",
+    "archiveGroup": "Архивировать группу",
+    "unarchiveGroup": "Разархивировать",
+    "emptyRoster": "В этой группе пока нет студентов",
+    "groupFull": "Группа заполнена",
+    "limitReached": "Лимит тарифа исчерпан",
+    "transferSuccess": "Студент успешно переведен",
+    "transferError": "Ошибка перевода",
+    "dropSuccess": "Студент отчислен из группы",
+    "dropError": "Ошибка отчисления",
+    "teacherAssigned": "Преподаватель: {name}",
+    "teacherNotAssigned": "Преподаватель не назначен",
+    "rosterTitle": "Зачисленные ученики ({count})",
+    "noTeacher": "-- Без преподавателя --",
+    "studentLabel": "Студент: {name}",
+    "transferReasonLabel": "Причина перевода",
+    "dropConfirm": "Вы уверены, что хотите отчислить студента {name}?",
+    "saveError": "Ошибка сохранения",
+    "networkError": "Ошибка сети"
   },
-
+  "students": {
+    "title": "Студенты",
+    "subtitle": "Управление учащимися центра",
+    "totalCount": "Всего учеников: {count}",
+    "addStudent": "Добавить студента",
+    "importCsv": "Импорт из CSV",
+    "searchPlaceholder": "Поиск по имени или email...",
+    "filterGroup": "Все группы",
+    "filterStatus": "Все статусы",
+    "statusActive": "Активен",
+    "statusArchived": "В архиве",
+    "sortName": "По имени",
+    "sortDate": "По дате добавления",
+    "emptyList": "Студенты не найдены",
+    "emptyListFilter": "По заданным фильтрам ничего не найдено",
+    "loading": "Загрузка студентов...",
+    "errorLoading": "Ошибка при загрузке студентов",
+    "retry": "Повторить попытку",
+    "fullName": "ФИО",
+    "email": "Email",
+    "phone": "Телефон",
+    "group": "Группа",
+    "groups": "Группы",
+    "status": "Статус",
+    "actions": "Действия",
+    "viewProfile": "Карточка студента",
+    "profileTitle": "Карточка студента",
+    "profileSubtitle": "Личные данные, группы, успеваемость и платежи",
+    "attendanceSummary": "Посещаемость",
+    "gradesSummary": "Оценки",
+    "parents": "Родители",
+    "payments": "Платежи (просмотр)",
+    "enrollmentHistory": "История зачислений",
+    "noGroups": "Не зачислен ни в одну группу",
+    "noParents": "Нет привязанных родителей",
+    "noPayments": "Платежей пока нет",
+    "noHistory": "История пуста",
+    "inviteCodeNotice": "Создать с инвайт-кодом",
+    "csvPreview": "Предпросмотр CSV",
+    "csvUpload": "Загрузить CSV-файл",
+    "csvRowsValid": "Корректных строк: {count}",
+    "csvRowsError": "Ошибок: {count}",
+    "csvImportSuccess": "Успешно импортировано: {count}",
+    "csvImportErrorsTitle": "Отчёт об ошибках",
+    "csvHelp": "Формат: ФИО, Email, Телефон (опционально), ID группы (опционально)",
+    "pageOf": "Страница {page} из {totalPages}",
+    "studentCreatedInvite": "Студент успешно создан! Одноразовый инвайт-код:",
+    "noGroupSelected": "-- Без зачисления в группу --",
+    "sortAsc": "А-Я",
+    "sortDesc": "Я-А",
+    "sortNewest": "Новые",
+    "sortOldest": "Старые",
+    "csvErrorRow": "Строка {row}: {error}",
+    "teacherLabel": "Учитель: {name}",
+    "lessonFallback": "Занятие",
+    "transferHistory": "Из «{from}» в «{to}»",
+    "reasonLabel": "Причина: {reason}"
+  },
   "lessons": {
     "title": "Занятия",
     "createLesson": "Создать занятие",
@@ -158,7 +348,6 @@
     "meetingUrl": "Ссылка на конференцию",
     "location": "Аудитория"
   },
-
   "materials": {
     "title": "Материалы",
     "addMaterial": "Добавить материал",
@@ -171,7 +360,6 @@
     "bookDescription": "Файл для чтения",
     "testDescription": "Тест с автопроверкой"
   },
-
   "attendance": {
     "title": "Посещаемость",
     "markAttendance": "Отметить посещаемость",
@@ -179,9 +367,41 @@
     "absent": "Отсутствует",
     "excused": "По ув. причине",
     "late": "Опоздал",
-    "attendanceRate": "% посещаемости"
+    "attendanceRate": "% посещаемости",
+    "exportCsv": "Экспорт в CSV",
+    "riskList": "Зона риска (< 80%)",
+    "riskListEmpty": "Нет учеников в зоне риска",
+    "selectGroup": "Выберите группу",
+    "selectLesson": "Выберите урок",
+    "markAllPresent": "Отметить всех",
+    "saveAttendance": "Сохранить отметки",
+    "note": "Заметка",
+    "savedSuccess": "Посещаемость успешно сохранена",
+    "classesCount": "{attended} / {total} занятий"
   },
-
+  "grades": {
+    "title": "Успеваемость и журнал оценок",
+    "gradebookMatrix": "Матрица оценок",
+    "weightedScore": "Итоговый балл",
+    "letterGrade": "Оценка",
+    "finalizePeriod": "Финализировать период",
+    "finalizedSuccess": "Оценки периода успешно финализированы",
+    "exportCsv": "Экспорт в CSV",
+    "lockedTooltip": "Оценка зафиксирована и не подлежит изменению",
+    "selectGroup": "Выберите группу",
+    "noGrades": "Оценок пока нет",
+    "teacherDescription": "Оценки учеников ваших групп",
+    "studentDescription": "Ваши оценки",
+    "parentDescription": "Оценки ваших детей",
+    "allDescription": "Все оценки учебного центра",
+    "averageScore": "Средний балл",
+    "passed": "✓ Сдан",
+    "failed": "✗ Не сдан",
+    "points": "баллов",
+    "gradeExcellent": "A (Отлично)",
+    "gradeGood": "B (Хорошо)",
+    "gradeSatisfactory": "C (Удовл.)"
+  },
   "homework": {
     "title": "Домашние задания",
     "createHomework": "Создать ДЗ",
@@ -192,9 +412,45 @@
     "graded": "Проверено",
     "overdue": "Просрочено",
     "submitHomework": "Сдать задание",
-    "gradeHomework": "Оценить задание"
+    "gradeHomework": "Оценить задание",
+    "accepted": "Принято",
+    "revisionRequested": "На доработке",
+    "feedback": "Комментарий преподавателя",
+    "links": "Внешние ссылки",
+    "submitSuccess": "Задание успешно отправлено",
+    "gradeSuccess": "Оценка успешно выставлена",
+    "assignmentFallback": "Задание",
+    "linkNamePlaceholder": "Название (например, Репозиторий)",
+    "solutionLabel": "Решение:",
+    "linksLabel": "Ссылки:",
+    "scoreLabel": "Балл (0 - 100)",
+    "scoreRange": "Оценка (0 — 100)",
+    "studentAnswer": "Ответ ученика:",
+    "noTextAnswer": "Текстовый ответ отсутствует",
+    "quickTemplates": "Быстрые шаблоны отзывов",
+    "templateExcellent": "Отличная работа! Все требования выполнены на 100%.",
+    "templateFormatting": "Хорошее решение, но обрати внимание на форматирование кода.",
+    "templateAccepted": "Принято! Можешь переходить к следующему уроку.",
+    "templateNeedsRevision": "Требуется доработка. Исправь указанные ошибки и ответь снова.",
+    "noPendingReview": "Нет работ, ожидающих проверки",
+    "saveGradeError": "Ошибка сохранения оценки",
+    "networkError": "Ошибка сети",
+    "reviewStreamTitle": "Поток проверки ДЗ ({current} из {total})",
+    "gradedSummary": "Оценено: {grade} / 100",
+    "teacherCommentPlaceholder": "Комментарий учителя для ученика...",
+    "saveAndNext": "Сохранить и Перейти к следующему (Enter)"
   },
-
+  "testing": {
+    "startTest": "Начать тестирование",
+    "submitTest": "Завершить тест",
+    "timeRemaining": "Осталось времени",
+    "attemptsLeft": "Осталось попыток",
+    "passed": "Тест сдан",
+    "failed": "Тест не сдан",
+    "reviewTitle": "Разбор ответов",
+    "yourAnswer": "Ваш ответ",
+    "correctAnswer": "Правильный ответ"
+  },
   "payments": {
     "title": "Платежи и Оплата",
     "description": "История платежей и взносов",
@@ -212,9 +468,9 @@
     "debtors": "Должники",
     "totalCollected": "Собрано",
     "totalExpected": "Ожидается",
-    "totalOverdue": "Просрочено"
+    "totalOverdue": "Просрочено",
+    "noPaymentsYet": "Платежей пока нет"
   },
-
   "invites": {
     "title": "Инвайты и Доступ",
     "description": "Коды приглашения в центр",
@@ -231,7 +487,6 @@
     "bulkImport": "Массовый импорт (CSV)",
     "parentInvite": "Инвайт для родителя"
   },
-
   "staff": {
     "title": "Сотрудники центра",
     "addStaff": "Добавить сотрудника",
@@ -241,7 +496,6 @@
     "deactivate": "Деактивировать",
     "activate": "Активировать"
   },
-
   "parent": {
     "childProgress": "Успеваемость Ваших Детей",
     "noChildren": "У вас пока нет привязанных детей в этом центре.",
@@ -250,7 +504,6 @@
     "coursesAndGroups": "Курсы и Группы",
     "paymentHistory": "История Оплат"
   },
-
   "student": {
     "myCourses": "Мои Зачисленные Курсы & Потоки",
     "noCourses": "Вы пока не зачислены ни в одну группу.",
@@ -258,7 +511,6 @@
     "teacher": "Преподаватель",
     "assigningTeacher": "Назначается"
   },
-
   "performance": {
     "title": "Успеваемость",
     "averageGrade": "Средний балл",
@@ -269,7 +521,6 @@
     "trendDown": "Снижение",
     "trendStable": "Стабильно"
   },
-
   "activity": {
     "title": "Активность",
     "lastLogin": "Последний вход",
@@ -278,7 +529,6 @@
     "testCompleted": "Пройден тест",
     "homeworkSubmitted": "Сдано ДЗ"
   },
-
   "platform": {
     "title": "Панель Управления Платформой",
     "centerManagement": "Управление центрами",
@@ -297,15 +547,19 @@
     "churn": "Churn Rate",
     "impersonate": "Войти как пользователь",
     "auditLog": "Журнал аудита",
+    "support": "Поддержка платформы",
+    "settings": "Настройки платформы",
     "offline": "Офлайн",
     "online": "Онлайн",
     "hybrid": "Гибрид",
     "trial": "Пробный",
     "active": "Активен",
     "frozen": "Заморожен",
+    "paused": "Приостановлен",
+    "overdue": "Просрочен",
+    "cancelled": "Отменён",
     "blocked": "Заблокирован"
   },
-
   "subscription": {
     "title": "Подписка",
     "currentPlan": "Текущий тариф",
@@ -314,7 +568,6 @@
     "changePlan": "Сменить тариф",
     "trialEnds": "Пробный период заканчивается {date}"
   },
-
   "support": {
     "title": "Поддержка",
     "createTicket": "Создать обращение",
@@ -328,7 +581,9 @@
     "statusResolved": "Решён",
     "statusClosed": "Закрыт"
   },
-
+  "reports": {
+    "attendanceSummary": "Сводка посещаемости"
+  },
   "notifications": {
     "title": "Уведомления",
     "markRead": "Прочитано",
@@ -342,7 +597,6 @@
     "gradePosted": "Выставлена оценка: {grade}",
     "subscriptionExpiring": "Подписка истекает {date}"
   },
-
   "landing": {
     "heroTitle": "Единое пространство для вашего",
     "heroHighlight": "учебного центра, учителей и учеников",
@@ -361,5 +615,62 @@
     "connectPro": "Подключить Pro",
     "contactUs": "Связаться с нами",
     "copyright": "© 2026 AcademiaSaaS Platform. Все права защищены. Закрытая LMS-система для учебных центров."
+  },
+  "schedule": {
+    "title": "Расписание",
+    "subtitle": "Управление и просмотр расписания занятий",
+    "dayView": "День",
+    "weekView": "Неделя",
+    "monthView": "Месяц",
+    "allGroups": "Все группы",
+    "allTeachers": "Все преподаватели",
+    "searchPlaceholder": "Поиск по предмету, группе или аудитории...",
+    "exportIcal": "Экспорт в iCal",
+    "addSlot": "Добавить занятие",
+    "editSlot": "Редактировать занятие",
+    "deleteSlot": "Удалить",
+    "cancelSlot": "Отменить занятие",
+    "group": "Группа",
+    "teacher": "Преподаватель",
+    "dayOfWeek": "День недели",
+    "startTime": "Время начала",
+    "endTime": "Время окончания",
+    "room": "Аудитория",
+    "roomPlaceholder": "например, Аудитория 101",
+    "status": "Статус",
+    "active": "Активно",
+    "cancelled": "Отменено",
+    "cancelledReason": "Причина отмены",
+    "save": "Сохранить",
+    "cancel": "Отмена",
+    "loading": "Загрузка расписания...",
+    "emptyTitle": "Занятий не найдено",
+    "emptySubtitle": "На выбранный период или по фильтрам расписание отсутствует",
+    "errorTitle": "Ошибка загрузки",
+    "retry": "Повторить",
+    "upcomingLessons": "Ближайшие занятия (на неделю)",
+    "substituteTeacher": "Замена",
+    "regularClassesCount": "{count} регулярных занятий",
+    "monday": "Понедельник",
+    "tuesday": "Вторник",
+    "wednesday": "Среда",
+    "thursday": "Четверг",
+    "friday": "Пятница",
+    "saturday": "Суббота",
+    "sunday": "Воскресенье",
+    "monShort": "Пн",
+    "tueShort": "Вт",
+    "wedShort": "Ср",
+    "thuShort": "Чт",
+    "friShort": "Пт",
+    "satShort": "Сб",
+    "sunShort": "Вс",
+    "noClasses": "Нет занятий",
+    "confirmDelete": "Вы уверены, что хотите удалить это занятие из расписания?",
+    "conflictWarning": "Конфликт расписания!",
+    "online": "Онлайн",
+    "offline": "Офлайн",
+    "meetingLink": "Ссылка на встречу",
+    "day": "День"
   }
 }

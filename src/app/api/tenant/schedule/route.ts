@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { requireTenantAccess, logAuditEvent } from "@/lib/tenant";
 import { sendNotification } from "@/lib/notifications";
 import { Prisma } from "@prisma/client";
+import { withKeyedLock } from "@/lib/async-lock";
 
 // ─── Conflict Detection Helper ───────────────────────────────────────────────
 
@@ -25,7 +26,7 @@ async function detectConflicts(params: ConflictCheckParams) {
   // Build base query for same day/time overlap
   const timeConflictWhere = {
     dayOfWeek: params.dayOfWeek,
-    status: "ACTIVE",
+    status: "ACTIVE" as const,
     id: params.excludeSlotId ? { not: params.excludeSlotId } : undefined,
     // Simple string comparison for time overlap (works for HH:MM format)
     AND: [
@@ -58,12 +59,12 @@ async function detectConflicts(params: ConflictCheckParams) {
   }
 
   // 3. Check room conflict — same room/branch at the same time
-  if (params.roomName && params.branchId) {
+  if (params.roomName) {
     const roomConflict = await params.tenantDb.scheduleSlot.findFirst({
       where: {
         ...timeConflictWhere,
-        branchId: params.branchId,
         roomName: params.roomName,
+        ...(params.branchId ? { branchId: params.branchId } : {}),
       },
       include: { group: { select: { name: true } } },
     });
@@ -144,7 +145,7 @@ export async function GET(req: Request) {
     return NextResponse.json({ slots });
   } catch (err: unknown) {
     const error = err as { message?: string; status?: number };
-    return NextResponse.json({ error: error.message || "Server error" }, { status: error.status || 400 });
+    return NextResponse.json({ error: error.status ? error.message : "Server error" }, { status: error.status || 400 });
   }
 }
 
@@ -174,60 +175,66 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: "dayOfWeek must be 1-7 (Mon-Sun)" }, { status: 400 });
     }
 
-    const group = await tenantDb.group.findFirst({
-      where: { id: groupId },
-    });
-    if (!group) return NextResponse.json({ error: "Group not found in this center" }, { status: 404 });
-
-    const teacher = await tenantDb.centerMembership.findFirst({
-      where: { id: teacherMembershipId },
-    });
-    if (!teacher) return NextResponse.json({ error: "Teacher not found in this center" }, { status: 404 });
-
-    // Conflict detection
-    const conflicts = await detectConflicts({
-      tenantDb,
-      groupId,
-      teacherMembershipId,
-      branchId,
-      roomName,
-      dayOfWeek,
-      startTime,
-      endTime,
-    });
-
-    if (conflicts.length > 0) {
-      return NextResponse.json({ error: "Schedule conflicts detected", conflicts }, { status: 409 });
+    if (startTime >= endTime) {
+      return NextResponse.json({ error: "startTime must be earlier than endTime" }, { status: 400 });
     }
 
-    const slot = await tenantDb.scheduleSlot.create({
-      data: {
-        centerId: tenantCtx.center.id,
+    return await withKeyedLock(`schedule:${tenantCtx.center.id}`, async () => {
+      const group = await tenantDb.group.findFirst({
+        where: { id: groupId },
+      });
+      if (!group) return NextResponse.json({ error: "Group not found in this center" }, { status: 404 });
+
+      const teacher = await tenantDb.centerMembership.findFirst({
+        where: { id: teacherMembershipId },
+      });
+      if (!teacher) return NextResponse.json({ error: "Teacher not found in this center" }, { status: 404 });
+
+      // Conflict detection
+      const conflicts = await detectConflicts({
+        tenantDb,
         groupId,
         teacherMembershipId,
-        branchId: branchId || null,
-        subjectId: subjectId || null,
-        roomName: roomName?.trim() || null,
+        branchId,
+        roomName,
         dayOfWeek,
         startTime,
         endTime,
-        createdByMemberId: tenantCtx.membership?.id,
-      },
-    });
+      });
 
-    await logAuditEvent({
-      centerId: tenantCtx.center.id,
-      actorUserId: tenantCtx.session.user.id,
-      action: "SCHEDULE_CREATED",
-      resource: "ScheduleSlot",
-      resourceId: slot.id,
-      details: { groupId, dayOfWeek, startTime, endTime },
-    });
+      if (conflicts.length > 0) {
+        return NextResponse.json({ error: "Schedule conflicts detected", conflicts }, { status: 409 });
+      }
 
-    return NextResponse.json({ success: true, slot });
+      const slot = await tenantDb.scheduleSlot.create({
+        data: {
+          centerId: tenantCtx.center.id,
+          groupId,
+          teacherMembershipId,
+          branchId: branchId || null,
+          subjectId: subjectId || null,
+          roomName: roomName?.trim() || null,
+          dayOfWeek,
+          startTime,
+          endTime,
+          createdByMemberId: tenantCtx.membership?.id,
+        },
+      });
+
+      await logAuditEvent({
+        centerId: tenantCtx.center.id,
+        actorUserId: tenantCtx.session.user.id,
+        action: "SCHEDULE_CREATED",
+        resource: "ScheduleSlot",
+        resourceId: slot.id,
+        details: { groupId, dayOfWeek, startTime, endTime },
+      });
+
+      return NextResponse.json({ success: true, slot });
+    });
   } catch (err: unknown) {
     const error = err as { message?: string; status?: number };
-    return NextResponse.json({ error: error.message || "Server error" }, { status: error.status || 400 });
+    return NextResponse.json({ error: error.status ? error.message : "Server error" }, { status: error.status || 400 });
   }
 }
 
@@ -249,111 +256,115 @@ export async function PATCH(req: Request) {
     const { id, groupId, teacherMembershipId, branchId, roomName, dayOfWeek, startTime, endTime, status, cancelledReason } =
       await req.json();
 
-    if (!id) return NextResponse.json({ error: "Slot ID required" }, { status: 400 });
-
-    const existing = await tenantDb.scheduleSlot.findFirst({
-      where: { id },
-    });
-    if (!existing) return NextResponse.json({ error: "Schedule slot not found" }, { status: 404 });
-
-    const updatedGroupId = groupId || existing.groupId;
-    const updatedTeacherId = teacherMembershipId || existing.teacherMembershipId;
-    const updatedDay = dayOfWeek || existing.dayOfWeek;
-    const updatedStart = startTime || existing.startTime;
-    const updatedEnd = endTime || existing.endTime;
-
-    if (groupId && groupId !== existing.groupId) {
-      const group = await tenantDb.group.findFirst({
-        where: { id: groupId },
+    return await withKeyedLock(`schedule:${tenantCtx.center.id}`, async () => {
+      const existing = await tenantDb.scheduleSlot.findFirst({
+        where: { id },
       });
-      if (!group) return NextResponse.json({ error: "Group not found in this center" }, { status: 404 });
-    }
+      if (!existing) return NextResponse.json({ error: "Schedule slot not found" }, { status: 404 });
 
-    if (teacherMembershipId && teacherMembershipId !== existing.teacherMembershipId) {
-      const teacher = await tenantDb.centerMembership.findFirst({
-        where: { id: teacherMembershipId },
-      });
-      if (!teacher) return NextResponse.json({ error: "Teacher not found in this center" }, { status: 404 });
-    }
+      const updatedGroupId = groupId || existing.groupId;
+      const updatedTeacherId = teacherMembershipId || existing.teacherMembershipId;
+      const updatedDay = dayOfWeek || existing.dayOfWeek;
+      const updatedStart = startTime || existing.startTime;
+      const updatedEnd = endTime || existing.endTime;
 
-    if (branchId && branchId !== existing.branchId) {
-      const branch = await tenantDb.branch.findFirst({
-        where: { id: branchId },
-      });
-      if (!branch) return NextResponse.json({ error: "Branch not found in this center" }, { status: 404 });
-    }
-
-    if (groupId || teacherMembershipId || dayOfWeek || startTime || endTime) {
-      const conflicts = await detectConflicts({
-        tenantDb,
-        groupId: updatedGroupId,
-        teacherMembershipId: updatedTeacherId,
-        branchId: branchId ?? existing.branchId,
-        roomName: roomName ?? existing.roomName,
-        dayOfWeek: updatedDay,
-        startTime: updatedStart,
-        endTime: updatedEnd,
-        excludeSlotId: id,
-      });
-
-      if (conflicts.length > 0) {
-        return NextResponse.json({ error: "Schedule conflicts detected", conflicts }, { status: 409 });
+      if (updatedStart >= updatedEnd) {
+        return NextResponse.json({ error: "startTime must be earlier than endTime" }, { status: 400 });
       }
-    }
 
-    await tenantDb.scheduleSlot.updateMany({
-      where: { id },
-      data: {
-        groupId: updatedGroupId,
-        teacherMembershipId: updatedTeacherId,
-        branchId: branchId !== undefined ? branchId || null : existing.branchId,
-        roomName: roomName !== undefined ? roomName?.trim() || null : existing.roomName,
-        dayOfWeek: updatedDay,
-        startTime: updatedStart,
-        endTime: updatedEnd,
-        status: status || existing.status,
-        cancelledReason: cancelledReason || existing.cancelledReason,
-      },
-    });
-    const slot = await tenantDb.scheduleSlot.findFirst({ where: { id } });
+      if (groupId && groupId !== existing.groupId) {
+        const group = await tenantDb.group.findFirst({
+          where: { id: groupId },
+        });
+        if (!group) return NextResponse.json({ error: "Group not found in this center" }, { status: 404 });
+      }
 
-    await logAuditEvent({
-      centerId: tenantCtx.center.id,
-      actorUserId: tenantCtx.session.user.id,
-      action: "SCHEDULE_UPDATED",
-      resource: "ScheduleSlot",
-      resourceId: id,
-      details: { status, dayOfWeek },
-    });
+      if (teacherMembershipId && teacherMembershipId !== existing.teacherMembershipId) {
+        const teacher = await tenantDb.centerMembership.findFirst({
+          where: { id: teacherMembershipId },
+        });
+        if (!teacher) return NextResponse.json({ error: "Teacher not found in this center" }, { status: 404 });
+      }
 
-    if (status === "CANCELLED" || existing.dayOfWeek !== updatedDay || existing.startTime !== updatedStart) {
-      const groupEnrollments = await tenantDb.enrollment.findMany({
-        where: { groupId: updatedGroupId, status: "ACTIVE" },
-        include: { student: true },
-      });
-      const group = await tenantDb.group.findFirst({ where: { id: updatedGroupId }, select: { name: true } });
-      
-      const notifType = status === "CANCELLED" ? "SCHEDULE_CANCELLED" : "SCHEDULE_CHANGE";
-      const titleKey = status === "CANCELLED" ? "notifications.scheduleCancelled" : "notifications.scheduleChanged";
-      
-      for (const en of groupEnrollments) {
-        if (en.student.userId) {
-          await sendNotification({
-            userId: en.student.userId,
-            centerId: tenantCtx.center.id,
-            type: notifType,
-            titleKey,
-            bodyKey: "notifications.scheduleBody",
-            bodyParams: { groupName: group?.name || "" },
-          });
+      if (branchId && branchId !== existing.branchId) {
+        const branch = await tenantDb.branch.findFirst({
+          where: { id: branchId },
+        });
+        if (!branch) return NextResponse.json({ error: "Branch not found in this center" }, { status: 404 });
+      }
+
+      if (groupId || teacherMembershipId || dayOfWeek || startTime || endTime) {
+        const conflicts = await detectConflicts({
+          tenantDb,
+          groupId: updatedGroupId,
+          teacherMembershipId: updatedTeacherId,
+          branchId: branchId ?? existing.branchId,
+          roomName: roomName ?? existing.roomName,
+          dayOfWeek: updatedDay,
+          startTime: updatedStart,
+          endTime: updatedEnd,
+          excludeSlotId: id,
+        });
+
+        if (conflicts.length > 0) {
+          return NextResponse.json({ error: "Schedule conflicts detected", conflicts }, { status: 409 });
         }
       }
-    }
 
-    return NextResponse.json({ success: true, slot });
+      await tenantDb.scheduleSlot.updateMany({
+        where: { id },
+        data: {
+          groupId: updatedGroupId,
+          teacherMembershipId: updatedTeacherId,
+          branchId: branchId !== undefined ? branchId || null : existing.branchId,
+          roomName: roomName !== undefined ? roomName?.trim() || null : existing.roomName,
+          dayOfWeek: updatedDay,
+          startTime: updatedStart,
+          endTime: updatedEnd,
+          status: status || existing.status,
+          cancelledReason: cancelledReason || existing.cancelledReason,
+        },
+      });
+      const slot = await tenantDb.scheduleSlot.findFirst({ where: { id } });
+
+      await logAuditEvent({
+        centerId: tenantCtx.center.id,
+        actorUserId: tenantCtx.session.user.id,
+        action: "SCHEDULE_UPDATED",
+        resource: "ScheduleSlot",
+        resourceId: id,
+        details: { status, dayOfWeek },
+      });
+
+      if (status === "CANCELLED" || existing.dayOfWeek !== updatedDay || existing.startTime !== updatedStart) {
+        const groupEnrollments = await tenantDb.enrollment.findMany({
+          where: { groupId: updatedGroupId, status: "ACTIVE" },
+          include: { student: true },
+        });
+        const group = await tenantDb.group.findFirst({ where: { id: updatedGroupId }, select: { name: true } });
+        
+        const notifType = status === "CANCELLED" ? "SCHEDULE_CANCELLED" : "SCHEDULE_CHANGE";
+        const titleKey = status === "CANCELLED" ? "notifications.scheduleCancelled" : "notifications.scheduleChanged";
+        
+        for (const en of groupEnrollments) {
+          if (en.student.userId) {
+            await sendNotification({
+              userId: en.student.userId,
+              centerId: tenantCtx.center.id,
+              type: notifType,
+              titleKey,
+              bodyKey: "notifications.scheduleBody",
+              bodyParams: { groupName: group?.name || "" },
+            });
+          }
+        }
+      }
+
+      return NextResponse.json({ success: true, slot });
+    });
   } catch (err: unknown) {
     const error = err as { message?: string; status?: number };
-    return NextResponse.json({ error: error.message || "Server error" }, { status: error.status || 400 });
+    return NextResponse.json({ error: error.status ? error.message : "Server error" }, { status: error.status || 400 });
   }
 }
 
@@ -389,6 +400,6 @@ export async function DELETE(req: Request) {
     return NextResponse.json({ success: true });
   } catch (err: unknown) {
     const error = err as { message?: string; status?: number };
-    return NextResponse.json({ error: error.message || "Server error" }, { status: error.status || 400 });
+    return NextResponse.json({ error: error.status ? error.message : "Server error" }, { status: error.status || 400 });
   }
 }

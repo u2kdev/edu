@@ -20,6 +20,7 @@ export default function PlatformOwnersPage() {
     fetch("/api/developer/platform-owners")
       .then((res) => res.json())
       .then((json) => setOwners(json.owners || []))
+      .catch(() => setOwners([]))
       .finally(() => setLoading(false));
   }, []);
 

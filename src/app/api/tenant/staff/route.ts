@@ -6,6 +6,8 @@ import { getAuthSession, hashPassword } from "@/lib/auth";
 import { requireTenantAccess, logAuditEvent } from "@/lib/tenant";
 import { hasPermission } from "@/lib/permissions";
 import { checkSubscriptionLimit } from "@/lib/limits";
+import { sendPasswordSetupLink } from "@/lib/password-reset";
+import type { MembershipRole, MembershipStatus } from "@prisma/client";
 import crypto from "crypto";
 
 // GET /api/tenant/staff — List all staff members of the active center
@@ -47,7 +49,7 @@ export async function GET(req: Request) {
   } catch (err: unknown) {
     const error = err as { message?: string; code?: string; status?: number };
     return NextResponse.json(
-      { error: error.message || "Server error", code: error.code },
+      { error: error.status ? error.message : "Server error", code: error.code },
       { status: error.status || (error.message?.includes("Forbidden") ? 403 : 500) }
     );
   }
@@ -122,6 +124,7 @@ export async function POST(req: Request) {
     const tempPassword = crypto.randomBytes(12).toString("base64url");
     const tempPasswordHash = await hashPassword(tempPassword);
 
+    let isNewUser = false;
     if (!user) {
       user = await db.platformUser.create({
         data: {
@@ -133,6 +136,7 @@ export async function POST(req: Request) {
           emailVerified: new Date(),
         },
       });
+      isNewUser = true;
     }
 
     if (staffRole === "TEACHER" || staffRole === "TEACHER_ASSISTANT") {
@@ -176,7 +180,19 @@ export async function POST(req: Request) {
       },
     });
 
-    // TODO: Send invite email/SMS with tempPassword or invite link
+    // Email a single-use "set your password" link so the new account is usable.
+    // (Runs only after the membership was created successfully.)
+    if (isNewUser) {
+      await sendPasswordSetupLink({
+        userId: user.id,
+        email: user.email,
+        fullName: user.fullName,
+        lang: center.defaultLanguage,
+      }).catch((sendErr: unknown) => {
+        console.error("Failed to send staff password setup email:", sendErr);
+      });
+    }
+
     // For now, return the temporary password in dev mode only
     return NextResponse.json({
       success: true,
@@ -249,9 +265,9 @@ export async function PATCH(req: Request) {
       );
     }
 
-    const updateData: { status?: string; role?: string } = {};
+    const updateData: { status?: MembershipStatus; role?: MembershipRole } = {};
     if (status && ["ACTIVE", "INACTIVE", "SUSPENDED", "ARCHIVED"].includes(status)) {
-      updateData.status = status;
+      updateData.status = status as MembershipStatus;
     }
     if (newRole && ["CENTER_ADMIN", "TEACHER", "CENTER_SUPPORT"].includes(newRole)) {
       // Only Director can change roles
@@ -261,7 +277,7 @@ export async function PATCH(req: Request) {
           { status: 403 }
         );
       }
-      updateData.role = newRole;
+      updateData.role = newRole as MembershipRole;
     }
 
     await tenantDb.centerMembership.updateMany({
@@ -352,7 +368,7 @@ export async function DELETE(req: Request) {
 
     if (
       role === "CENTER_ADMIN" &&
-      (membership.role === "CENTER_ADMIN" || membership.role === "DIRECTOR")
+      membership.role === "CENTER_ADMIN"
     ) {
       return NextResponse.json(
         { error: "Only Director can delete administrative staff" },

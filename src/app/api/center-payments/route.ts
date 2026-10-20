@@ -1,5 +1,10 @@
 import { NextResponse } from "next/server";
 import { requireTenantAccess, logAuditEvent } from "@/lib/tenant";
+import type { PaymentMethod, CenterPaymentStatus, Currency } from "@prisma/client";
+
+const PAYMENT_METHODS: PaymentMethod[] = ["CASH", "ONLINE", "BANK_TRANSFER"];
+const PAYMENT_STATUSES: CenterPaymentStatus[] = ["PENDING", "PAID", "PARTIALLY_PAID", "FAILED", "REFUNDED"];
+const CURRENCIES: Currency[] = ["UZS", "USD", "EUR", "RUB"];
 
 export async function GET(req: Request) {
   try {
@@ -76,9 +81,9 @@ export async function POST(req: Request) {
         amount: parseFloat(amount),
         originalAmount: originalAmount ? parseFloat(originalAmount) : parseFloat(amount),
         discountAmount: discountAmount ? parseFloat(discountAmount) : 0,
-        currency: currency || "UZS",
-        status: status || "PAID", // PAID, PARTIALLY_PAID, PENDING
-        paymentMethod: paymentMethod || "CASH",
+        currency: CURRENCIES.includes(currency) ? currency : "UZS",
+        status: PAYMENT_STATUSES.includes(status) ? status : "PAID",
+        paymentMethod: PAYMENT_METHODS.includes(paymentMethod) ? paymentMethod : "CASH",
         installmentIndex: installmentIndex ? parseInt(installmentIndex) : 1,
         paidAt: new Date(),
       },

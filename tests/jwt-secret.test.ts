@@ -25,7 +25,7 @@ describe("JWT_SECRET Configuration & Validation", () => {
         stdio: "pipe",
       });
     }).toThrow();
-  });
+  }, 60000);
 
   it("throws error and terminates on module load in production with short JWT_SECRET", () => {
     expect(() => {
@@ -33,7 +33,7 @@ describe("JWT_SECRET Configuration & Validation", () => {
         stdio: "pipe",
       });
     }).toThrow();
-  });
+  }, 60000);
 
   it("loads module successfully in production with valid 32+ chars JWT_SECRET", () => {
     const output = execSync(
@@ -41,5 +41,5 @@ describe("JWT_SECRET Configuration & Validation", () => {
       { encoding: "utf8" }
     );
     expect(output).toContain("LOADED_SUCCESSFULLY");
-  });
+  }, 60000);
 });

@@ -1,7 +1,18 @@
 import { NextResponse } from "next/server";
 import { requireTenantAccess } from "@/lib/tenant";
+import type { MembershipRole } from "@prisma/client";
 
 import { generateSecureInviteCode } from "@/lib/invites";
+
+const VALID_TARGET_ROLES: MembershipRole[] = [
+  "DIRECTOR",
+  "CENTER_ADMIN",
+  "TEACHER",
+  "TEACHER_ASSISTANT",
+  "CENTER_SUPPORT",
+  "STUDENT",
+  "PARENT",
+];
 
 export async function POST(req: Request) {
   try {
@@ -18,6 +29,10 @@ export async function POST(req: Request) {
     }
 
     const { targetRole, courseId, groupId, maxUses, customCode } = await req.json();
+
+    const resolvedTargetRole: MembershipRole = VALID_TARGET_ROLES.includes(targetRole)
+      ? targetRole
+      : "STUDENT";
 
     const code = customCode
       ? customCode.toUpperCase().trim()
@@ -38,7 +53,7 @@ export async function POST(req: Request) {
       data: {
         centerId: tenantCtx.center.id,
         code,
-        targetRole: targetRole || "STUDENT",
+        targetRole: resolvedTargetRole,
         courseId: courseId || null,
         groupId: groupId || null,
         maxUses: maxUses ? parseInt(maxUses) : 10,
@@ -56,6 +71,6 @@ export async function POST(req: Request) {
     if (error.code === "P2002") {
       return NextResponse.json({ error: "This code is already in use" }, { status: error.status || 400 });
     }
-    return NextResponse.json({ error: error.message || "Server error" }, { status: error.status || 400 });
+    return NextResponse.json({ error: error.status ? error.message : "Server error" }, { status: error.status || 400 });
   }
 }

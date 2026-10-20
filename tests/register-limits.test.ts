@@ -36,8 +36,8 @@ describe("Registration Rate Limits", () => {
     await db.platformUser.deleteMany({ where: { email: { contains: "reglim" } } });
   });
 
-  beforeEach(() => {
-    rateLimits.clear();
+  beforeEach(async () => {
+    await db.rateLimitRecord.deleteMany();
   });
 
   const mockReq = (body: unknown, ip: string = "1.1.1.1") =>

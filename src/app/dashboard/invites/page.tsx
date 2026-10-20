@@ -4,10 +4,10 @@ import { redirect } from "next/navigation";
 import InvitesManager from "@/components/InvitesManager";
 
 export default async function InvitesPage() {
-  const tenantCtx = await requireTenantPageAccess();
-
   const session = await getAuthSession();
   if (!session) redirect("/login");
+
+  const tenantCtx = await requireTenantPageAccess();
 
   const activeCenterId = session.activeCenterId;
   const activeRole = session.activeCenterRole;

@@ -46,5 +46,7 @@ export function handlePlatformError(err: unknown) {
   if (msg.startsWith("Forbidden")) {
     return NextResponse.json({ error: msg }, { status: 403 });
   }
-  return NextResponse.json({ error: msg || "Internal Server Error" }, { status: 500 });
+  // Unexpected error: log details server-side, never leak them to the client.
+  console.error("Unhandled platform API error:", err);
+  return NextResponse.json({ error: "Internal Server Error" }, { status: 500 });
 }

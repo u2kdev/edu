@@ -1,7 +1,6 @@
 import { getAuthSession } from "@/lib/auth";
 import { redirect } from "next/navigation";
 import { Globe, FileText, Sparkles, Tag, CheckCircle2 } from "lucide-react";
-import { t } from "@/i18n";
 
 export default async function SEOAdminPage() {
   const session = await getAuthSession();

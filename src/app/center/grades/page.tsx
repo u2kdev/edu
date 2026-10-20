@@ -5,6 +5,7 @@ import Link from "next/link";
 import { GraduationCap, Award, CheckCircle2, AlertCircle, Users } from "lucide-react";
 import { t, formatDateLocalized } from "@/i18n";
 import { Prisma } from "@prisma/client";
+import GradebookManager from "@/components/GradebookManager";
 
 export default async function CenterGradesPage() {
   const tenantCtx = await requireTenantPageAccess();
@@ -21,27 +22,49 @@ export default async function CenterGradesPage() {
   // Get the current user's membership in this center
   const currentMembership = session.memberships.find((m) => m.centerId === centerId);
 
-  // SECURITY: Build WHERE clause scoped by role
-  // TEACHER: only see grades for students in their own groups
-  // STUDENT: only see their own grades
-  // DIRECTOR/CENTER_ADMIN: see all center grades
-  let submissionsWhere: Prisma.HomeworkSubmissionWhereInput = {
-    homework: { lesson: { module: { course: { centerId } } } },
-    grade: { not: null },
-  };
-  let testAttemptsWhere: Prisma.TestAttemptWhereInput = {
-    test: { material: { centerId } },
-  };
+  // Platform staff (DEVELOPER / SUPERADMIN / PLATFORM_SUPPORT) may browse any center.
+  const isPlatformStaff =
+    tenantCtx.isPlatformStaff || session.user.platformRole === "SUPERADMIN";
+  // The center-wide scope is reserved for management and platform staff.
+  const isCenterWide =
+    activeRole === "DIRECTOR" || activeRole === "CENTER_ADMIN" || isPlatformStaff;
 
-  if (activeRole === "TEACHER" && currentMembership) {
-    // Scope to groups where this teacher is assigned
+  // SECURITY: Build WHERE clause scoped by role.
+  // TEACHER/TEACHER_ASSISTANT: only grades for students in their own groups
+  // STUDENT: only their own grades
+  // PARENT: only their confirmed children
+  // DIRECTOR/CENTER_ADMIN/platform staff: all center grades
+  // Anything else (unknown/support role, or a role without a membership in the
+  // active center): an empty scope — never fall back to the whole center.
+  const emptyScope = { id: { in: [] as string[] } };
+
+  let submissionsWhere: Prisma.HomeworkSubmissionWhereInput;
+  let testAttemptsWhere: Prisma.TestAttemptWhereInput;
+
+  if (isCenterWide) {
+    submissionsWhere = {
+      homework: { lesson: { module: { course: { centerId } } } },
+      grade: { not: null },
+    };
+    testAttemptsWhere = {
+      test: { material: { centerId } },
+    };
+  } else if (
+    (activeRole === "TEACHER" || activeRole === "TEACHER_ASSISTANT") &&
+    currentMembership
+  ) {
+    // Scope to groups where this teacher (or assistant) is assigned
+    const groupScope =
+      activeRole === "TEACHER_ASSISTANT"
+        ? { assistantMembershipId: currentMembership.id }
+        : { teacherMembershipId: currentMembership.id };
     submissionsWhere = {
       homework: { lesson: { module: { course: { centerId } } } },
       grade: { not: null },
       student: {
         enrollments: {
           some: {
-            group: { teacherMembershipId: currentMembership.id },
+            group: groupScope,
           },
         },
       },
@@ -51,7 +74,7 @@ export default async function CenterGradesPage() {
       student: {
         enrollments: {
           some: {
-            group: { teacherMembershipId: currentMembership.id },
+            group: groupScope,
           },
         },
       },
@@ -83,6 +106,9 @@ export default async function CenterGradesPage() {
       test: { material: { centerId } },
       studentMembershipId: { in: childIds },
     };
+  } else {
+    submissionsWhere = emptyScope;
+    testAttemptsWhere = emptyScope;
   }
 
   const submissions = await tenantCtx.getTenantDb().homeworkSubmission.findMany({
@@ -110,6 +136,27 @@ export default async function CenterGradesPage() {
     ? Math.round(submissions.reduce((sum, s) => sum + (s.grade || 0), 0) / totalGraded)
     : 0;
 
+  // Gradebook matrix is only meaningful for staff with access to groups:
+  // management/platform staff (all groups) or teachers with a group scope.
+  let groups: { id: string; name: string }[] = [];
+  const hasOwnGroups =
+    (activeRole === "TEACHER" || activeRole === "TEACHER_ASSISTANT") &&
+    Boolean(currentMembership);
+  if (isCenterWide || hasOwnGroups) {
+    const groupsWhere: Prisma.GroupWhereInput = { centerId };
+    if (activeRole === "TEACHER" && currentMembership) {
+      groupsWhere.teacherMembershipId = currentMembership.id;
+    } else if (activeRole === "TEACHER_ASSISTANT" && currentMembership) {
+      groupsWhere.assistantMembershipId = currentMembership.id;
+    }
+    const rawGroups = await tenantCtx.getTenantDb().group.findMany({
+      where: groupsWhere,
+      select: { id: true, name: true },
+      orderBy: { name: "asc" },
+    });
+    groups = rawGroups;
+  }
+
   return (
     <div className="space-y-8">
       <div className="flex items-center justify-between">
@@ -117,17 +164,17 @@ export default async function CenterGradesPage() {
           <h2 className="text-xl font-bold text-white">{t(locale, "nav.grades")}</h2>
           <p className="text-sm text-slate-400 mt-0.5">
             {activeRole === "TEACHER"
-              ? "Оценки учеников ваших групп"
+              ? t(locale, "grades.teacherDescription")
               : activeRole === "STUDENT"
-              ? "Ваши оценки"
+              ? t(locale, "grades.studentDescription")
               : activeRole === "PARENT"
-              ? "Оценки ваших детей"
-              : "Все оценки учебного центра"}
+              ? t(locale, "grades.parentDescription")
+              : t(locale, "grades.allDescription")}
           </p>
         </div>
         {totalGraded > 0 && (
           <div className="glass-panel px-5 py-3 rounded-2xl border border-slate-800 text-right">
-            <div className="text-xs text-slate-400 uppercase tracking-wider font-semibold">Средний балл</div>
+            <div className="text-xs text-slate-400 uppercase tracking-wider font-semibold">{t(locale, "grades.averageScore")}</div>
             <div className={`text-2xl font-extrabold mt-0.5 ${avgGrade >= 70 ? "text-emerald-400" : avgGrade >= 50 ? "text-amber-400" : "text-red-400"}`}>
               {avgGrade}%
             </div>
@@ -135,12 +182,21 @@ export default async function CenterGradesPage() {
         )}
       </div>
 
+      {/* Gradebook Matrix Component for Staff */}
+      {groups.length > 0 && (
+        <GradebookManager
+          groups={groups}
+          locale={locale}
+          userRole={activeRole}
+        />
+      )}
+
       {/* Test Attempts Grades Table */}
       <div className="space-y-4">
         <h3 className="text-base font-bold text-white flex items-center gap-2">
           <Award className="w-5 h-5 text-brand-400" />
           <span>{t(locale, "materials.testDescription")}</span>
-          <span className="ml-auto text-xs font-normal text-slate-500">{testAttempts.length} записей</span>
+          <span className="ml-auto text-xs font-normal text-slate-500">{t(locale, "common.recordsCount", { count: testAttempts.length })}</span>
         </h3>
 
         <div className="glass-panel rounded-2xl border border-slate-800 overflow-hidden">
@@ -180,7 +236,7 @@ export default async function CenterGradesPage() {
                             ? "bg-emerald-500/10 text-emerald-400 border border-emerald-500/20"
                             : "bg-red-500/10 text-red-400 border border-red-500/20"
                         }`}>
-                          {isPassed ? "✓ Сдан" : "✗ Не сдан"}
+                          {isPassed ? t(locale, "grades.passed") : t(locale, "grades.failed")}
                         </span>
                       </td>
                       <td className="p-4 text-xs text-slate-400">
@@ -200,7 +256,7 @@ export default async function CenterGradesPage() {
         <h3 className="text-base font-bold text-white flex items-center gap-2">
           <GraduationCap className="w-5 h-5 text-emerald-400" />
           <span>{t(locale, "homework.title")}</span>
-          <span className="ml-auto text-xs font-normal text-slate-500">{submissions.length} записей</span>
+          <span className="ml-auto text-xs font-normal text-slate-500">{t(locale, "common.recordsCount", { count: submissions.length })}</span>
         </h3>
 
         <div className="glass-panel rounded-2xl border border-slate-800 overflow-hidden">
@@ -210,7 +266,7 @@ export default async function CenterGradesPage() {
                 <th className="p-4">{t(locale, "nav.students")}</th>
                 <th className="p-4">{t(locale, "homework.title")}</th>
                 <th className="p-4">{t(locale, "performance.title")}</th>
-                <th className="p-4">Обратная связь</th>
+                <th className="p-4">{t(locale, "homework.feedback")}</th>
                 <th className="p-4">{t(locale, "common.date")}</th>
               </tr>
             </thead>

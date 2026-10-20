@@ -4,11 +4,28 @@ import { redirect } from "next/navigation";
 import { HelpCircle, MessageSquare, Plus, Clock } from "lucide-react";
 import { t, formatDateLocalized } from "@/i18n";
 
+// Ticket statuses are snake_case in the DB, while the catalog keys are camelCase
+// (`support.statusInProgress`). Build the key explicitly so multi-word statuses
+// do not fall through to a raw i18n key.
+const SUPPORT_STATUS_KEYS: Record<string, string> = {
+  OPEN: "support.statusOpen",
+  IN_PROGRESS: "support.statusInProgress",
+  RESOLVED: "support.statusResolved",
+  CLOSED: "support.statusClosed",
+};
+
+function supportStatusKey(status: string): string {
+  return SUPPORT_STATUS_KEYS[status] ?? status;
+}
+
 export default async function CenterSupportPage() {
   const tenantCtx = await requireTenantPageAccess();
 
   const session = await getAuthSession();
   if (!session) redirect("/login");
+
+  const centerId = session.activeCenterId;
+  if (!centerId) redirect("/center");
 
   const locale = session.user.preferredLanguage;
 
@@ -16,7 +33,7 @@ export default async function CenterSupportPage() {
     where: {
       OR: [
         { creatorUserId: session.user.id },
-        ...(session.activeCenterId ? [{ centerId: session.activeCenterId }] : []),
+        { centerId },
       ],
     },
     include: {
@@ -58,7 +75,7 @@ export default async function CenterSupportPage() {
                     ? "bg-emerald-500/10 text-emerald-400 border border-emerald-500/20"
                     : "bg-slate-800 text-slate-400"
                 }`}>
-                  {t(locale, "support.status" + tkt.status.charAt(0) + tkt.status.slice(1).toLowerCase())}
+                  {t(locale, supportStatusKey(tkt.status))}
                 </span>
               </div>
 

@@ -36,7 +36,7 @@ export async function GET(req: Request) {
     return NextResponse.json({ groups });
   } catch (err: unknown) {
     const error = err as { message?: string; status?: number };
-    return NextResponse.json({ error: error.message || "Ошибка загрузки групп" }, { status: error.status || 400 });
+    return NextResponse.json({ error: error.status ? error.message : "Ошибка загрузки групп" }, { status: error.status || 400 });
   }
 }
 
@@ -89,6 +89,6 @@ export async function POST(req: Request) {
     return NextResponse.json({ success: true, group });
   } catch (err: unknown) {
     const error = err as { message?: string; status?: number };
-    return NextResponse.json({ error: error.message || "Ошибка создания группы" }, { status: error.status || 400 });
+    return NextResponse.json({ error: error.status ? error.message : "Ошибка создания группы" }, { status: error.status || 400 });
   }
 }

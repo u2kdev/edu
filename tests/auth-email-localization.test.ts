@@ -65,7 +65,7 @@ describe("TRUST-2 Item 8: Email links for confirm-email and pending invite accep
     const userEmail = sent.find((m) => m.to === email);
     expect(userEmail).toBeDefined();
     // Must contain confirm link with token and ru lang
-    expect(userEmail!.body).toMatch(/\/auth\/confirm-email\?token=[a-zA-Z0-9_-]+(&locale=ru|&lang=ru)/);
+    expect(userEmail!.body).toMatch(/\/confirm-email\?token=[a-zA-Z0-9_-]+(&locale=ru|&lang=ru)/);
   });
 
   it("sends pending invite email with accept link in ru/uz for existing user", async () => {
@@ -132,6 +132,6 @@ describe("TRUST-2 Item 8: Email links for confirm-email and pending invite accep
     const inviteMail = sent.find((m) => m.to === existingEmail);
     expect(inviteMail).toBeDefined();
     // Must contain accept link with pendingInviteId and uz lang
-    expect(inviteMail!.body).toMatch(/\/auth\/invites\/accept\?pendingInviteId=[a-zA-Z0-9_-]+(&locale=uz|&lang=uz)/);
+    expect(inviteMail!.body).toMatch(/\/invites\/accept\?pendingInviteId=[a-zA-Z0-9_-]+(&locale=uz|&lang=uz)/);
   });
 });

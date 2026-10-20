@@ -1,11 +1,14 @@
 "use client";
 
 import { useEffect, useState, Suspense } from "react";
-import { t } from "@/lib/i18n";
+import { t } from "@/i18n";
 import { useRouter, useSearchParams } from "next/navigation";
+import { CheckCircle2, AlertTriangle, Loader2, Clock } from "lucide-react";
+import { AuthShell } from "@/components/auth/AuthShell";
 
 function ConfirmEmailContent() {
-    const router = useRouter();
+  const locale = "ru";
+  const router = useRouter();
   const searchParams = useSearchParams();
   const token = searchParams?.get("token") || "";
 
@@ -18,7 +21,7 @@ function ConfirmEmailContent() {
       setStatus("error");
       return;
     }
-    
+
     fetch("/api/auth/confirm-email", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -45,71 +48,85 @@ function ConfirmEmailContent() {
         method: "POST",
       });
       if (res.ok) {
-        setResendMsg(t("auth.confirm.resend_success"));
+        setResendMsg(t(locale, "auth.confirm.resend_success"));
       } else {
-        setResendMsg(t("auth.confirm.resend_error"));
+        setResendMsg(t(locale, "auth.confirm.resend_error"));
       }
     } catch {
-      setResendMsg(t("auth.confirm.resend_error"));
+      setResendMsg(t(locale, "auth.confirm.resend_error"));
     } finally {
       setResending(false);
     }
   };
 
+  const resendButton = (
+    <button
+      onClick={handleResend}
+      disabled={resending}
+      className="flex w-full cursor-pointer items-center justify-center gap-2 rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm font-semibold text-ink-soft transition-colors hover:bg-[color:var(--paper-2)] disabled:opacity-60"
+    >
+      {resending ? t(locale, "auth.confirm.loading") : t(locale, "auth.confirm.resend")}
+    </button>
+  );
+
   return (
-    <div className="max-w-md mx-auto mt-10 p-6 bg-white shadow-md rounded-md text-center">
-      <h2 className="text-2xl font-semibold mb-6">{t("auth.confirm.title")}</h2>
-      
+    <AuthShell title={t(locale, "auth.confirm.title")}>
       {status === "loading" && (
-        <p className="text-gray-600">{t("auth.confirm.loading")}</p>
+        <div className="flex flex-col items-center gap-4 py-4 text-center">
+          <Loader2 className="h-8 w-8 animate-spin text-[color:var(--brand)]" />
+          <p className="text-sm text-ink-muted">{t(locale, "auth.confirm.loading")}</p>
+        </div>
       )}
-      
+
       {status === "success" && (
-        <div>
-          <p className="text-green-600 mb-4">{t("auth.confirm.success")}</p>
+        <div className="space-y-5 text-center">
+          <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-2xl border border-emerald-100 bg-emerald-50 text-emerald-600">
+            <CheckCircle2 className="h-7 w-7" />
+          </div>
+          <p className="text-sm font-medium text-emerald-700">{t(locale, "auth.confirm.success")}</p>
           <button
             onClick={() => router.push("/login")}
-            className="w-full flex justify-center py-2 px-4 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-indigo-600 hover:bg-indigo-700"
+            className="flex w-full cursor-pointer items-center justify-center rounded-xl bg-[color:var(--brand)] px-4 py-3 text-sm font-semibold text-white shadow-[0_16px_36px_-16px_rgba(29,78,216,0.8)] transition-all hover:bg-[color:var(--brand-strong)] active:scale-[0.99]"
           >
-            {t("auth.confirm.login")}
+            {t(locale, "auth.confirm.login")}
           </button>
         </div>
       )}
-      
+
       {status === "expired" && (
-        <div>
-          <p className="text-yellow-600 mb-4">{t("auth.confirm.expired")}</p>
-          <button
-            onClick={handleResend}
-            disabled={resending}
-            className="w-full flex justify-center py-2 px-4 border border-gray-300 rounded-md shadow-sm text-sm font-medium text-gray-700 bg-white hover:bg-gray-50 disabled:bg-gray-200"
-          >
-            {resending ? t("auth.confirm.loading") : t("auth.confirm.resend")}
-          </button>
-          {resendMsg && <p className="mt-2 text-sm">{resendMsg}</p>}
+        <div className="space-y-5 text-center">
+          <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-2xl border border-amber-100 bg-amber-50 text-amber-600">
+            <Clock className="h-7 w-7" />
+          </div>
+          <p className="text-sm font-medium text-amber-700">{t(locale, "auth.confirm.expired")}</p>
+          {resendButton}
+          {resendMsg && <p className="text-sm text-ink-muted">{resendMsg}</p>}
         </div>
       )}
-      
+
       {status === "error" && (
-        <div>
-          <p className="text-red-500 mb-4">{t("auth.confirm.error")}</p>
-          <button
-            onClick={handleResend}
-            disabled={resending}
-            className="w-full flex justify-center py-2 px-4 border border-gray-300 rounded-md shadow-sm text-sm font-medium text-gray-700 bg-white hover:bg-gray-50 disabled:bg-gray-200"
-          >
-            {resending ? t("auth.confirm.loading") : t("auth.confirm.resend")}
-          </button>
-          {resendMsg && <p className="mt-2 text-sm">{resendMsg}</p>}
+        <div className="space-y-5 text-center">
+          <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-2xl border border-rose-100 bg-rose-50 text-rose-600">
+            <AlertTriangle className="h-7 w-7" />
+          </div>
+          <p className="text-sm font-medium text-rose-600">{t(locale, "auth.confirm.error")}</p>
+          {resendButton}
+          {resendMsg && <p className="text-sm text-ink-muted">{resendMsg}</p>}
         </div>
       )}
-    </div>
+    </AuthShell>
   );
 }
 
 export default function ConfirmEmailPage() {
   return (
-    <Suspense fallback={<div>Loading...</div>}>
+    <Suspense
+      fallback={
+        <div data-theme="light" className="public-shell mesh-gradient-light flex min-h-screen items-center justify-center font-strict">
+          <Loader2 className="h-8 w-8 animate-spin text-[color:var(--brand)]" />
+        </div>
+      }
+    >
       <ConfirmEmailContent />
     </Suspense>
   );

@@ -45,13 +45,14 @@ describe("API Response Utilities", () => {
     }
   });
 
-  it("handleApiError handles standard Error", async () => {
+  it("handleApiError hides internal messages for unexpected errors", async () => {
     const e = new Error("Something went wrong");
     const res = handleApiError(e);
     const data = await res.json();
-    
+
     expect(res.status).toBe(500);
     expect(data.error.code).toBe("INTERNAL_SERVER_ERROR");
-    expect(data.error.message).toBe("Something went wrong");
+    // Internal error details must not leak to the client.
+    expect(data.error.message).toBe("Внутренняя ошибка сервера");
   });
 });

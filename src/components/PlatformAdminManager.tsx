@@ -25,8 +25,30 @@ interface PlatformAdminManagerProps {
   metrics: {
     totalCenters: number;
     activeCenters: number;
-    frozenCenters: number;
+    pausedCenters: number;
   };
+}
+
+// The API validates slugs with /^[a-z0-9-]+$/, so Cyrillic names must be
+// transliterated instead of being copied verbatim into the URL.
+const CYRILLIC_TO_LATIN: Record<string, string> = {
+  а: "a", б: "b", в: "v", г: "g", д: "d", е: "e", ё: "e", ж: "zh", з: "z",
+  и: "i", й: "y", к: "k", л: "l", м: "m", н: "n", о: "o", п: "p", р: "r",
+  с: "s", т: "t", у: "u", ф: "f", х: "kh", ц: "ts", ч: "ch", ш: "sh",
+  щ: "shch", ъ: "", ы: "y", ь: "", э: "e", ю: "yu", я: "ya",
+};
+
+function slugifyCenterName(value: string): string {
+  return value
+    .toLowerCase()
+    .split("")
+    .map((ch) => CYRILLIC_TO_LATIN[ch] ?? ch)
+    .join("")
+    .replace(/[^a-z0-9\s-]/g, "")
+    .trim()
+    .replace(/[\s_]+/g, "-")
+    .replace(/-+/g, "-")
+    .replace(/^-|-$/g, "");
 }
 
 export default function PlatformAdminManager({ initialCenters, plans, metrics }: PlatformAdminManagerProps) {
@@ -37,6 +59,8 @@ export default function PlatformAdminManager({ initialCenters, plans, metrics }:
   // Form states for Superadmin creating center & director
   const [name, setName] = useState("");
   const [slug, setSlug] = useState("");
+  // Once the admin edits the slug by hand, later name changes must not overwrite it.
+  const [slugTouched, setSlugTouched] = useState(false);
   const [centerType, setCenterType] = useState("HYBRID");
   const [planId, setPlanId] = useState(plans[0]?.id || "");
   const [directorEmail, setDirectorEmail] = useState("");
@@ -47,12 +71,19 @@ export default function PlatformAdminManager({ initialCenters, plans, metrics }:
 
   const handleNameChange = (val: string) => {
     setName(val);
-    const autoSlug = val
-      .toLowerCase()
-      .trim()
-      .replace(/[^a-z0-9а-я\s-]/g, "")
-      .replace(/[\s_]+/g, "-");
-    setSlug(autoSlug);
+    if (!slugTouched) {
+      setSlug(slugifyCenterName(val));
+    }
+  };
+
+  const openCreateModal = () => {
+    setError("");
+    setShowCreateModal(true);
+  };
+
+  const closeCreateModal = () => {
+    setError("");
+    setShowCreateModal(false);
   };
 
   const handleCreateCenter = async (e: React.FormEvent) => {
@@ -81,8 +112,11 @@ export default function PlatformAdminManager({ initialCenters, plans, metrics }:
         setShowCreateModal(false);
         setName("");
         setSlug("");
+        setSlugTouched(false);
         setDirectorEmail("");
         setDirectorFullName("");
+        setDirectorPhone("");
+        setError("");
         router.refresh();
       } else {
         setError(data.error || "Ошибка при создании центра");
@@ -96,7 +130,7 @@ export default function PlatformAdminManager({ initialCenters, plans, metrics }:
 
   const handleUpdateStatus = async (centerId: string, newStatus: string) => {
     try {
-      const res = await fetch("/api/platform/centers", {
+      const res = await fetch(`/api/platform/centers/${centerId}`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ centerId, status: newStatus }),
@@ -129,12 +163,12 @@ export default function PlatformAdminManager({ initialCenters, plans, metrics }:
 
           <div className="glass-panel p-5 rounded-2xl border border-slate-800">
             <span className="text-xs font-semibold text-slate-400 uppercase tracking-wider">Заморожены (Frozen)</span>
-            <div className="text-2xl font-bold text-amber-400 mt-1">{metrics.frozenCenters}</div>
+            <div className="text-2xl font-bold text-amber-400 mt-1">{metrics.pausedCenters}</div>
           </div>
         </div>
 
         <button
-          onClick={() => setShowCreateModal(true)}
+          onClick={openCreateModal}
           className="w-full sm:w-auto px-5 py-3.5 bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-500 hover:to-indigo-500 text-white font-semibold rounded-2xl shadow-xl shadow-purple-600/30 transition-all flex items-center justify-center gap-2 shrink-0"
         >
           <Plus className="w-5 h-5" />
@@ -196,9 +230,9 @@ export default function PlatformAdminManager({ initialCenters, plans, metrics }:
                             TRIAL
                           </span>
                         )}
-                        {c.status === "FROZEN" && (
+                        {c.status === "PAUSED" && (
                           <span className="px-2.5 py-1 rounded-full bg-amber-500/10 text-amber-400 text-xs font-bold">
-                            FROZEN
+                            PAUSED
                           </span>
                         )}
                         {c.status === "BLOCKED" && (
@@ -216,9 +250,9 @@ export default function PlatformAdminManager({ initialCenters, plans, metrics }:
                             Активировать
                           </button>
                         )}
-                        {c.status !== "FROZEN" && (
+                        {c.status !== "PAUSED" && (
                           <button
-                            onClick={() => handleUpdateStatus(c.id, "FROZEN")}
+                            onClick={() => handleUpdateStatus(c.id, "PAUSED")}
                             className="px-3 py-1 bg-amber-600/20 hover:bg-amber-600/30 text-amber-300 rounded-lg text-xs font-semibold border border-amber-500/30 transition-colors"
                           >
                             Заморозить
@@ -281,7 +315,10 @@ export default function PlatformAdminManager({ initialCenters, plans, metrics }:
                     type="text"
                     required
                     value={slug}
-                    onChange={(e) => setSlug(e.target.value)}
+                    onChange={(e) => {
+                      setSlug(e.target.value);
+                      setSlugTouched(true);
+                    }}
                     placeholder="e.g. quantum-coding"
                     className="w-full px-4 py-2.5 bg-slate-900 border border-slate-700 rounded-xl text-white text-sm font-mono focus:outline-none focus:border-purple-500"
                   />
@@ -363,7 +400,7 @@ export default function PlatformAdminManager({ initialCenters, plans, metrics }:
               <div className="flex justify-end gap-3 pt-4 border-t border-slate-800">
                 <button
                   type="button"
-                  onClick={() => setShowCreateModal(false)}
+                  onClick={closeCreateModal}
                   className="px-4 py-2.5 bg-slate-800 hover:bg-slate-700 text-slate-300 font-semibold rounded-xl text-sm"
                 >
                   Отмена

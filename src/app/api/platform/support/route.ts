@@ -3,6 +3,9 @@ import { NextResponse } from "next/server";
 // eslint-disable-next-line no-restricted-imports
 import { db } from "@/lib/db";
 import { requirePlatformOwner, handlePlatformError } from "@/lib/platformAuth";
+import type { TicketStatus } from "@prisma/client";
+
+const TICKET_STATUSES: TicketStatus[] = ["OPEN", "IN_PROGRESS", "RESOLVED", "CLOSED"];
 
 export async function GET(req: Request) {
   try {
@@ -10,9 +13,9 @@ export async function GET(req: Request) {
     const { searchParams } = new URL(req.url);
     const status = searchParams.get("status");
 
-    const whereClause: { status?: string } = {};
-    if (status) {
-      whereClause.status = status;
+    const whereClause: { status?: TicketStatus } = {};
+    if (status && TICKET_STATUSES.includes(status as TicketStatus)) {
+      whereClause.status = status as TicketStatus;
     }
 
     const tickets = await db.supportTicket.findMany({

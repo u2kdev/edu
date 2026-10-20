@@ -18,7 +18,7 @@ describe("Phase 9: Notification System", () => {
   beforeAll(async () => {
     // Setup test tenants and users
     const ownerA = await db.platformUser.create({
-      data: { email: `tenantA-${Date.now()}@test.com`, passwordHash: "x", fullName: "Owner A", platformRole: "TENANT_OWNER" },
+      data: { email: `tenantA-${Date.now()}@test.com`, passwordHash: "x", fullName: "Owner A", platformRole: "NONE" },
     });
     const centerA = await db.learningCenter.create({
       data: { name: "Tenant A Center", slug: "tenant-a-test-" + Date.now(), ownerId: ownerA.id, status: "ACTIVE" },
@@ -27,7 +27,7 @@ describe("Phase 9: Notification System", () => {
     userA = ownerA.id;
 
     const ownerB = await db.platformUser.create({
-      data: { email: `tenantB-${Date.now()}@test.com`, passwordHash: "x", fullName: "Owner B", platformRole: "TENANT_OWNER" },
+      data: { email: `tenantB-${Date.now()}@test.com`, passwordHash: "x", fullName: "Owner B", platformRole: "NONE" },
     });
     const centerB = await db.learningCenter.create({
       data: { name: "Tenant B Center", slug: "tenant-b-test-" + Date.now(), ownerId: ownerB.id, status: "ACTIVE" },

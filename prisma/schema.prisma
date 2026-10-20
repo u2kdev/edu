@@ -1,6 +1,7 @@
 datasource db {
-  provider = "postgresql"
-  url      = env("DATABASE_URL")
+  provider  = "postgresql"
+  url       = env("DATABASE_URL")
+  directUrl = env("DIRECT_URL")
 }
 
 generator client {
@@ -13,23 +14,23 @@ generator client {
 // ----------------------------------------------------
 
 model PlatformUser {
-  id                String   @id @default(uuid())
-  email             String   @unique
-  phone             String?
-  passwordHash      String
-  fullName          String
-  avatarUrl         String?
-  platformRole      String   @default("NONE")
-  preferredLanguage String   @default("ru") // ru, uz-Latn, uz-Cyrl
-  isActive          Boolean  @default(true)
-  twoFactorEnabled  Boolean  @default(false)
-  twoFactorSecret   String? // TOTP secret (encrypted)
-  createdAt         DateTime @default(now())
-  emailConfirmToken String?   @unique
+  id                  String       @id @default(uuid())
+  email               String       @unique
+  phone               String?
+  passwordHash        String
+  fullName            String
+  avatarUrl           String?
+  platformRole        PlatformRole @default(NONE)
+  preferredLanguage   Language     @default(ru) // ru, uz-Latn, uz-Cyrl (DB values via @map)
+  isActive            Boolean      @default(true)
+  twoFactorEnabled    Boolean      @default(false)
+  twoFactorSecret     String? // TOTP secret (encrypted)
+  createdAt           DateTime     @default(now())
+  emailConfirmToken   String?      @unique
   emailConfirmExpires DateTime?
-  emailVerified     DateTime?
-  
-  updatedAt         DateTime @updatedAt
+  emailVerified       DateTime?
+
+  updatedAt DateTime @updatedAt
 
   memberships         CenterMembership[]
   ownedCenters        LearningCenter[]     @relation("CenterOwner")
@@ -51,22 +52,22 @@ model PlatformUser {
 // ----------------------------------------------------
 
 model LearningCenter {
-  id              String   @id @default(uuid())
-  slug            String   @unique
-  name            String
-  centerType      String   @default("HYBRID")
-  status          String   @default("TRIAL") // TRIAL, ACTIVE, PAUSED, OVERDUE, BLOCKED, CANCELLED
+  id               String       @id @default(uuid())
+  slug             String       @unique
+  name             String
+  centerType       CenterType   @default(HYBRID)
+  status           CenterStatus @default(TRIAL)
   suspensionReason String?
-  logoUrl         String?
-  phone           String?
-  email           String?
-  brandingConfig  String? // JSON: colors, custom subtitle, etc.
-  defaultLanguage String   @default("ru")
-  timeZone        String   @default("Asia/Tashkent")
-  gradingScale    String   @default("PERCENT_100") // PERCENT_100, POINTS_5, PASS_FAIL
-  ownerId         String
-  createdAt       DateTime @default(now())
-  updatedAt       DateTime @updatedAt
+  logoUrl          String?
+  phone            String?
+  email            String?
+  brandingConfig   String? // JSON: colors, custom subtitle, etc.
+  defaultLanguage  Language     @default(ru) // ru, uz-Latn, uz-Cyrl (DB values via @map)
+  timeZone         String       @default("Asia/Tashkent")
+  gradingScale     GradingScale @default(PERCENT_100) // PERCENT_100, POINTS_5, PASS_FAIL
+  ownerId          String
+  createdAt        DateTime     @default(now())
+  updatedAt        DateTime     @updatedAt
 
   owner              PlatformUser         @relation("CenterOwner", fields: [ownerId], references: [id])
   subscriptions      Subscription[]
@@ -117,16 +118,16 @@ model SubscriptionPlan {
 
 // Статусы подписки: TRIAL, ACTIVE, PAST_DUE, FROZEN, CANCELLED
 model Subscription {
-  id                    String    @id @default(uuid())
+  id                    String             @id @default(uuid())
   centerId              String
   planId                String
-  status                String    @default("TRIAL")
+  status                SubscriptionStatus @default(TRIAL)
   trialEndsAt           DateTime?
-  currentPeriodStartsAt DateTime  @default(now())
+  currentPeriodStartsAt DateTime           @default(now())
   currentPeriodEndsAt   DateTime
-  autoRenew             Boolean   @default(true)
-  createdAt             DateTime  @default(now())
-  updatedAt             DateTime  @updatedAt
+  autoRenew             Boolean            @default(true)
+  createdAt             DateTime           @default(now())
+  updatedAt             DateTime           @updatedAt
 
   center LearningCenter   @relation(fields: [centerId], references: [id], onDelete: Cascade)
   plan   SubscriptionPlan @relation(fields: [planId], references: [id])
@@ -182,15 +183,15 @@ model Subject {
 // ----------------------------------------------------
 
 model CenterMembership {
-  id          String   @id @default(uuid())
+  id          String           @id @default(uuid())
   userId      String
   centerId    String
-  role        String // DIRECTOR, CENTER_ADMIN, TEACHER, TEACHER_ASSISTANT, CENTER_SUPPORT, STUDENT, PARENT
-  status      String   @default("ACTIVE")
+  role        MembershipRole // DIRECTOR, CENTER_ADMIN, TEACHER, TEACHER_ASSISTANT, CENTER_SUPPORT, STUDENT, PARENT
+  status      MembershipStatus @default(ACTIVE)
   permissions String? // JSON: granular permission overrides for this membership
-  joinedAt    DateTime @default(now())
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
+  joinedAt    DateTime         @default(now())
+  createdAt   DateTime         @default(now())
+  updatedAt   DateTime         @updatedAt
 
   user   PlatformUser   @relation(fields: [userId], references: [id], onDelete: Cascade)
   center LearningCenter @relation(fields: [centerId], references: [id], onDelete: Cascade)
@@ -228,26 +229,25 @@ model CenterMembership {
 // ----------------------------------------------------
 
 model InviteCode {
-  id                    String    @id @default(uuid())
+  id                    String         @id @default(uuid())
   centerId              String
-  code                  String    @unique
-  targetRole            String    @default("STUDENT")
+  code                  String         @unique
+  targetRole            MembershipRole @default(STUDENT)
   courseId              String?
   groupId               String?
   maxUses               Int?
-  usesCount             Int       @default(0)
+  usesCount             Int            @default(0)
   expiresAt             DateTime?
   createdByMembershipId String
-  isRevoked             Boolean   @default(false)
-  createdAt             DateTime  @default(now())
-  updatedAt             DateTime  @updatedAt
+  isRevoked             Boolean        @default(false)
+  createdAt             DateTime       @default(now())
+  updatedAt             DateTime       @updatedAt
 
-  center  LearningCenter   @relation(fields: [centerId], references: [id], onDelete: Cascade)
-  creator CenterMembership @relation("InviteCreator", fields: [createdByMembershipId], references: [id], onDelete: Restrict)
-  course  Course?          @relation(fields: [courseId], references: [id], onDelete: SetNull)
-  group   Group?           @relation(fields: [groupId], references: [id], onDelete: SetNull)
+  center         LearningCenter   @relation(fields: [centerId], references: [id], onDelete: Cascade)
+  creator        CenterMembership @relation("InviteCreator", fields: [createdByMembershipId], references: [id], onDelete: Restrict)
+  course         Course?          @relation(fields: [courseId], references: [id], onDelete: SetNull)
+  group          Group?           @relation(fields: [groupId], references: [id], onDelete: SetNull)
   pendingInvites PendingInvite[]
-
 
   @@index([code])
   @@index([centerId])
@@ -255,15 +255,15 @@ model InviteCode {
 
 // Статусы ParentLink: PENDING, CONFIRMED, REJECTED
 model ParentLink {
-  id                  String    @id @default(uuid())
+  id                  String              @id @default(uuid())
   parentMembershipId  String
   studentMembershipId String
-  status              String    @default("PENDING")
-  initiatedBy         String    @default("ADMIN")
+  status              ParentLinkStatus    @default(PENDING)
+  initiatedBy         ParentLinkInitiator @default(ADMIN)
   inviteCodeUsed      String?
   confirmedAt         DateTime?
-  createdAt           DateTime  @default(now())
-  updatedAt           DateTime  @updatedAt
+  createdAt           DateTime            @default(now())
+  updatedAt           DateTime            @updatedAt
 
   parent  CenterMembership @relation("ParentLinks", fields: [parentMembershipId], references: [id], onDelete: Cascade)
   student CenterMembership @relation("StudentLinks", fields: [studentMembershipId], references: [id], onDelete: Cascade)
@@ -319,15 +319,15 @@ model CourseModule {
 // Типы уроков: ONLINE, OFFLINE
 // Статусы: ACTIVE, ARCHIVED, CANCELLED
 model Lesson {
-  id                            String    @id @default(uuid())
+  id                            String       @id @default(uuid())
   moduleId                      String
   scheduleSlotId                String? // Link to recurring schedule slot
   title                         String
-  lessonType                    String    @default("OFFLINE")
-  status                        String    @default("ACTIVE") // ACTIVE, ARCHIVED, CANCELLED
-  orderIndex                    Int       @default(0)
+  lessonType                    LessonType   @default(OFFLINE)
+  status                        LessonStatus @default(ACTIVE)
+  orderIndex                    Int          @default(0)
   scheduledAt                   DateTime?
-  durationMinutes               Int       @default(60)
+  durationMinutes               Int          @default(60)
   content                       String?
   videoUrl                      String?
   onlineMeetingUrl              String?
@@ -335,8 +335,8 @@ model Lesson {
   attachmentsJson               String?
   substituteTeacherMembershipId String?
   cancelledReason               String?
-  createdAt                     DateTime  @default(now())
-  updatedAt                     DateTime  @updatedAt
+  createdAt                     DateTime     @default(now())
+  updatedAt                     DateTime     @updatedAt
 
   module            CourseModule      @relation(fields: [moduleId], references: [id], onDelete: Cascade)
   scheduleSlot      ScheduleSlot?     @relation(fields: [scheduleSlotId], references: [id], onDelete: SetNull)
@@ -359,7 +359,7 @@ model Lesson {
 
 // Статусы: ACTIVE, CANCELLED, RESCHEDULED
 model ScheduleSlot {
-  id                  String   @id @default(uuid())
+  id                  String             @id @default(uuid())
   centerId            String
   groupId             String
   teacherMembershipId String
@@ -369,13 +369,13 @@ model ScheduleSlot {
   dayOfWeek           Int // 1=Mon, 2=Tue ... 7=Sun
   startTime           String // "09:00"
   endTime             String // "10:30"
-  isRecurring         Boolean  @default(true)
+  isRecurring         Boolean            @default(true)
   overrideDate        String? // "2026-09-15" for one-off overrides
-  status              String   @default("ACTIVE") // ACTIVE, CANCELLED, RESCHEDULED
+  status              ScheduleSlotStatus @default(ACTIVE)
   cancelledReason     String?
   createdByMemberId   String?
-  createdAt           DateTime @default(now())
-  updatedAt           DateTime @updatedAt
+  createdAt           DateTime           @default(now())
+  updatedAt           DateTime           @updatedAt
 
   center  LearningCenter   @relation(fields: [centerId], references: [id], onDelete: Cascade)
   group   Group            @relation(fields: [groupId], references: [id], onDelete: Cascade)
@@ -418,18 +418,20 @@ model Group {
 
   @@index([courseId])
   @@index([teacherMembershipId])
+  @@index([centerId])
+  @@index([assistantMembershipId])
 }
 
 // Статусы Enrollment: ACTIVE, WAITLIST, COMPLETED, DROPPED
 model Enrollment {
-  id                  String   @id @default(uuid())
+  id                  String           @id @default(uuid())
   centerId            String
   studentMembershipId String
   groupId             String
-  status              String   @default("ACTIVE")
-  enrolledAt          DateTime @default(now())
-  createdAt           DateTime @default(now())
-  updatedAt           DateTime @updatedAt
+  status              EnrollmentStatus @default(ACTIVE)
+  enrolledAt          DateTime         @default(now())
+  createdAt           DateTime         @default(now())
+  updatedAt           DateTime         @updatedAt
 
   student CenterMembership @relation("StudentEnrollments", fields: [studentMembershipId], references: [id], onDelete: Cascade)
   group   Group            @relation(fields: [groupId], references: [id], onDelete: Cascade)
@@ -447,16 +449,16 @@ model Enrollment {
 
 // Статусы посещаемости: PRESENT, ABSENT, EXCUSED, LATE
 model Attendance {
-  id                   String   @id @default(uuid())
+  id                   String           @id @default(uuid())
   lessonId             String
   studentMembershipId  String
   groupId              String?
-  status               String   @default("PRESENT") // PRESENT, ABSENT, EXCUSED, LATE
+  status               AttendanceStatus @default(PRESENT)
   note                 String?
   markedByMembershipId String
-  markedAt             DateTime @default(now())
-  createdAt            DateTime @default(now())
-  updatedAt            DateTime @updatedAt
+  markedAt             DateTime         @default(now())
+  createdAt            DateTime         @default(now())
+  updatedAt            DateTime         @updatedAt
 
   lesson  Lesson           @relation(fields: [lessonId], references: [id], onDelete: Cascade)
   student CenterMembership @relation("StudentAttendances", fields: [studentMembershipId], references: [id], onDelete: Restrict)
@@ -489,20 +491,20 @@ model Homework {
 
 // Статусы: NOT_SUBMITTED, SUBMITTED, UNDER_REVIEW, ACCEPTED, REJECTED
 model HomeworkSubmission {
-  id                   String    @id @default(uuid())
+  id                   String           @id @default(uuid())
   homeworkId           String
   studentMembershipId  String
   groupId              String?
   submissionText       String?
   filesJson            String?
-  status               String    @default("NOT_SUBMITTED") // NOT_SUBMITTED, SUBMITTED, UNDER_REVIEW, ACCEPTED, REJECTED
+  status               SubmissionStatus @default(NOT_SUBMITTED) // NOT_SUBMITTED, SUBMITTED, UNDER_REVIEW, ACCEPTED, REJECTED
   grade                Int?
   feedback             String?
   gradedByMembershipId String?
-  submittedAt          DateTime  @default(now())
+  submittedAt          DateTime         @default(now())
   gradedAt             DateTime?
-  createdAt            DateTime  @default(now())
-  updatedAt            DateTime  @updatedAt
+  createdAt            DateTime         @default(now())
+  updatedAt            DateTime         @updatedAt
 
   homework     Homework          @relation(fields: [homeworkId], references: [id], onDelete: Cascade)
   student      CenterMembership  @relation("StudentSubmissions", fields: [studentMembershipId], references: [id], onDelete: Cascade)
@@ -524,24 +526,24 @@ model HomeworkSubmission {
 // ----------------------------------------------------
 
 model Grade {
-  id                   String    @id @default(uuid())
+  id                   String         @id @default(uuid())
   centerId             String
   studentMembershipId  String
   groupId              String?
   lessonId             String?
   teacherMembershipId  String
-  gradeType            String    @default("HOMEWORK") // HOMEWORK, TEST, ORAL, WRITTEN, MIDTERM, FINAL, PROJECT, OTHER
+  gradeType            GradeType      @default(HOMEWORK) // HOMEWORK, LESSON, TEST, ORAL, WRITTEN, MIDTERM, FINAL, PROJECT, OTHER
   value                Float
-  maxValue             Float     @default(100)
+  maxValue             Float          @default(100)
   comment              String?
-  lifecycle            String    @default("DRAFT") // DRAFT, SUBMITTED, FINAL
-  homeworkSubmissionId String?   @unique
+  lifecycle            GradeLifecycle @default(DRAFT) // DRAFT, SUBMITTED, FINAL
+  homeworkSubmissionId String?        @unique
   finalizedAt          DateTime?
   finalizedById        String?
   deletedAt            DateTime? // soft delete
   deletedById          String?
-  createdAt            DateTime  @default(now())
-  updatedAt            DateTime  @updatedAt
+  createdAt            DateTime       @default(now())
+  updatedAt            DateTime       @updatedAt
 
   center             LearningCenter      @relation(fields: [centerId], references: [id], onDelete: Cascade)
   student            CenterMembership    @relation("StudentGrades", fields: [studentMembershipId], references: [id], onDelete: Restrict)
@@ -562,29 +564,28 @@ model Grade {
 // ----------------------------------------------------
 
 model CenterPayment {
-  id                  String    @id @default(uuid())
+  id                  String              @id @default(uuid())
   centerId            String
   studentMembershipId String
   groupId             String?
   amount              Float
   originalAmount      Float?
-  discountAmount      Float     @default(0)
-  currency            String    @default("UZS")
-  status              String    @default("PENDING") // PENDING, PAID, PARTIALLY_PAID, FAILED, REFUNDED
-  paymentMethod       String    @default("CASH")
+  discountAmount      Float               @default(0)
+  currency            Currency            @default(UZS)
+  status              CenterPaymentStatus @default(PENDING) // PENDING, PAID, PARTIALLY_PAID, FAILED, REFUNDED
+  paymentMethod       PaymentMethod       @default(CASH)
   installmentIndex    Int?
   externalTxId        String?
   note                String?
   paidAt              DateTime?
   refundedAt          DateTime?
   deletedAt           DateTime? // soft delete
-  createdAt           DateTime  @default(now())
-  updatedAt           DateTime  @updatedAt
+  createdAt           DateTime            @default(now())
+  updatedAt           DateTime            @updatedAt
 
   center  LearningCenter   @relation(fields: [centerId], references: [id], onDelete: Cascade)
   student CenterMembership @relation("StudentPayments", fields: [studentMembershipId], references: [id], onDelete: Restrict)
   group   Group?           @relation(fields: [groupId], references: [id], onDelete: SetNull)
-
 
   @@index([centerId])
   @@index([studentMembershipId])
@@ -596,18 +597,18 @@ model CenterPayment {
 // ----------------------------------------------------
 
 model Announcement {
-  id         String    @id @default(uuid())
+  id         String          @id @default(uuid())
   centerId   String
   authorId   String // CenterMembership id
   title      String
   body       String
-  targetRole String? // null = all, STUDENT, TEACHER, PARENT, etc.
+  targetRole MembershipRole? // null = all, STUDENT, TEACHER, PARENT, etc.
   groupId    String? // null = all groups
-  isPinned   Boolean   @default(false)
-  publishAt  DateTime  @default(now())
+  isPinned   Boolean         @default(false)
+  publishAt  DateTime        @default(now())
   expiresAt  DateTime?
-  createdAt  DateTime  @default(now())
-  updatedAt  DateTime  @updatedAt
+  createdAt  DateTime        @default(now())
+  updatedAt  DateTime        @updatedAt
 
   center LearningCenter   @relation(fields: [centerId], references: [id], onDelete: Cascade)
   author CenterMembership @relation("AnnouncementAuthor", fields: [authorId], references: [id], onDelete: Restrict)
@@ -622,21 +623,22 @@ model Announcement {
 // ----------------------------------------------------
 
 model SupportTicket {
-  id            String   @id @default(uuid())
+  id            String         @id @default(uuid())
   centerId      String?
   creatorUserId String
   subject       String
-  status        String   @default("OPEN")
-  priority      String   @default("MEDIUM")
-  scope         String   @default("TENANT")
-  createdAt     DateTime @default(now())
-  updatedAt     DateTime @updatedAt
+  status        TicketStatus   @default(OPEN)
+  priority      TicketPriority @default(MEDIUM)
+  scope         TicketScope    @default(TENANT)
+  createdAt     DateTime       @default(now())
+  updatedAt     DateTime       @updatedAt
 
   center   LearningCenter? @relation(fields: [centerId], references: [id], onDelete: Cascade)
   creator  PlatformUser    @relation("TicketCreator", fields: [creatorUserId], references: [id], onDelete: Cascade)
   messages TicketMessage[]
 
   @@index([creatorUserId])
+  @@index([centerId])
 }
 
 model TicketMessage {
@@ -650,6 +652,8 @@ model TicketMessage {
 
   ticket SupportTicket @relation(fields: [ticketId], references: [id], onDelete: Cascade)
   sender PlatformUser  @relation("MessageSender", fields: [senderUserId], references: [id], onDelete: Cascade)
+
+  @@index([ticketId])
 }
 
 model AuditLog {
@@ -712,20 +716,20 @@ model PasswordResetToken {
 // ----------------------------------------------------
 
 model Material {
-  id              String   @id @default(uuid())
+  id              String       @id @default(uuid())
   lessonId        String?
   centerId        String
   title           String
-  materialType    String   @default("LECTURE") // VIDEO, LECTURE, BOOK, TEST, LINK
+  materialType    MaterialType @default(LECTURE)
   contentText     String?
   fileUrl         String?
   externalUrl     String?
   durationMinutes Int?
   pagesRange      String?
-  orderIndex      Int      @default(0)
-  isPrivate       Boolean  @default(true) // Private by default — access control
-  createdAt       DateTime @default(now())
-  updatedAt       DateTime @updatedAt
+  orderIndex      Int          @default(0)
+  isPrivate       Boolean      @default(true) // Private by default — access control
+  createdAt       DateTime     @default(now())
+  updatedAt       DateTime     @updatedAt
 
   lesson    Lesson?            @relation(fields: [lessonId], references: [id], onDelete: SetNull)
   test      Test?
@@ -759,15 +763,15 @@ model Test {
 }
 
 model TestQuestion {
-  id            String   @id @default(uuid())
+  id            String       @id @default(uuid())
   testId        String
   questionText  String
-  questionType  String   @default("SINGLE_CHOICE") // SINGLE_CHOICE, MULTIPLE_CHOICE, TEXT
+  questionType  QuestionType @default(SINGLE_CHOICE)
   optionsJson   String?
   correctAnswer String?
-  points        Int      @default(1)
-  orderIndex    Int      @default(0)
-  createdAt     DateTime @default(now())
+  points        Int          @default(1)
+  orderIndex    Int          @default(0)
+  createdAt     DateTime     @default(now())
 
   test     Test           @relation(fields: [testId], references: [id], onDelete: Cascade)
   centerId String
@@ -837,14 +841,14 @@ model PerformanceSnapshot {
 }
 
 model ActivityLog {
-  id               String   @id @default(uuid())
+  id               String       @id @default(uuid())
   userMembershipId String
   centerId         String
-  activityType     String // LOGIN, VIEW_MATERIAL, VIEW_VIDEO, COMPLETE_TEST, SUBMIT_HOMEWORK, VIEW_LESSON
+  activityType     ActivityType // LOGIN, VIEW_MATERIAL, VIEW_VIDEO, COMPLETE_TEST, SUBMIT_HOMEWORK, VIEW_LESSON
   resourceType     String?
   resourceId       String?
   metadataJson     String?
-  createdAt        DateTime @default(now())
+  createdAt        DateTime     @default(now())
 
   member CenterMembership @relation("MemberActivityLogs", fields: [userMembershipId], references: [id], onDelete: Cascade)
   center LearningCenter   @relation(fields: [centerId], references: [id], onDelete: Cascade)
@@ -863,17 +867,17 @@ model ActivityLog {
 // ----------------------------------------------------
 
 model Notification {
-  id         String    @id @default(uuid())
+  id         String              @id @default(uuid())
   userId     String
   centerId   String?
-  type       String    @default("GENERAL")
+  type       NotificationType    @default(GENERAL)
   titleKey   String
   bodyKey    String
   bodyParams String?
-  channel    String    @default("IN_APP") // IN_APP, EMAIL, SMS, PUSH
-  isRead     Boolean   @default(false)
+  channel    NotificationChannel @default(IN_APP) // IN_APP, EMAIL, SMS, PUSH
+  isRead     Boolean             @default(false)
   sentAt     DateTime?
-  createdAt  DateTime  @default(now())
+  createdAt  DateTime            @default(now())
 
   user   PlatformUser    @relation(fields: [userId], references: [id], onDelete: Cascade)
   center LearningCenter? @relation(fields: [centerId], references: [id], onDelete: Cascade)
@@ -929,16 +933,287 @@ model LoginAttempt {
   @@unique([email, ip])
 }
 
+model RateLimitRecord {
+  id        String   @id @default(uuid())
+  key       String   @unique
+  count     Int      @default(1)
+  expiresAt DateTime
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([key])
+  @@index([expiresAt])
+}
+
 model PendingInvite {
-  id           String       @id @default(uuid())
+  id           String              @id @default(uuid())
   email        String
   ipAddress    String?
   inviteCodeId String
-  status       String       @default("PENDING")
+  status       PendingInviteStatus @default(PENDING)
   expiresAt    DateTime
-  createdAt    DateTime     @default(now())
+  createdAt    DateTime            @default(now())
 
-  inviteCode   InviteCode   @relation(fields: [inviteCodeId], references: [id], onDelete: Cascade)
+  inviteCode InviteCode @relation(fields: [inviteCodeId], references: [id], onDelete: Cascade)
 
   @@index([email])
+  @@index([inviteCodeId])
+}
+
+model EmailOutbox {
+  id          String            @id @default(uuid())
+  to          String
+  subject     String
+  body        String
+  html        String?
+  status      EmailOutboxStatus @default(PENDING) // PENDING, SENT, FAILED
+  attempts    Int               @default(0)
+  maxAttempts Int               @default(5)
+  lastError   String?
+  nextRetryAt DateTime          @default(now())
+  sentAt      DateTime?
+  createdAt   DateTime          @default(now())
+  updatedAt   DateTime          @updatedAt
+
+  @@index([status, nextRetryAt])
+  @@index([createdAt])
+}
+
+// ----------------------------------------------------
+// Enums (typed statuses / categories)
+// ----------------------------------------------------
+
+enum AttendanceStatus {
+  PRESENT
+  ABSENT
+  EXCUSED
+  LATE
+}
+
+enum MaterialType {
+  VIDEO
+  LECTURE
+  BOOK
+  TEST
+  LINK
+}
+
+enum QuestionType {
+  SINGLE_CHOICE
+  MULTIPLE_CHOICE
+  TEXT
+  TRUE_FALSE
+}
+
+enum GradeType {
+  HOMEWORK
+  LESSON
+  TEST
+  ORAL
+  WRITTEN
+  MIDTERM
+  FINAL
+  PROJECT
+  OTHER
+}
+
+enum GradeLifecycle {
+  DRAFT
+  SUBMITTED
+  FINAL
+}
+
+enum EmailOutboxStatus {
+  PENDING
+  SENT
+  FAILED
+}
+
+enum NotificationChannel {
+  IN_APP
+  EMAIL
+  SMS
+  PUSH
+}
+
+enum CenterStatus {
+  TRIAL
+  ACTIVE
+  PAUSED
+  OVERDUE
+  BLOCKED
+  CANCELLED
+}
+
+enum SubscriptionStatus {
+  TRIAL
+  ACTIVE
+  PAST_DUE
+  FROZEN
+  CANCELLED
+}
+
+enum MembershipRole {
+  DIRECTOR
+  CENTER_ADMIN
+  TEACHER
+  TEACHER_ASSISTANT
+  CENTER_SUPPORT
+  STUDENT
+  PARENT
+}
+
+enum MembershipStatus {
+  ACTIVE
+  INACTIVE
+  SUSPENDED
+  ARCHIVED
+}
+
+enum ParentLinkStatus {
+  PENDING
+  CONFIRMED
+  REJECTED
+}
+
+enum PendingInviteStatus {
+  PENDING
+  ACCEPTED
+  EXPIRED
+}
+
+enum LessonStatus {
+  ACTIVE
+  CANCELLED
+  RESCHEDULED
+}
+
+enum ScheduleSlotStatus {
+  ACTIVE
+  CANCELLED
+  RESCHEDULED
+}
+
+enum SubmissionStatus {
+  NOT_SUBMITTED
+  SUBMITTED
+  UNDER_REVIEW
+  REVISION_REQUESTED
+  ACCEPTED
+  REJECTED
+}
+
+enum CenterPaymentStatus {
+  PENDING
+  PAID
+  PARTIALLY_PAID
+  FAILED
+  REFUNDED
+}
+
+enum TicketStatus {
+  OPEN
+  IN_PROGRESS
+  RESOLVED
+  CLOSED
+}
+
+enum TicketPriority {
+  LOW
+  MEDIUM
+  HIGH
+  URGENT
+}
+
+enum TicketScope {
+  TENANT
+  PLATFORM
+}
+
+enum EnrollmentStatus {
+  ACTIVE
+  WAITLIST
+  COMPLETED
+  DROPPED
+}
+
+enum NotificationType {
+  INVITE
+  NEW_HOMEWORK
+  SCHEDULE_CHANGE
+  SCHEDULE_CANCELLED
+  PAYMENT_DUE
+  PAYMENT_OVERDUE
+  GRADE_POSTED
+  SUBSCRIPTION_EXPIRING
+  STAFF_ADDED
+  GENERAL
+  ATTENDANCE_ABSENT
+  ATTENDANCE_LATE
+  LESSON_CANCELLED
+  LESSON_SUBSTITUTED
+  ANNOUNCEMENT
+}
+
+enum ActivityType {
+  LOGIN
+  VIEW_MATERIAL
+  VIEW_VIDEO
+  COMPLETE_TEST
+  SUBMIT_HOMEWORK
+  VIEW_LESSON
+}
+
+enum LessonType {
+  OFFLINE
+  ONLINE
+}
+
+enum PaymentMethod {
+  CASH
+  ONLINE
+  BANK_TRANSFER
+}
+
+enum ParentLinkInitiator {
+  ADMIN
+  PARENT
+  STUDENT
+}
+
+enum CenterType {
+  OFFLINE
+  ONLINE
+  HYBRID
+}
+
+enum GradingScale {
+  PERCENT_100
+  POINTS_5
+  PASS_FAIL
+}
+
+enum Currency {
+  UZS
+  USD
+  EUR
+  RUB
+}
+
+enum PlatformRole {
+  NONE
+  DEVELOPER
+  SUPERADMIN
+  PLATFORM_ADMIN
+  FULL_ACCESS
+  PLATFORM_SUPPORT
+  SEO_ADMIN
+}
+
+// App locale codes contain a hyphen ("uz-Latn"), which is not a valid Prisma
+// enum identifier, so the values are mapped to their real DB representation.
+enum Language {
+  ru
+  uz_Latn @map("uz-Latn")
+  uz_Cyrl @map("uz-Cyrl")
 }

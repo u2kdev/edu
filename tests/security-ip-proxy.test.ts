@@ -18,8 +18,8 @@ describe("TRUST-3 Item 2: getClientIp proxy security, default unknown, NaN handl
   const origHops = process.env.TRUSTED_PROXY_HOPS;
   const origTrustHeaders = process.env.TRUST_PROXY_HEADERS;
 
-  beforeEach(() => {
-    rateLimits.clear();
+  beforeEach(async () => {
+    await db.rateLimitRecord.deleteMany();
     delete process.env.TRUSTED_PROXY_HOPS;
     delete process.env.TRUST_PROXY_HEADERS;
   });
@@ -37,8 +37,8 @@ describe("TRUST-3 Item 2: getClientIp proxy security, default unknown, NaN handl
     }
   });
 
-  afterEach(() => {
-    rateLimits.clear();
+  afterEach(async () => {
+    await db.rateLimitRecord.deleteMany();
     if (origHops !== undefined) {
       process.env.TRUSTED_PROXY_HOPS = origHops;
     } else {
@@ -116,11 +116,11 @@ describe("TRUST-3 Item 2: getClientIp proxy security, default unknown, NaN handl
     expect(getClientIp(req2)).toBe("unknown");
   });
 
-  it("rate limit keys never contain 'undefined'", () => {
+  it("rate limit keys never contain 'undefined'", async () => {
     const testKeys = ["unknown", "1.2.3.4_login", "unknown_register"];
     for (const key of testKeys) {
       expect(key.includes("undefined")).toBe(false);
-      checkRateLimit(key, 10, 60000);
+      await checkRateLimit(key, 10, 60000);
       expect(rateLimits.has(key)).toBe(true);
       rateLimits.delete(key);
     }

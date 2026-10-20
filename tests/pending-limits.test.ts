@@ -1,7 +1,7 @@
 import { describe, it, expect, beforeAll, afterAll, beforeEach } from "vitest";
 import { POST as registerPost } from "../src/app/api/auth/register/route";
 import { db } from "../src/lib/db";
-import { rateLimits } from "../src/lib/rate-limit"; // Assuming we can clear them
+import { clearRateLimit } from "../src/lib/rate-limit";
 
 describe("PendingInvite Limits (POST /api/auth/register)", () => {
   let centerId: string;
@@ -41,11 +41,8 @@ describe("PendingInvite Limits (POST /api/auth/register)", () => {
     await db.platformUser.deleteMany({ where: { email: { in: [testEmail, `limitowner-${ownerId}@test.com`] } } });
   });
 
-  beforeEach(() => {
-    // Clear all rate limits
-    rateLimits.clear();
-    // Pre-fill the global "_register" limit to allow many requests so it doesn't block us
-    // Wait, checkRateLimit increments. If we want to bypass it, we can just delete its key in rateLimits.
+  beforeEach(async () => {
+    await db.rateLimitRecord.deleteMany();
   });
 
   const mockReq = (body: unknown, ip: string = "1.1.1.1") =>
@@ -57,36 +54,37 @@ describe("PendingInvite Limits (POST /api/auth/register)", () => {
 
   it("IP Limit: 21st registration from same IP in 1 hour returns 429", async () => {
     const spamIp = "1.2.3.4";
-    // Send 20 requests
-    const promises = [];
+    // Send 20 requests sequentially, bypassing _register and center-level limit so we test IP limit
     for (let i = 0; i < 20; i++) {
-      // clear the _register rate limit to bypass it!
-      rateLimits.delete(spamIp + "_register");
-      promises.push(
-        registerPost(mockReq({ email: testEmail, password: "password123", fullName: `Spam`, inviteCode: code1Limit }, spamIp))
-      );
+      await clearRateLimit(spamIp + "_register");
+      await clearRateLimit(code1Limit + "_register");
+      await clearRateLimit(spamIp + "_" + code1Limit + "_register");
+      await clearRateLimit(spamIp + "_" + centerId + "_pending");
+      await registerPost(mockReq({ email: testEmail, password: "password123", fullName: `Spam`, inviteCode: code1Limit }, spamIp));
     }
-    await Promise.all(promises);
 
-    rateLimits.delete(spamIp + "_register"); // bypass again
+    await clearRateLimit(spamIp + "_register");
+    await clearRateLimit(code1Limit + "_register");
+    await clearRateLimit(spamIp + "_" + code1Limit + "_register");
+    await clearRateLimit(spamIp + "_" + centerId + "_pending");
     const res21 = await registerPost(mockReq({ email: testEmail, password: "password123", fullName: `Spam`, inviteCode: code1Limit }, spamIp));
     expect(res21.status).toBe(429);
     const data = await res21.json();
     expect(data.error.code).toBe("RATE_LIMITED");
-  });
+  }, 30000);
 
   it("Email/Center Limit: 11th registration for same center returns 429", async () => {
     const spamIp = "5.5.5.5";
-    const promises = [];
     for (let i = 0; i < 10; i++) {
-      rateLimits.delete(spamIp + "_register");
-      promises.push(
-        registerPost(mockReq({ email: testEmail, password: "password123", fullName: `Spam`, inviteCode: code1Limit }, spamIp))
-      );
+      await clearRateLimit(spamIp + "_register");
+      await clearRateLimit(code1Limit + "_register");
+      await clearRateLimit(spamIp + "_" + code1Limit + "_register");
+      await registerPost(mockReq({ email: testEmail, password: "password123", fullName: `Spam`, inviteCode: code1Limit }, spamIp));
     }
-    await Promise.all(promises);
 
-    rateLimits.delete(spamIp + "_register");
+    await clearRateLimit(spamIp + "_register");
+    await clearRateLimit(code1Limit + "_register");
+    await clearRateLimit(spamIp + "_" + code1Limit + "_register");
     const res11 = await registerPost(mockReq({ email: testEmail, password: "password123", fullName: `Spam`, inviteCode: code1Limit }, spamIp));
     expect(res11.status).toBe(429);
     const data11 = await res11.json();

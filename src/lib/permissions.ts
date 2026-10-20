@@ -32,6 +32,21 @@ export type CenterRole =
   | "STUDENT"
   | "PARENT";
 
+export const CENTER_ROLES: CenterRole[] = [
+  "DIRECTOR",
+  "CENTER_ADMIN",
+  "TEACHER",
+  "TEACHER_ASSISTANT",
+  "CENTER_SUPPORT",
+  "STUDENT",
+  "PARENT",
+];
+
+/** Runtime guard for center membership roles (matches Prisma `MembershipRole`). */
+export function isCenterRole(value: unknown): value is CenterRole {
+  return typeof value === "string" && (CENTER_ROLES as string[]).includes(value);
+}
+
 // Granular permissions for fine-grained access control
 export type Permission =
   // Students

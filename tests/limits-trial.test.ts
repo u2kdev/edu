@@ -47,7 +47,7 @@ describe("Subscription Limits (Trial)", () => {
   });
 
   it("paused/blocked/cancelled/overdue center has no active subscription limits bypass", async () => {
-    for (const status of ["PAUSED", "BLOCKED", "CANCELLED", "OVERDUE"]) {
+    for (const status of ["PAUSED", "BLOCKED", "CANCELLED", "OVERDUE"] as const) {
       const center = await db.learningCenter.create({
         data: { name: `Status Center ${status}`, slug: `sc-${status.toLowerCase()}-${Date.now()}`, timeZone: "Asia/Tashkent", status, ownerId }
       });
@@ -55,7 +55,7 @@ describe("Subscription Limits (Trial)", () => {
         data: {
           centerId: center.id,
           planId,
-          status,
+          status: "PAST_DUE",
           currentPeriodStartsAt: new Date(),
           currentPeriodEndsAt: new Date(Date.now() + 86400000)
         }

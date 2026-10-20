@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 // Reason: Exception: Invite validation requires global search before center context is known.
 // eslint-disable-next-line no-restricted-imports
 import { db } from "@/lib/db";
-import { hashPassword, signJWT } from "@/lib/auth";
+import { hashPassword, comparePassword, createSessionToken } from "@/lib/auth";
 import { getTenantDb } from "@/lib/db-tenant";
 import { logAuditEvent } from "@/lib/tenant";
 import { checkSubscriptionLimit } from "@/lib/limits";
@@ -13,7 +13,7 @@ import { apiError, handleApiError } from "@/lib/api-response";
 export async function POST(req: Request) {
   try {
     const ip = getClientIp(req);
-    if (!checkRateLimit(ip)) {
+    if (!(await checkRateLimit(ip))) {
       return apiError("Too many attempts", "RATE_LIMITED", 429);
     }
 
@@ -63,47 +63,63 @@ export async function POST(req: Request) {
     let user;
     let isNewUser = false;
 
-    if (email) {
-      const cleanEmail = email.toLowerCase().trim();
-      user = await db.platformUser.findUnique({
-        where: { email: cleanEmail },
-      });
-
-      if (!user) {
-        // New user registration via invite
-        if (!fullName || !password) {
-          return NextResponse.json(
-            { error: "Full name and password are required for new users" },
-            { status: 400 }
-          );
-        }
-
-        if (password.length < 6) {
-          return NextResponse.json(
-            { error: "Password must be at least 6 characters" },
-            { status: 400 }
-          );
-        }
-
-        const passwordHash = await hashPassword(password);
-
-        user = await db.platformUser.create({
-          data: {
-            email: cleanEmail,
-            fullName,
-            phone: phone || null,
-            passwordHash,
-            preferredLanguage: invite.center.defaultLanguage || "ru",
-          },
-        });
-
-        isNewUser = true;
-      }
-    } else {
+    if (!email) {
       return NextResponse.json(
         { error: "Email is required" },
         { status: 400 }
       );
+    }
+
+    const cleanEmail = email.toLowerCase().trim();
+    const existingUser = await db.platformUser.findUnique({
+      where: { email: cleanEmail },
+    });
+
+    if (existingUser) {
+      // SECURITY: never start a session for an existing account without verifying
+      // its password. Otherwise anyone who knows an email + invite code could
+      // hijack that account — the invite code alone must not grant access.
+      if (!password || !(await comparePassword(password, existingUser.passwordHash))) {
+        return NextResponse.json(
+          { error: "Аккаунт с таким email уже существует. Войдите в аккаунт и примите приглашение из личного кабинета." },
+          { status: 401 }
+        );
+      }
+
+      if (!existingUser.isActive) {
+        return NextResponse.json({ error: "Аккаунт заблокирован" }, { status: 403 });
+      }
+
+      user = existingUser;
+    } else {
+      // New user registration via invite
+      if (!fullName || !password) {
+        return NextResponse.json(
+          { error: "Full name and password are required for new users" },
+          { status: 400 }
+        );
+      }
+
+      if (password.length < 6) {
+        return NextResponse.json(
+          { error: "Password must be at least 6 characters" },
+          { status: 400 }
+        );
+      }
+
+      const passwordHash = await hashPassword(password);
+
+      user = await db.platformUser.create({
+        data: {
+          email: cleanEmail,
+          fullName,
+          phone: phone || null,
+          passwordHash,
+          preferredLanguage: invite.center.defaultLanguage || "ru",
+        },
+      });
+
+      isNewUser = true;
     }
 
     const tenantDb = getTenantDb(invite.centerId);
@@ -203,14 +219,21 @@ export async function POST(req: Request) {
       },
     });
 
-    // Sign JWT for the new/existing user and set cookie
-    const token = signJWT({
-      userId: user.id,
-      email: user.email,
-      platformRole: user.platformRole,
-      activeCenterId: invite.centerId,
-      activeCenterRole: invite.targetRole,
-    });
+    // Start a persisted, revocable session (with jti) for the new/existing user
+    const token = await createSessionToken(
+      {
+        userId: user.id,
+        email: user.email,
+        platformRole: user.platformRole,
+        activeCenterId: invite.centerId,
+        activeCenterRole: invite.targetRole,
+      },
+      {
+        maxAgeSeconds: 7 * 24 * 60 * 60,
+        ipAddress: ip,
+        userAgent: req.headers.get("user-agent") || undefined,
+      }
+    );
 
     const response = NextResponse.json({
       success: true,

@@ -1,7 +1,8 @@
 import { NextResponse } from "next/server";
 // eslint-disable-next-line no-restricted-imports
 import { db } from "@/lib/db";
-import { getAuthSession } from "@/lib/auth";
+import { getAuthSession, hashPassword } from "@/lib/auth";
+import { renderEmailTemplate, sendEmailWithOutbox } from "@/lib/email";
 import { checkRateLimit, getClientIp } from '@/lib/rate-limit';
 import { hasPermission } from "@/lib/permissions";
 import { z } from "zod";
@@ -14,7 +15,7 @@ const schema = z.object({
 export async function POST(req: Request, { params }: { params: { id: string } }) {
   try {
     const ip = getClientIp(req);
-    if (!checkRateLimit(ip, 5, 60000)) return NextResponse.json({error: 'Too many requests'}, {status: 429});
+    if (!(await checkRateLimit(ip, 5, 60000))) return NextResponse.json({error: 'Too many requests'}, {status: 429});
     const session = await getAuthSession();
     if (!session || !hasPermission("platform.centers.write", session.user.platformRole)) {
       return NextResponse.json({ error: "Forbidden" }, { status: 403 });
@@ -35,17 +36,38 @@ export async function POST(req: Request, { params }: { params: { id: string } })
       return NextResponse.json({ error: "Center not found" }, { status: 404 });
     }
 
-    await db.$transaction(async (tx) => {
+    const newDirectorInvite = await db.$transaction(async (tx) => {
+      let invite: { to: string; fullName: string; resetUrl: string } | null = null;
+
       let user = await tx.platformUser.findUnique({ where: { email: targetEmail } });
       if (!user) {
+        // Create the director with a random, properly hashed password, then email a reset link.
+        const randomPassword = crypto.randomBytes(32).toString("hex");
         user = await tx.platformUser.create({
           data: {
             email: targetEmail,
             fullName: "New Director",
-            passwordHash: crypto.randomBytes(16).toString("hex"),
+            passwordHash: await hashPassword(randomPassword),
             emailVerified: new Date()
           }
         });
+
+        const resetToken = crypto.randomBytes(32).toString("hex");
+        const hashedToken = crypto.createHash("sha256").update(resetToken).digest("hex");
+        await tx.passwordResetToken.create({
+          data: {
+            userId: user.id,
+            tokenHash: hashedToken,
+            expiresAt: new Date(Date.now() + 72 * 60 * 60 * 1000),
+          },
+        });
+
+        const appUrl = process.env.APP_URL || process.env.NEXT_PUBLIC_URL || "http://localhost:3000";
+        invite = {
+          to: user.email,
+          fullName: user.fullName,
+          resetUrl: `${appUrl}/reset-password?token=${resetToken}`,
+        };
       }
 
       const oldOwnerId = center.ownerId;
@@ -92,7 +114,23 @@ export async function POST(req: Request, { params }: { params: { id: string } })
           detailsJson: JSON.stringify({ oldOwnerId, newOwnerId: user.id })
         }
       });
+
+      return invite;
     });
+
+    if (newDirectorInvite) {
+      const email = renderEmailTemplate("PASSWORD_RESET", {
+        lang: "ru",
+        fullName: newDirectorInvite.fullName,
+        url: newDirectorInvite.resetUrl,
+      });
+      await sendEmailWithOutbox(
+        newDirectorInvite.to,
+        email.subject,
+        email.text,
+        email.html
+      ).catch(() => {});
+    }
 
     return NextResponse.json({ success: true });
   } catch (err: unknown) {

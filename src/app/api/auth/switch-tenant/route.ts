@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
-import { getAuthSession, signJWT } from "@/lib/auth";
+import { getAuthSession, createSessionToken } from "@/lib/auth";
+import { getClientIp } from "@/lib/ip";
 import { db } from "@/lib/db";
 
 export async function POST(req: Request) {
@@ -28,13 +29,20 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: "Forbidden: You are not a member of this center" }, { status: 403 });
     }
 
-    const token = signJWT({
-      userId: session.user.id,
-      email: session.user.email,
-      platformRole: session.user.platformRole,
-      activeCenterId: centerId,
-      activeCenterRole: targetMembership?.role,
-    });
+    const token = await createSessionToken(
+      {
+        userId: session.user.id,
+        email: session.user.email,
+        platformRole: session.user.platformRole,
+        activeCenterId: centerId,
+        activeCenterRole: targetMembership?.role,
+      },
+      {
+        maxAgeSeconds: 7 * 24 * 60 * 60,
+        ipAddress: getClientIp(req),
+        userAgent: req.headers.get("user-agent") || undefined,
+      }
+    );
 
     const response = NextResponse.json({
       success: true,
