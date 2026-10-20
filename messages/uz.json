@@ -25,10 +25,10 @@
     }
   },
   "hero": {
-    "badge": "14 kun bepul sinov muddati",
+    "badge": "14 kun bepul sinov",
     "title": "O'quv markazingiz uchun",
-    "titleHighlight": "zamonaviy LMS tizimi ijarasi",
-    "subtitle": "Qimmat dasturchilar jamoasisiz to'liq avtomatlashtirish: talabalar, dars jadvallari, davomat, baholar, ota-onalar ilovasi va to'lovlar monitoringi bir joyda. 10 daqiqada ishga tushiring.",
+    "titleHighlight": "zamonaviy LMS",
+    "subtitle": "Talabalar, jadval, davomat, baholar va to'lovlar — bitta tizimda. 10 daqiqada ishga tushiring.",
     "ctaStart": "Bepul boshlash",
     "ctaDemo": "Demo ko'rish",
     "trust": {
@@ -48,70 +48,46 @@
     }
   },
   "whyUs": {
-    "badge": "Nega aynan e-darschi?",
-    "title": "Markazingizni yangi bosqichga olib chiqadigan",
-    "titleHighlight": "10 ta kuchli afzallik",
-    "subtitle": "Biz faqat dastur bermaymiz — biz ta'lim biznesingiz samaradorligini va o'quvchilar sonini oshirishga yordam beramiz.",
+    "badge": "Imkoniyatlar",
+    "title": "Bitta tizim —",
+    "titleHighlight": "butun o'quv markazi",
+    "subtitle": "Har bir rol uchun o'z kabineti — ortiqcha qog'ozbozliksiz.",
     "items": [
       {
         "id": "mobile-apps",
         "title": "O'quvchilar va ota-onalar ilovasi",
-        "description": "Dars jadvali, uy vazifalari, baholar va davomat bir teginishda smartfonda ko'rinadi.",
+        "description": "Jadval, baholar, davomat va to'lovlar telefonda.",
         "icon": "Smartphone"
       },
       {
+        "id": "schedule-conflicts",
+        "title": "Aqlli dars jadvali",
+        "description": "Xona va o'qituvchilar to'qnashuvisiz.",
+        "icon": "Calendar"
+      },
+      {
         "id": "teacher-cabinet",
-        "title": "O'qituvchilar uchun qulay kabinet",
-        "description": "Bir necha soniyada davomat belgilash, uy vazifalarini tekshirish va baholash jurnali.",
+        "title": "Baholar va uy vazifalari",
+        "description": "Jurnal, topshiriqlar va onlayn testlar bir joyda.",
         "icon": "GraduationCap"
       },
       {
-        "id": "attendance-realtime",
-        "title": "Real vaqtda davomat va monitoring",
-        "description": "Davomati 80% dan past o'quvchilar avtomatik xavf zonasiga tushadi va tahlil qilinadi.",
-        "icon": "UserCheck"
-      },
-      {
-        "id": "parent-notifications",
-        "title": "Ota-onalarga tezkor bildirishnomalar",
-        "description": "Telegram-bot, SMS va Push orqali dars qoldirilishi yoki yangi baho haqida xabarlar.",
-        "icon": "Bell"
-      },
-      {
         "id": "payments-billing",
-        "title": "Onlayn to'lov va to'lovlar nazorati",
-        "description": "Payme, Click, Uzum orqali avtomatik to'lov qabul qilish va qarzdorlik hisobi.",
+        "title": "To'lovlar nazorati",
+        "description": "Payme, Click, Uzum va qarzdorlik hisobi.",
         "icon": "CreditCard"
       },
       {
         "id": "director-analytics",
-        "title": "Direktor uchun chuqur tahlil va hisobotlar",
-        "description": "Tushum, guruhlar to'laligi, o'qituvchilar samaradorligi va filiallarni boshqarish paneli.",
+        "title": "Hisobotlar va tahlil",
+        "description": "Tushum, davomat va guruhlar to'laligi.",
         "icon": "BarChart3"
       },
       {
-        "id": "schedule-conflicts",
-        "title": "Aql bovar qilmas dars jadvali",
-        "description": "Xonalar va o'qituvchilar to'qnashuvini (conflict detection) avtomatik oldini olish.",
-        "icon": "Calendar"
-      },
-      {
         "id": "data-security",
-        "title": "Ma'lumotlar xavfsizligi va zaxiralash",
-        "description": "Har bir markaz uchun to'liq izolyatsiya, kunlik avtomatik zaxira nusxalari.",
+        "title": "Xavfsizlik",
+        "description": "Har bir markaz ma'lumotlari to'liq izolyatsiyada.",
         "icon": "ShieldCheck"
-      },
-      {
-        "id": "local-support",
-        "title": "O'zbek va rus tillarida jonli qo'llab-quvvatlash",
-        "description": "Toshkentdagi texnik jamoamiz xodimlaringizni o'qitadi va 24/7 yordam beradi.",
-        "icon": "Headphones"
-      },
-      {
-        "id": "no-code-launch",
-        "title": "Dasturlashsiz 10 daqiqada ishga tushirish",
-        "description": "Server sozlash yoki kod yozish shart emas — kiring, filialingizni ulang va ishlang.",
-        "icon": "Zap"
       }
     ]
   },

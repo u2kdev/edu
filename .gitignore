@@ -52,3 +52,6 @@ transmitter/
 
 # local agent tooling (skills, reach tooling, cookies) — never publish
 .agents/
+skills-lock.json
+.vercel
+.env*

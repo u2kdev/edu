@@ -34,13 +34,13 @@ describe("Landing Page Professional-Grade Redesign (Apple & Emil Kowalski Design
     expect(footerContent).not.toContain("e-darschi");
   });
 
-  it("hero features an Apple-caliber realistic application workspace preview with live metric widgets and photo evidence", () => {
+  it("hero keeps a single calm product window: one photo, no floating widgets", () => {
     const heroContent = fs.readFileSync(heroPath, "utf-8");
     // High-resolution collaborative education image
     expect(heroContent).toMatch(/images\.unsplash\.com\/photo-/);
-    // Micro-interactions with tactile stats
-    expect(heroContent).toContain("98.4%");
-    // Trust architecture badges
+    // One image only — floating metric cards were removed for clarity.
+    expect((heroContent.match(/<img/g) || []).length).toBe(1);
+    // Trust architecture stays as a single quiet line.
     expect(heroContent).toContain("trust");
   });
 

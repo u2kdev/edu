@@ -26,9 +26,9 @@ describe("e-darschi Landing Page Specification & Integrity Tests", () => {
       expect(ruMessages).toHaveProperty(section);
     }
 
-    // Check whyUs items count (must have 10 features)
-    expect(uzMessages.whyUs.items.length).toBe(10);
-    expect(ruMessages.whyUs.items.length).toBe(10);
+    // Six focused features instead of a wall of cards
+    expect(uzMessages.whyUs.items.length).toBe(6);
+    expect(ruMessages.whyUs.items.length).toBe(6);
 
     // Check FAQ count (must have 6 items)
     expect(uzMessages.faq.items.length).toBe(6);

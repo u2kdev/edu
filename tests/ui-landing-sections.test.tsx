@@ -90,7 +90,7 @@ afterEach(() => {
 });
 
 describe("Hero", () => {
-  it("renders the ru hero copy, trust architecture and fires the lead CTA", () => {
+  it("renders the ru hero copy, one-line trust strip and fires the lead CTA", () => {
     const onOpenLeadModal = vi.fn();
     render(<Hero locale="ru" onOpenLeadModal={onOpenLeadModal} />);
 
@@ -100,13 +100,12 @@ describe("Hero", () => {
     expect(h1.textContent).toContain(ru.hero.titleHighlight);
     expect(screen.getByText(ru.hero.subtitle)).toBeTruthy();
 
-    expect(screen.getByText(ru.hero.trust.badge)).toBeTruthy();
+    // Security story collapsed to a single quiet line (no card row).
     expect(screen.getByText(ru.hero.trust.isolation.title)).toBeTruthy();
-    expect(screen.getByText(ru.hero.trust.isolation.description)).toBeTruthy();
     expect(screen.getByText(ru.hero.trust.roles.title)).toBeTruthy();
-    expect(screen.getByText(ru.hero.trust.roles.description)).toBeTruthy();
     expect(screen.getByText(ru.hero.trust.audit.title)).toBeTruthy();
-    expect(screen.getByText(ru.hero.trust.audit.description)).toBeTruthy();
+    expect(screen.queryByText(ru.hero.trust.badge)).toBeNull();
+    expect(screen.queryByText(ru.hero.trust.isolation.description)).toBeNull();
 
     fireEvent.click(screen.getByRole("button", { name: ru.hero.ctaStart }));
     expect(onOpenLeadModal).toHaveBeenCalledTimes(1);
@@ -121,14 +120,14 @@ describe("Hero", () => {
     expect(screen.getByRole("button", { name: uz.hero.ctaStart })).toBeTruthy();
   });
 
-  it("renders the product preview photos and floating metric cards", () => {
+  it("renders a single calm product window without floating metric cards", () => {
     const { container } = render(<Hero locale="ru" onOpenLeadModal={vi.fn()} />);
 
-    // one workspace photo + three avatar photos
+    // Exactly one photograph: the workspace preview. No avatar chips, no overlays.
     const images = container.querySelectorAll("img");
-    expect(images.length).toBeGreaterThanOrEqual(4);
-    expect(screen.getByText(/98\.4%/)).toBeTruthy();
-    expect(screen.getByText("Payme & Click & Uzum")).toBeTruthy();
+    expect(images.length).toBe(1);
+    expect(screen.queryByText(/98\.4%/)).toBeNull();
+    expect(screen.queryByText("Payme & Click & Uzum")).toBeNull();
   });
 });
 

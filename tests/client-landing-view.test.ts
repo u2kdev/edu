@@ -14,13 +14,12 @@ describe("Landing Page Modern Light UI with Strict Font, Photos & Animations", (
     expect(content).toMatch(/particles-bg|mesh-gradient-light/);
   });
 
-  it("Hero section includes photo elements, UI preview cards, and mesh gradients", () => {
+  it("Hero section includes a photo element, a calm preview window and gradients", () => {
     const heroContent = fs.readFileSync(heroPath, "utf-8");
     // Strict typography
     expect(heroContent).toContain("font-strict");
-    // Primary educational photo element and avatar photos
+    // Primary educational photo element
     expect(heroContent).toContain("photo-1522202176988");
-    expect(heroContent).toContain("photo-1534528741775");
     // Mesh gradient and interactive preview
     expect(heroContent).toMatch(/gradient|mesh/i);
     expect(heroContent).toContain("motion.");
@@ -33,10 +32,11 @@ describe("Landing Page Modern Light UI with Strict Font, Photos & Animations", (
     expect(appsContent).toContain("motion.");
   });
 
-  it("Features section uses theme-aware surfaces, strict font, and motion transitions", () => {
+  it("Features section stays quiet: strict font, motion, no card surfaces", () => {
     const featuresContent = fs.readFileSync(featuresPath, "utf-8");
     expect(featuresContent).toContain("font-strict");
     expect(featuresContent).toContain("motion.");
-    expect(featuresContent).toContain("bg-[color:var(--surface)]");
+    // Minimalism guard: the feature block is plain text, not a wall of cards.
+    expect(featuresContent).not.toContain("bg-[color:var(--surface)]");
   });
 });
