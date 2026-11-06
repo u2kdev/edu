@@ -1,17 +1,44 @@
 import React, { useEffect } from "react";
-import { Stack } from "expo-router";
+import { Stack, useRouter } from "expo-router";
 import { StatusBar } from "expo-status-bar";
 import { SafeAreaProvider } from "react-native-safe-area-context";
 import { useAuthStore } from "../src/store/auth-store";
+import { configureNotificationHandler, resolveNotificationRoute } from "../src/services/notifications";
 import "../src/i18n";
 import "../global.css";
 
 export default function RootLayout() {
+  const router = useRouter();
   const restoreSession = useAuthStore((state) => state.restoreSession);
+  const activeCenterRole = useAuthStore((state) => state.activeCenterRole);
 
   useEffect(() => {
     restoreSession();
-  }, [restoreSession]);
+    configureNotificationHandler();
+
+    // Listen to user tapping a push notification
+    let subscription: { remove: () => void } | null = null;
+    (async () => {
+      try {
+        const Notifications = await import("expo-notifications");
+        subscription = Notifications.addNotificationResponseReceivedListener((response) => {
+          const data = response?.notification?.request?.content?.data;
+          const targetRoute = resolveNotificationRoute(data, activeCenterRole || undefined);
+          if (targetRoute && targetRoute !== "/") {
+            router.push(targetRoute as any);
+          }
+        });
+      } catch {
+        // Ignored in non-native / test environments
+      }
+    })();
+
+    return () => {
+      if (subscription && typeof subscription.remove === "function") {
+        subscription.remove();
+      }
+    };
+  }, [restoreSession, activeCenterRole, router]);
 
   return (
     <SafeAreaProvider>

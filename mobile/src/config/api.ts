@@ -1,4 +1,9 @@
-import { Platform } from "react-native";
+let platformOS = "android";
+try {
+  // eslint-disable-next-line @typescript-eslint/no-require-imports
+  const rn = require("react-native");
+  if (rn?.Platform?.OS) platformOS = rn.Platform.OS;
+} catch {}
 
 /**
  * API configuration for e-darschi mobile client.
@@ -9,7 +14,7 @@ import { Platform } from "react-native";
  */
 export const API_BASE_URL =
   process.env.EXPO_PUBLIC_API_URL ||
-  (Platform.OS === "android" ? "http://10.0.2.2:3000" : "http://localhost:3000");
+  (platformOS === "android" ? "http://10.0.2.2:3000" : "http://localhost:3000");
 
 export const API_ENDPOINTS = {
   LOGIN: "/api/auth/mobile/login",
