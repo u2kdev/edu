@@ -26,7 +26,7 @@ export async function GET(req: Request) {
       );
     }
 
-    // 1. Fetch teacher's assigned groups with students
+    // 1. Fetch teacher's assigned groups with students and course lessons
     const groups = await tenantDb.group.findMany({
       where: {
         OR: [
@@ -35,7 +35,24 @@ export async function GET(req: Request) {
         ],
       },
       include: {
-        course: { select: { id: true, title: true } },
+        course: {
+          select: {
+            id: true,
+            title: true,
+            modules: {
+              orderBy: { orderIndex: "asc" },
+              include: {
+                lessons: {
+                  where: { status: "ACTIVE" },
+                  include: {
+                    scheduleSlot: { select: { groupId: true } },
+                  },
+                  orderBy: { orderIndex: "desc" },
+                },
+              },
+            },
+          },
+        },
         enrollments: {
           where: { status: "ACTIVE" },
           include: {
@@ -70,7 +87,16 @@ export async function GET(req: Request) {
       ? await tenantDb.homeworkSubmission.findMany({
           where: {
             status: "SUBMITTED",
-            groupId: { in: groupIds },
+            OR: [
+              { groupId: { in: groupIds } },
+              {
+                student: {
+                  enrollments: {
+                    some: { groupId: { in: groupIds }, status: "ACTIVE" },
+                  },
+                },
+              },
+            ],
           },
           include: {
             homework: { select: { id: true, title: true } },
@@ -81,7 +107,7 @@ export async function GET(req: Request) {
             },
           },
           orderBy: { submittedAt: "asc" },
-          take: 10,
+          take: 15,
         })
       : [];
 
@@ -93,17 +119,33 @@ export async function GET(req: Request) {
         email: tenantCtx.session.user.email,
         centerName: tenantCtx.center.name,
       },
-      groups: groups.map((g) => ({
-        id: g.id,
-        name: g.name,
-        courseTitle: g.course?.title || null,
-        activeStudentsCount: g.enrollments.length,
-        students: g.enrollments.map((e) => ({
-          membershipId: e.student.id,
-          fullName: e.student.user.fullName,
-          avatarUrl: e.student.user.avatarUrl,
-        })),
-      })),
+      groups: groups.map((g) => {
+        // Find lessons belonging to this group's course and matching this group's scheduleSlot (or unlinked)
+        const groupLessons: Array<{ id: string; title: string }> = [];
+        for (const mod of g.course?.modules || []) {
+          for (const les of mod.lessons) {
+            if (!les.scheduleSlot?.groupId || les.scheduleSlot.groupId === g.id) {
+              groupLessons.push({ id: les.id, title: les.title });
+            }
+          }
+        }
+        const latestLesson = groupLessons[0] || null;
+
+        return {
+          id: g.id,
+          name: g.name,
+          courseTitle: g.course?.title || null,
+          latestLessonId: latestLesson?.id || null,
+          latestLessonTitle: latestLesson?.title || null,
+          lessons: groupLessons,
+          activeStudentsCount: g.enrollments.length,
+          students: g.enrollments.map((e) => ({
+            membershipId: e.student.id,
+            fullName: e.student.user.fullName,
+            avatarUrl: e.student.user.avatarUrl,
+          })),
+        };
+      }),
       schedule: scheduleSlots.map((slot) => ({
         id: slot.id,
         groupId: slot.groupId,
@@ -116,8 +158,11 @@ export async function GET(req: Request) {
       })),
       pendingReviews: pendingReviews.map((sub) => ({
         id: sub.id,
+        homeworkId: sub.homeworkId,
         homeworkTitle: sub.homework.title,
+        studentMembershipId: sub.studentMembershipId,
         studentName: sub.student.user.fullName,
+        submissionText: sub.submissionText || null,
         submittedAt: sub.submittedAt,
         status: sub.status,
       })),

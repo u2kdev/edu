@@ -1,7 +1,16 @@
 import { create } from "zustand";
 import { AuthStorage } from "../services/auth-storage";
-import { apiClient } from "../services/api-client";
+import { apiClient, setOnUnauthorizedCallback } from "../services/api-client";
 import { API_ENDPOINTS } from "../config/api";
+
+function detectPlatform(): "ios" | "android" {
+  try {
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    const rn = require("react-native");
+    if (rn?.Platform?.OS === "ios") return "ios";
+  } catch {}
+  return "android";
+}
 
 export interface UserProfile {
   id: string;
@@ -66,23 +75,26 @@ export const useAuthStore = create<AuthState>((set, get) => ({
           email,
           password,
           deviceName,
-          platform: "ios", // default or runtime platform
+          platform: detectPlatform(),
         }),
       });
 
       const { token, user, memberships, activeCenterId, activeCenterRole } = response;
+      const resolvedRole =
+        activeCenterRole || (memberships[0]?.role ?? user.platformRole);
 
       await AuthStorage.setItem("auth_token", token);
       await AuthStorage.setItem("auth_user", JSON.stringify(user));
+      await AuthStorage.setItem("auth_memberships", JSON.stringify(memberships || []));
       if (activeCenterId) await AuthStorage.setItem("auth_active_center", activeCenterId);
-      if (activeCenterRole) await AuthStorage.setItem("auth_active_role", activeCenterRole);
+      if (resolvedRole) await AuthStorage.setItem("auth_active_role", resolvedRole);
 
       set({
         token,
         user,
-        memberships,
+        memberships: memberships || [],
         activeCenterId,
-        activeRole: activeCenterRole || (memberships[0]?.role ?? user.platformRole),
+        activeRole: resolvedRole,
         isAuthenticated: true,
         isLoading: false,
         error: null,
@@ -119,16 +131,21 @@ export const useAuthStore = create<AuthState>((set, get) => ({
     try {
       const token = await AuthStorage.getItem("auth_token");
       const userStr = await AuthStorage.getItem("auth_user");
+      const membershipsStr = await AuthStorage.getItem("auth_memberships");
       const centerId = await AuthStorage.getItem("auth_active_center");
       const role = await AuthStorage.getItem("auth_active_role");
 
       if (token && userStr) {
         const user = JSON.parse(userStr) as UserProfile;
+        const memberships = membershipsStr
+          ? (JSON.parse(membershipsStr) as CenterMembership[])
+          : [];
         set({
           token,
           user,
+          memberships,
           activeCenterId: centerId,
-          activeRole: role || user.platformRole,
+          activeRole: role || memberships[0]?.role || user.platformRole,
           isAuthenticated: true,
           isLoading: false,
         });
@@ -157,3 +174,17 @@ export const useAuthStore = create<AuthState>((set, get) => ({
     }
   },
 }));
+
+// Automatically clear local auth state on 401 responses
+setOnUnauthorizedCallback(() => {
+  AuthStorage.clearAll().catch(() => {});
+  useAuthStore.setState({
+    token: null,
+    user: null,
+    memberships: [],
+    activeCenterId: null,
+    activeRole: null,
+    isAuthenticated: false,
+    isLoading: false,
+  });
+});

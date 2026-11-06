@@ -1,6 +1,7 @@
 import { describe, it, expect, beforeAll, afterAll } from "vitest";
 import { GET as getTeacherDashboard } from "../src/app/api/mobile/teacher/dashboard/route";
 import { GET as getDirectorDashboard } from "../src/app/api/mobile/director/dashboard/route";
+import { GET as getPlatformDashboard } from "../src/app/api/mobile/platform/dashboard/route";
 import { POST as bulkAttendance } from "../src/app/api/attendance/bulk/route";
 import { hashPassword, signJWT, hashJti } from "../src/lib/auth";
 import { db } from "../src/lib/db";
@@ -275,6 +276,7 @@ describe("Mobile Teacher & Director Workspaces", () => {
     expect(data.teacher.fullName).toBe("Teacher Jamshid");
     expect(data.groups.length).toBe(1);
     expect(data.groups[0].name).toBe("React Native Batch 1");
+    expect(data.groups[0].latestLessonId).toBe(lessonId);
     expect(data.groups[0].activeStudentsCount).toBe(1);
     expect(data.schedule.length).toBe(1);
     expect(data.schedule[0].roomName).toBe("Lab 202");
@@ -331,6 +333,12 @@ describe("Mobile Teacher & Director Workspaces", () => {
   it("GET /api/mobile/director/dashboard: rejects teacher access (403)", async () => {
     const req = mockReq("/api/mobile/director/dashboard", "GET", teacherToken);
     const res = await getDirectorDashboard(req);
+    expect(res.status).toBe(403);
+  });
+
+  it("GET /api/mobile/platform/dashboard: rejects non-platform user (403)", async () => {
+    const req = mockReq("/api/mobile/platform/dashboard", "GET", directorToken);
+    const res = await getPlatformDashboard(req);
     expect(res.status).toBe(403);
   });
 });

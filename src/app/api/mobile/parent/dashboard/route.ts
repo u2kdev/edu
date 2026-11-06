@@ -113,7 +113,10 @@ export async function GET(req: Request) {
     // Check today's status
     const todayStr = new Date().toISOString().slice(0, 10);
     const todayAttendanceRecord = attendances.find((a) => {
-      const recDate = a.markedAt instanceof Date ? a.markedAt.toISOString().slice(0, 10) : String(a.markedAt).slice(0, 10);
+      const recDate =
+        a.markedAt instanceof Date
+          ? a.markedAt.toISOString().slice(0, 10)
+          : String(a.markedAt).slice(0, 10);
       return recDate === todayStr;
     });
 
@@ -132,7 +135,8 @@ export async function GET(req: Request) {
     });
 
     const sumScores = grades.reduce((acc, g) => acc + g.value, 0);
-    const averageScore = grades.length > 0 ? Math.round((sumScores / grades.length) * 10) / 10 : null;
+    const averageScore =
+      grades.length > 0 ? Math.round((sumScores / grades.length) * 10) / 10 : null;
 
     // 5. Child's upcoming schedule
     const scheduleSlots = targetGroupIds.length > 0
@@ -153,6 +157,13 @@ export async function GET(req: Request) {
           take: 4,
         })
       : [];
+
+    // 6. Child's recent payments
+    const payments = await tenantDb.centerPayment.findMany({
+      where: { studentMembershipId: targetStudentId, deletedAt: null },
+      orderBy: { createdAt: "desc" },
+      take: 5,
+    });
 
     return NextResponse.json({
       success: true,
@@ -181,6 +192,15 @@ export async function GET(req: Request) {
           dayOfWeek: slot.dayOfWeek,
           startTime: slot.startTime,
           endTime: slot.endTime,
+          roomName: slot.roomName || "Аудитория",
+        })),
+        payments: payments.map((p) => ({
+          id: p.id,
+          amount: p.amount,
+          currency: p.currency,
+          status: p.status,
+          paidAt: p.paidAt,
+          createdAt: p.createdAt,
         })),
       },
     });

@@ -41,10 +41,24 @@ export async function apiClient<T>(
 
   const url = endpoint.startsWith("http") ? endpoint : `${API_BASE_URL}${endpoint}`;
 
-  const response = await fetch(url, {
-    ...options,
-    headers,
-  });
+  let response: Response;
+  try {
+    response = await fetch(url, {
+      ...options,
+      headers,
+    });
+  } catch (networkErr) {
+    // Fallback to LAN IP if localhost tunnel is unavailable (e.g. unplugged USB, running on Wi-Fi)
+    if (!endpoint.startsWith("http") && API_BASE_URL.includes("localhost")) {
+      const lanUrl = `http://192.168.100.12:3000${endpoint}`;
+      response = await fetch(lanUrl, {
+        ...options,
+        headers,
+      });
+    } else {
+      throw networkErr;
+    }
+  }
 
   if (response.status === 401) {
     if (onUnauthorizedCallback) {

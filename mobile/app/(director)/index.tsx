@@ -39,7 +39,7 @@ interface DirectorDashboardData {
 }
 
 export default function DirectorDashboard() {
-  const { t } = useTranslation();
+  const { t, i18n } = useTranslation();
   const router = useRouter();
   const { logout } = useAuthStore();
   const [data, setData] = useState<DirectorDashboardData | null>(null);
@@ -72,6 +72,10 @@ export default function DirectorDashboard() {
     router.replace("/(auth)/login");
   };
 
+  const toggleLanguage = () => {
+    i18n.changeLanguage(i18n.language === "ru" ? "uz" : "ru");
+  };
+
   if (loading && !data) {
     return (
       <View className="flex-1 items-center justify-center bg-slate-900">
@@ -89,10 +93,10 @@ export default function DirectorDashboard() {
     >
       {/* Top Bar */}
       <View className="flex-row items-center justify-between mb-6">
-        <View>
+        <View className="flex-1 mr-3">
           <View className="flex-row items-center gap-2">
             <Text className="text-xs font-bold text-indigo-400 uppercase tracking-wider">
-              {data?.center.name || "Учебный центр"}
+              {data?.center.name || "e-darschi"}
             </Text>
             <View className="px-2 py-0.5 rounded-full bg-emerald-500/20 border border-emerald-500/40">
               <Text className="text-[10px] font-bold text-emerald-400">
@@ -105,39 +109,49 @@ export default function DirectorDashboard() {
           </Text>
         </View>
 
-        <TouchableOpacity
-          onPress={handleLogout}
-          className="px-3 py-1.5 rounded-lg bg-slate-800 border border-slate-700"
-        >
-          <Text className="text-xs font-medium text-slate-300">{t("common.logout")}</Text>
-        </TouchableOpacity>
+        <View className="flex-row items-center gap-2">
+          <TouchableOpacity
+            onPress={toggleLanguage}
+            className="px-2.5 py-1.5 rounded-lg bg-slate-800 border border-slate-700"
+          >
+            <Text className="text-xs font-bold text-indigo-400">
+              {i18n.language === "ru" ? "UZ" : "RU"}
+            </Text>
+          </TouchableOpacity>
+          <TouchableOpacity
+            onPress={handleLogout}
+            className="px-3 py-1.5 rounded-lg bg-slate-800 border border-slate-700"
+          >
+            <Text className="text-xs font-medium text-slate-300">{t("common.logout")}</Text>
+          </TouchableOpacity>
+        </View>
       </View>
 
       {/* KPI Grid */}
       <View className="flex-row flex-wrap gap-3 mb-6">
         <View className="w-[48%] p-4 rounded-2xl bg-slate-800 border border-slate-700/60">
-          <Text className="text-xs text-slate-400 font-medium">Активных учеников</Text>
+          <Text className="text-xs text-slate-400 font-medium">{t("director.activeStudents")}</Text>
           <Text className="text-2xl font-black text-white mt-1">
             {kpis?.activeStudentsCount ?? 0}
           </Text>
         </View>
 
         <View className="w-[48%] p-4 rounded-2xl bg-slate-800 border border-slate-700/60">
-          <Text className="text-xs text-slate-400 font-medium">Учебных групп</Text>
+          <Text className="text-xs text-slate-400 font-medium">{t("director.activeGroups")}</Text>
           <Text className="text-2xl font-black text-white mt-1">
             {kpis?.activeGroupsCount ?? 0}
           </Text>
         </View>
 
         <View className="w-[48%] p-4 rounded-2xl bg-slate-800 border border-slate-700/60">
-          <Text className="text-xs text-slate-400 font-medium">Собрано выручки</Text>
-          <Text className="text-xl font-black text-emerald-400 mt-1">
+          <Text className="text-xs text-slate-400 font-medium">{t("director.totalRevenue")}</Text>
+          <Text className="text-lg font-black text-emerald-400 mt-1">
             {(kpis?.totalRevenue || 0).toLocaleString()} UZS
           </Text>
         </View>
 
         <View className="w-[48%] p-4 rounded-2xl bg-slate-800 border border-slate-700/60">
-          <Text className="text-xs text-slate-400 font-medium">Ср. посещаемость</Text>
+          <Text className="text-xs text-slate-400 font-medium">{t("director.avgAttendance")}</Text>
           <Text className="text-2xl font-black text-indigo-400 mt-1">
             {kpis?.averageAttendancePercent ?? 100}%
           </Text>
@@ -147,7 +161,7 @@ export default function DirectorDashboard() {
       {/* Risk List Section */}
       <View className="mb-12">
         <View className="flex-row items-center justify-between mb-3">
-          <Text className="text-base font-bold text-white">Зона риска (пропуски уроков)</Text>
+          <Text className="text-base font-bold text-white">{t("director.atRiskTitle")}</Text>
           <View className="px-2 py-0.5 rounded-full bg-rose-500/20 border border-rose-500/40">
             <Text className="text-[10px] font-bold text-rose-400">{kpis?.riskCount || 0}</Text>
           </View>
@@ -162,7 +176,7 @@ export default function DirectorDashboard() {
               <View className="flex-1 mr-2">
                 <Text className="text-sm font-bold text-white">{st.fullName}</Text>
                 <Text className="text-xs text-slate-400 mt-0.5">
-                  Пропущено занятий: {st.missedCount}
+                  {t("director.missedClasses", { count: st.missedCount })}
                 </Text>
               </View>
               <View className="items-end">
@@ -176,7 +190,7 @@ export default function DirectorDashboard() {
             </View>
           ))
         ) : (
-          <Text className="text-xs text-slate-500 italic">Студентов в зоне риска нет</Text>
+          <Text className="text-xs text-slate-500 italic">{t("director.noAtRisk")}</Text>
         )}
       </View>
     </ScrollView>

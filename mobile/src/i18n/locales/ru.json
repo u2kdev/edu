@@ -1,7 +1,7 @@
 {
   "auth": {
     "title": "Вход в e-darschi",
-    "subtitle": "Учебная экосистема для студентов и родителей",
+    "subtitle": "Учебная экосистема для всех участников обучения",
     "emailLabel": "Электронная почта",
     "emailPlaceholder": "example@domain.uz",
     "passwordLabel": "Пароль",
@@ -9,14 +9,15 @@
     "loginButton": "Войти",
     "loggingIn": "Вход в систему...",
     "invalidCredentials": "Неверный логин или пароль",
-    "emailNotVerified": "Требуется подтверждение email. Пожалуйста, проверьте вашу почту."
+    "emailNotVerified": "Требуется подтверждение email. Пожалуйста, проверьте вашу почту.",
+    "quickDemoAccounts": "Быстрый вход (Демо-роли)"
   },
   "roles": {
     "student": "Ученик",
     "parent": "Родитель",
     "teacher": "Преподаватель",
     "director": "Руководитель центра",
-    "admin": "Администратор"
+    "admin": "Администратор платформы"
   },
   "tabs": {
     "today": "Сегодня",
@@ -33,12 +34,20 @@
     "noUpcomingClasses": "На сегодня уроков больше нет",
     "attendance": "Посещаемость",
     "averageScore": "Средний балл",
-    "homeworkDue": "Заданий к сдаче",
+    "homeworkDue": "Домашние задания",
     "submitHomework": "Сдать задание",
+    "updateSubmission": "Обновить ответ",
+    "homeworkModalTitle": "Сдача домашнего задания",
+    "homeworkPlaceholder": "Введите ваш ответ или ссылку на выполненную работу...",
+    "homeworkSuccess": "Домашнее задание успешно отправлено!",
+    "noHomework": "Активных домашних заданий нет",
+    "noGrades": "Оценок пока нет",
     "room": "Аудитория",
-    "teacher": "Преподаватель"
+    "teacher": "Преподаватель",
+    "teacherFeedback": "Комментарий учителя"
   },
   "parent": {
+    "title": "Кабинет родителя",
     "selectChild": "Выберите ученика",
     "attendanceStatus": "Статус на сегодня",
     "present": "Присутствовал на уроке",
@@ -46,15 +55,58 @@
     "late": "Опоздал",
     "noLesson": "Сегодня занятий нет",
     "recentGrades": "Последние оценки",
-    "payments": "Баланс и абонементы"
+    "upcomingSchedule": "Расписание ребенка",
+    "payments": "Баланс и оплаты",
+    "paid": "Оплачено",
+    "pending": "Ожидает оплаты",
+    "noChildren": "У вас пока нет привязанных учеников."
+  },
+  "teacher": {
+    "mySchedule": "Мое расписание",
+    "myGroups": "Мои группы и посещаемость",
+    "studentsCount": "{{count}} учеников",
+    "quickMarkAll": "✓ Отметить всех присутствующими (1 клик)",
+    "openAttendanceModal": "📋 Поименный журнал группы",
+    "pendingReviews": "ДЗ на проверку",
+    "reviewAction": "Оценить",
+    "allReviewed": "Все сданные задания проверены!",
+    "gradeModalTitle": "Проверка домашнего задания",
+    "studentAnswer": "Ответ ученика",
+    "scoreLabel": "Оценка (0–100)",
+    "feedbackLabel": "Комментарий преподавателя",
+    "feedbackPlaceholder": "Отличная работа! Замечаний нет...",
+    "submitGrade": "Сохранить оценку",
+    "attendanceSaved": "Посещаемость успешно сохранена!",
+    "gradeSaved": "Оценка успешно выставлена!"
+  },
+  "director": {
+    "activeStudents": "Активных учеников",
+    "activeGroups": "Учебных групп",
+    "activeTeachers": "Преподавателей",
+    "totalRevenue": "Собрано выручки",
+    "avgAttendance": "Ср. посещаемость",
+    "atRiskTitle": "Зона риска (пропуски уроков)",
+    "missedClasses": "Пропущено занятий: {{count}}",
+    "noAtRisk": "Студентов в зоне риска нет"
+  },
+  "platform": {
+    "title": "Управление платформой SaaS",
+    "totalCenters": "Всего центров",
+    "activeCenters": "Активных центров",
+    "totalUsers": "Пользователей",
+    "totalStudents": "Всего учеников",
+    "openTickets": "Открытых тикетов",
+    "centersList": "Учебные центры (Тенанты)",
+    "owner": "Владелец"
   },
   "common": {
-    "logout": "Выйти из аккаунта",
+    "logout": "Выйти",
     "retry": "Повторить попытку",
     "loading": "Загрузка...",
     "error": "Произошла ошибка",
     "save": "Сохранить",
     "cancel": "Отмена",
+    "close": "Закрыть",
     "switchCenter": "Сменить учебный центр",
     "language": "Язык интерфейса"
   }

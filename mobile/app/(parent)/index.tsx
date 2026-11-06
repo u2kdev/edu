@@ -46,11 +46,20 @@ interface ParentDashboardData {
       startTime: string;
       endTime: string;
     }>;
+    payments?: Array<{
+      id: string;
+      amount: number;
+      currency: string;
+      status: string;
+      dueDate: string | null;
+      paidAt: string | null;
+      description: string | null;
+    }>;
   } | null;
 }
 
 export default function ParentDashboard() {
-  const { t } = useTranslation();
+  const { t, i18n } = useTranslation();
   const router = useRouter();
   const { logout } = useAuthStore();
   const [data, setData] = useState<ParentDashboardData | null>(null);
@@ -96,6 +105,10 @@ export default function ParentDashboard() {
     router.replace("/(auth)/login");
   };
 
+  const toggleLanguage = () => {
+    i18n.changeLanguage(i18n.language === "ru" ? "uz" : "ru");
+  };
+
   if (loading && !data) {
     return (
       <View className="flex-1 items-center justify-center bg-slate-900">
@@ -113,21 +126,31 @@ export default function ParentDashboard() {
     >
       {/* Top Bar */}
       <View className="flex-row items-center justify-between mb-5">
-        <View>
+        <View className="flex-1 mr-3">
           <Text className="text-xs font-semibold text-indigo-400 uppercase tracking-wider">
             {t("roles.parent")}
           </Text>
           <Text className="text-xl font-black text-white mt-0.5">
-            Кабинет родителя
+            {t("parent.title")}
           </Text>
         </View>
 
-        <TouchableOpacity
-          onPress={handleLogout}
-          className="px-3 py-1.5 rounded-lg bg-slate-800 border border-slate-700"
-        >
-          <Text className="text-xs font-medium text-slate-300">{t("common.logout")}</Text>
-        </TouchableOpacity>
+        <View className="flex-row items-center gap-2">
+          <TouchableOpacity
+            onPress={toggleLanguage}
+            className="px-2.5 py-1.5 rounded-lg bg-slate-800 border border-slate-700"
+          >
+            <Text className="text-xs font-bold text-indigo-400">
+              {i18n.language === "ru" ? "UZ" : "RU"}
+            </Text>
+          </TouchableOpacity>
+          <TouchableOpacity
+            onPress={handleLogout}
+            className="px-3 py-1.5 rounded-lg bg-slate-800 border border-slate-700"
+          >
+            <Text className="text-xs font-medium text-slate-300">{t("common.logout")}</Text>
+          </TouchableOpacity>
+        </View>
       </View>
 
       {/* Child Switcher Tabs */}
@@ -169,7 +192,7 @@ export default function ParentDashboard() {
               {t("parent.attendanceStatus")}
             </Text>
             <View className="flex-row items-center justify-between">
-              <Text className="text-lg font-black text-white">{active.fullName}</Text>
+              <Text className="text-lg font-black text-white flex-1 mr-2">{active.fullName}</Text>
               <View
                 className={`px-3 py-1 rounded-full ${
                   active.todayStatus === "PRESENT"
@@ -212,7 +235,7 @@ export default function ParentDashboard() {
                 {active.metrics.attendancePercent}%
               </Text>
               <Text className="text-[10px] text-slate-500 mt-0.5">
-                Посещено {active.metrics.presentCount}/{active.metrics.totalClasses}
+                {active.metrics.presentCount}/{active.metrics.totalClasses}
               </Text>
             </View>
 
@@ -221,9 +244,34 @@ export default function ParentDashboard() {
               <Text className="text-2xl font-black text-indigo-400 mt-1">
                 {active.metrics.averageScore ?? "—"}
               </Text>
-              <Text className="text-[10px] text-slate-500 mt-0.5">Средний балл</Text>
+              <Text className="text-[10px] text-slate-500 mt-0.5">/ 100</Text>
             </View>
           </View>
+
+          {/* Upcoming Schedule */}
+          {active.upcomingSchedule && active.upcomingSchedule.length > 0 && (
+            <View className="mb-6">
+              <Text className="text-base font-bold text-white mb-3">
+                {t("parent.upcomingSchedule")}
+              </Text>
+              {active.upcomingSchedule.map((slot) => (
+                <View
+                  key={slot.id}
+                  className="p-3.5 mb-2 rounded-xl bg-slate-800/70 border border-slate-700/50 flex-row items-center justify-between"
+                >
+                  <View className="flex-1 mr-2">
+                    <Text className="text-sm font-bold text-white">{slot.groupName}</Text>
+                    <Text className="text-xs text-slate-400 mt-0.5">👤 {slot.teacherName}</Text>
+                  </View>
+                  <View className="px-2.5 py-1 rounded-lg bg-indigo-500/10 border border-indigo-500/30">
+                    <Text className="text-xs font-bold text-indigo-400">
+                      {slot.startTime} - {slot.endTime}
+                    </Text>
+                  </View>
+                </View>
+              ))}
+            </View>
+          )}
 
           {/* Recent Grades */}
           <View className="mb-6">
@@ -235,22 +283,59 @@ export default function ParentDashboard() {
                   className="p-3.5 mb-2 rounded-xl bg-slate-800/60 border border-slate-700/40 flex-row items-center justify-between"
                 >
                   <Text className="text-sm text-slate-300 flex-1 mr-2">
-                    {g.lessonTitle || "Оценка"}
+                    {g.lessonTitle || t("tabs.grades")}
                   </Text>
                   <View className="px-3 py-1 rounded-lg bg-indigo-500/10 border border-indigo-500/30">
-                    <Text className="text-sm font-black text-indigo-400">{g.score} баллов</Text>
+                    <Text className="text-sm font-black text-indigo-400">{g.score}</Text>
                   </View>
                 </View>
               ))
             ) : (
-              <Text className="text-xs text-slate-500 italic">Оценок пока нет</Text>
+              <Text className="text-xs text-slate-500 italic">{t("student.noGrades")}</Text>
             )}
           </View>
+
+          {/* Payments Section */}
+          {active.payments && active.payments.length > 0 && (
+            <View className="mb-12">
+              <Text className="text-base font-bold text-white mb-3">{t("parent.payments")}</Text>
+              {active.payments.map((p) => (
+                <View
+                  key={p.id}
+                  className="p-4 mb-2 rounded-xl bg-slate-800 border border-slate-700/60 flex-row items-center justify-between"
+                >
+                  <View className="flex-1 mr-2">
+                    <Text className="text-sm font-bold text-white">
+                      {p.amount.toLocaleString()} {p.currency}
+                    </Text>
+                    <Text className="text-xs text-slate-400 mt-0.5">
+                      {p.description || t("tabs.payments")}
+                    </Text>
+                  </View>
+                  <View
+                    className={`px-2.5 py-1 rounded-lg ${
+                      p.status === "PAID"
+                        ? "bg-emerald-500/10 border border-emerald-500/30"
+                        : "bg-amber-500/10 border border-amber-500/30"
+                    }`}
+                  >
+                    <Text
+                      className={`text-xs font-bold ${
+                        p.status === "PAID" ? "text-emerald-400" : "text-amber-400"
+                      }`}
+                    >
+                      {p.status === "PAID" ? t("parent.paid") : t("parent.pending")}
+                    </Text>
+                  </View>
+                </View>
+              ))}
+            </View>
+          )}
         </>
       ) : (
         <View className="p-8 items-center justify-center">
           <Text className="text-sm text-slate-400 text-center">
-            У вас пока нет привязанных учеников.
+            {t("parent.noChildren")}
           </Text>
         </View>
       )}

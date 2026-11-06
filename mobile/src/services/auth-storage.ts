@@ -45,6 +45,7 @@ export const AuthStorage = {
   async clearAll(): Promise<void> {
     await this.removeItem("auth_token");
     await this.removeItem("auth_user");
+    await this.removeItem("auth_memberships");
     await this.removeItem("auth_active_center");
     await this.removeItem("auth_active_role");
     memoryStorage.clear();

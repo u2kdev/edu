@@ -42,7 +42,7 @@ export default function RootLayout() {
 
   return (
     <SafeAreaProvider>
-      <StatusBar style="auto" />
+      <StatusBar style="light" />
       <Stack
         screenOptions={{
           headerShown: false,
@@ -55,6 +55,7 @@ export default function RootLayout() {
         <Stack.Screen name="(parent)" />
         <Stack.Screen name="(teacher)" />
         <Stack.Screen name="(director)" />
+        <Stack.Screen name="(platform)" />
       </Stack>
     </SafeAreaProvider>
   );

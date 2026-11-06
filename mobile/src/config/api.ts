@@ -8,9 +8,9 @@ try {
 /**
  * API configuration for e-darschi mobile client.
  * In development:
- * - Android Emulator uses 10.0.2.2 to access host machine.
- * - iOS Simulator uses localhost.
- * - Real devices can define EXPO_PUBLIC_API_URL in .env.
+ * - Physical Android over USB with `adb reverse tcp:3000 tcp:3000` uses http://localhost:3000 (via EXPO_PUBLIC_API_URL).
+ * - Android Emulator uses http://10.0.2.2:3000.
+ * - iOS Simulator uses http://localhost:3000.
  */
 export const API_BASE_URL =
   process.env.EXPO_PUBLIC_API_URL ||
@@ -25,6 +25,7 @@ export const API_ENDPOINTS = {
   PARENT_DASHBOARD: "/api/mobile/parent/dashboard",
   TEACHER_DASHBOARD: "/api/mobile/teacher/dashboard",
   DIRECTOR_DASHBOARD: "/api/mobile/director/dashboard",
+  PLATFORM_DASHBOARD: "/api/mobile/platform/dashboard",
   ATTENDANCE_BULK: "/api/attendance/bulk",
   SCHEDULE: "/api/tenant/schedule",
   GRADES: "/api/grades",

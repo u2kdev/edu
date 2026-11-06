@@ -104,11 +104,12 @@ export async function GET(req: Request) {
                 grade: true,
                 submittedAt: true,
                 feedback: true,
+                submissionText: true,
               },
             },
           },
           orderBy: { dueDate: "asc" },
-          take: 5,
+          take: 10,
         })
       : [];
 
@@ -117,11 +118,13 @@ export async function GET(req: Request) {
       return {
         id: hw.id,
         title: hw.title,
+        description: hw.description || null,
         lessonTitle: hw.lesson.title,
         dueDate: hw.dueDate,
         status: submission ? submission.status : "NOT_SUBMITTED",
         grade: submission?.grade ?? null,
         feedback: submission?.feedback ?? null,
+        submissionText: submission?.submissionText ?? null,
       };
     });
 

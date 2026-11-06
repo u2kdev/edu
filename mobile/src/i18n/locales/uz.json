@@ -1,7 +1,7 @@
 {
   "auth": {
     "title": "e-darschi tizimiga kirish",
-    "subtitle": "O'quvchilar va ota-onalar uchun ta'lim ekotizimi",
+    "subtitle": "O'quv jarayonining barcha ishtirokchilari uchun ta'lim ekotizimi",
     "emailLabel": "Elektron pochta",
     "emailPlaceholder": "example@domain.uz",
     "passwordLabel": "Parol",
@@ -9,14 +9,15 @@
     "loginButton": "Tizimga kirish",
     "loggingIn": "Kirilmoqda...",
     "invalidCredentials": "Login yoki parol noto'g'ri",
-    "emailNotVerified": "Emailni tasdiqlash talab qilinadi. Pochtangizni tekshiring."
+    "emailNotVerified": "Emailni tasdiqlash talab qilinadi. Pochtangizni tekshiring.",
+    "quickDemoAccounts": "Tezkor kirish (Demo rollar)"
   },
   "roles": {
     "student": "O'quvchi",
     "parent": "Ota-ona",
     "teacher": "O'qituvchi",
     "director": "Markaz rahbari",
-    "admin": "Administrator"
+    "admin": "Platforma administratori"
   },
   "tabs": {
     "today": "Bugun",
@@ -33,12 +34,20 @@
     "noUpcomingClasses": "Bugunga boshqa darslar yo'q",
     "attendance": "Davomat",
     "averageScore": "O'rtacha ball",
-    "homeworkDue": "Topshirish kerak bo'lgan vazifalar",
+    "homeworkDue": "Uy vazifalari",
     "submitHomework": "Vazifani topshirish",
+    "updateSubmission": "Javobni yangilash",
+    "homeworkModalTitle": "Uy vazifasini topshirish",
+    "homeworkPlaceholder": "Javobingizni yoki bajarilgan ish havolasini kiriting...",
+    "homeworkSuccess": "Uy vazifasi muvaffaqiyatli yuborildi!",
+    "noHomework": "Faol uy vazifalari yo'q",
+    "noGrades": "Hozircha baholar yo'q",
     "room": "Xona",
-    "teacher": "O'qituvchi"
+    "teacher": "O'qituvchi",
+    "teacherFeedback": "O'qituvchi izohi"
   },
   "parent": {
+    "title": "Ota-ona kabineti",
     "selectChild": "Farzandni tanlang",
     "attendanceStatus": "Bugungi davomat holati",
     "present": "Darsda qatnashdi",
@@ -46,15 +55,58 @@
     "late": "Kechikdi",
     "noLesson": "Bugun darslar yo'q",
     "recentGrades": "So'nggi baholar",
-    "payments": "Balans va to'lovlar"
+    "upcomingSchedule": "Farzand dars jadvali",
+    "payments": "Balans va to'lovlar",
+    "paid": "To'langan",
+    "pending": "To'lov kutilmoqda",
+    "noChildren": "Sizga biriktirilgan o'quvchilar hali yo'q."
+  },
+  "teacher": {
+    "mySchedule": "Mening dars jadvalim",
+    "myGroups": "Mening guruhlarim va davomat",
+    "studentsCount": "{{count}} o'quvchi",
+    "quickMarkAll": "✓ Barchani qatnashdi deb belgilash (1 bosishda)",
+    "openAttendanceModal": "📋 Guruh davomat jurnali",
+    "pendingReviews": "Tekshiriladigan vazifalar",
+    "reviewAction": "Baholash",
+    "allReviewed": "Barcha topshirilgan vazifalar tekshirildi!",
+    "gradeModalTitle": "Uy vazifasini tekshirish",
+    "studentAnswer": "O'quvchi javobi",
+    "scoreLabel": "Baho (0–100)",
+    "feedbackLabel": "O'qituvchi izohi",
+    "feedbackPlaceholder": "Ajoyib natija! E'tirozlar yo'q...",
+    "submitGrade": "Bahoni saqlash",
+    "attendanceSaved": "Davomat muvaffaqiyatli saqlandi!",
+    "gradeSaved": "Baho muvaffaqiyatli qo'yildi!"
+  },
+  "director": {
+    "activeStudents": "Faol o'quvchilar",
+    "activeGroups": "O'quv guruhlari",
+    "activeTeachers": "O'qituvchilar",
+    "totalRevenue": "Jami tushum",
+    "avgAttendance": "O'rtacha davomat",
+    "atRiskTitle": "Xavf guruhi (dars qoldirganlar)",
+    "missedClasses": "Qoldirilgan darslar: {{count}}",
+    "noAtRisk": "Xavf guruhidagi o'quvchilar yo'q"
+  },
+  "platform": {
+    "title": "SaaS Platforma Boshqaruvi",
+    "totalCenters": "Jami markazlar",
+    "activeCenters": "Faol markazlar",
+    "totalUsers": "Foydalanuvchilar",
+    "totalStudents": "Jami o'quvchilar",
+    "openTickets": "Ochiq murojaatlar",
+    "centersList": "O'quv markazlari (Tenantlar)",
+    "owner": "Rahbar"
   },
   "common": {
-    "logout": "Profildan chiqish",
+    "logout": "Chiqish",
     "retry": "Qayta urinish",
     "loading": "Yuklanmoqda...",
     "error": "Xatolik yuz berdi",
     "save": "Saqlash",
     "cancel": "Bekor qilish",
+    "close": "Yopish",
     "switchCenter": "O'quv markazini almashtirish",
     "language": "Ilova tili"
   }
