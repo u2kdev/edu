@@ -10,11 +10,31 @@ import {
   TextInput,
   Alert,
 } from "react-native";
-import { useRouter } from "expo-router";
 import { useTranslation } from "react-i18next";
+import {
+  Home,
+  Calendar,
+  BookOpenCheck,
+  Award,
+  Clock,
+  MapPin,
+  User as UserIcon,
+  CheckCircle2,
+  Send,
+  MessageSquare,
+  ChevronRight,
+  X,
+} from "lucide-react-native";
 import { useAuthStore } from "../../src/store/auth-store";
 import { apiClient } from "../../src/services/api-client";
 import { API_ENDPOINTS } from "../../src/config/api";
+import {
+  AppHeader,
+  BottomTabBar,
+  ProgressBar,
+  ProfileAndSettingsView,
+  TabItem,
+} from "../../src/components/ui";
 
 interface HomeworkItem {
   id: string;
@@ -59,12 +79,16 @@ interface StudentDashboardData {
 }
 
 export default function StudentDashboard() {
-  const { t, i18n } = useTranslation();
-  const router = useRouter();
-  const { user, logout } = useAuthStore();
+  const { t } = useTranslation();
+  const { user } = useAuthStore();
   const [data, setData] = useState<StudentDashboardData | null>(null);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
+
+  // Navigation & Filters
+  const [activeTab, setActiveTab] = useState<string>("today");
+  const [selectedDay, setSelectedDay] = useState<number>(0); // 0 = All
+  const [hwFilter, setHwFilter] = useState<"ALL" | "PENDING" | "GRADED">("ALL");
 
   // Homework Submission Modal State
   const [selectedHomework, setSelectedHomework] = useState<HomeworkItem | null>(null);
@@ -90,15 +114,6 @@ export default function StudentDashboard() {
   const onRefresh = () => {
     setRefreshing(true);
     fetchDashboard();
-  };
-
-  const handleLogout = async () => {
-    await logout();
-    router.replace("/(auth)/login");
-  };
-
-  const toggleLanguage = () => {
-    i18n.changeLanguage(i18n.language === "ru" ? "uz" : "ru");
   };
 
   const openHomeworkModal = (hw: HomeworkItem) => {
@@ -130,243 +145,461 @@ export default function StudentDashboard() {
 
   if (loading && !data) {
     return (
-      <View className="flex-1 items-center justify-center bg-slate-900">
+      <View className="flex-1 items-center justify-center bg-slate-950">
         <ActivityIndicator size="large" color="#6366F1" />
       </View>
     );
   }
 
   const nextClass = data?.upcomingSchedule[0];
+  const pendingHwCount =
+    data?.activeHomework.filter((h) => h.status === "ASSIGNED").length || 0;
+
+  const tabs: TabItem[] = [
+    { key: "today", label: t("tabs.today"), icon: Home },
+    { key: "schedule", label: t("tabs.schedule"), icon: Calendar },
+    {
+      key: "homework",
+      label: t("tabs.homework"),
+      icon: BookOpenCheck,
+      badge: pendingHwCount,
+    },
+    { key: "profile", label: t("tabs.profile"), icon: Award },
+  ];
+
+  const filteredSchedule = (data?.upcomingSchedule || []).filter((slot) =>
+    selectedDay === 0 ? true : slot.dayOfWeek === selectedDay
+  );
+
+  const filteredHomework = (data?.activeHomework || []).filter((hw) => {
+    if (hwFilter === "PENDING") return hw.status === "ASSIGNED" || hw.status === "SUBMITTED";
+    if (hwFilter === "GRADED") return hw.status === "REVIEWED" || hw.status === "ACCEPTED" || hw.grade !== null;
+    return true;
+  });
 
   return (
-    <>
+    <View className="flex-1 bg-slate-950">
+      <AppHeader
+        title={user?.fullName || data?.student.fullName || t("roles.student")}
+        subtitle={data?.student.centerName || "e-darschi"}
+        accentColor="#6366F1"
+        onAvatarPress={() => setActiveTab("profile")}
+      />
+
       <ScrollView
-        className="flex-1 bg-slate-900 px-5 pt-12"
-        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor="#6366F1" />}
+        className="flex-1 px-5 pt-5"
+        refreshControl={
+          <RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor="#6366F1" />
+        }
       >
-        {/* Top Bar */}
-        <View className="flex-row items-center justify-between mb-6">
-          <View className="flex-1 mr-3">
-            <Text className="text-xs font-semibold text-indigo-400 uppercase tracking-wider">
-              {data?.student.centerName || "e-darschi"}
-            </Text>
-            <Text className="text-xl font-black text-white mt-0.5" numberOfLines={1}>
-              {t("student.welcome", { name: user?.fullName || data?.student.fullName || "Ученик" })}
-            </Text>
-          </View>
+        {/* TAB 1: TODAY / OVERVIEW */}
+        {activeTab === "today" && (
+          <View className="pb-10">
+            {/* Next Class Hero Card */}
+            <View className="mb-5 p-5 rounded-3xl bg-indigo-950/60 border border-indigo-500/40">
+              <View className="flex-row items-center justify-between mb-3">
+                <View className="flex-row items-center">
+                  <Clock size={14} color="#818CF8" />
+                  <Text className="text-xs font-extrabold text-indigo-300 uppercase tracking-wider ml-1.5">
+                    {t("student.nextClass")}
+                  </Text>
+                </View>
+                {nextClass && (
+                  <View className="px-3 py-1 rounded-full bg-indigo-500/25 border border-indigo-400/40">
+                    <Text className="text-xs font-black text-indigo-200">
+                      {nextClass.startTime} – {nextClass.endTime}
+                    </Text>
+                  </View>
+                )}
+              </View>
 
-          <View className="flex-row items-center gap-2">
-            <TouchableOpacity
-              onPress={toggleLanguage}
-              className="px-2.5 py-1.5 rounded-lg bg-slate-800 border border-slate-700"
-            >
-              <Text className="text-xs font-bold text-indigo-400">
-                {i18n.language === "ru" ? "UZ" : "RU"}
+              {nextClass ? (
+                <>
+                  <Text className="text-xl font-black text-white mb-3">
+                    {nextClass.groupName}
+                  </Text>
+                  <View className="flex-row items-center justify-between pt-3 border-t border-indigo-500/20">
+                    <View className="flex-row items-center">
+                      <MapPin size={14} color="#94A3B8" />
+                      <Text className="text-xs font-semibold text-slate-300 ml-1.5">
+                        {nextClass.roomName}
+                      </Text>
+                    </View>
+                    <View className="flex-row items-center">
+                      <UserIcon size={14} color="#94A3B8" />
+                      <Text className="text-xs font-semibold text-slate-300 ml-1.5">
+                        {nextClass.teacherName}
+                      </Text>
+                    </View>
+                  </View>
+                </>
+              ) : (
+                <Text className="text-sm text-slate-400">
+                  {t("student.noUpcomingClasses")}
+                </Text>
+              )}
+            </View>
+
+            {/* Metric Cards with Progress Bars */}
+            <View className="flex-row gap-3 mb-6">
+              <View className="flex-1 p-4 rounded-3xl bg-slate-900 border border-slate-800">
+                <Text className="text-xs text-slate-400 font-semibold">
+                  {t("student.attendance")}
+                </Text>
+                <Text className="text-2xl font-black text-emerald-400 mt-1">
+                  {data?.metrics.attendancePercent ?? 100}%
+                </Text>
+                <ProgressBar
+                  value={data?.metrics.attendancePercent ?? 100}
+                  color="#10B981"
+                />
+                <Text className="text-[11px] text-slate-500 mt-2">
+                  {data?.metrics.presentCount ?? 0} / {data?.metrics.totalClasses ?? 0} уроков
+                </Text>
+              </View>
+
+              <View className="flex-1 p-4 rounded-3xl bg-slate-900 border border-slate-800">
+                <Text className="text-xs text-slate-400 font-semibold">
+                  {t("student.averageScore")}
+                </Text>
+                <Text className="text-2xl font-black text-indigo-400 mt-1">
+                  {data?.metrics.averageScore ?? "—"}
+                </Text>
+                <ProgressBar
+                  value={data?.metrics.averageScore ?? 0}
+                  color="#6366F1"
+                />
+                <Text className="text-[11px] text-slate-500 mt-2">из 100 баллов</Text>
+              </View>
+            </View>
+
+            {/* Homework Preview Section */}
+            <View className="mb-6">
+              <View className="flex-row items-center justify-between mb-3">
+                <Text className="text-base font-extrabold text-white">
+                  {t("student.homeworkDue")}
+                </Text>
+                <TouchableOpacity onPress={() => setActiveTab("homework")}>
+                  <Text className="text-xs font-bold text-indigo-400">
+                    Все ({data?.activeHomework.length || 0}) →
+                  </Text>
+                </TouchableOpacity>
+              </View>
+
+              {data?.activeHomework && data.activeHomework.length > 0 ? (
+                data.activeHomework.slice(0, 3).map((hw) => (
+                  <TouchableOpacity
+                    key={hw.id}
+                    onPress={() => openHomeworkModal(hw)}
+                    activeOpacity={0.8}
+                    className="p-4 mb-2.5 rounded-2xl bg-slate-900 border border-slate-800 flex-row items-center justify-between"
+                  >
+                    <View className="flex-1 mr-3">
+                      <Text className="text-sm font-extrabold text-white">
+                        {hw.title}
+                      </Text>
+                      <Text className="text-xs text-slate-400 mt-0.5">
+                        {hw.lessonTitle}
+                      </Text>
+                    </View>
+                    <View className="flex-row items-center">
+                      <View
+                        className={`px-2.5 py-1 rounded-xl mr-2 ${
+                          hw.grade !== null
+                            ? "bg-emerald-500/15 border border-emerald-500/30"
+                            : hw.status === "SUBMITTED"
+                            ? "bg-amber-500/15 border border-amber-500/30"
+                            : "bg-indigo-500/15 border border-indigo-500/30"
+                        }`}
+                      >
+                        <Text
+                          className={`text-xs font-extrabold ${
+                            hw.grade !== null
+                              ? "text-emerald-400"
+                              : hw.status === "SUBMITTED"
+                              ? "text-amber-400"
+                              : "text-indigo-300"
+                          }`}
+                        >
+                          {hw.grade !== null ? `${hw.grade}/100` : hw.status}
+                        </Text>
+                      </View>
+                      <ChevronRight size={16} color="#64748B" />
+                    </View>
+                  </TouchableOpacity>
+                ))
+              ) : (
+                <View className="p-6 rounded-2xl bg-slate-900/60 border border-slate-800 items-center">
+                  <CheckCircle2 size={24} color="#10B981" />
+                  <Text className="text-xs text-slate-400 mt-2">
+                    {t("student.noHomework")}
+                  </Text>
+                </View>
+              )}
+            </View>
+
+            {/* Recent Grades Preview */}
+            <View>
+              <Text className="text-base font-extrabold text-white mb-3">
+                {t("tabs.grades")}
               </Text>
-            </TouchableOpacity>
-            <TouchableOpacity
-              onPress={handleLogout}
-              className="px-3 py-1.5 rounded-lg bg-slate-800 border border-slate-700"
+              {data?.recentGrades && data.recentGrades.length > 0 ? (
+                data.recentGrades.slice(0, 4).map((g) => (
+                  <View
+                    key={g.id}
+                    className="p-4 mb-2 rounded-2xl bg-slate-900 border border-slate-800 flex-row items-center justify-between"
+                  >
+                    <View className="flex-row items-center flex-1 mr-3">
+                      <View className="w-9 h-9 rounded-xl bg-indigo-500/15 items-center justify-center mr-3">
+                        <Award size={18} color="#818CF8" />
+                      </View>
+                      <Text className="text-sm font-bold text-slate-200 flex-1">
+                        {g.lessonTitle || t("tabs.grades")}
+                      </Text>
+                    </View>
+                    <View className="px-3 py-1.5 rounded-xl bg-emerald-500/15 border border-emerald-500/30">
+                      <Text className="text-sm font-black text-emerald-400">
+                        {g.score}/{g.maxScore}
+                      </Text>
+                    </View>
+                  </View>
+                ))
+              ) : (
+                <Text className="text-xs text-slate-500 italic">
+                  {t("student.noGrades")}
+                </Text>
+              )}
+            </View>
+          </View>
+        )}
+
+        {/* TAB 2: SCHEDULE WITH DAY FILTER */}
+        {activeTab === "schedule" && (
+          <View className="pb-10">
+            <ScrollView
+              horizontal
+              showsHorizontalScrollIndicator={false}
+              className="mb-5"
             >
-              <Text className="text-xs font-medium text-slate-300">{t("common.logout")}</Text>
-            </TouchableOpacity>
-          </View>
-        </View>
+              {[0, 1, 2, 3, 4, 5, 6].map((day) => {
+                const isSelected = selectedDay === day;
+                const label = day === 0 ? t("days.all") : t(`days.${day}`);
+                return (
+                  <TouchableOpacity
+                    key={day}
+                    onPress={() => setSelectedDay(day)}
+                    className={`mr-2 px-4 py-2.5 rounded-2xl border ${
+                      isSelected
+                        ? "bg-indigo-600 border-indigo-500"
+                        : "bg-slate-900 border-slate-800"
+                    }`}
+                  >
+                    <Text
+                      className={`text-xs font-extrabold ${
+                        isSelected ? "text-white" : "text-slate-400"
+                      }`}
+                    >
+                      {label}
+                    </Text>
+                  </TouchableOpacity>
+                );
+              })}
+            </ScrollView>
 
-        {/* Metric Cards Row */}
-        <View className="flex-row gap-3 mb-6">
-          <View className="flex-1 p-4 rounded-2xl bg-slate-800/80 border border-slate-700/60">
-            <Text className="text-xs text-slate-400 font-medium">{t("student.attendance")}</Text>
-            <Text className="text-2xl font-black text-emerald-400 mt-1">
-              {data?.metrics.attendancePercent ?? 100}%
-            </Text>
-            <Text className="text-[10px] text-slate-500 mt-0.5">
-              {data?.metrics.presentCount ?? 0}/{data?.metrics.totalClasses ?? 0}
-            </Text>
-          </View>
-
-          <View className="flex-1 p-4 rounded-2xl bg-slate-800/80 border border-slate-700/60">
-            <Text className="text-xs text-slate-400 font-medium">{t("student.averageScore")}</Text>
-            <Text className="text-2xl font-black text-indigo-400 mt-1">
-              {data?.metrics.averageScore !== null && data?.metrics.averageScore !== undefined
-                ? data.metrics.averageScore
-                : "—"}
-            </Text>
-            <Text className="text-[10px] text-slate-500 mt-0.5">/ 100</Text>
-          </View>
-        </View>
-
-        {/* Next Class Hero Card */}
-        <View className="mb-6 p-5 rounded-2xl bg-slate-800 border border-indigo-500/30">
-          <View className="flex-row items-center justify-between mb-2">
-            <Text className="text-xs font-bold text-indigo-300 uppercase tracking-wide">
-              {t("student.nextClass")}
-            </Text>
-            {nextClass && (
-              <View className="px-2.5 py-0.5 rounded-full bg-indigo-500/20 border border-indigo-400/30">
-                <Text className="text-[10px] font-bold text-indigo-300">
-                  {nextClass.startTime} - {nextClass.endTime}
+            {filteredSchedule.length > 0 ? (
+              filteredSchedule.map((slot) => (
+                <View
+                  key={slot.id}
+                  className="p-4 mb-3 rounded-3xl bg-slate-900 border border-slate-800 flex-row items-center"
+                >
+                  <View className="px-3 py-2.5 rounded-2xl bg-indigo-500/15 border border-indigo-500/30 items-center justify-center mr-4">
+                    <Text className="text-xs font-black text-indigo-300">
+                      {slot.startTime}
+                    </Text>
+                    <Text className="text-[10px] font-semibold text-indigo-400/80 mt-0.5">
+                      {slot.endTime}
+                    </Text>
+                  </View>
+                  <View className="flex-1">
+                    <Text className="text-base font-extrabold text-white">
+                      {slot.groupName}
+                    </Text>
+                    <View className="flex-row items-center mt-1.5">
+                      <MapPin size={13} color="#94A3B8" />
+                      <Text className="text-xs text-slate-400 ml-1 mr-3">
+                        {slot.roomName}
+                      </Text>
+                      <UserIcon size={13} color="#94A3B8" />
+                      <Text className="text-xs text-slate-400 ml-1">
+                        {slot.teacherName}
+                      </Text>
+                    </View>
+                  </View>
+                </View>
+              ))
+            ) : (
+              <View className="p-8 rounded-3xl bg-slate-900/60 border border-slate-800 items-center">
+                <Calendar size={28} color="#64748B" />
+                <Text className="text-sm font-bold text-slate-400 mt-3">
+                  {t("student.noUpcomingClasses")}
                 </Text>
               </View>
             )}
           </View>
-
-          {nextClass ? (
-            <>
-              <Text className="text-lg font-extrabold text-white">{nextClass.groupName}</Text>
-              <View className="flex-row items-center gap-4 mt-3">
-                <Text className="text-xs text-slate-300 font-medium">
-                  📍 {nextClass.roomName}
-                </Text>
-                <Text className="text-xs text-slate-300 font-medium">
-                  👤 {nextClass.teacherName}
-                </Text>
-              </View>
-            </>
-          ) : (
-            <Text className="text-sm text-slate-400 mt-1">{t("student.noUpcomingClasses")}</Text>
-          )}
-        </View>
-
-        {/* Full Schedule Section */}
-        {data?.upcomingSchedule && data.upcomingSchedule.length > 1 && (
-          <View className="mb-6">
-            <Text className="text-base font-bold text-white mb-3">{t("tabs.schedule")}</Text>
-            {data.upcomingSchedule.map((slot) => (
-              <View
-                key={slot.id}
-                className="p-3.5 mb-2 rounded-xl bg-slate-800/70 border border-slate-700/50 flex-row items-center justify-between"
-              >
-                <View className="flex-1 mr-2">
-                  <Text className="text-sm font-bold text-white">{slot.groupName}</Text>
-                  <Text className="text-xs text-slate-400 mt-0.5">
-                    📍 {slot.roomName} • 👤 {slot.teacherName}
-                  </Text>
-                </View>
-                <View className="px-2.5 py-1 rounded-lg bg-slate-700/80">
-                  <Text className="text-xs font-bold text-indigo-300">
-                    {slot.startTime} - {slot.endTime}
-                  </Text>
-                </View>
-              </View>
-            ))}
-          </View>
         )}
 
-        {/* Active Homework (Interactive) */}
-        <View className="mb-6">
-          <View className="flex-row items-center justify-between mb-3">
-            <Text className="text-base font-bold text-white">{t("student.homeworkDue")}</Text>
-            <Text className="text-xs text-indigo-400 font-bold">{data?.activeHomework.length || 0}</Text>
-          </View>
-
-          {data?.activeHomework && data.activeHomework.length > 0 ? (
-            data.activeHomework.map((hw) => (
-              <TouchableOpacity
-                key={hw.id}
-                onPress={() => openHomeworkModal(hw)}
-                activeOpacity={0.8}
-                className="p-4 mb-2.5 rounded-2xl bg-slate-800 border border-slate-700/60"
-              >
-                <View className="flex-row items-center justify-between mb-1.5">
-                  <Text className="text-sm font-bold text-white flex-1 mr-2">{hw.title}</Text>
-                  <View
-                    className={`px-2.5 py-0.5 rounded-lg ${
-                      hw.status === "REVIEWED" || hw.status === "ACCEPTED"
-                        ? "bg-emerald-500/10 border border-emerald-500/30"
-                        : hw.status === "SUBMITTED"
-                        ? "bg-amber-500/10 border border-amber-500/30"
-                        : "bg-indigo-500/10 border border-indigo-500/30"
+        {/* TAB 3: HOMEWORK WORKSPACE */}
+        {activeTab === "homework" && (
+          <View className="pb-10">
+            {/* Segmented Filter */}
+            <View className="flex-row p-1 rounded-2xl bg-slate-900 border border-slate-800 mb-5">
+              {[
+                { key: "ALL", label: t("student.filterAll") },
+                { key: "PENDING", label: t("student.filterPending") },
+                { key: "GRADED", label: t("student.filterGraded") },
+              ].map((tab) => {
+                const active = hwFilter === tab.key;
+                return (
+                  <TouchableOpacity
+                    key={tab.key}
+                    onPress={() => setHwFilter(tab.key as any)}
+                    className={`flex-1 py-2.5 rounded-xl items-center ${
+                      active ? "bg-indigo-600" : ""
                     }`}
                   >
                     <Text
-                      className={`text-[10px] font-bold ${
-                        hw.status === "REVIEWED" || hw.status === "ACCEPTED"
-                          ? "text-emerald-400"
-                          : hw.status === "SUBMITTED"
-                          ? "text-amber-400"
-                          : "text-indigo-400"
+                      className={`text-xs font-extrabold ${
+                        active ? "text-white" : "text-slate-400"
                       }`}
                     >
-                      {hw.grade !== null ? `${hw.grade}/100` : hw.status}
+                      {tab.label}
                     </Text>
-                  </View>
-                </View>
+                  </TouchableOpacity>
+                );
+              })}
+            </View>
 
-                <Text className="text-xs text-slate-400">{hw.lessonTitle}</Text>
-
-                {hw.feedback && (
-                  <View className="mt-2 p-2.5 rounded-lg bg-slate-900/60 border border-slate-700/50">
-                    <Text className="text-[11px] text-slate-300">
-                      💬 {t("student.teacherFeedback")}: {hw.feedback}
+            {filteredHomework.length > 0 ? (
+              filteredHomework.map((hw) => (
+                <TouchableOpacity
+                  key={hw.id}
+                  onPress={() => openHomeworkModal(hw)}
+                  activeOpacity={0.85}
+                  className="p-5 mb-3 rounded-3xl bg-slate-900 border border-slate-800"
+                >
+                  <View className="flex-row items-center justify-between mb-2">
+                    <Text className="text-base font-extrabold text-white flex-1 mr-2">
+                      {hw.title}
                     </Text>
+                    <View
+                      className={`px-3 py-1 rounded-full ${
+                        hw.grade !== null
+                          ? "bg-emerald-500/15 border border-emerald-500/40"
+                          : hw.status === "SUBMITTED"
+                          ? "bg-amber-500/15 border border-amber-500/40"
+                          : "bg-indigo-500/15 border border-indigo-500/40"
+                      }`}
+                    >
+                      <Text
+                        className={`text-xs font-extrabold ${
+                          hw.grade !== null
+                            ? "text-emerald-400"
+                            : hw.status === "SUBMITTED"
+                            ? "text-amber-400"
+                            : "text-indigo-300"
+                        }`}
+                      >
+                        {hw.grade !== null ? `${hw.grade} / 100` : hw.status}
+                      </Text>
+                    </View>
                   </View>
-                )}
 
-                <View className="mt-3 pt-2.5 border-t border-slate-700/50 flex-row items-center justify-between">
-                  <Text className="text-[11px] text-slate-400">
-                    {hw.dueDate ? `📅 ${new Date(hw.dueDate).toLocaleDateString()}` : ""}
-                  </Text>
-                  <Text className="text-xs font-bold text-indigo-400">
-                    {hw.submissionText ? `✎ ${t("student.updateSubmission")}` : `→ ${t("student.submitHomework")}`}
-                  </Text>
-                </View>
-              </TouchableOpacity>
-            ))
-          ) : (
-            <Text className="text-xs text-slate-500 italic">{t("student.noHomework")}</Text>
-          )}
-        </View>
+                  <Text className="text-xs text-slate-400">{hw.lessonTitle}</Text>
 
-        {/* Recent Grades */}
-        <View className="mb-12">
-          <Text className="text-base font-bold text-white mb-3">{t("tabs.grades")}</Text>
-          {data?.recentGrades && data.recentGrades.length > 0 ? (
-            data.recentGrades.map((g) => (
-              <View
-                key={g.id}
-                className="p-3.5 mb-2 rounded-xl bg-slate-800/60 border border-slate-700/40 flex-row items-center justify-between"
-              >
-                <Text className="text-sm text-slate-300 flex-1 mr-2">
-                  {g.lessonTitle || t("tabs.grades")}
+                  {hw.description && (
+                    <Text className="text-xs text-slate-300 mt-2">
+                      {hw.description}
+                    </Text>
+                  )}
+
+                  {hw.feedback && (
+                    <View className="mt-3 p-3 rounded-2xl bg-slate-950 border border-slate-800 flex-row items-start">
+                      <MessageSquare size={14} color="#818CF8" />
+                      <Text className="text-xs text-slate-300 ml-2 flex-1">
+                        {t("student.teacherFeedback")}: {hw.feedback}
+                      </Text>
+                    </View>
+                  )}
+
+                  <View className="mt-4 pt-3 border-t border-slate-800 flex-row items-center justify-between">
+                    <Text className="text-xs text-slate-500">
+                      {hw.dueDate
+                        ? `Срок: ${new Date(hw.dueDate).toLocaleDateString()}`
+                        : ""}
+                    </Text>
+                    <View className="flex-row items-center">
+                      <Send size={13} color="#818CF8" />
+                      <Text className="text-xs font-extrabold text-indigo-400 ml-1.5">
+                        {hw.submissionText
+                          ? t("student.updateSubmission")
+                          : t("student.submitHomework")}
+                      </Text>
+                    </View>
+                  </View>
+                </TouchableOpacity>
+              ))
+            ) : (
+              <View className="p-8 rounded-3xl bg-slate-900/60 border border-slate-800 items-center">
+                <BookOpenCheck size={28} color="#64748B" />
+                <Text className="text-sm font-bold text-slate-400 mt-3">
+                  {t("student.noHomework")}
                 </Text>
-                <View className="px-3 py-1 rounded-lg bg-indigo-500/10 border border-indigo-500/30">
-                  <Text className="text-sm font-black text-indigo-400">
-                    {g.score}/{g.maxScore}
-                  </Text>
-                </View>
               </View>
-            ))
-          ) : (
-            <Text className="text-xs text-slate-500 italic">{t("student.noGrades")}</Text>
-          )}
-        </View>
+            )}
+          </View>
+        )}
+
+        {/* TAB 4: PROFILE & SETTINGS */}
+        {activeTab === "profile" && (
+          <ProfileAndSettingsView
+            centerName={data?.student.centerName}
+            roleLabel={t("roles.student")}
+            accentColor="#6366F1"
+          />
+        )}
       </ScrollView>
 
-      {/* Homework Submission Modal */}
+      <BottomTabBar
+        tabs={tabs}
+        activeTab={activeTab}
+        onSelect={setActiveTab}
+        accentColor="#6366F1"
+      />
+
+      {/* Homework Submission Bottom Sheet Modal */}
       <Modal
         visible={!!selectedHomework}
         animationType="slide"
         transparent
         onRequestClose={() => setSelectedHomework(null)}
       >
-        <View className="flex-1 bg-black/70 justify-end">
-          <View className="bg-slate-900 border-t border-slate-700 rounded-t-3xl p-6">
+        <View className="flex-1 bg-black/75 justify-end">
+          <View className="bg-slate-900 border-t border-slate-800 rounded-t-3xl p-6">
             <View className="flex-row items-center justify-between mb-4">
-              <Text className="text-lg font-extrabold text-white flex-1 mr-2">
+              <Text className="text-lg font-black text-white flex-1 mr-2">
                 {t("student.homeworkModalTitle")}
               </Text>
               <TouchableOpacity
                 onPress={() => setSelectedHomework(null)}
-                className="px-3 py-1 rounded-lg bg-slate-800"
+                className="w-9 h-9 rounded-full bg-slate-800 items-center justify-center"
               >
-                <Text className="text-xs font-bold text-slate-400">{t("common.close")}</Text>
+                <X size={18} color="#94A3B8" />
               </TouchableOpacity>
             </View>
 
             {selectedHomework && (
               <>
-                <Text className="text-sm font-bold text-indigo-400 mb-1">
+                <Text className="text-sm font-extrabold text-indigo-400 mb-1">
                   {selectedHomework.title}
                 </Text>
                 {selectedHomework.description && (
@@ -382,14 +615,14 @@ export default function StudentDashboard() {
                   numberOfLines={4}
                   placeholder={t("student.homeworkPlaceholder")}
                   placeholderTextColor="#64748B"
-                  className="w-full min-h-[110px] p-4 rounded-xl bg-slate-800 border border-slate-700 text-white text-sm mb-4"
+                  className="w-full min-h-[120px] p-4 rounded-2xl bg-slate-950 border border-slate-800 text-white text-sm mb-4"
                   style={{ textAlignVertical: "top" }}
                 />
 
                 <TouchableOpacity
                   onPress={handleSubmitHomework}
                   disabled={submittingHw || !submissionText.trim()}
-                  className={`w-full h-12 rounded-xl items-center justify-center ${
+                  className={`w-full py-4 rounded-2xl flex-row items-center justify-center ${
                     submittingHw || !submissionText.trim()
                       ? "bg-indigo-600/40"
                       : "bg-indigo-600"
@@ -398,9 +631,12 @@ export default function StudentDashboard() {
                   {submittingHw ? (
                     <ActivityIndicator color="#FFFFFF" />
                   ) : (
-                    <Text className="text-white font-bold text-sm">
-                      {t("student.submitHomework")}
-                    </Text>
+                    <>
+                      <Send size={16} color="#FFFFFF" />
+                      <Text className="text-white font-extrabold text-sm ml-2">
+                        {t("student.submitHomework")}
+                      </Text>
+                    </>
                   )}
                 </TouchableOpacity>
               </>
@@ -408,6 +644,6 @@ export default function StudentDashboard() {
           </View>
         </View>
       </Modal>
-    </>
+    </View>
   );
 }

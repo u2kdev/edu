@@ -4,14 +4,28 @@ import {
   Text,
   ScrollView,
   RefreshControl,
-  TouchableOpacity,
   ActivityIndicator,
+  TextInput,
 } from "react-native";
-import { useRouter } from "expo-router";
 import { useTranslation } from "react-i18next";
-import { useAuthStore } from "../../src/store/auth-store";
+import {
+  Home,
+  Building2,
+  Award,
+  Users,
+  GraduationCap,
+  LifeBuoy,
+  Search,
+  Layers,
+} from "lucide-react-native";
 import { apiClient } from "../../src/services/api-client";
 import { API_ENDPOINTS } from "../../src/config/api";
+import {
+  AppHeader,
+  BottomTabBar,
+  ProfileAndSettingsView,
+  TabItem,
+} from "../../src/components/ui";
 
 interface PlatformDashboardData {
   success: boolean;
@@ -38,12 +52,12 @@ interface PlatformDashboardData {
 }
 
 export default function PlatformDashboard() {
-  const { t, i18n } = useTranslation();
-  const router = useRouter();
-  const { logout } = useAuthStore();
+  const { t } = useTranslation();
   const [data, setData] = useState<PlatformDashboardData | null>(null);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
+  const [activeTab, setActiveTab] = useState<string>("today");
+  const [searchQuery, setSearchQuery] = useState("");
 
   const fetchDashboard = useCallback(async () => {
     try {
@@ -66,124 +80,181 @@ export default function PlatformDashboard() {
     fetchDashboard();
   };
 
-  const handleLogout = async () => {
-    await logout();
-    router.replace("/(auth)/login");
-  };
-
-  const toggleLanguage = () => {
-    i18n.changeLanguage(i18n.language === "ru" ? "uz" : "ru");
-  };
-
   if (loading && !data) {
     return (
-      <View className="flex-1 items-center justify-center bg-slate-900">
-        <ActivityIndicator size="large" color="#6366F1" />
+      <View className="flex-1 items-center justify-center bg-slate-950">
+        <ActivityIndicator size="large" color="#06B6D4" />
       </View>
     );
   }
 
   const kpis = data?.kpis;
+  const tabs: TabItem[] = [
+    { key: "today", label: t("tabs.today"), icon: Home },
+    {
+      key: "centers",
+      label: t("tabs.centers"),
+      icon: Building2,
+      badge: kpis?.totalCenters,
+    },
+    { key: "profile", label: t("tabs.profile"), icon: Award },
+  ];
+
+  const filteredCenters = (data?.centers || []).filter((c) =>
+    c.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+    c.ownerName.toLowerCase().includes(searchQuery.toLowerCase())
+  );
+
+  const renderCentersList = () => (
+    <>
+      <View className="w-full h-12 px-4 rounded-2xl bg-slate-900 border border-slate-800 flex-row items-center mb-4">
+        <Search size={16} color="#64748B" />
+        <TextInput
+          value={searchQuery}
+          onChangeText={setSearchQuery}
+          placeholder={t("platform.searchPlaceholder")}
+          placeholderTextColor="#64748B"
+          className="flex-1 ml-2.5 text-sm text-white"
+        />
+      </View>
+
+      {filteredCenters.map((center) => (
+        <View
+          key={center.id}
+          className="p-4 mb-3 rounded-3xl bg-slate-900 border border-slate-800"
+        >
+          <View className="flex-row items-center justify-between mb-1.5">
+            <Text className="text-base font-extrabold text-white flex-1 mr-2">
+              {center.name}
+            </Text>
+            <View className="px-2.5 py-0.5 rounded-full bg-emerald-500/20 border border-emerald-500/40">
+              <Text className="text-[10px] font-bold text-emerald-400">
+                {center.status}
+              </Text>
+            </View>
+          </View>
+          <Text className="text-xs text-slate-400">
+            {t("platform.owner")}: {center.ownerName}
+          </Text>
+          <View className="flex-row items-center gap-5 mt-3 pt-2.5 border-t border-slate-800">
+            <View className="flex-row items-center">
+              <Users size={13} color="#22D3EE" />
+              <Text className="text-xs text-cyan-400 font-bold ml-1.5">
+                {center.membersCount} участников
+              </Text>
+            </View>
+            <View className="flex-row items-center">
+              <Layers size={13} color="#94A3B8" />
+              <Text className="text-xs text-slate-300 font-bold ml-1.5">
+                {center.groupsCount} групп
+              </Text>
+            </View>
+          </View>
+        </View>
+      ))}
+    </>
+  );
 
   return (
-    <ScrollView
-      className="flex-1 bg-slate-900 px-5 pt-12"
-      refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor="#6366F1" />}
-    >
-      {/* Top Bar */}
-      <View className="flex-row items-center justify-between mb-6">
-        <View className="flex-1 mr-3">
-          <Text className="text-xs font-bold text-indigo-400 uppercase tracking-wider">
-            {data?.admin.systemRole || "SUPERADMIN"}
-          </Text>
-          <Text className="text-xl font-black text-white mt-0.5">
-            {t("platform.title")}
-          </Text>
-        </View>
+    <View className="flex-1 bg-slate-950">
+      <AppHeader
+        title={t("platform.title")}
+        subtitle={data?.admin.systemRole || "SUPERADMIN"}
+        accentColor="#06B6D4"
+        onAvatarPress={() => setActiveTab("profile")}
+      />
 
-        <View className="flex-row items-center gap-2">
-          <TouchableOpacity
-            onPress={toggleLanguage}
-            className="px-2.5 py-1.5 rounded-lg bg-slate-800 border border-slate-700"
-          >
-            <Text className="text-xs font-bold text-indigo-400">
-              {i18n.language === "ru" ? "UZ" : "RU"}
-            </Text>
-          </TouchableOpacity>
-          <TouchableOpacity
-            onPress={handleLogout}
-            className="px-3 py-1.5 rounded-lg bg-slate-800 border border-slate-700"
-          >
-            <Text className="text-xs font-medium text-slate-300">{t("common.logout")}</Text>
-          </TouchableOpacity>
-        </View>
-      </View>
-
-      {/* KPI Grid */}
-      <View className="flex-row flex-wrap gap-3 mb-6">
-        <View className="w-[48%] p-4 rounded-2xl bg-slate-800 border border-slate-700/60">
-          <Text className="text-xs text-slate-400 font-medium">{t("platform.activeCenters")}</Text>
-          <Text className="text-2xl font-black text-emerald-400 mt-1">
-            {kpis?.activeCenters ?? 0} / {kpis?.totalCenters ?? 0}
-          </Text>
-        </View>
-
-        <View className="w-[48%] p-4 rounded-2xl bg-slate-800 border border-slate-700/60">
-          <Text className="text-xs text-slate-400 font-medium">{t("platform.totalUsers")}</Text>
-          <Text className="text-2xl font-black text-white mt-1">
-            {kpis?.totalUsers ?? 0}
-          </Text>
-        </View>
-
-        <View className="w-[48%] p-4 rounded-2xl bg-slate-800 border border-slate-700/60">
-          <Text className="text-xs text-slate-400 font-medium">{t("platform.totalStudents")}</Text>
-          <Text className="text-2xl font-black text-indigo-400 mt-1">
-            {kpis?.totalStudents ?? 0}
-          </Text>
-        </View>
-
-        <View className="w-[48%] p-4 rounded-2xl bg-slate-800 border border-slate-700/60">
-          <Text className="text-xs text-slate-400 font-medium">{t("platform.openTickets")}</Text>
-          <Text className="text-2xl font-black text-amber-400 mt-1">
-            {kpis?.openTicketsCount ?? 0}
-          </Text>
-        </View>
-      </View>
-
-      {/* Centers List */}
-      <View className="mb-12">
-        <Text className="text-base font-bold text-white mb-3">{t("platform.centersList")}</Text>
-        {data?.centers && data.centers.length > 0 ? (
-          data.centers.map((center) => (
-            <View
-              key={center.id}
-              className="p-4 mb-2.5 rounded-2xl bg-slate-800 border border-slate-700/60"
-            >
-              <View className="flex-row items-center justify-between mb-1.5">
-                <Text className="text-base font-extrabold text-white flex-1 mr-2">
-                  {center.name}
-                </Text>
-                <View className="px-2.5 py-0.5 rounded-full bg-emerald-500/20 border border-emerald-500/40">
-                  <Text className="text-[10px] font-bold text-emerald-400">{center.status}</Text>
+      <ScrollView
+        className="flex-1 px-5 pt-5"
+        refreshControl={
+          <RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor="#06B6D4" />
+        }
+      >
+        {/* TAB 1: PLATFORM OVERVIEW */}
+        {activeTab === "today" && (
+          <View className="pb-10">
+            <View className="flex-row flex-wrap justify-between mb-5">
+              <View className="w-[48%] p-4 mb-3 rounded-3xl bg-slate-900 border border-slate-800">
+                <View className="flex-row items-center justify-between mb-2">
+                  <Text className="text-xs text-slate-400 font-semibold">
+                    {t("platform.activeCenters")}
+                  </Text>
+                  <Building2 size={16} color="#22D3EE" />
                 </View>
-              </View>
-              <Text className="text-xs text-slate-400">
-                👤 {t("platform.owner")}: {center.ownerName}
-              </Text>
-              <View className="flex-row items-center gap-4 mt-2 pt-2 border-t border-slate-700/50">
-                <Text className="text-xs text-indigo-400 font-semibold">
-                  👥 {center.membersCount}
+                <Text className="text-2xl font-black text-emerald-400">
+                  {kpis?.activeCenters ?? 0} / {kpis?.totalCenters ?? 0}
                 </Text>
-                <Text className="text-xs text-slate-300 font-semibold">
-                  📚 {center.groupsCount}
+              </View>
+
+              <View className="w-[48%] p-4 mb-3 rounded-3xl bg-slate-900 border border-slate-800">
+                <View className="flex-row items-center justify-between mb-2">
+                  <Text className="text-xs text-slate-400 font-semibold">
+                    {t("platform.totalUsers")}
+                  </Text>
+                  <Users size={16} color="#818CF8" />
+                </View>
+                <Text className="text-2xl font-black text-white">
+                  {kpis?.totalUsers ?? 0}
+                </Text>
+              </View>
+
+              <View className="w-[48%] p-4 rounded-3xl bg-slate-900 border border-slate-800">
+                <View className="flex-row items-center justify-between mb-2">
+                  <Text className="text-xs text-slate-400 font-semibold">
+                    {t("platform.totalStudents")}
+                  </Text>
+                  <GraduationCap size={16} color="#34D399" />
+                </View>
+                <Text className="text-2xl font-black text-indigo-400">
+                  {kpis?.totalStudents ?? 0}
+                </Text>
+              </View>
+
+              <View className="w-[48%] p-4 rounded-3xl bg-slate-900 border border-slate-800">
+                <View className="flex-row items-center justify-between mb-2">
+                  <Text className="text-xs text-slate-400 font-semibold">
+                    {t("platform.openTickets")}
+                  </Text>
+                  <LifeBuoy size={16} color="#FBBF24" />
+                </View>
+                <Text className="text-2xl font-black text-amber-400">
+                  {kpis?.openTicketsCount ?? 0}
                 </Text>
               </View>
             </View>
-          ))
-        ) : (
-          <Text className="text-xs text-slate-500 italic">—</Text>
+
+            <Text className="text-base font-extrabold text-white mb-3">
+              {t("platform.centersList")}
+            </Text>
+            {renderCentersList()}
+          </View>
         )}
-      </View>
-    </ScrollView>
+
+        {/* TAB 2: TENANTS DIRECTORY */}
+        {activeTab === "centers" && (
+          <View className="pb-10">
+            <Text className="text-base font-extrabold text-white mb-3">
+              {t("platform.centersList")}
+            </Text>
+            {renderCentersList()}
+          </View>
+        )}
+
+        {/* TAB 3: PROFILE */}
+        {activeTab === "profile" && (
+          <ProfileAndSettingsView
+            roleLabel={t("roles.admin")}
+            accentColor="#06B6D4"
+          />
+        )}
+      </ScrollView>
+
+      <BottomTabBar
+        tabs={tabs}
+        activeTab={activeTab}
+        onSelect={setActiveTab}
+        accentColor="#06B6D4"
+      />
+    </View>
   );
 }

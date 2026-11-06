@@ -10,11 +10,30 @@ import {
   Modal,
   TextInput,
 } from "react-native";
-import { useRouter } from "expo-router";
 import { useTranslation } from "react-i18next";
+import {
+  Home,
+  Users,
+  CheckSquare,
+  UserCheck,
+  Clock,
+  MapPin,
+  BookOpen,
+  ClipboardCheck,
+  CheckCircle2,
+  X,
+  Award,
+} from "lucide-react-native";
 import { useAuthStore } from "../../src/store/auth-store";
 import { apiClient } from "../../src/services/api-client";
 import { API_ENDPOINTS } from "../../src/config/api";
+import {
+  AppHeader,
+  BottomTabBar,
+  ProfileAndSettingsView,
+  TabItem,
+  getInitials,
+} from "../../src/components/ui";
 
 interface TeacherGroup {
   id: string;
@@ -62,13 +81,13 @@ interface TeacherDashboardData {
 type AttendanceStatus = "PRESENT" | "LATE" | "ABSENT";
 
 export default function TeacherDashboard() {
-  const { t, i18n } = useTranslation();
-  const router = useRouter();
-  const { user, logout } = useAuthStore();
+  const { t } = useTranslation();
+  const { user } = useAuthStore();
   const [data, setData] = useState<TeacherDashboardData | null>(null);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [markingGroupId, setMarkingGroupId] = useState<string | null>(null);
+  const [activeTab, setActiveTab] = useState<string>("today");
 
   // Per-Student Attendance Modal State
   const [attendanceGroup, setAttendanceGroup] = useState<TeacherGroup | null>(null);
@@ -100,15 +119,6 @@ export default function TeacherDashboard() {
   const onRefresh = () => {
     setRefreshing(true);
     fetchDashboard();
-  };
-
-  const handleLogout = async () => {
-    await logout();
-    router.replace("/(auth)/login");
-  };
-
-  const toggleLanguage = () => {
-    i18n.changeLanguage(i18n.language === "ru" ? "uz" : "ru");
   };
 
   const handleQuickAttendanceAllPresent = async (group: TeacherGroup) => {
@@ -144,13 +154,8 @@ export default function TeacherDashboard() {
     setAttendanceGroup(group);
   };
 
-  const cycleStudentStatus = (membershipId: string) => {
-    setStudentStatuses((prev) => {
-      const current = prev[membershipId] || "PRESENT";
-      const next: AttendanceStatus =
-        current === "PRESENT" ? "LATE" : current === "LATE" ? "ABSENT" : "PRESENT";
-      return { ...prev, [membershipId]: next };
-    });
+  const setStudentStatus = (membershipId: string, status: AttendanceStatus) => {
+    setStudentStatuses((prev) => ({ ...prev, [membershipId]: status }));
   };
 
   const handleSaveCustomAttendance = async () => {
@@ -212,224 +217,356 @@ export default function TeacherDashboard() {
 
   if (loading && !data) {
     return (
-      <View className="flex-1 items-center justify-center bg-slate-900">
-        <ActivityIndicator size="large" color="#6366F1" />
+      <View className="flex-1 items-center justify-center bg-slate-950">
+        <ActivityIndicator size="large" color="#10B981" />
       </View>
     );
   }
 
-  return (
-    <>
-      <ScrollView
-        className="flex-1 bg-slate-900 px-5 pt-12"
-        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor="#6366F1" />}
-      >
-        {/* Top Bar */}
-        <View className="flex-row items-center justify-between mb-6">
-          <View className="flex-1 mr-3">
-            <Text className="text-xs font-semibold text-indigo-400 uppercase tracking-wider">
-              {data?.teacher.centerName || "e-darschi"}
-            </Text>
-            <Text className="text-xl font-black text-white mt-0.5" numberOfLines={1}>
-              {user?.fullName || data?.teacher.fullName || t("roles.teacher")}
-            </Text>
-          </View>
+  const totalStudents =
+    data?.groups.reduce((sum, g) => sum + g.activeStudentsCount, 0) || 0;
+  const reviewsCount = data?.pendingReviews.length || 0;
 
-          <View className="flex-row items-center gap-2">
-            <TouchableOpacity
-              onPress={toggleLanguage}
-              className="px-2.5 py-1.5 rounded-lg bg-slate-800 border border-slate-700"
-            >
-              <Text className="text-xs font-bold text-indigo-400">
-                {i18n.language === "ru" ? "UZ" : "RU"}
+  const tabs: TabItem[] = [
+    { key: "today", label: t("tabs.today"), icon: Home },
+    { key: "groups", label: t("tabs.groups"), icon: Users },
+    {
+      key: "reviews",
+      label: t("tabs.reviews"),
+      icon: ClipboardCheck,
+      badge: reviewsCount,
+    },
+    { key: "profile", label: t("tabs.profile"), icon: Award },
+  ];
+
+  const renderGroupCard = (group: TeacherGroup) => (
+    <View
+      key={group.id}
+      className="p-5 mb-3.5 rounded-3xl bg-slate-900 border border-slate-800"
+    >
+      <View className="flex-row items-center justify-between mb-1.5">
+        <Text className="text-base font-extrabold text-white flex-1 mr-2">
+          {group.name}
+        </Text>
+        <View className="px-3 py-1 rounded-full bg-emerald-500/15 border border-emerald-500/30">
+          <Text className="text-xs font-extrabold text-emerald-400">
+            {t("teacher.studentsCount", { count: group.activeStudentsCount })}
+          </Text>
+        </View>
+      </View>
+
+      {group.courseTitle && (
+        <View className="flex-row items-center mb-4">
+          <BookOpen size={13} color="#94A3B8" />
+          <Text className="text-xs text-slate-400 ml-1.5" numberOfLines={1}>
+            {group.courseTitle}
+            {group.latestLessonTitle ? ` • ${group.latestLessonTitle}` : ""}
+          </Text>
+        </View>
+      )}
+
+      <View className="gap-2.5">
+        <TouchableOpacity
+          onPress={() => handleQuickAttendanceAllPresent(group)}
+          disabled={markingGroupId === group.id}
+          activeOpacity={0.8}
+          className="w-full py-3.5 rounded-2xl bg-emerald-600 flex-row items-center justify-center"
+        >
+          {markingGroupId === group.id ? (
+            <ActivityIndicator size="small" color="#FFFFFF" />
+          ) : (
+            <>
+              <UserCheck size={16} color="#FFFFFF" />
+              <Text className="text-xs font-extrabold text-white ml-2">
+                {t("teacher.quickMarkAll")}
               </Text>
-            </TouchableOpacity>
-            <TouchableOpacity
-              onPress={handleLogout}
-              className="px-3 py-1.5 rounded-lg bg-slate-800 border border-slate-700"
-            >
-              <Text className="text-xs font-medium text-slate-300">{t("common.logout")}</Text>
-            </TouchableOpacity>
-          </View>
-        </View>
-
-        {/* Schedule Today Card */}
-        <View className="mb-6">
-          <Text className="text-base font-bold text-white mb-3">{t("teacher.mySchedule")}</Text>
-          {data?.schedule && data.schedule.length > 0 ? (
-            data.schedule.map((slot) => (
-              <View
-                key={slot.id}
-                className="p-4 mb-2.5 rounded-xl bg-slate-800 border border-slate-700/60 flex-row items-center justify-between"
-              >
-                <View className="flex-1 mr-2">
-                  <Text className="text-sm font-bold text-white">{slot.groupName}</Text>
-                  <Text className="text-xs text-slate-400 mt-0.5">📍 {slot.roomName}</Text>
-                </View>
-                <View className="px-3 py-1.5 rounded-lg bg-indigo-500/10 border border-indigo-500/30">
-                  <Text className="text-xs font-black text-indigo-400">
-                    {slot.startTime} - {slot.endTime}
-                  </Text>
-                </View>
-              </View>
-            ))
-          ) : (
-            <Text className="text-xs text-slate-500 italic">{t("student.noUpcomingClasses")}</Text>
+            </>
           )}
-        </View>
+        </TouchableOpacity>
 
-        {/* Assigned Groups with Quick Attendance & Journal */}
-        <View className="mb-6">
-          <Text className="text-base font-bold text-white mb-3">{t("teacher.myGroups")}</Text>
-          {data?.groups && data.groups.length > 0 ? (
-            data.groups.map((group) => (
-              <View
-                key={group.id}
-                className="p-4 mb-3 rounded-2xl bg-slate-800/90 border border-slate-700/60"
-              >
-                <View className="flex-row items-center justify-between mb-1">
-                  <Text className="text-base font-extrabold text-white">{group.name}</Text>
-                  <Text className="text-xs text-indigo-400 font-semibold">
-                    {t("teacher.studentsCount", { count: group.activeStudentsCount })}
-                  </Text>
-                </View>
-                {group.courseTitle && (
-                  <Text className="text-xs text-slate-400 mb-3">
-                    {group.courseTitle}
-                    {group.latestLessonTitle ? ` • ${group.latestLessonTitle}` : ""}
-                  </Text>
-                )}
+        {group.students.length > 0 && (
+          <TouchableOpacity
+            onPress={() => openAttendanceJournal(group)}
+            activeOpacity={0.8}
+            className="w-full py-3 rounded-2xl bg-slate-800 border border-slate-700 flex-row items-center justify-center"
+          >
+            <CheckSquare size={15} color="#CBD5E1" />
+            <Text className="text-xs font-bold text-slate-200 ml-2">
+              {t("teacher.openAttendanceModal")}
+            </Text>
+          </TouchableOpacity>
+        )}
+      </View>
+    </View>
+  );
 
-                <View className="gap-2">
-                  <TouchableOpacity
-                    onPress={() => handleQuickAttendanceAllPresent(group)}
-                    disabled={markingGroupId === group.id}
-                    className="w-full py-2.5 rounded-xl bg-emerald-600/20 border border-emerald-500/40 items-center justify-center active:bg-emerald-600/30"
-                  >
-                    {markingGroupId === group.id ? (
-                      <ActivityIndicator size="small" color="#10B981" />
-                    ) : (
-                      <Text className="text-xs font-bold text-emerald-400">
-                        {t("teacher.quickMarkAll")}
-                      </Text>
-                    )}
-                  </TouchableOpacity>
+  return (
+    <View className="flex-1 bg-slate-950">
+      <AppHeader
+        title={user?.fullName || data?.teacher.fullName || t("roles.teacher")}
+        subtitle={data?.teacher.centerName || "e-darschi"}
+        accentColor="#10B981"
+        onAvatarPress={() => setActiveTab("profile")}
+      />
 
-                  {group.students.length > 0 && (
-                    <TouchableOpacity
-                      onPress={() => openAttendanceJournal(group)}
-                      className="w-full py-2.5 rounded-xl bg-slate-700/60 border border-slate-600 items-center justify-center"
-                    >
-                      <Text className="text-xs font-bold text-slate-200">
-                        {t("teacher.openAttendanceModal")}
-                      </Text>
-                    </TouchableOpacity>
-                  )}
-                </View>
+      <ScrollView
+        className="flex-1 px-5 pt-5"
+        refreshControl={
+          <RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor="#10B981" />
+        }
+      >
+        {/* TAB 1: OVERVIEW */}
+        {activeTab === "today" && (
+          <View className="pb-10">
+            {/* Teacher Summary KPI Row */}
+            <View className="flex-row gap-3 mb-6">
+              <View className="flex-1 p-4 rounded-3xl bg-slate-900 border border-slate-800">
+                <Text className="text-xs text-slate-400 font-semibold">
+                  {t("tabs.groups")}
+                </Text>
+                <Text className="text-2xl font-black text-emerald-400 mt-1">
+                  {data?.groups.length || 0}
+                </Text>
+                <Text className="text-[11px] text-slate-500 mt-1">
+                  {totalStudents} учеников
+                </Text>
               </View>
-            ))
-          ) : (
-            <Text className="text-xs text-slate-500 italic">—</Text>
-          )}
-        </View>
 
-        {/* Pending Homework Reviews (Interactive) */}
-        <View className="mb-12">
-          <View className="flex-row items-center justify-between mb-3">
-            <Text className="text-base font-bold text-white">{t("teacher.pendingReviews")}</Text>
-            <Text className="text-xs text-amber-400 font-bold">{data?.pendingReviews.length || 0}</Text>
-          </View>
-
-          {data?.pendingReviews && data.pendingReviews.length > 0 ? (
-            data.pendingReviews.map((rev) => (
               <TouchableOpacity
-                key={rev.id}
-                onPress={() => openGradeModal(rev)}
+                onPress={() => setActiveTab("reviews")}
                 activeOpacity={0.8}
-                className="p-4 mb-2.5 rounded-xl bg-slate-800 border border-slate-700/60 flex-row items-center justify-between"
+                className="flex-1 p-4 rounded-3xl bg-slate-900 border border-slate-800"
               >
-                <View className="flex-1 mr-3">
-                  <Text className="text-sm font-bold text-white">{rev.homeworkTitle}</Text>
-                  <Text className="text-xs text-slate-400 mt-0.5">👤 {rev.studentName}</Text>
-                  {rev.submissionText && (
-                    <Text className="text-xs text-slate-300 mt-1" numberOfLines={1}>
-                      📝 {rev.submissionText}
-                    </Text>
-                  )}
-                </View>
-                <View className="px-3 py-1.5 rounded-lg bg-amber-500/15 border border-amber-500/40">
-                  <Text className="text-xs font-bold text-amber-400">
-                    {t("teacher.reviewAction")}
-                  </Text>
-                </View>
+                <Text className="text-xs text-slate-400 font-semibold">
+                  {t("teacher.pendingReviews")}
+                </Text>
+                <Text className="text-2xl font-black text-amber-400 mt-1">
+                  {reviewsCount}
+                </Text>
+                <Text className="text-[11px] text-amber-400/80 font-bold mt-1">
+                  Нажмите для проверки →
+                </Text>
               </TouchableOpacity>
-            ))
-          ) : (
-            <Text className="text-xs text-slate-500 italic">{t("teacher.allReviewed")}</Text>
-          )}
-        </View>
+            </View>
+
+            {/* Schedule Section */}
+            <View className="mb-6">
+              <Text className="text-base font-extrabold text-white mb-3">
+                {t("teacher.mySchedule")}
+              </Text>
+              {data?.schedule && data.schedule.length > 0 ? (
+                data.schedule.map((slot) => (
+                  <View
+                    key={slot.id}
+                    className="p-4 mb-2.5 rounded-3xl bg-slate-900 border border-slate-800 flex-row items-center justify-between"
+                  >
+                    <View className="flex-1 mr-3">
+                      <Text className="text-sm font-extrabold text-white">
+                        {slot.groupName}
+                      </Text>
+                      <View className="flex-row items-center mt-1">
+                        <MapPin size={13} color="#94A3B8" />
+                        <Text className="text-xs text-slate-400 ml-1">
+                          {slot.roomName}
+                        </Text>
+                      </View>
+                    </View>
+                    <View className="px-3.5 py-2 rounded-2xl bg-emerald-500/15 border border-emerald-500/30 flex-row items-center">
+                      <Clock size={13} color="#34D399" />
+                      <Text className="text-xs font-black text-emerald-300 ml-1.5">
+                        {slot.startTime} – {slot.endTime}
+                      </Text>
+                    </View>
+                  </View>
+                ))
+              ) : (
+                <Text className="text-xs text-slate-500 italic">
+                  {t("student.noUpcomingClasses")}
+                </Text>
+              )}
+            </View>
+
+            {/* Quick Groups Attendance */}
+            <View>
+              <Text className="text-base font-extrabold text-white mb-3">
+                {t("teacher.myGroups")}
+              </Text>
+              {data?.groups.map(renderGroupCard)}
+            </View>
+          </View>
+        )}
+
+        {/* TAB 2: GROUPS & JOURNAL */}
+        {activeTab === "groups" && (
+          <View className="pb-10">
+            <Text className="text-base font-extrabold text-white mb-3">
+              {t("teacher.myGroups")} ({data?.groups.length || 0})
+            </Text>
+            {data?.groups.map(renderGroupCard)}
+          </View>
+        )}
+
+        {/* TAB 3: HOMEWORK REVIEWS */}
+        {activeTab === "reviews" && (
+          <View className="pb-10">
+            <Text className="text-base font-extrabold text-white mb-3">
+              {t("teacher.pendingReviews")} ({reviewsCount})
+            </Text>
+            {data?.pendingReviews && data.pendingReviews.length > 0 ? (
+              data.pendingReviews.map((rev) => (
+                <TouchableOpacity
+                  key={rev.id}
+                  onPress={() => openGradeModal(rev)}
+                  activeOpacity={0.85}
+                  className="p-5 mb-3 rounded-3xl bg-slate-900 border border-slate-800"
+                >
+                  <View className="flex-row items-center justify-between mb-2">
+                    <View className="flex-row items-center flex-1 mr-2">
+                      <View className="w-9 h-9 rounded-xl bg-amber-500/15 items-center justify-center mr-3">
+                        <Text className="text-xs font-black text-amber-400">
+                          {getInitials(rev.studentName)}
+                        </Text>
+                      </View>
+                      <View className="flex-1">
+                        <Text className="text-sm font-extrabold text-white">
+                          {rev.studentName}
+                        </Text>
+                        <Text className="text-xs text-indigo-400 font-semibold">
+                          {rev.homeworkTitle}
+                        </Text>
+                      </View>
+                    </View>
+                    <View className="px-3 py-1.5 rounded-xl bg-amber-500/20 border border-amber-500/40">
+                      <Text className="text-xs font-extrabold text-amber-300">
+                        {t("teacher.reviewAction")}
+                      </Text>
+                    </View>
+                  </View>
+
+                  {rev.submissionText && (
+                    <View className="mt-2 p-3 rounded-2xl bg-slate-950 border border-slate-800">
+                      <Text className="text-xs text-slate-300" numberOfLines={2}>
+                        “{rev.submissionText}”
+                      </Text>
+                    </View>
+                  )}
+                </TouchableOpacity>
+              ))
+            ) : (
+              <View className="p-8 rounded-3xl bg-slate-900/60 border border-slate-800 items-center">
+                <CheckCircle2 size={32} color="#10B981" />
+                <Text className="text-sm font-bold text-slate-300 mt-3">
+                  {t("teacher.allReviewed")}
+                </Text>
+              </View>
+            )}
+          </View>
+        )}
+
+        {/* TAB 4: PROFILE */}
+        {activeTab === "profile" && (
+          <ProfileAndSettingsView
+            centerName={data?.teacher.centerName}
+            roleLabel={t("roles.teacher")}
+            accentColor="#10B981"
+          />
+        )}
       </ScrollView>
 
-      {/* Per-Student Attendance Journal Modal */}
+      <BottomTabBar
+        tabs={tabs}
+        activeTab={activeTab}
+        onSelect={setActiveTab}
+        accentColor="#10B981"
+      />
+
+      {/* Per-Student Segmented Attendance Journal Modal */}
       <Modal
         visible={!!attendanceGroup}
         animationType="slide"
         transparent
         onRequestClose={() => setAttendanceGroup(null)}
       >
-        <View className="flex-1 bg-black/70 justify-end">
-          <View className="bg-slate-900 border-t border-slate-700 rounded-t-3xl p-6 max-h-[80%]">
+        <View className="flex-1 bg-black/75 justify-end">
+          <View className="bg-slate-900 border-t border-slate-800 rounded-t-3xl p-6 max-h-[85%]">
             <View className="flex-row items-center justify-between mb-4">
               <View className="flex-1 mr-2">
-                <Text className="text-lg font-extrabold text-white">
+                <Text className="text-lg font-black text-white">
                   {attendanceGroup?.name}
                 </Text>
-                <Text className="text-xs text-slate-400">
+                <Text className="text-xs text-emerald-400 font-semibold mt-0.5">
                   {attendanceGroup?.latestLessonTitle || t("teacher.openAttendanceModal")}
                 </Text>
               </View>
               <TouchableOpacity
                 onPress={() => setAttendanceGroup(null)}
-                className="px-3 py-1.5 rounded-lg bg-slate-800"
+                className="w-9 h-9 rounded-full bg-slate-800 items-center justify-center"
               >
-                <Text className="text-xs font-bold text-slate-400">{t("common.close")}</Text>
+                <X size={18} color="#94A3B8" />
               </TouchableOpacity>
             </View>
 
             <ScrollView className="mb-4">
               {attendanceGroup?.students.map((st) => {
-                const status = studentStatuses[st.membershipId] || "PRESENT";
+                const current = studentStatuses[st.membershipId] || "PRESENT";
                 return (
-                  <TouchableOpacity
+                  <View
                     key={st.membershipId}
-                    onPress={() => cycleStudentStatus(st.membershipId)}
-                    className="p-3.5 mb-2 rounded-xl bg-slate-800 border border-slate-700 flex-row items-center justify-between"
+                    className="p-3.5 mb-2.5 rounded-2xl bg-slate-950 border border-slate-800 flex-row items-center justify-between"
                   >
-                    <Text className="text-sm font-semibold text-white flex-1 mr-2">
+                    <Text
+                      className="text-sm font-bold text-white flex-1 mr-2"
+                      numberOfLines={1}
+                    >
                       {st.fullName}
                     </Text>
-                    <View
-                      className={`px-3 py-1 rounded-lg ${
-                        status === "PRESENT"
-                          ? "bg-emerald-500/20 border border-emerald-500/40"
-                          : status === "LATE"
-                          ? "bg-amber-500/20 border border-amber-500/40"
-                          : "bg-rose-500/20 border border-rose-500/40"
-                      }`}
-                    >
-                      <Text
-                        className={`text-xs font-bold ${
-                          status === "PRESENT"
-                            ? "text-emerald-400"
-                            : status === "LATE"
-                            ? "text-amber-400"
-                            : "text-rose-400"
-                        }`}
-                      >
-                        {status}
-                      </Text>
+
+                    {/* Segmented 3-state Attendance Selector */}
+                    <View className="flex-row gap-1.5">
+                      {(
+                        [
+                          {
+                            code: "PRESENT",
+                            label: t("teacher.statusPresent"),
+                            activeBg: "bg-emerald-600 border-emerald-500",
+                          },
+                          {
+                            code: "LATE",
+                            label: t("teacher.statusLate"),
+                            activeBg: "bg-amber-600 border-amber-500",
+                          },
+                          {
+                            code: "ABSENT",
+                            label: t("teacher.statusAbsent"),
+                            activeBg: "bg-rose-600 border-rose-500",
+                          },
+                        ] as const
+                      ).map((opt) => {
+                        const isSelected = current === opt.code;
+                        return (
+                          <TouchableOpacity
+                            key={opt.code}
+                            onPress={() =>
+                              setStudentStatus(st.membershipId, opt.code)
+                            }
+                            className={`px-2.5 py-1.5 rounded-xl border ${
+                              isSelected
+                                ? opt.activeBg
+                                : "bg-slate-900 border-slate-800"
+                            }`}
+                          >
+                            <Text
+                              className={`text-[11px] font-extrabold ${
+                                isSelected ? "text-white" : "text-slate-400"
+                              }`}
+                            >
+                              {opt.label}
+                            </Text>
+                          </TouchableOpacity>
+                        );
+                      })}
                     </View>
-                  </TouchableOpacity>
+                  </View>
                 );
               })}
             </ScrollView>
@@ -437,68 +574,99 @@ export default function TeacherDashboard() {
             <TouchableOpacity
               onPress={handleSaveCustomAttendance}
               disabled={savingAttendance}
-              className="w-full h-12 rounded-xl bg-indigo-600 items-center justify-center"
+              className="w-full py-4 rounded-2xl bg-emerald-600 items-center justify-center"
             >
               {savingAttendance ? (
                 <ActivityIndicator color="#FFFFFF" />
               ) : (
-                <Text className="text-white font-bold text-sm">{t("common.save")}</Text>
+                <Text className="text-white font-extrabold text-sm">
+                  {t("common.save")}
+                </Text>
               )}
             </TouchableOpacity>
           </View>
         </View>
       </Modal>
 
-      {/* Homework Grading Modal */}
+      {/* Homework Grading Modal with Quick Presets */}
       <Modal
         visible={!!selectedReview}
         animationType="slide"
         transparent
         onRequestClose={() => setSelectedReview(null)}
       >
-        <View className="flex-1 bg-black/70 justify-end">
-          <View className="bg-slate-900 border-t border-slate-700 rounded-t-3xl p-6">
+        <View className="flex-1 bg-black/75 justify-end">
+          <View className="bg-slate-900 border-t border-slate-800 rounded-t-3xl p-6">
             <View className="flex-row items-center justify-between mb-4">
-              <Text className="text-lg font-extrabold text-white flex-1 mr-2">
+              <Text className="text-lg font-black text-white flex-1 mr-2">
                 {t("teacher.gradeModalTitle")}
               </Text>
               <TouchableOpacity
                 onPress={() => setSelectedReview(null)}
-                className="px-3 py-1 rounded-lg bg-slate-800"
+                className="w-9 h-9 rounded-full bg-slate-800 items-center justify-center"
               >
-                <Text className="text-xs font-bold text-slate-400">{t("common.close")}</Text>
+                <X size={18} color="#94A3B8" />
               </TouchableOpacity>
             </View>
 
             {selectedReview && (
               <>
-                <Text className="text-sm font-bold text-indigo-400">
+                <Text className="text-sm font-extrabold text-emerald-400">
                   {selectedReview.homeworkTitle}
                 </Text>
                 <Text className="text-xs text-slate-400 mb-3">
-                  👤 {selectedReview.studentName}
+                  {selectedReview.studentName}
                 </Text>
 
                 {selectedReview.submissionText && (
-                  <View className="p-3.5 rounded-xl bg-slate-800 border border-slate-700 mb-4">
+                  <View className="p-3.5 rounded-2xl bg-slate-950 border border-slate-800 mb-4">
                     <Text className="text-[11px] font-bold text-slate-400 mb-1">
                       {t("teacher.studentAnswer")}:
                     </Text>
-                    <Text className="text-xs text-white">{selectedReview.submissionText}</Text>
+                    <Text className="text-xs text-white">
+                      {selectedReview.submissionText}
+                    </Text>
                   </View>
                 )}
 
-                <Text className="text-xs font-semibold text-slate-300 mb-1.5">
+                <Text className="text-xs font-bold text-slate-300 mb-2">
                   {t("teacher.scoreLabel")}
                 </Text>
+
+                {/* Quick 1-Tap Score Presets */}
+                <View className="flex-row gap-2 mb-3">
+                  {["100", "95", "85", "75", "60"].map((preset) => {
+                    const active = gradeValue === preset;
+                    return (
+                      <TouchableOpacity
+                        key={preset}
+                        onPress={() => setGradeValue(preset)}
+                        className={`flex-1 py-2 rounded-xl border items-center ${
+                          active
+                            ? "bg-emerald-600 border-emerald-500"
+                            : "bg-slate-950 border-slate-800"
+                        }`}
+                      >
+                        <Text
+                          className={`text-xs font-extrabold ${
+                            active ? "text-white" : "text-slate-300"
+                          }`}
+                        >
+                          {preset}
+                        </Text>
+                      </TouchableOpacity>
+                    );
+                  })}
+                </View>
+
                 <TextInput
                   value={gradeValue}
                   onChangeText={setGradeValue}
                   keyboardType="numeric"
-                  className="w-full h-11 px-4 rounded-xl bg-slate-800 border border-slate-700 text-white text-base mb-3"
+                  className="w-full h-12 px-4 rounded-2xl bg-slate-950 border border-slate-800 text-white text-base font-bold mb-3"
                 />
 
-                <Text className="text-xs font-semibold text-slate-300 mb-1.5">
+                <Text className="text-xs font-bold text-slate-300 mb-1.5">
                   {t("teacher.feedbackLabel")}
                 </Text>
                 <TextInput
@@ -506,19 +674,19 @@ export default function TeacherDashboard() {
                   onChangeText={setFeedbackValue}
                   placeholder={t("teacher.feedbackPlaceholder")}
                   placeholderTextColor="#64748B"
-                  className="w-full h-20 p-3 rounded-xl bg-slate-800 border border-slate-700 text-white text-sm mb-4"
-                   multiline
+                  className="w-full h-20 p-3.5 rounded-2xl bg-slate-950 border border-slate-800 text-white text-sm mb-4"
+                  multiline
                 />
 
                 <TouchableOpacity
                   onPress={handleSaveGrade}
                   disabled={savingGrade}
-                  className="w-full h-12 rounded-xl bg-indigo-600 items-center justify-center"
+                  className="w-full py-4 rounded-2xl bg-emerald-600 items-center justify-center"
                 >
                   {savingGrade ? (
                     <ActivityIndicator color="#FFFFFF" />
                   ) : (
-                    <Text className="text-white font-bold text-sm">
+                    <Text className="text-white font-extrabold text-sm">
                       {t("teacher.submitGrade")}
                     </Text>
                   )}
@@ -528,6 +696,6 @@ export default function TeacherDashboard() {
           </View>
         </View>
       </Modal>
-    </>
+    </View>
   );
 }
