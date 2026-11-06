@@ -44,6 +44,7 @@ export interface JWTPayload {
   platformRole: PlatformRole | string;
   activeCenterId?: string;
   activeCenterRole?: CenterRole | string;
+  jti?: string;
 }
 
 export async function hashPassword(password: string): Promise<string> {
@@ -58,8 +59,10 @@ import crypto from "crypto";
 
 export function signJWT(payload: JWTPayload, expiresIn: jwt.SignOptions["expiresIn"] = "7d", jwtId?: string): string {
   const options: jwt.SignOptions = { expiresIn };
-  if (jwtId) options.jwtid = jwtId;
-  return jwt.sign(payload, getJwtSecret(), options);
+  const { jti, ...restPayload } = payload;
+  const effectiveJti = jwtId || jti;
+  if (effectiveJti) options.jwtid = effectiveJti;
+  return jwt.sign(restPayload, getJwtSecret(), options);
 }
 
 export function verifyJWT(token: string): (JWTPayload & { jti?: string }) | null {
