@@ -1,8 +1,8 @@
 import { getAuthSession } from "./auth";
 import { NextResponse } from "next/server";
 
-export async function requirePlatformOwner() {
-  const session = await getAuthSession();
+export async function requirePlatformOwner(req?: Request) {
+  const session = await getAuthSession(req);
   if (!session) {
     throw new Error("Unauthorized");
   }
@@ -21,8 +21,8 @@ export async function requirePlatformOwner() {
   return session;
 }
 
-export async function requireDeveloper() {
-  const session = await getAuthSession();
+export async function requireDeveloper(req?: Request) {
+  const session = await getAuthSession(req);
   if (!session) {
     throw new Error("Unauthorized");
   }

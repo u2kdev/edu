@@ -40,6 +40,7 @@ model PlatformUser {
   notifications       Notification[]
   passwordResetTokens PasswordResetToken[]
   userSessions        UserSession[]
+  devicePushTokens    DevicePushToken[]
 
   @@index([email])
   @@index([phone])
@@ -695,6 +696,21 @@ model UserSession {
 
   @@index([userId])
   @@index([jtiHash])
+}
+
+model DevicePushToken {
+  id         String   @id @default(uuid())
+  userId     String
+  platform   String
+  pushToken  String   @unique
+  deviceInfo String?
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  user PlatformUser @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([pushToken])
 }
 
 model PasswordResetToken {

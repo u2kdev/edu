@@ -6,6 +6,13 @@ export const loginSchema = z.object({
   rememberMe: z.boolean().optional().default(false),
 });
 
+export const mobileLoginSchema = z.object({
+  email: z.string().email("auth.email.invalid"),
+  password: z.string().min(6, "auth.password.min_6"),
+  deviceName: z.string().optional(),
+  platform: z.enum(["ios", "android", "web"]).optional(),
+});
+
 export const registerSchema = z
   .object({
     email: z.string().email("auth.email.invalid"),

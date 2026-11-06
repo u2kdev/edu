@@ -115,7 +115,7 @@ export async function requireTenantAccess(
     isWrite = ["POST", "PUT", "PATCH", "DELETE"].includes(method);
   }
 
-  const session = await getAuthSession();
+  const session = await getAuthSession(req);
   if (!session) {
     throw new TenantUnauthorizedError();
   }

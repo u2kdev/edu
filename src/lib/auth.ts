@@ -1,6 +1,6 @@
 import jwt from "jsonwebtoken";
 import bcrypt from "bcryptjs";
-import { cookies } from "next/headers";
+import { cookies, headers } from "next/headers";
 import { db } from "./db";
 import { languageToLocale } from "./language";
 
@@ -104,7 +104,7 @@ export async function createSessionToken(
   return token;
 }
 
-export async function getAuthSession(): Promise<{
+export async function getAuthSession(req?: Request): Promise<{
   user: {
     id: string;
     email: string;
@@ -127,8 +127,39 @@ export async function getAuthSession(): Promise<{
   jti?: string;
   sessionId?: string;
 } | null> {
-  const cookieStore = cookies();
-  const token = cookieStore.get("auth_token")?.value;
+  let token: string | undefined;
+
+  // 1. Check req header if passed
+  if (req && typeof req.headers?.get === "function") {
+    const authHeader = req.headers.get("authorization");
+    if (authHeader && authHeader.startsWith("Bearer ")) {
+      token = authHeader.substring(7).trim();
+    }
+  }
+
+  // 2. Check next/headers if not extracted from req
+  if (!token) {
+    try {
+      const headerStore = headers();
+      const authHeader = headerStore.get("authorization");
+      if (authHeader && authHeader.startsWith("Bearer ")) {
+        token = authHeader.substring(7).trim();
+      }
+    } catch {
+      // outside request scope
+    }
+  }
+
+  // 3. Fallback to cookies
+  if (!token) {
+    try {
+      const cookieStore = cookies();
+      token = cookieStore.get("auth_token")?.value;
+    } catch {
+      // outside request scope
+    }
+  }
+
 
   if (!token) return null;
 
