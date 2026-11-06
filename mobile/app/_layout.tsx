@@ -2,6 +2,7 @@ import React, { useEffect } from "react";
 import { Stack, useRouter } from "expo-router";
 import { StatusBar } from "expo-status-bar";
 import { SafeAreaProvider } from "react-native-safe-area-context";
+import Constants from "expo-constants";
 import { useAuthStore } from "../src/store/auth-store";
 import { configureNotificationHandler, resolveNotificationRoute } from "../src/services/notifications";
 import "../src/i18n";
@@ -14,9 +15,18 @@ export default function RootLayout() {
 
   useEffect(() => {
     restoreSession();
+
+    const isExpoGo =
+      Constants.appOwnership === "expo" ||
+      Constants.executionEnvironment === "storeClient";
+
+    if (isExpoGo) {
+      return;
+    }
+
     configureNotificationHandler();
 
-    // Listen to user tapping a push notification
+    // Listen to user tapping a push notification (only in standalone/dev-client builds)
     let subscription: { remove: () => void } | null = null;
     (async () => {
       try {
@@ -51,11 +61,11 @@ export default function RootLayout() {
       >
         <Stack.Screen name="index" />
         <Stack.Screen name="(auth)/login" options={{ animation: "fade" }} />
-        <Stack.Screen name="(student)" />
-        <Stack.Screen name="(parent)" />
-        <Stack.Screen name="(teacher)" />
-        <Stack.Screen name="(director)" />
-        <Stack.Screen name="(platform)" />
+        <Stack.Screen name="(student)/index" />
+        <Stack.Screen name="(parent)/index" />
+        <Stack.Screen name="(teacher)/index" />
+        <Stack.Screen name="(director)/index" />
+        <Stack.Screen name="(platform)/index" />
       </Stack>
     </SafeAreaProvider>
   );

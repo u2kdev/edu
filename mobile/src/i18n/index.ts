@@ -26,6 +26,7 @@ try {
 
 if (!i18n.isInitialized) {
   i18n.use(initReactI18next).init({
+    compatibilityJSON: "v3",
     resources,
     lng: detectedLanguage,
     fallbackLng: "uz",

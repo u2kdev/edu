@@ -70,9 +70,9 @@ export default function LoginScreen() {
       className="flex-1 bg-slate-900"
     >
       <ScrollView
-        contentContainerStyle={{ flexGrow: 1 }}
+        contentContainerStyle={{ flexGrow: 1, justifyContent: "center" }}
         keyboardShouldPersistTaps="handled"
-        className="px-6 py-10 justify-center"
+        className="px-6 py-10"
       >
         {/* Language Pill */}
         <View className="items-end mb-6">

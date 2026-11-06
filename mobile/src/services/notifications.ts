@@ -86,8 +86,14 @@ export async function configureNotificationHandler(): Promise<void> {
  */
 export async function registerForPushNotifications(): Promise<string | null> {
   try {
-    const Notifications = await import("expo-notifications");
     const Constants = (await import("expo-constants")).default;
+    if (
+      Constants?.appOwnership === "expo" ||
+      Constants?.executionEnvironment === "storeClient"
+    ) {
+      return null;
+    }
+    const Notifications = await import("expo-notifications");
     const Platform = getPlatform();
 
     if (Platform.OS === "android") {

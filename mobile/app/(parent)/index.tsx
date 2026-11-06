@@ -157,7 +157,7 @@ export default function ParentDashboard() {
       {data?.children && data.children.length > 1 && (
         <View className="mb-5">
           <Text className="text-xs font-medium text-slate-400 mb-2">{t("parent.selectChild")}:</Text>
-          <ScrollView horizontal showsHorizontalScrollIndicator={false} className="flex-row">
+          <ScrollView horizontal showsHorizontalScrollIndicator={false}>
             {data.children.map((child) => {
               const isSelected = child.membershipId === selectedChildId;
               return (
