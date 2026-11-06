@@ -10,7 +10,7 @@ import "../global.css";
 export default function RootLayout() {
   const router = useRouter();
   const restoreSession = useAuthStore((state) => state.restoreSession);
-  const activeCenterRole = useAuthStore((state) => state.activeCenterRole);
+  const activeRole = useAuthStore((state) => state.activeRole);
 
   useEffect(() => {
     restoreSession();
@@ -23,7 +23,7 @@ export default function RootLayout() {
         const Notifications = await import("expo-notifications");
         subscription = Notifications.addNotificationResponseReceivedListener((response) => {
           const data = response?.notification?.request?.content?.data;
-          const targetRoute = resolveNotificationRoute(data, activeCenterRole || undefined);
+          const targetRoute = resolveNotificationRoute(data, activeRole || undefined);
           if (targetRoute && targetRoute !== "/") {
             router.push(targetRoute as any);
           }
@@ -38,7 +38,7 @@ export default function RootLayout() {
         subscription.remove();
       }
     };
-  }, [restoreSession, activeCenterRole, router]);
+  }, [restoreSession, activeRole, router]);
 
   return (
     <SafeAreaProvider>
