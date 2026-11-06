@@ -1,0 +1,61 @@
+{
+  "auth": {
+    "title": "e-darschi tizimiga kirish",
+    "subtitle": "O'quvchilar va ota-onalar uchun ta'lim ekotizimi",
+    "emailLabel": "Elektron pochta",
+    "emailPlaceholder": "example@domain.uz",
+    "passwordLabel": "Parol",
+    "passwordPlaceholder": "Parolni kiriting",
+    "loginButton": "Tizimga kirish",
+    "loggingIn": "Kirilmoqda...",
+    "invalidCredentials": "Login yoki parol noto'g'ri",
+    "emailNotVerified": "Emailni tasdiqlash talab qilinadi. Pochtangizni tekshiring."
+  },
+  "roles": {
+    "student": "O'quvchi",
+    "parent": "Ota-ona",
+    "teacher": "O'qituvchi",
+    "director": "Markaz rahbari",
+    "admin": "Administrator"
+  },
+  "tabs": {
+    "today": "Bugun",
+    "schedule": "Dars jadvali",
+    "homework": "Vazifalar",
+    "grades": "Baholar",
+    "feed": "Voqealar",
+    "payments": "To'lovlar",
+    "profile": "Profil"
+  },
+  "student": {
+    "welcome": "Salom, {{name}}!",
+    "nextClass": "Keyingi dars",
+    "noUpcomingClasses": "Bugunga boshqa darslar yo'q",
+    "attendance": "Davomat",
+    "averageScore": "O'rtacha ball",
+    "homeworkDue": "Topshirish kerak bo'lgan vazifalar",
+    "submitHomework": "Vazifani topshirish",
+    "room": "Xona",
+    "teacher": "O'qituvchi"
+  },
+  "parent": {
+    "selectChild": "Farzandni tanlang",
+    "attendanceStatus": "Bugungi davomat holati",
+    "present": "Darsda qatnashdi",
+    "absent": "Darsga kelmadi",
+    "late": "Kechikdi",
+    "noLesson": "Bugun darslar yo'q",
+    "recentGrades": "So'nggi baholar",
+    "payments": "Balans va to'lovlar"
+  },
+  "common": {
+    "logout": "Profildan chiqish",
+    "retry": "Qayta urinish",
+    "loading": "Yuklanmoqda...",
+    "error": "Xatolik yuz berdi",
+    "save": "Saqlash",
+    "cancel": "Bekor qilish",
+    "switchCenter": "O'quv markazini almashtirish",
+    "language": "Ilova tili"
+  }
+}

@@ -1,0 +1,61 @@
+{
+  "auth": {
+    "title": "Вход в e-darschi",
+    "subtitle": "Учебная экосистема для студентов и родителей",
+    "emailLabel": "Электронная почта",
+    "emailPlaceholder": "example@domain.uz",
+    "passwordLabel": "Пароль",
+    "passwordPlaceholder": "Введите пароль",
+    "loginButton": "Войти",
+    "loggingIn": "Вход в систему...",
+    "invalidCredentials": "Неверный логин или пароль",
+    "emailNotVerified": "Требуется подтверждение email. Пожалуйста, проверьте вашу почту."
+  },
+  "roles": {
+    "student": "Ученик",
+    "parent": "Родитель",
+    "teacher": "Преподаватель",
+    "director": "Руководитель центра",
+    "admin": "Администратор"
+  },
+  "tabs": {
+    "today": "Сегодня",
+    "schedule": "Расписание",
+    "homework": "Задания",
+    "grades": "Оценки",
+    "feed": "События",
+    "payments": "Оплата",
+    "profile": "Профиль"
+  },
+  "student": {
+    "welcome": "Привет, {{name}}!",
+    "nextClass": "Ближайший урок",
+    "noUpcomingClasses": "На сегодня уроков больше нет",
+    "attendance": "Посещаемость",
+    "averageScore": "Средний балл",
+    "homeworkDue": "Заданий к сдаче",
+    "submitHomework": "Сдать задание",
+    "room": "Аудитория",
+    "teacher": "Преподаватель"
+  },
+  "parent": {
+    "selectChild": "Выберите ученика",
+    "attendanceStatus": "Статус на сегодня",
+    "present": "Присутствовал на уроке",
+    "absent": "Пропустил занятие",
+    "late": "Опоздал",
+    "noLesson": "Сегодня занятий нет",
+    "recentGrades": "Последние оценки",
+    "payments": "Баланс и абонементы"
+  },
+  "common": {
+    "logout": "Выйти из аккаунта",
+    "retry": "Повторить попытку",
+    "loading": "Загрузка...",
+    "error": "Произошла ошибка",
+    "save": "Сохранить",
+    "cancel": "Отмена",
+    "switchCenter": "Сменить учебный центр",
+    "language": "Язык интерфейса"
+  }
+}
