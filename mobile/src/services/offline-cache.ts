@@ -1,4 +1,5 @@
 import { AuthStorage } from "./auth-storage";
+import { SecureCipher } from "./secure-cipher";
 
 export interface CacheEntry<T> {
   data: T;
@@ -22,9 +23,20 @@ const registeredCacheKeys = new Set<string>([
   "homework",
 ]);
 
+function isSensitiveCacheKey(key: string): boolean {
+  const lower = key.toLowerCase();
+  return (
+    lower.includes("grade") ||
+    lower.includes("child") ||
+    lower.includes("parent") ||
+    lower.includes("student")
+  );
+}
+
 export const OfflineCache = {
   /**
-   * Saves data into secure encrypted device storage.
+   * Saves data into secure device storage. Sensitive child and grade records
+   * are strictly encrypted with AES-GCM (key in SecureStore) prior to persistence.
    */
   async set<T>(key: string, data: T, ttlMs: number = 24 * 60 * 60 * 1000): Promise<void> {
     registeredCacheKeys.add(key);
@@ -33,17 +45,36 @@ export const OfflineCache = {
       timestamp: Date.now(),
       ttlMs,
     };
-    await AuthStorage.setItem(`offline_cache_${key}`, JSON.stringify(entry));
+    const serialized = JSON.stringify(entry);
+
+    if (isSensitiveCacheKey(key)) {
+      const encrypted = await SecureCipher.encrypt(serialized);
+      await AuthStorage.setItem(`offline_cache_${key}`, encrypted);
+    } else {
+      await AuthStorage.setItem(`offline_cache_${key}`, serialized);
+    }
   },
 
   /**
-   * Retrieves data from secure offline cache, respecting TTL.
+   * Retrieves data from secure offline cache, decrypting sensitive entries and respecting TTL.
    */
   async get<T>(key: string): Promise<T | null> {
     const raw = await AuthStorage.getItem(`offline_cache_${key}`);
     if (!raw) return null;
+
     try {
-      const entry = JSON.parse(raw) as CacheEntry<T>;
+      let plaintext = raw;
+      if (isSensitiveCacheKey(key) || raw.includes("__encrypted")) {
+        const decrypted = await SecureCipher.decrypt(raw);
+        if (!decrypted) {
+          // Decryption failed (e.g. key wiped or revoked)
+          await AuthStorage.removeItem(`offline_cache_${key}`);
+          return null;
+        }
+        plaintext = decrypted;
+      }
+
+      const entry = JSON.parse(plaintext) as CacheEntry<T>;
       if (Date.now() - entry.timestamp > entry.ttlMs) {
         await AuthStorage.removeItem(`offline_cache_${key}`);
         return null;
@@ -63,11 +94,12 @@ export const OfflineCache = {
   },
 
   /**
-   * Wipes all cached business data on logout or 401 Unauthorized.
+   * Wipes all cached business data and secure keys on logout, 401, account deletion, or user switch.
    */
   async clear(): Promise<void> {
     for (const k of registeredCacheKeys) {
       await AuthStorage.removeItem(`offline_cache_${k}`);
     }
+    await SecureCipher.wipeKey();
   },
 };

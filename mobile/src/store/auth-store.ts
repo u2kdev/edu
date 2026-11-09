@@ -1,5 +1,6 @@
 import { create } from "zustand";
 import { AuthStorage } from "../services/auth-storage";
+import { OfflineCache } from "../services/offline-cache";
 import { apiClient, setOnUnauthorizedCallback } from "../services/api-client";
 import { API_ENDPOINTS } from "../config/api";
 
@@ -55,6 +56,7 @@ interface AuthState {
   restoreSession: () => Promise<void>;
   switchRole: (role: string) => Promise<void>;
   switchCenter: (centerId: string) => Promise<void>;
+  switchUser: () => Promise<void>;
 }
 
 export const useAuthStore = create<AuthState>((set, get) => ({
@@ -114,6 +116,7 @@ export const useAuthStore = create<AuthState>((set, get) => ({
     try {
       await apiClient(API_ENDPOINTS.LOGOUT, { method: "POST" }).catch(() => {});
     } finally {
+      await OfflineCache.clear();
       await AuthStorage.clearAll();
       set({
         token: null,
@@ -126,6 +129,21 @@ export const useAuthStore = create<AuthState>((set, get) => ({
         error: null,
       });
     }
+  },
+
+  switchUser: async () => {
+    await OfflineCache.clear();
+    await AuthStorage.clearAll();
+    set({
+      token: null,
+      user: null,
+      memberships: [],
+      activeCenterId: null,
+      activeRole: null,
+      isAuthenticated: false,
+      isLoading: false,
+      error: null,
+    });
   },
 
   restoreSession: async () => {
@@ -179,6 +197,7 @@ export const useAuthStore = create<AuthState>((set, get) => ({
 
 // Automatically clear local auth state on 401 responses
 setOnUnauthorizedCallback(() => {
+  OfflineCache.clear().catch(() => {});
   AuthStorage.clearAll().catch(() => {});
   useAuthStore.setState({
     token: null,

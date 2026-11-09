@@ -59,6 +59,7 @@ export const AuthStorage = {
       "offline_cache_schedule",
       "offline_cache_grades",
       "offline_cache_homework",
+      "app_cache_encryption_key",
     ];
     for (const k of allKeys) {
       await this.removeItem(k);
