@@ -63,12 +63,14 @@ describe("Mobile Account Deletion & App Store Compliance", () => {
   });
 
   it("DELETE /api/auth/account/delete: soft-deletes account, revokes all sessions, and deletes push tokens", async () => {
-    // 1. Send account deletion request with Bearer token
+    // 1. Send account deletion request with Bearer token and password
     const deleteReq = new Request("http://localhost/api/auth/account/delete", {
       method: "DELETE",
       headers: {
         authorization: `Bearer ${bearerToken}`,
+        "content-type": "application/json",
       },
+      body: JSON.stringify({ password: "MobilePass123!" }),
     });
 
     const res = await deleteAccount(deleteReq);
