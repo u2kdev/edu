@@ -25,7 +25,7 @@ import {
 import { useAuthStore } from "../../src/store/auth-store";
 import { resolveRoleRoute } from "../../src/navigation/role-router";
 import { registerForPushNotifications } from "../../src/services/notifications";
-import { DEMO_ROLE_PRESETS } from "../../src/components/ui";
+import { DevQuickLogin } from "../../src/components/dev-quick-login";
 
 export default function LoginScreen() {
   const { t, i18n } = useTranslation();
@@ -56,17 +56,17 @@ export default function LoginScreen() {
 
       const activeRole = useAuthStore.getState().activeRole;
       const targetRoute = resolveRoleRoute(activeRole);
-      router.replace(targetRoute as any);
+      router.replace(targetRoute as Parameters<typeof router.replace>[0]);
     }
   };
 
   const handleLogin = () => performLogin(email, password);
 
-  const handleInstantDemoLogin = (demoEmail: string) => {
+  const handleDemoLogin = (demoEmail: string, demoPass: string) => {
     setEmail(demoEmail);
-    setPassword("Password123!");
+    setPassword(demoPass);
     setActiveDemoEmail(demoEmail);
-    performLogin(demoEmail, "Password123!");
+    performLogin(demoEmail, demoPass);
   };
 
   const toggleLanguage = () => {
@@ -205,57 +205,12 @@ export default function LoginScreen() {
           </TouchableOpacity>
         </View>
 
-        {/* 1-Tap Instant Demo Roles */}
-        <View>
-          <View className="flex-row items-center mb-1.5">
-            <Sparkles size={14} color="#818CF8" />
-            <Text className="text-xs font-extrabold text-indigo-300 uppercase tracking-wider ml-1.5">
-              {t("auth.quickDemoAccounts")}
-            </Text>
-          </View>
-          <Text className="text-xs text-slate-500 mb-3">
-            {t("auth.quickDemoHint")}
-          </Text>
-
-          {DEMO_ROLE_PRESETS.map((acc) => {
-            const IconComponent = acc.Icon;
-            const isLoggingInThis = activeDemoEmail === acc.email && isSubmitting;
-            return (
-              <TouchableOpacity
-                key={acc.email}
-                disabled={isSubmitting}
-                activeOpacity={0.8}
-                onPress={() => handleInstantDemoLogin(acc.email)}
-                className="p-3.5 mb-2.5 rounded-2xl bg-slate-900 border border-slate-800/90 flex-row items-center justify-between"
-              >
-                <View className="flex-row items-center flex-1 mr-3">
-                  <View
-                    style={{ backgroundColor: `${acc.color}20` }}
-                    className="w-11 h-11 rounded-2xl items-center justify-center mr-3.5"
-                  >
-                    <IconComponent size={20} color={acc.color} />
-                  </View>
-                  <View className="flex-1">
-                    <Text className="text-sm font-extrabold text-white">
-                      {t(acc.roleKey)}
-                    </Text>
-                    <Text className="text-xs text-slate-400 mt-0.5" numberOfLines={1}>
-                      {acc.subtitle}
-                    </Text>
-                  </View>
-                </View>
-
-                {isLoggingInThis ? (
-                  <ActivityIndicator size="small" color={acc.color} />
-                ) : (
-                  <View className="w-8 h-8 rounded-xl bg-slate-800 items-center justify-center">
-                    <ChevronRight size={16} color="#94A3B8" />
-                  </View>
-                )}
-              </TouchableOpacity>
-            );
-          })}
-        </View>
+        {__DEV__ && (
+          <DevQuickLogin
+            onSelect={handleDemoLogin}
+            activeEmail={activeDemoEmail}
+          />
+        )}
       </ScrollView>
     </KeyboardAvoidingView>
   );
