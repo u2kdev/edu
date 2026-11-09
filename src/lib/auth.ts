@@ -77,6 +77,14 @@ export function hashJti(jti: string): string {
   return crypto.createHash("sha256").update(jti).digest("hex");
 }
 
+export function hashToken(token: string): string {
+  return crypto.createHash("sha256").update(token).digest("hex");
+}
+
+export function generateRefreshToken(): string {
+  return crypto.randomBytes(32).toString("hex");
+}
+
 /**
  * Creates a JWT bound to a persisted UserSession (with `jti`) and returns the token.
  *

@@ -1,4 +1,4 @@
-import { API_BASE_URL } from "../config/api";
+import { API_BASE_URL, API_ENDPOINTS } from "../config/api";
 import { AuthStorage } from "./auth-storage";
 
 export class ApiError extends Error {
@@ -61,6 +61,42 @@ export async function apiClient<T>(
   }
 
   if (response.status === 401) {
+    // Attempt automatic refresh if not already requesting auth routes
+    const isAuthRoute = endpoint.includes("/api/auth/mobile/login") || endpoint.includes("/api/auth/mobile/refresh");
+    if (!isAuthRoute) {
+      const storedRefreshToken = await AuthStorage.getItem("auth_refresh_token");
+      if (storedRefreshToken) {
+        try {
+          const refreshRes = await fetch(`${API_BASE_URL}${API_ENDPOINTS.REFRESH}`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ refreshToken: storedRefreshToken }),
+          });
+
+          if (refreshRes.ok) {
+            const refreshData = await refreshRes.json();
+            if (refreshData?.token) {
+              await AuthStorage.setItem("auth_token", refreshData.token);
+              if (refreshData.refreshToken) {
+                await AuthStorage.setItem("auth_refresh_token", refreshData.refreshToken);
+              }
+              // Retry original request with newly issued token
+              const retryHeaders = new Headers(options.headers || {});
+              retryHeaders.set("Content-Type", "application/json");
+              retryHeaders.set("Authorization", `Bearer ${refreshData.token}`);
+              if (centerId && !retryHeaders.has("x-center-id")) {
+                retryHeaders.set("x-center-id", centerId);
+              }
+              const retryResponse = await fetch(url, { ...options, headers: retryHeaders });
+              if (retryResponse.ok) {
+                return (await retryResponse.json()) as T;
+              }
+            }
+          }
+        } catch {}
+      }
+    }
+
     if (onUnauthorizedCallback) {
       onUnauthorizedCallback();
     }

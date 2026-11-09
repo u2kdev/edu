@@ -10,7 +10,13 @@ export const mobileLoginSchema = z.object({
   email: z.string().email("auth.email.invalid"),
   password: z.string().min(6, "auth.password.min_6"),
   deviceName: z.string().optional(),
+  deviceId: z.string().optional(),
   platform: z.enum(["ios", "android", "web"]).optional(),
+});
+
+export const mobileRefreshTokenSchema = z.object({
+  refreshToken: z.string().min(10, "auth.token.required"),
+  deviceId: z.string().optional(),
 });
 
 export const registerSchema = z

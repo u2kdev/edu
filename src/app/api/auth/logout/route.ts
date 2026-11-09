@@ -8,11 +8,18 @@ import { db } from "@/lib/db";
 export async function POST(req: Request) {
   try {
     // Log logout event before clearing cookie
-    const session = await getAuthSession();
+    const { searchParams } = new URL(req.url);
+    const all = searchParams.get("all") === "true";
+    const session = await getAuthSession(req);
     if (session) {
       const ip = getClientIp(req);
       try {
-        if (session.sessionId) {
+        if (all) {
+          await db.userSession.updateMany({
+            where: { userId: session.user.id, revokedAt: null },
+            data: { revokedAt: new Date() }
+          });
+        } else if (session.sessionId) {
           await db.userSession.update({
             where: { id: session.sessionId },
             data: { revokedAt: new Date() }

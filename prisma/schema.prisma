@@ -682,20 +682,24 @@ model AuditLog {
 // ----------------------------------------------------
 
 model UserSession {
-  id         String    @id @default(uuid())
-  userId     String
-  jtiHash    String    @unique // Hash of JWT ID for revocation check
-  userAgent  String?
-  ipAddress  String?
-  createdAt  DateTime  @default(now())
-  lastSeenAt DateTime  @default(now())
-  expiresAt  DateTime
-  revokedAt  DateTime?
+  id               String    @id @default(uuid())
+  userId           String
+  jtiHash          String    @unique // Hash of JWT ID for revocation check
+  refreshTokenHash String?   @unique // Hash of refresh token for rotation and revocation
+  deviceId         String?   // Device identifier
+  userAgent        String?
+  ipAddress        String?
+  createdAt        DateTime  @default(now())
+  lastSeenAt       DateTime  @default(now())
+  expiresAt        DateTime
+  revokedAt        DateTime?
 
   user PlatformUser @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@index([userId])
   @@index([jtiHash])
+  @@index([refreshTokenHash])
+  @@index([deviceId])
 }
 
 model DevicePushToken {

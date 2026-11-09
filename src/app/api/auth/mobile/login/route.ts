@@ -1,7 +1,7 @@
 // Reason: Exception: Auth routes operate on platform models.
 // eslint-disable-next-line no-restricted-imports
 import { db } from "@/lib/db";
-import { comparePassword, signJWT, hashJti, JWTPayload } from "@/lib/auth";
+import { comparePassword, signJWT, hashJti, hashToken, generateRefreshToken, JWTPayload } from "@/lib/auth";
 import { checkRateLimit } from "@/lib/rate-limit";
 import { getClientIp } from "@/lib/ip";
 import { apiError, apiSuccess, handleApiError } from "@/lib/api-response";
@@ -20,7 +20,7 @@ export async function POST(req: Request) {
 
     const body = await req.json();
     const parsed = mobileLoginSchema.parse(body);
-    const { email: rawEmail, password, deviceName, platform } = parsed;
+    const { email: rawEmail, password, deviceName, deviceId, platform } = parsed;
     const email = rawEmail.toLowerCase().trim();
 
     // 1. Check LoginAttempt (Brute-force protection)
@@ -137,7 +137,8 @@ export async function POST(req: Request) {
     });
 
     const jti = uuidv4();
-    const expiresIn = "30d";
+    const expiresIn = "15m";
+    const refreshToken = generateRefreshToken();
     const expiresAt = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000);
 
     const activeMembership = user.memberships[0] || null;
@@ -158,6 +159,8 @@ export async function POST(req: Request) {
       data: {
         userId: user.id,
         jtiHash: hashJti(jti),
+        refreshTokenHash: hashToken(refreshToken),
+        deviceId: deviceId || null,
         expiresAt,
         ipAddress: ip,
         userAgent: finalUserAgent,
@@ -198,6 +201,7 @@ export async function POST(req: Request) {
 
     return apiSuccess({
       token,
+      refreshToken,
       user: {
         id: user.id,
         email: user.email,

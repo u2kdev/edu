@@ -33,6 +33,7 @@ export interface CenterMembership {
 interface LoginResponse {
   success: boolean;
   token: string;
+  refreshToken?: string;
   user: UserProfile;
   memberships: CenterMembership[];
   activeCenterId: string | null;
@@ -79,11 +80,12 @@ export const useAuthStore = create<AuthState>((set, get) => ({
         }),
       });
 
-      const { token, user, memberships, activeCenterId, activeCenterRole } = response;
+      const { token, refreshToken, user, memberships, activeCenterId, activeCenterRole } = response;
       const resolvedRole =
         activeCenterRole || (memberships[0]?.role ?? user.platformRole);
 
       await AuthStorage.setItem("auth_token", token);
+      if (refreshToken) await AuthStorage.setItem("auth_refresh_token", refreshToken);
       await AuthStorage.setItem("auth_user", JSON.stringify(user));
       await AuthStorage.setItem("auth_memberships", JSON.stringify(memberships || []));
       if (activeCenterId) await AuthStorage.setItem("auth_active_center", activeCenterId);

@@ -19,6 +19,7 @@ export const API_BASE_URL =
 export const API_ENDPOINTS = {
   LOGIN: "/api/auth/mobile/login",
   LOGOUT: "/api/auth/logout",
+  REFRESH: "/api/auth/mobile/refresh",
   REGISTER_PUSH_TOKEN: "/api/mobile/push-token/register",
   UNREGISTER_PUSH_TOKEN: "/api/mobile/push-token/unregister",
   STUDENT_DASHBOARD: "/api/mobile/student/dashboard",
