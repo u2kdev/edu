@@ -70,8 +70,13 @@ const uzbekStudentNamesC2 = [
 ];
 
 async function main() {
-  if (process.env.NODE_ENV === "production") {
-    console.error("Seed aborted: Cannot run seed script in production!");
+  const isProd =
+    process.env.NODE_ENV === "production" ||
+    process.env.VERCEL_ENV === "production" ||
+    process.env.RAILWAY_ENVIRONMENT_NAME === "production";
+
+  if (isProd) {
+    console.error("CRITICAL SECURITY ERROR: Seed script execution is permanently disabled in production environments!");
     process.exit(1);
   }
 

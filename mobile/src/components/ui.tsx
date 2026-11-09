@@ -217,17 +217,20 @@ export function ProfileAndSettingsView({
   const { user, activeRole, login, logout } = useAuthStore();
   const [switchingEmail, setSwitchingEmail] = useState<string | null>(null);
 
-  const handleQuickRoleSwitch = async (demoEmail: string) => {
+  const handleQuickRoleSwitch = async (demoEmail: string, password?: string) => {
     setSwitchingEmail(demoEmail);
     try {
       const ok = await login(
         demoEmail,
-        "Password123!",
+        password || "",
         Platform.OS === "ios" ? "iPhone Mobile" : "Android Mobile"
       );
       if (ok) {
         const nextRole = useAuthStore.getState().activeRole;
-        router.replace(resolveRoleRoute(nextRole) as any);
+        const targetRoute = resolveRoleRoute(nextRole);
+        if (targetRoute) {
+          router.replace(targetRoute as Parameters<typeof router.replace>[0]);
+        }
       }
     } finally {
       setSwitchingEmail(null);
