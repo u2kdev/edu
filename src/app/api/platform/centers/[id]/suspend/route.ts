@@ -12,7 +12,7 @@ const schema = z.object({
 
 export async function POST(req: Request, { params }: { params: { id: string } }) {
   try {
-    const session = await getAuthSession();
+    const session = await getAuthSession(req);
     if (!session || !hasPermission("platform.centers.block", session.user.platformRole)) {
       return NextResponse.json({ error: "Forbidden" }, { status: 403 });
     }
@@ -46,6 +46,13 @@ export async function POST(req: Request, { params }: { params: { id: string } })
         suspensionReason: action === "resume" ? null : reason
       }
     });
+
+    if (action === "block") {
+      // Purge all push tokens associated with the blocked center
+      await db.devicePushToken.deleteMany({
+        where: { centerId: params.id },
+      });
+    }
 
     await db.auditLog.create({
       data: {

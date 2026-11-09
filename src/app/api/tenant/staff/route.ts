@@ -284,6 +284,16 @@ export async function PATCH(req: Request) {
       where: { id: membershipId },
       data: updateData,
     });
+
+    if (updateData.status === "ARCHIVED") {
+      // Purge push tokens when membership is archived
+      await db.devicePushToken.deleteMany({
+        where: {
+          userId: membership.userId,
+          centerId: center.id,
+        },
+      });
+    }
     
     const updated = await tenantDb.centerMembership.findFirst({
       where: { id: membershipId },
@@ -379,6 +389,14 @@ export async function DELETE(req: Request) {
     try {
       await tenantDb.centerMembership.delete({
         where: { id: membershipId },
+      });
+
+      // Purge push tokens when member is deleted
+      await db.devicePushToken.deleteMany({
+        where: {
+          userId: membership.userId,
+          centerId: center.id,
+        },
       });
     } catch (err: unknown) {
       const errStr = String(err);
