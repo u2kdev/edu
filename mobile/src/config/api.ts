@@ -46,6 +46,7 @@ export const API_BASE_URL = resolveApiBaseUrl();
 export const API_ENDPOINTS = {
   LOGIN: "/api/auth/mobile/login",
   LOGOUT: "/api/auth/logout",
+  DELETE_ACCOUNT: "/api/auth/account/delete",
   REFRESH: "/api/auth/mobile/refresh",
   REGISTER_PUSH_TOKEN: "/api/mobile/push-token/register",
   UNREGISTER_PUSH_TOKEN: "/api/mobile/push-token/unregister",

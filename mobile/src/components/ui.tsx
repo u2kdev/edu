@@ -5,6 +5,8 @@ import {
   TouchableOpacity,
   ActivityIndicator,
   Platform,
+  Alert,
+  Linking,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useRouter } from "expo-router";
@@ -20,7 +22,13 @@ import {
   ShieldCheck,
   ChevronRight,
   Check,
+  Trash2,
+  Shield,
+  FileText,
+  Info,
 } from "lucide-react-native";
+import { apiClient } from "../services/api-client";
+import { API_ENDPOINTS } from "../config/api";
 import { useAuthStore } from "../store/auth-store";
 import { resolveRoleRoute } from "../navigation/role-router";
 import { DevRoleSwitcher } from "./dev-quick-login";
@@ -305,6 +313,89 @@ export function ProfileAndSettingsView({
           switchingEmail={switchingEmail}
         />
       )}
+
+      {/* Privacy Policy & Data Disclosure */}
+      <View className="p-4 rounded-3xl bg-slate-800/70 border border-slate-700/50 mb-5">
+        <View className="flex-row items-center mb-3">
+          <Shield size={16} color="#818CF8" />
+          <Text className="text-xs font-bold text-slate-300 uppercase tracking-wider ml-2">
+            Безопасность и данные (App Store / Play)
+          </Text>
+        </View>
+
+        <TouchableOpacity
+          onPress={() => Linking.openURL("https://edarschi.uz/privacy").catch(() => {})}
+          className="p-3 mb-3 rounded-2xl bg-slate-900/80 border border-slate-700/60 flex-row items-center justify-between"
+        >
+          <View className="flex-row items-center">
+            <FileText size={16} color="#A5B4FC" />
+            <Text className="text-xs font-semibold text-indigo-300 ml-2.5">
+              Политика конфиденциальности
+            </Text>
+          </View>
+          <ChevronRight size={16} color="#64748B" />
+        </TouchableOpacity>
+
+        <View className="p-3 rounded-2xl bg-slate-950/70 border border-slate-800 mb-2">
+          <Text className="text-[11px] font-bold text-slate-300 mb-1">
+            Собираемые данные приложения:
+          </Text>
+          <Text className="text-[10px] text-slate-400 leading-4">
+            • Профиль: ФИО, email, статус учетной записи\n
+            • Устройства: Push-токен и ОС (для уведомлений)\n
+            • Безопасность: IP-адрес и user-agent сессий
+          </Text>
+        </View>
+
+        <View className="p-3 rounded-2xl bg-indigo-950/40 border border-indigo-900/60">
+          <View className="flex-row items-center mb-1">
+            <Info size={13} color="#818CF8" />
+            <Text className="text-[11px] font-bold text-indigo-200 ml-1.5">
+              Данные несовершеннолетних (детей):
+            </Text>
+          </View>
+          <Text className="text-[10px] text-indigo-300/80 leading-4">
+            Хранятся исключительно учебные записи (оценки, посещаемость, сданные ДЗ) с привязкой к родителю. Рекламный трекинг (IDFA/GAID), геолокация и передача третьим лицам строго отсутствуют.
+          </Text>
+        </View>
+      </View>
+
+      {/* Delete Account (App Store Mandatory Requirement) */}
+      <View className="p-4 rounded-3xl bg-rose-950/20 border border-rose-900/40 mb-5">
+        <Text className="text-xs font-bold text-rose-300 uppercase tracking-wider mb-1">
+          Удаление аккаунта
+        </Text>
+        <Text className="text-[11px] text-rose-400/80 mb-3">
+          Безвозвратная деактивация профиля и немедленный отзыв всех активных сессий
+        </Text>
+
+        <TouchableOpacity
+          onPress={() => {
+            Alert.alert(
+              "Удаление аккаунта",
+              "Вы уверены, что хотите деактивировать аккаунт? Все ваши активные сессии будут немедленно отозваны.",
+              [
+                { text: "Отмена", style: "cancel" },
+                {
+                  text: "Удалить",
+                  style: "destructive",
+                  onPress: async () => {
+                    try {
+                      await apiClient(API_ENDPOINTS.DELETE_ACCOUNT, { method: "DELETE" });
+                    } catch {}
+                    await handleLogout();
+                  },
+                },
+              ]
+            );
+          }}
+          activeOpacity={0.8}
+          className="w-full py-3.5 rounded-2xl bg-rose-500/20 border border-rose-500/40 flex-row items-center justify-center"
+        >
+          <Trash2 size={16} color="#FB7185" />
+          <Text className="text-xs font-bold text-rose-300 ml-2">Удалить мой аккаунт</Text>
+        </TouchableOpacity>
+      </View>
 
       {/* Logout Button */}
       <TouchableOpacity
