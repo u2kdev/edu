@@ -89,7 +89,7 @@ describe("Email Resend and Sensitive Actions", () => {
       method: "POST", headers: { "x-forwarded-for": ip }, body: JSON.stringify({ email: "any@test.com" }),
     });
 
-    const ip = "4.4.4.4";
+    const ip = `4.4.4.${Math.floor(Math.random() * 200) + 10}`;
     for(let i=0; i<3; i++) {
       const r = await resendPost(mockResendReq(ip));
       expect(r.status).toBe(200);

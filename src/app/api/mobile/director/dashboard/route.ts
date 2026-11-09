@@ -42,6 +42,9 @@ export async function GET(req: Request) {
 
     // 3. Center Average Attendance %
     const recentAttendances = await tenantDb.attendance.findMany({
+      where: {
+        student: { centerId: tenantCtx.center.id },
+      },
       select: { status: true },
       take: 100,
     });
