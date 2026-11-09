@@ -1,4 +1,4 @@
-import { API_BASE_URL, API_ENDPOINTS } from "../config/api";
+import { API_BASE_URL, API_ENDPOINTS, isDevelopmentEnvironment } from "../config/api";
 import { AuthStorage } from "./auth-storage";
 
 export class ApiError extends Error {
@@ -48,8 +48,8 @@ export async function apiClient<T>(
       headers,
     });
   } catch (networkErr) {
-    // Fallback to LAN IP if localhost tunnel is unavailable (e.g. unplugged USB, running on Wi-Fi)
-    if (!endpoint.startsWith("http") && API_BASE_URL.includes("localhost")) {
+    // LAN fallback is strictly prohibited in release builds and only allowed during local dev
+    if (isDevelopmentEnvironment() && !endpoint.startsWith("http") && API_BASE_URL.includes("localhost")) {
       const lanUrl = `http://192.168.100.12:3000${endpoint}`;
       response = await fetch(lanUrl, {
         ...options,

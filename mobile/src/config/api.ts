@@ -12,9 +12,36 @@ try {
  * - Android Emulator uses http://10.0.2.2:3000.
  * - iOS Simulator uses http://localhost:3000.
  */
-export const API_BASE_URL =
-  process.env.EXPO_PUBLIC_API_URL ||
-  (platformOS === "android" ? "http://10.0.2.2:3000" : "http://localhost:3000");
+export function isDevelopmentEnvironment(): boolean {
+  if (typeof __DEV__ !== "undefined") {
+    return __DEV__;
+  }
+  return process.env.NODE_ENV !== "production";
+}
+
+export function resolveApiBaseUrl(
+  isDev: boolean = isDevelopmentEnvironment(),
+  envUrl?: string
+): string {
+  const configuredUrl = envUrl ?? process.env.EXPO_PUBLIC_API_URL;
+  if (!isDev) {
+    if (!configuredUrl) {
+      throw new Error("EXPO_PUBLIC_API_URL must be configured for release builds");
+    }
+    if (!configuredUrl.startsWith("https://")) {
+      throw new Error(`Insecure API URL rejected in release build: "${configuredUrl}". Only HTTPS is permitted.`);
+    }
+    return configuredUrl.replace(/\/+$/, "");
+  }
+
+  if (configuredUrl) {
+    return configuredUrl.replace(/\/+$/, "");
+  }
+
+  return platformOS === "android" ? "http://10.0.2.2:3000" : "http://localhost:3000";
+}
+
+export const API_BASE_URL = resolveApiBaseUrl();
 
 export const API_ENDPOINTS = {
   LOGIN: "/api/auth/mobile/login",
