@@ -46,6 +46,41 @@ export async function POST(req: Request) {
     });
 
     if (!session) {
+      // Token reuse detection: check if this token was already rotated
+      const reusedSession = await db.userSession.findFirst({
+        where: { prevRefreshTokenHash: tokenHash },
+      });
+
+      if (reusedSession) {
+        const timeSinceRotation = Math.abs(Date.now() - (reusedSession.lastSeenAt?.getTime() ?? 0));
+        // If rotated within concurrent race window (1000ms), fail without revoking the winning session
+        if (timeSinceRotation < 1000) {
+          return apiError("Refresh token already consumed", "INVALID_REFRESH_TOKEN", 401);
+        }
+
+        // Severe security alert: an already-rotated refresh token was reused.
+        // Revoke all sessions for this user to neutralize potential replay attack.
+        await db.userSession.updateMany({
+          where: { userId: reusedSession.userId, revokedAt: null },
+          data: { revokedAt: new Date() },
+        });
+
+        try {
+          await db.auditLog.create({
+            data: {
+              actorUserId: reusedSession.userId,
+              action: "MOBILE_REFRESH_TOKEN_REUSE_REVOCATION",
+              resource: "UserSession",
+              resourceId: reusedSession.id,
+              detailsJson: JSON.stringify({ ip, warning: "Rotated refresh token reuse detected" }),
+              ipAddress: ip,
+            },
+          });
+        } catch {}
+
+        return apiError("Session has been revoked due to token reuse", "SESSION_REVOKED", 401);
+      }
+
       return apiError("Invalid refresh token", "INVALID_REFRESH_TOKEN", 401);
     }
 
@@ -92,17 +127,28 @@ export async function POST(req: Request) {
 
     const newAccessToken = signJWT(payload, "15m");
 
-    // Atomically rotate token
-    await db.userSession.update({
-      where: { id: session.id },
+    // Atomically rotate token using conditional updateMany
+    const updateResult = await db.userSession.updateMany({
+      where: {
+        id: session.id,
+        refreshTokenHash: tokenHash,
+        revokedAt: null,
+      },
       data: {
         jtiHash: hashJti(newJti),
         refreshTokenHash: newRefreshTokenHash,
+        prevRefreshTokenHash: tokenHash,
         lastSeenAt: new Date(),
         expiresAt: newExpiresAt,
         ipAddress: ip,
       },
     });
+
+    if (updateResult.count === 0) {
+      // Another concurrent request successfully rotated the token first.
+      // Return 401 without global session revocation so the winner's new tokens remain valid.
+      return apiError("Refresh token already consumed", "INVALID_REFRESH_TOKEN", 401);
+    }
 
     try {
       await db.auditLog.create({
