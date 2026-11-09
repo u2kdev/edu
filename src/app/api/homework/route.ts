@@ -218,6 +218,17 @@ export async function PATCH(req: Request) {
       return NextResponse.json({ error: "homeworkId required" }, { status: 400 });
     }
 
+    if (action === "GRADE") {
+      if (
+        tenantCtx.role !== "DIRECTOR" &&
+        tenantCtx.role !== "CENTER_ADMIN" &&
+        tenantCtx.role !== "TEACHER" &&
+        !tenantCtx.isPlatformStaff
+      ) {
+        return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+      }
+    }
+
     // SECURITY: Verify homework belongs to this tenant
     const homework = await tenantDb.homework.findFirst({
       where: { id: homeworkId },
