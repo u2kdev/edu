@@ -19,11 +19,13 @@ export async function POST(req: Request) {
             where: { userId: session.user.id, revokedAt: null },
             data: { revokedAt: new Date() }
           });
+          await db.devicePushToken.deleteMany({ where: { userId: session.user.id } });
         } else if (session.sessionId) {
           await db.userSession.update({
             where: { id: session.sessionId },
             data: { revokedAt: new Date() }
           });
+          await db.devicePushToken.deleteMany({ where: { userId: session.user.id } });
         }
         await db.auditLog.create({
           data: {

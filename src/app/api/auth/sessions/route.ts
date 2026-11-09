@@ -68,6 +68,7 @@ export async function DELETE(req: Request) {
         },
         data: { revokedAt: new Date() }
       });
+      await db.devicePushToken.deleteMany({ where: { userId: session.user.id } });
       
       await db.auditLog.create({
         data: {

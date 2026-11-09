@@ -21,12 +21,14 @@ export async function POST(req: Request) {
       where: { pushToken },
       create: {
         userId: session.user.id,
+        centerId: session.activeCenterId || null,
         platform,
         pushToken,
         deviceInfo,
       },
       update: {
         userId: session.user.id,
+        centerId: session.activeCenterId || null,
         platform,
         deviceInfo,
       },

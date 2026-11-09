@@ -73,6 +73,7 @@ model LearningCenter {
   owner              PlatformUser         @relation("CenterOwner", fields: [ownerId], references: [id])
   subscriptions      Subscription[]
   memberships        CenterMembership[]
+  devicePushTokens   DevicePushToken[]
   inviteCodes        InviteCode[]
   courses            Course[]
   branches           Branch[]
@@ -705,15 +706,18 @@ model UserSession {
 model DevicePushToken {
   id         String   @id @default(uuid())
   userId     String
+  centerId   String?
   platform   String
   pushToken  String   @unique
   deviceInfo String?
   createdAt  DateTime @default(now())
   updatedAt  DateTime @updatedAt
 
-  user PlatformUser @relation(fields: [userId], references: [id], onDelete: Cascade)
+  user   PlatformUser    @relation(fields: [userId], references: [id], onDelete: Cascade)
+  center LearningCenter? @relation(fields: [centerId], references: [id], onDelete: Cascade)
 
   @@index([userId])
+  @@index([centerId])
   @@index([pushToken])
 }
 
