@@ -9,8 +9,7 @@ try {
  * API configuration for e-darschi mobile client.
  * In development:
  * - Physical Android over USB with `adb reverse tcp:3000 tcp:3000` uses http://localhost:3000 (via EXPO_PUBLIC_API_URL).
- * - Android Emulator uses http://10.0.2.2:3000.
- * - iOS Simulator uses http://localhost:3000.
+ * - iOS Simulator / Android device uses localhost or configured EXPO_PUBLIC_API_URL.
  */
 export function isDevelopmentEnvironment(): boolean {
   if (typeof __DEV__ !== "undefined") {
@@ -38,7 +37,7 @@ export function resolveApiBaseUrl(
     return configuredUrl.replace(/\/+$/, "");
   }
 
-  return platformOS === "android" ? "http://10.0.2.2:3000" : "http://localhost:3000";
+  return configuredUrl ? configuredUrl.replace(/\/+$/, "") : "http://localhost:3000";
 }
 
 export const API_BASE_URL = resolveApiBaseUrl();

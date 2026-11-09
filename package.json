@@ -16,7 +16,8 @@
     "prisma:db-push": "prisma db push",
     "prisma:seed": "node --import tsx/esm prisma/seed.ts",
     "setup:first-owner": "node --import tsx/esm scripts/first-owner.ts",
-    "screenshots": "node scripts/take-screenshots.mjs"
+    "screenshots": "node scripts/take-screenshots.mjs",
+    "check:release-bundle": "node scripts/check-release-bundle.mjs"
   },
   "dependencies": {
     "@prisma/client": "^5.21.0",

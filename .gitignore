@@ -57,3 +57,4 @@ transmitter/
 skills-lock.json
 .vercel
 .env*
+dist/

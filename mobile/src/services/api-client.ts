@@ -50,8 +50,9 @@ export async function apiClient<T>(
     });
   } catch (networkErr) {
     // LAN fallback is strictly prohibited in release builds and only allowed during local dev
-    if (isDevelopmentEnvironment() && !endpoint.startsWith("http") && API_BASE_URL.includes("localhost")) {
-      const lanUrl = `http://192.168.100.12:3000${endpoint}`;
+    const devLanBase = process.env.EXPO_PUBLIC_DEV_LAN_URL;
+    if (isDevelopmentEnvironment() && !endpoint.startsWith("http") && API_BASE_URL.includes("localhost") && devLanBase) {
+      const lanUrl = `${devLanBase.replace(/\/+$/, "")}${endpoint}`;
       response = await fetch(lanUrl, {
         ...options,
         headers,
