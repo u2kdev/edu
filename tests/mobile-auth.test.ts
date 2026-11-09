@@ -100,7 +100,7 @@ describe("Mobile Authentication & Gateway", () => {
     }
   });
 
-  const mockMobileReq = (body: unknown, ip: string = "127.0.0.1") => {
+  const mockMobileReq = (body: unknown, ip: string = `127.0.1.${Math.floor(Math.random() * 200 + 1)}`) => {
     return new Request("http://localhost/api/auth/mobile/login", {
       method: "POST",
       headers: {
