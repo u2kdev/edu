@@ -76,7 +76,7 @@ async function main() {
     process.env.RAILWAY_ENVIRONMENT_NAME === "production";
 
   if (isProd) {
-    console.error("CRITICAL SECURITY ERROR: Seed script execution is permanently disabled in production environments!");
+    console.error("CRITICAL SECURITY ERROR: Cannot run seed script in production environments!");
     process.exit(1);
   }
 
