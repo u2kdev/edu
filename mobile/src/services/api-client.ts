@@ -1,5 +1,6 @@
 import { API_BASE_URL, API_ENDPOINTS, isDevelopmentEnvironment } from "../config/api";
 import { AuthStorage } from "./auth-storage";
+import { OfflineCache } from "./offline-cache";
 
 export class ApiError extends Error {
   status: number;
@@ -97,6 +98,7 @@ export async function apiClient<T>(
       }
     }
 
+    OfflineCache.clear().catch(() => {});
     if (onUnauthorizedCallback) {
       onUnauthorizedCallback();
     }
@@ -112,4 +114,27 @@ export async function apiClient<T>(
   }
 
   return json as T;
+}
+
+
+export async function cachedApiClient<T>(
+  endpoint: string,
+  cacheKey: string,
+  options: RequestInit = {}
+): Promise<{ data: T; fromCache: boolean }> {
+  try {
+    const freshData = await apiClient<T>(endpoint, options);
+    await OfflineCache.set(cacheKey, freshData);
+    return { data: freshData, fromCache: false };
+  } catch (err) {
+    if (err instanceof ApiError && err.status === 401) {
+      await OfflineCache.clear();
+      throw err;
+    }
+    const cached = await OfflineCache.get<T>(cacheKey);
+    if (cached !== null) {
+      return { data: cached, fromCache: true };
+    }
+    throw err;
+  }
 }

@@ -43,11 +43,26 @@ export const AuthStorage = {
   },
 
   async clearAll(): Promise<void> {
-    await this.removeItem("auth_token");
-    await this.removeItem("auth_user");
-    await this.removeItem("auth_memberships");
-    await this.removeItem("auth_active_center");
-    await this.removeItem("auth_active_role");
+    const allKeys = [
+      "auth_token",
+      "auth_refresh_token",
+      "auth_device_id",
+      "auth_user",
+      "auth_memberships",
+      "auth_active_center",
+      "auth_active_role",
+      "offline_cache_student",
+      "offline_cache_teacher",
+      "offline_cache_parent",
+      "offline_cache_director",
+      "offline_cache_platform",
+      "offline_cache_schedule",
+      "offline_cache_grades",
+      "offline_cache_homework",
+    ];
+    for (const k of allKeys) {
+      await this.removeItem(k);
+    }
     memoryStorage.clear();
   },
 };
