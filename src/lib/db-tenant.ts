@@ -28,6 +28,7 @@ export const TENANT_MODELS = [
   "AuditLog",
   "ActivityLog",
   "Notification",
+  "DevicePushToken",
 ];
 
 type DelegateMethods = {

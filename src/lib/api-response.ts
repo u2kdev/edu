@@ -14,7 +14,12 @@ export type ApiErrorCode =
   | "INVALID_INVITE"
   | "ROLE_CONFLICT"
   | "EMAIL_NOT_VERIFIED"
-  | "SERVICE_UNAVAILABLE";
+  | "SERVICE_UNAVAILABLE"
+  | "INVALID_REFRESH_TOKEN"
+  | "SESSION_REVOKED"
+  | "EXPIRED_REFRESH_TOKEN"
+  | "DEVICE_MISMATCH"
+  | "SOLE_DIRECTOR_CONFLICT";
 
 export interface ApiErrorResponse {
   success: false;

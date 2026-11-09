@@ -13,6 +13,10 @@ export async function POST(req: Request) {
       return apiError("Unauthorized", "UNAUTHORIZED", 401);
     }
 
+    if (session.user.platformRole === "PLATFORM_SUPPORT") {
+      return apiError("Forbidden: Platform support has read-only access", "FORBIDDEN", 403);
+    }
+
     const ip = getClientIp(req);
     const body = await req.json();
     const { pushToken, platform, deviceInfo } = registerPushTokenSchema.parse(body);

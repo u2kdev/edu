@@ -42,6 +42,6 @@ describe("TRUST-2 Item 2: Prisma DMMF TENANT_MODELS completeness", () => {
       .map((m) => m.name);
 
     // Notification (global vs tenant), SupportTicket (platform vs tenant), AuditLog (platform vs tenant)
-    expect(nullableCenterIdModels.sort()).toEqual(["AuditLog", "Notification", "SupportTicket"].sort());
+    expect(nullableCenterIdModels.sort()).toEqual(["AuditLog", "DevicePushToken", "Notification", "SupportTicket"].sort());
   });
 });

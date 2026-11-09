@@ -66,7 +66,7 @@ describe("Mobile Refresh Tokens & Device Rotation", () => {
       method: "POST",
       headers: {
         "content-type": "application/json",
-        "x-forwarded-for": "127.0.0.1",
+        "x-forwarded-for": headers["x-forwarded-for"] || `127.0.3.${Math.floor(Math.random() * 250) + 1}`,
         ...headers,
       },
       body: JSON.stringify(body),

@@ -1,3 +1,5 @@
+export const dynamic = "force-dynamic";
+
 import { requireTenantPageAccess } from "@/lib/tenant";
 import { getAuthSession } from "@/lib/auth";
 import { redirect } from "next/navigation";
