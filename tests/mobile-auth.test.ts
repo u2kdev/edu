@@ -242,6 +242,60 @@ describe("Mobile Authentication & Gateway", () => {
     expect(session).toBeNull();
   });
 
+  it("getAuthSession: rejects tampered or forged token", async () => {
+    const jti = uuidv4();
+    const token = signJWT(
+      {
+        userId,
+        email,
+        platformRole: "NONE",
+        jti,
+      },
+      "30d"
+    );
+
+    // Tamper with the token payload
+    const parts = token.split(".");
+    const tamperedToken = `${parts[0]}.${parts[1]}xyz.${parts[2]}`;
+
+    const req = new Request("http://localhost/api/students/me", {
+      headers: { authorization: `Bearer ${tamperedToken}` },
+    });
+
+    const session = await getAuthSession(req);
+    expect(session).toBeNull();
+  });
+
+  it("getAuthSession: rejects expired token", async () => {
+    const jti = uuidv4();
+    // Create token with -10s expiration
+    const token = signJWT(
+      {
+        userId,
+        email,
+        platformRole: "NONE",
+        jti,
+      },
+      "-10s"
+    );
+
+    await db.userSession.create({
+      data: {
+        userId,
+        jtiHash: hashJti(jti),
+        expiresAt: new Date(Date.now() - 10000),
+        userAgent: "expired-token-agent",
+      },
+    });
+
+    const req = new Request("http://localhost/api/students/me", {
+      headers: { authorization: `Bearer ${token}` },
+    });
+
+    const session = await getAuthSession(req);
+    expect(session).toBeNull();
+  });
+
   it("requireTenantAccess: allows access when Bearer token is provided", async () => {
     const jti = uuidv4();
     const token = signJWT(
