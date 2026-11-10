@@ -262,3 +262,92 @@ export async function requireTenantPageAccess(
   const req = new Request("http://localhost/rsc", { method: "GET" });
   return requireTenantAccess(req, options);
 }
+
+/**
+ * Enforces strict tenant access for center financial routes (/api/finance/*):
+ * - Platform roles (SUPERADMIN, DEVELOPER, PLATFORM_SUPPORT, etc.) CANNOT access
+ *   center finances without explicit impersonation.
+ * - When impersonating (via /api/platform/impersonate session or x-impersonate-center-id header),
+ *   access to /api/finance/* is strictly READ-ONLY (write methods return 403 Forbidden)
+ *   and every read operation writes a FINANCE_IMPERSONATION_READ entry to AuditLog.
+ */
+export async function requireFinanceTenantAccess(
+  req: Request,
+  options?: { isWrite?: boolean; expectedCenterId?: string }
+) {
+  let isWrite = options?.isWrite;
+  if (isWrite === undefined) {
+    const method = req.method?.toUpperCase() || "GET";
+    isWrite = ["POST", "PUT", "PATCH", "DELETE"].includes(method);
+  }
+
+  const impersonateCenterHeader = req.headers.get("x-impersonate-center-id")?.trim();
+  const impersonationReason =
+    req.headers.get("x-impersonation-reason")?.trim() ||
+    req.headers.get("x-action-reason")?.trim() ||
+    "Platform finance audit via impersonation";
+
+  const tenantCtx = await requireTenantAccess(req, {
+    ...options,
+    expectedCenterId: options?.expectedCenterId || impersonateCenterHeader || undefined,
+    isWrite,
+  });
+
+  const sessionImpersonatorId = tenantCtx.session.impersonatorUserId;
+  const isHeaderImpersonation = Boolean(tenantCtx.isPlatformStaff && impersonateCenterHeader);
+  const isSessionImpersonation = Boolean(sessionImpersonatorId);
+  const isImpersonating = isHeaderImpersonation || isSessionImpersonation;
+
+  // Platform staff without explicit impersonation cannot view or modify center finances
+  if (tenantCtx.isPlatformStaff && !isImpersonating) {
+    throw new TenantAccessError(
+      "Forbidden: Platform staff cannot access center finances without explicit impersonation",
+      "FINANCE_IMPERSONATION_REQUIRED",
+      403
+    );
+  }
+
+  if (isImpersonating) {
+    if (isWrite) {
+      throw new TenantAccessError(
+        "Forbidden: Center finance access during platform impersonation is strictly read-only",
+        "FINANCE_IMPERSONATION_READ_ONLY",
+        403
+      );
+    }
+
+    const actorUserId = sessionImpersonatorId || tenantCtx.session.user.id;
+    let routePath = "/api/finance";
+    try {
+      routePath = new URL(req.url).pathname;
+    } catch {}
+
+    await logAuditEvent({
+      centerId: tenantCtx.center.id,
+      actorUserId,
+      action: "FINANCE_IMPERSONATION_READ",
+      resource: "CenterFinance",
+      resourceId: tenantCtx.center.id,
+      details: {
+        route: routePath,
+        method: req.method,
+        impersonatedUserId: isSessionImpersonation ? tenantCtx.session.user.id : null,
+        impersonatorUserId: actorUserId,
+        reason: impersonationReason,
+      },
+    });
+
+    return {
+      ...tenantCtx,
+      isImpersonating: true,
+      isReadOnly: true,
+      getTenantDb: () => getTenantDb(tenantCtx.center.id, { isReadOnly: true }),
+    };
+  }
+
+  return {
+    ...tenantCtx,
+    isImpersonating: false,
+  };
+}
+

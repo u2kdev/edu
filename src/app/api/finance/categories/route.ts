@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
-import { requireTenantAccess, logAuditEvent } from "@/lib/tenant";
+import { requireFinanceTenantAccess, logAuditEvent } from "@/lib/tenant";
 import { hasPermission } from "@/lib/permissions";
 import { checkRateLimit, getClientIp } from "@/lib/rate-limit";
 
@@ -19,20 +19,20 @@ const updateCategorySchema = z.object({
   isActive: z.boolean().optional(),
 });
 
-function canReadFinance(role: string, isPlatformStaff: boolean): boolean {
-  if (isPlatformStaff) return true;
+function canReadFinance(role: string, isImpersonating: boolean): boolean {
+  if (isImpersonating) return true;
   return hasPermission("finance.read", "NONE", role);
 }
 
-function canWriteFinance(role: string, isPlatformStaff: boolean): boolean {
-  if (isPlatformStaff) return true;
+function canWriteFinance(role: string, isImpersonating: boolean): boolean {
+  if (isImpersonating) return false;
   return hasPermission("finance.write", "NONE", role);
 }
 
 export async function GET(req: Request) {
   try {
-    const tenantCtx = await requireTenantAccess(req);
-    if (!canReadFinance(tenantCtx.role, tenantCtx.isPlatformStaff)) {
+    const tenantCtx = await requireFinanceTenantAccess(req);
+    if (!canReadFinance(tenantCtx.role, tenantCtx.isImpersonating)) {
       return NextResponse.json(
         { error: "Forbidden: No permission to read finance categories" },
         { status: 403 }
@@ -69,8 +69,8 @@ export async function GET(req: Request) {
 
 export async function POST(req: Request) {
   try {
-    const tenantCtx = await requireTenantAccess(req);
-    if (!canWriteFinance(tenantCtx.role, tenantCtx.isPlatformStaff)) {
+    const tenantCtx = await requireFinanceTenantAccess(req);
+    if (!canWriteFinance(tenantCtx.role, tenantCtx.isImpersonating)) {
       return NextResponse.json(
         { error: "Forbidden: No permission to create finance categories" },
         { status: 403 }
@@ -127,8 +127,8 @@ export async function POST(req: Request) {
 
 export async function PATCH(req: Request) {
   try {
-    const tenantCtx = await requireTenantAccess(req);
-    if (!canWriteFinance(tenantCtx.role, tenantCtx.isPlatformStaff)) {
+    const tenantCtx = await requireFinanceTenantAccess(req);
+    if (!canWriteFinance(tenantCtx.role, tenantCtx.isImpersonating)) {
       return NextResponse.json(
         { error: "Forbidden: No permission to update finance categories" },
         { status: 403 }

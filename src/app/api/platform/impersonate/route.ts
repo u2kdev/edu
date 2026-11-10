@@ -9,7 +9,7 @@ import { logAuditEvent } from "@/lib/tenant";
 // POST /api/platform/impersonate - Platform support / Superadmin impersonates a user with mandatory audit log
 export async function POST(req: Request) {
   try {
-    const session = await getAuthSession();
+    const session = await getAuthSession(req);
     if (!session) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
@@ -64,6 +64,7 @@ export async function POST(req: Request) {
         platformRole: targetUser.platformRole,
         activeCenterId: activeMem?.centerId,
         activeCenterRole: activeMem?.role,
+        impersonatorUserId: session.user.id,
       },
       {
         maxAgeSeconds: 1 * 24 * 60 * 60, // 1 day for impersonation session

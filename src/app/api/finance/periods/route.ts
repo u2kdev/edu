@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
-import { requireTenantAccess } from "@/lib/tenant";
+import { requireFinanceTenantAccess } from "@/lib/tenant";
 import { hasPermission } from "@/lib/permissions";
 import { checkRateLimit, getClientIp } from "@/lib/rate-limit";
 import { closeFinancePeriod } from "@/lib/finance";
@@ -13,9 +13,9 @@ const closePeriodSchema = z.object({
 
 export async function GET(req: Request) {
   try {
-    const tenantCtx = await requireTenantAccess(req);
+    const tenantCtx = await requireFinanceTenantAccess(req);
     const canRead =
-      tenantCtx.isPlatformStaff || hasPermission("finance.read", "NONE", tenantCtx.role);
+      tenantCtx.isImpersonating || hasPermission("finance.read", "NONE", tenantCtx.role);
     if (!canRead) {
       return NextResponse.json(
         { error: "Forbidden: No permission to read finance periods" },
@@ -48,9 +48,9 @@ export async function GET(req: Request) {
 
 export async function POST(req: Request) {
   try {
-    const tenantCtx = await requireTenantAccess(req);
+    const tenantCtx = await requireFinanceTenantAccess(req);
     const canClose =
-      tenantCtx.isPlatformStaff || hasPermission("finance.period.close", "NONE", tenantCtx.role);
+      !tenantCtx.isImpersonating && hasPermission("finance.period.close", "NONE", tenantCtx.role);
 
     if (!canClose) {
       return NextResponse.json(

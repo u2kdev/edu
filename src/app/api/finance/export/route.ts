@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { requireTenantAccess, logAuditEvent } from "@/lib/tenant";
+import { requireFinanceTenantAccess, logAuditEvent } from "@/lib/tenant";
 import { hasPermission } from "@/lib/permissions";
 import { checkRateLimit, getClientIp } from "@/lib/rate-limit";
 import { getTashkentMonthBounds, TASHKENT_OFFSET_MS } from "@/lib/finance";
@@ -17,9 +17,9 @@ function formatTashkentDateString(date: Date): string {
 
 export async function GET(req: Request) {
   try {
-    const tenantCtx = await requireTenantAccess(req);
+    const tenantCtx = await requireFinanceTenantAccess(req);
     const canExport =
-      tenantCtx.isPlatformStaff ||
+      tenantCtx.isImpersonating ||
       hasPermission("finance.export", "NONE", tenantCtx.role) ||
       hasPermission("finance.read", "NONE", tenantCtx.role);
 

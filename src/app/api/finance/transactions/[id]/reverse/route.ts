@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
-import { requireTenantAccess } from "@/lib/tenant";
+import { requireFinanceTenantAccess } from "@/lib/tenant";
 import { hasPermission } from "@/lib/permissions";
 import { checkRateLimit, getClientIp } from "@/lib/rate-limit";
 import { reverseFinanceTransaction } from "@/lib/finance";
@@ -15,9 +15,9 @@ export async function POST(
   context: { params: Promise<{ id: string }> }
 ) {
   try {
-    const tenantCtx = await requireTenantAccess(req);
+    const tenantCtx = await requireFinanceTenantAccess(req);
     const canStorno =
-      tenantCtx.isPlatformStaff || hasPermission("finance.storno", "NONE", tenantCtx.role);
+      !tenantCtx.isImpersonating && hasPermission("finance.storno", "NONE", tenantCtx.role);
 
     if (!canStorno) {
       return NextResponse.json(

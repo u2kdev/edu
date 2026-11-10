@@ -44,6 +44,7 @@ export interface JWTPayload {
   platformRole: PlatformRole | string;
   activeCenterId?: string;
   activeCenterRole?: CenterRole | string;
+  impersonatorUserId?: string;
   jti?: string;
 }
 
@@ -137,6 +138,7 @@ export async function getAuthSession(req?: Request): Promise<{
   }[];
   jti?: string;
   sessionId?: string;
+  impersonatorUserId?: string;
 } | null> {
   let token: string | undefined;
 
@@ -276,5 +278,6 @@ export async function getAuthSession(req?: Request): Promise<{
     memberships: membershipsFormatted,
     jti: payload.jti,
     sessionId: session?.id,
+    impersonatorUserId: payload.impersonatorUserId,
   };
 }

@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import { Currency } from "@prisma/client";
-import { requireTenantAccess, logAuditEvent } from "@/lib/tenant";
+import { requireFinanceTenantAccess, logAuditEvent } from "@/lib/tenant";
 import { hasPermission } from "@/lib/permissions";
 import { checkRateLimit, getClientIp } from "@/lib/rate-limit";
 
@@ -15,9 +15,9 @@ const salaryRateSchema = z.object({
 
 export async function GET(req: Request) {
   try {
-    const tenantCtx = await requireTenantAccess(req);
+    const tenantCtx = await requireFinanceTenantAccess(req);
     const canRead =
-      tenantCtx.isPlatformStaff || hasPermission("finance.read", "NONE", tenantCtx.role);
+      tenantCtx.isImpersonating || hasPermission("finance.read", "NONE", tenantCtx.role);
     if (!canRead) {
       return NextResponse.json(
         { error: "Forbidden: No permission to read teacher salary rates" },
@@ -53,9 +53,9 @@ export async function GET(req: Request) {
 
 export async function POST(req: Request) {
   try {
-    const tenantCtx = await requireTenantAccess(req);
+    const tenantCtx = await requireFinanceTenantAccess(req);
     const canWrite =
-      tenantCtx.isPlatformStaff || hasPermission("finance.write", "NONE", tenantCtx.role);
+      !tenantCtx.isImpersonating && hasPermission("finance.write", "NONE", tenantCtx.role);
     if (!canWrite) {
       return NextResponse.json(
         { error: "Forbidden: No permission to manage teacher salary rates" },
