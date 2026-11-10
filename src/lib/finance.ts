@@ -291,33 +291,45 @@ export async function reverseFinanceTransaction(input: ReverseFinanceTransaction
   }
 
   const reversalDate = input.date ?? new Date();
+  if (await isDateInClosedPeriod(input.centerId, original.date)) {
+    throw new Error("Cannot reverse transaction belonging to a closed finance period");
+  }
   if (await isDateInClosedPeriod(input.centerId, reversalDate)) {
     throw new Error("Cannot record reversal in a closed finance period");
   }
 
-  const reversal = await tenantDb.financeTransaction.create({
-    data: {
-      centerId: input.centerId,
-      type: original.type,
-      amount: original.amount,
-      currency: original.currency,
-      accountId: original.accountId,
-      targetAccountId: original.targetAccountId,
-      categoryId: original.categoryId,
-      date: reversalDate,
-      description: `СТОРНО: ${original.description ?? original.id} (${trimmedReason})`,
-      counterparty: original.counterparty,
-      studentMembershipId: original.studentMembershipId,
-      groupId: original.groupId,
-      courseId: original.courseId,
-      branchId: original.branchId,
-      centerPaymentId: original.centerPaymentId,
-      isReversal: true,
-      reversalOfId: original.id,
-      reversalReason: trimmedReason,
-      createdBy: input.actorUserId,
-    },
-  });
+  let reversal;
+  try {
+    reversal = await tenantDb.financeTransaction.create({
+      data: {
+        centerId: input.centerId,
+        type: original.type,
+        amount: original.amount,
+        currency: original.currency,
+        accountId: original.accountId,
+        targetAccountId: original.targetAccountId,
+        categoryId: original.categoryId,
+        date: reversalDate,
+        description: `СТОРНО: ${original.description ?? original.id} (${trimmedReason})`,
+        counterparty: original.counterparty,
+        studentMembershipId: original.studentMembershipId,
+        groupId: original.groupId,
+        courseId: original.courseId,
+        branchId: original.branchId,
+        centerPaymentId: original.centerPaymentId,
+        isReversal: true,
+        reversalOfId: original.id,
+        reversalReason: trimmedReason,
+        createdBy: input.actorUserId,
+      },
+    });
+  } catch (err: unknown) {
+    const errStr = String(err);
+    if (errStr.includes("Unique constraint") || errStr.includes("P2002")) {
+      throw new Error("Transaction has already been reversed (already reversed)");
+    }
+    throw err;
+  }
 
   await tenantDb.auditLog.create({
     data: {

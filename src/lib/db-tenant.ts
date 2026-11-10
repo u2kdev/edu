@@ -81,6 +81,48 @@ async function validateFinanceTransactionWrite(data: Record<string, unknown>, ce
       `Cannot record transaction in a closed finance period (${closedPeriod.year}-${String(closedPeriod.month).padStart(2, "0")})`
     );
   }
+
+  if (data.isReversal === true || typeof data.reversalOfId === "string") {
+    const reversalOfId = data.reversalOfId;
+    if (typeof reversalOfId !== "string" || reversalOfId.trim() === "") {
+      throw new Error("Reversal transaction requires a valid reversalOfId");
+    }
+    const original = await db.financeTransaction.findFirst({
+      where: { id: reversalOfId, centerId },
+    });
+    if (!original) {
+      throw new Error("Original transaction for reversal not found in this center");
+    }
+    if (original.isReversal) {
+      throw new Error("Cannot reverse a transaction that is already a reversal (storno)");
+    }
+    if (amount !== original.amount) {
+      throw new Error(
+        `Reversal amount must exactly equal original transaction amount (${original.amount} UZS)`
+      );
+    }
+
+    const origYm = getTashkentYearMonthFromDate(original.date);
+    const origClosedPeriod = await db.financePeriod.findFirst({
+      where: {
+        centerId,
+        status: "CLOSED",
+        OR: [
+          { year: origYm.year, month: origYm.month },
+          {
+            startDate: { lte: original.date },
+            endDate: { gte: original.date },
+          },
+        ],
+      },
+      select: { id: true, year: true, month: true },
+    });
+    if (origClosedPeriod) {
+      throw new Error(
+        `Cannot reverse a transaction belonging to a closed finance period (${origClosedPeriod.year}-${String(origClosedPeriod.month).padStart(2, "0")})`
+      );
+    }
+  }
 }
 
 type DelegateMethods = {

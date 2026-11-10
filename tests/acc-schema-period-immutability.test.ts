@@ -409,4 +409,96 @@ describe("ACC-1 Item 1: Finance Schema, Account Balances, Period Lock & Storno I
     expect(octTx.id).toBeDefined();
     expect(await calculateAccountBalance(centerId, cashAccountId)).toBe(840000);
   });
+
+  it("5. enforces storno uniqueness under Promise.all concurrency, forbids reversing a transaction from a CLOSED period, and forbids mismatched reversal amounts", async () => {
+    const tenantDb = getTenantDb(centerId);
+
+    // 5a. Cannot reverse a transaction that belongs to CLOSED September 2026, even if reversal date is in October 2026
+    const sepTx = await tenantDb.financeTransaction.findFirstOrThrow({
+      where: {
+        date: {
+          gte: new Date("2026-09-01T00:00:00+05:00"),
+          lte: new Date("2026-09-30T23:59:59+05:00"),
+        },
+        isReversal: false,
+        reversedBy: null,
+      },
+    });
+
+    await expect(
+      reverseFinanceTransaction({
+        centerId,
+        transactionId: sepTx.id,
+        reason: "Попытка сторнировать проводку из закрытого сентября",
+        actorUserId: directorUserId,
+        date: new Date("2026-10-05T10:00:00+05:00"),
+      })
+    ).rejects.toThrow(/closed finance period/i);
+
+    // 5b. Create a new transaction in open October 2026 and test Promise.all concurrent storno
+    const octTx2 = await recordFinanceTransaction({
+      centerId,
+      type: "INCOME",
+      amount: 450000,
+      accountId: cashAccountId,
+      categoryId: incomeCategoryId,
+      date: new Date("2026-10-06T10:00:00+05:00"),
+      description: "Проводка для конкурентного сторно",
+      createdBy: directorUserId,
+    });
+
+    // Direct tenantDb attempt to create a storno with mismatched amount (!== 450000) must fail
+    await expect(
+      tenantDb.financeTransaction.create({
+        data: {
+          centerId,
+          type: "INCOME",
+          amount: 100000, // Mismatched! Original is 450000
+          accountId: cashAccountId,
+          categoryId: incomeCategoryId,
+          date: new Date("2026-10-06T12:00:00+05:00"),
+          isReversal: true,
+          reversalOfId: octTx2.id,
+          reversalReason: "Попытка частичного сторно",
+          createdBy: directorUserId,
+        },
+      })
+    ).rejects.toThrow(/Reversal amount must exactly equal original transaction amount/i);
+
+    // Concurrent Promise.all storno calls: exactly 1 succeeds, others reject with "already reversed"
+    const concurrentOutcomes = await Promise.allSettled([
+      reverseFinanceTransaction({
+        centerId,
+        transactionId: octTx2.id,
+        reason: "Конкурентное сторно #1",
+        actorUserId: directorUserId,
+        date: new Date("2026-10-06T15:00:00+05:00"),
+      }),
+      reverseFinanceTransaction({
+        centerId,
+        transactionId: octTx2.id,
+        reason: "Конкурентное сторно #2",
+        actorUserId: directorUserId,
+        date: new Date("2026-10-06T15:00:00+05:00"),
+      }),
+      reverseFinanceTransaction({
+        centerId,
+        transactionId: octTx2.id,
+        reason: "Конкурентное сторно #3",
+        actorUserId: directorUserId,
+        date: new Date("2026-10-06T15:00:00+05:00"),
+      }),
+    ]);
+
+    const fulfilled = concurrentOutcomes.filter((o) => o.status === "fulfilled");
+    const rejected = concurrentOutcomes.filter((o) => o.status === "rejected");
+    expect(fulfilled.length).toBe(1);
+    expect(rejected.length).toBe(2);
+
+    const reversalsInDb = await tenantDb.financeTransaction.findMany({
+      where: { reversalOfId: octTx2.id },
+    });
+    expect(reversalsInDb.length).toBe(1);
+    expect(reversalsInDb[0].amount).toBe(octTx2.amount);
+  });
 });
