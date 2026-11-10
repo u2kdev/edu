@@ -93,9 +93,10 @@ type DelegateMethods = {
 type DynamicDb = PrismaClient & Record<string, DelegateMethods>;
 
 // Dynamically generated foreign keys mapping from Prisma.dmmf
-const DMMF_RELATION_FOREIGN_KEYS: Record<string, string> = (() => {
-  const map: Record<string, string> = {};
+const DMMF_MODEL_RELATION_FOREIGN_KEYS: Record<string, Record<string, string>> = (() => {
+  const map: Record<string, Record<string, string>> = {};
   for (const model of Prisma.dmmf.datamodel.models) {
+    map[model.name] = {};
     for (const field of model.fields) {
       if (
         field.kind === "object" &&
@@ -106,7 +107,7 @@ const DMMF_RELATION_FOREIGN_KEYS: Record<string, string> = (() => {
         if (TENANT_MODELS.includes(targetModel)) {
           const delegateName = targetModel.charAt(0).toLowerCase() + targetModel.slice(1);
           for (const fk of field.relationFromFields) {
-            map[fk] = delegateName;
+            map[model.name][fk] = delegateName;
           }
         }
       }
@@ -115,7 +116,11 @@ const DMMF_RELATION_FOREIGN_KEYS: Record<string, string> = (() => {
   return map;
 })();
 
-async function validateForeignRelations(data: Record<string, unknown>, centerId: string) {
+async function validateForeignRelations(
+  modelName: string,
+  data: Record<string, unknown>,
+  centerId: string
+) {
   // Reject nested relation mutations like connect, create, connectOrCreate
   for (const [key, value] of Object.entries(data)) {
     if (value && typeof value === "object" && !Array.isArray(value) && !(value instanceof Date)) {
@@ -126,7 +131,8 @@ async function validateForeignRelations(data: Record<string, unknown>, centerId:
     }
   }
 
-  for (const [key, modelProp] of Object.entries(DMMF_RELATION_FOREIGN_KEYS)) {
+  const modelFks = DMMF_MODEL_RELATION_FOREIGN_KEYS[modelName] || {};
+  for (const [key, modelProp] of Object.entries(modelFks)) {
     const foreignId = data[key];
     if (typeof foreignId === "string" && foreignId.length > 0) {
       const dynamicDb = db as DynamicDb;
@@ -246,7 +252,7 @@ export function getTenantDb(rawCenterId?: string | null, options?: { isReadOnly?
                   }
                   delete dataObj.centerId;
                 }
-                await validateForeignRelations(dataObj, centerId);
+                await validateForeignRelations(model, dataObj, centerId);
               }
             }
 
@@ -259,10 +265,10 @@ export function getTenantDb(rawCenterId?: string | null, options?: { isReadOnly?
                   }
                   delete updateObj.centerId;
                 }
-                await validateForeignRelations(updateObj, centerId);
+                await validateForeignRelations(model, updateObj, centerId);
               }
               if (args.create && typeof args.create === "object") {
-                await validateForeignRelations(args.create as Record<string, unknown>, centerId);
+                await validateForeignRelations(model, args.create as Record<string, unknown>, centerId);
               }
               const modelProp = model.charAt(0).toLowerCase() + model.slice(1);
               const dynamicDb = db as DynamicDb;
@@ -310,7 +316,7 @@ export function getTenantDb(rawCenterId?: string | null, options?: { isReadOnly?
 
             if (operation === "create") {
               if (args.data && typeof args.data === "object") {
-                await validateForeignRelations(args.data as Record<string, unknown>, centerId);
+                await validateForeignRelations(model, args.data as Record<string, unknown>, centerId);
                 if (model === "FinanceTransaction") {
                   await validateFinanceTransactionWrite(args.data as Record<string, unknown>, centerId);
                 }
@@ -322,7 +328,7 @@ export function getTenantDb(rawCenterId?: string | null, options?: { isReadOnly?
               if (Array.isArray(args.data)) {
                 for (const item of args.data) {
                   if (item && typeof item === "object") {
-                    await validateForeignRelations(item as Record<string, unknown>, centerId);
+                    await validateForeignRelations(model, item as Record<string, unknown>, centerId);
                     if (model === "FinanceTransaction") {
                       await validateFinanceTransactionWrite(item as Record<string, unknown>, centerId);
                     }
@@ -331,7 +337,7 @@ export function getTenantDb(rawCenterId?: string | null, options?: { isReadOnly?
                 args.data = (args.data as Record<string, unknown>[]).map((d) => ({ ...d, centerId }));
               } else {
                 if (args.data && typeof args.data === "object") {
-                  await validateForeignRelations(args.data as Record<string, unknown>, centerId);
+                  await validateForeignRelations(model, args.data as Record<string, unknown>, centerId);
                   if (model === "FinanceTransaction") {
                     await validateFinanceTransactionWrite(args.data as Record<string, unknown>, centerId);
                   }
