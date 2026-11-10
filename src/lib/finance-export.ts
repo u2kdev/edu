@@ -1,4 +1,6 @@
-export const MAX_FINANCE_EXPORT_ROWS = 2000;
+export const DEFAULT_FINANCE_EXPORT_PAGE_SIZE = 500;
+export const MAX_FINANCE_EXPORT_PAGE_SIZE = 1000;
+export const MAX_FINANCE_EXPORT_ROWS = MAX_FINANCE_EXPORT_PAGE_SIZE;
 
 export interface FinanceExportRow {
   id: string;
@@ -55,13 +57,9 @@ const EXPORT_HEADERS = [
 ];
 
 /**
- * Generates UTF-8 CSV with formula injection protection and row limit enforcement.
+ * Generates UTF-8 CSV with formula injection protection.
  */
 export function generateFinanceCsv(rows: FinanceExportRow[]): string {
-  if (rows.length > MAX_FINANCE_EXPORT_ROWS) {
-    throw new Error(`Export exceeds maximum row limit of ${MAX_FINANCE_EXPORT_ROWS}`);
-  }
-
   const lines: string[] = [EXPORT_HEADERS.map(escapeCsvField).join(",")];
 
   for (const r of rows) {
@@ -191,14 +189,9 @@ function createStoredZip(files: { name: string; content: Buffer }[]): Buffer {
 }
 
 /**
- * Generates an OpenXML SpreadsheetML (.xlsx) Buffer with formula injection protection
- * and row limit enforcement.
+ * Generates an OpenXML SpreadsheetML (.xlsx) Buffer with formula injection protection.
  */
 export function generateFinanceXlsx(rows: FinanceExportRow[]): Buffer {
-  if (rows.length > MAX_FINANCE_EXPORT_ROWS) {
-    throw new Error(`Export exceeds maximum row limit of ${MAX_FINANCE_EXPORT_ROWS}`);
-  }
-
   const sheetRowsXml: string[] = [];
 
   // Row 1: Headers

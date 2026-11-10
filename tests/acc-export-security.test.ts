@@ -6,11 +6,10 @@ import {
   sanitizeSpreadsheetCell,
   generateFinanceCsv,
   generateFinanceXlsx,
-  MAX_FINANCE_EXPORT_ROWS,
 } from "../src/lib/finance-export";
 import { GET as exportFinanceRoute } from "../src/app/api/finance/export/route";
 
-describe("ACC-1 Item 6: CSV and XLSX Export with Formula Injection Protection & Row Limit", () => {
+describe("ACC-1 Item 6 & ACC-1b Item 7: CSV and XLSX Export with Mandatory Period Filter, Pagination & Formula Protection", () => {
   let centerId: string;
   let directorUserId: string;
   let accountantUserId: string;
@@ -105,11 +104,11 @@ describe("ACC-1 Item 6: CSV and XLSX Export with Formula Injection Protection & 
     });
     catIncomeId = cat.id;
 
-    // Seed transactions with malicious formula payloads (=, +, -, @)
+    // Seed 3 transactions in October 2026 with malicious formula payloads (=, +, -, @)
     const maliciousPayloads = [
-      { desc: "=CMD|' /C calc'!A0", cp: "+998901234567" },
-      { desc: "-2+3+cmd|' /C calc'!A0", cp: "@SUM(1+1)*cmd|' /C calc'!A0" },
-      { desc: "  =HYPERLINK(\"http://evil.uz\",\"Click\")", cp: "\t+100000" },
+      { desc: "=CMD|' /C calc'!A0", cp: "+998901234567", date: "2026-10-10T10:00:00+05:00" },
+      { desc: "-2+3+cmd|' /C calc'!A0", cp: "@SUM(1+1)*cmd|' /C calc'!A0", date: "2026-10-12T10:00:00+05:00" },
+      { desc: "  =HYPERLINK(\"http://evil.uz\",\"Click\")", cp: "\t+100000", date: "2026-10-15T10:00:00+05:00" },
     ];
 
     for (const item of maliciousPayloads) {
@@ -119,7 +118,7 @@ describe("ACC-1 Item 6: CSV and XLSX Export with Formula Injection Protection & 
         amount: 350000,
         accountId: cashAccId,
         categoryId: catIncomeId,
-        date: new Date("2026-10-12T10:00:00+05:00"),
+        date: new Date(item.date),
         description: item.desc,
         counterparty: item.cp,
         createdBy: directorUserId,
@@ -153,16 +152,47 @@ describe("ACC-1 Item 6: CSV and XLSX Export with Formula Injection Protection & 
     expect(sanitizeSpreadsheetCell("Обычный текст")).toBe("Обычный текст");
   });
 
-  it("2. exports CSV and XLSX with escaped formulas and enforces row limit", async () => {
+  it("2. requires mandatory period filter (period=YYYY-MM or startDate & endDate) and rejects export without period (400 Bad Request)", async () => {
+    // Missing period and startDate/endDate -> 400
+    const noPeriodRes = await exportFinanceRoute(
+      new Request("http://localhost:3000/api/finance/export?format=csv", {
+        headers: { Authorization: `Bearer ${directorToken}` },
+      })
+    );
+    expect(noPeriodRes.status).toBe(400);
+    const noPeriodBody = await noPeriodRes.json();
+    expect(noPeriodBody.error).toMatch(/period/i);
+
+    // Invalid period format -> 400
+    const badPeriodRes = await exportFinanceRoute(
+      new Request("http://localhost:3000/api/finance/export?format=csv&period=all", {
+        headers: { Authorization: `Bearer ${directorToken}` },
+      })
+    );
+    expect(badPeriodRes.status).toBe(400);
+
+    // Valid startDate & endDate range -> 200
+    const rangeRes = await exportFinanceRoute(
+      new Request(
+        "http://localhost:3000/api/finance/export?format=csv&startDate=2026-10-01T00:00:00%2B05:00&endDate=2026-10-31T23:59:59%2B05:00",
+        {
+          headers: { Authorization: `Bearer ${directorToken}` },
+        }
+      )
+    );
+    expect(rangeRes.status).toBe(200);
+  });
+
+  it("3. exports CSV and XLSX with escaped formulas and supports export page pagination (page & pageSize with X-Export-* headers)", async () => {
     // Teacher cannot export (403)
     const tchRes = await exportFinanceRoute(
-      new Request("http://localhost:3000/api/finance/export?format=csv", {
+      new Request("http://localhost:3000/api/finance/export?format=csv&period=2026-10", {
         headers: { Authorization: `Bearer ${teacherToken}` },
       })
     );
     expect(tchRes.status).toBe(403);
 
-    // Accountant can export CSV
+    // Accountant exports full page 1 (all 3 rows in 2026-10)
     const csvRes = await exportFinanceRoute(
       new Request("http://localhost:3000/api/finance/export?format=csv&period=2026-10", {
         headers: { Authorization: `Bearer ${accountantToken}` },
@@ -170,6 +200,9 @@ describe("ACC-1 Item 6: CSV and XLSX Export with Formula Injection Protection & 
     );
     expect(csvRes.status).toBe(200);
     expect(csvRes.headers.get("content-type")).toContain("text/csv");
+    expect(csvRes.headers.get("x-export-page")).toBe("1");
+    expect(csvRes.headers.get("x-export-total-rows")).toBe("3");
+    expect(csvRes.headers.get("x-export-total-pages")).toBe("1");
     const csvText = await csvRes.text();
 
     // Ensure malicious formulas are prefixed with single quote '
@@ -178,7 +211,7 @@ describe("ACC-1 Item 6: CSV and XLSX Export with Formula Injection Protection & 
     expect(csvText).toContain("'-2+3+cmd");
     expect(csvText).toContain("'@SUM(1+1)");
 
-    // Director can export XLSX
+    // Director exports XLSX
     const xlsxRes = await exportFinanceRoute(
       new Request("http://localhost:3000/api/finance/export?format=xlsx&period=2026-10", {
         headers: { Authorization: `Bearer ${directorToken}` },
@@ -188,7 +221,6 @@ describe("ACC-1 Item 6: CSV and XLSX Export with Formula Injection Protection & 
     expect(xlsxRes.headers.get("content-type")).toContain("spreadsheetml");
 
     const xlsxBytes = new Uint8Array(await xlsxRes.arrayBuffer());
-    // Must be a valid ZIP container (PK\x03\x04) containing xl/worksheets/sheet1.xml
     expect(xlsxBytes[0]).toBe(0x50); // 'P'
     expect(xlsxBytes[1]).toBe(0x4b); // 'K'
     const rawZipAscii = Buffer.from(xlsxBytes).toString("utf8");
@@ -196,35 +228,36 @@ describe("ACC-1 Item 6: CSV and XLSX Export with Formula Injection Protection & 
     expect(rawZipAscii).toContain("<t>&apos;=CMD|");
     expect(rawZipAscii).toContain("<t>&apos;+998901234567</t>");
 
-    // Enforce row limit via query param (e.g. limit=2 returns at most 2 data rows) and reject limit > MAX_FINANCE_EXPORT_ROWS
-    expect(MAX_FINANCE_EXPORT_ROWS).toBeLessThanOrEqual(5000);
-    const limitedRes = await exportFinanceRoute(
-      new Request("http://localhost:3000/api/finance/export?format=csv&limit=2", {
+    // Pagination: page=1&pageSize=2 returns 2 data rows + 1 header row = 3 lines
+    const page1Res = await exportFinanceRoute(
+      new Request("http://localhost:3000/api/finance/export?format=csv&period=2026-10&page=1&pageSize=2", {
         headers: { Authorization: `Bearer ${directorToken}` },
       })
     );
-    expect(limitedRes.status).toBe(200);
-    const limitedLines = (await limitedRes.text()).trim().split(/\r?\n/);
-    // 1 header line + 2 data lines = 3 lines
-    expect(limitedLines.length).toBe(3);
+    expect(page1Res.status).toBe(200);
+    expect(page1Res.headers.get("x-export-page")).toBe("1");
+    expect(page1Res.headers.get("x-export-page-size")).toBe("2");
+    expect(page1Res.headers.get("x-export-total-rows")).toBe("3");
+    expect(page1Res.headers.get("x-export-total-pages")).toBe("2");
+    const page1Lines = (await page1Res.text()).trim().split(/\r?\n/);
+    expect(page1Lines.length).toBe(3); // 1 header + 2 rows
 
-    // Direct generator throws if rows exceed MAX_FINANCE_EXPORT_ROWS
-    const oversizedRows = Array.from({ length: MAX_FINANCE_EXPORT_ROWS + 1 }, (_, i) => ({
-      id: `id-${i}`,
-      date: "2026-10-12",
-      type: "INCOME",
-      amount: 1000,
-      currency: "UZS",
-      accountName: "Касса",
-      targetAccountName: "",
-      categoryName: "Оплата",
-      counterparty: "Студент",
-      description: "Оплата",
-      branchName: "",
-      groupName: "",
-      isReversal: false,
-    }));
-    expect(() => generateFinanceCsv(oversizedRows)).toThrow(/row limit/i);
-    expect(() => generateFinanceXlsx(oversizedRows)).toThrow(/row limit/i);
+    // Pagination: page=2&pageSize=2 returns remaining 1 data row + 1 header row = 2 lines
+    const page2Res = await exportFinanceRoute(
+      new Request("http://localhost:3000/api/finance/export?format=csv&period=2026-10&page=2&pageSize=2", {
+        headers: { Authorization: `Bearer ${directorToken}` },
+      })
+    );
+    expect(page2Res.status).toBe(200);
+    expect(page2Res.headers.get("x-export-page")).toBe("2");
+    expect(page2Res.headers.get("x-export-page-size")).toBe("2");
+    expect(page2Res.headers.get("x-export-total-rows")).toBe("3");
+    expect(page2Res.headers.get("x-export-total-pages")).toBe("2");
+    const page2Lines = (await page2Res.text()).trim().split(/\r?\n/);
+    expect(page2Lines.length).toBe(2); // 1 header + 1 row
+
+    // Direct generator still works for valid row sets
+    expect(generateFinanceCsv([])).toContain("ID");
+    expect(generateFinanceXlsx([]).length).toBeGreaterThan(0);
   });
 });

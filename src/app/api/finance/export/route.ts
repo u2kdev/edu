@@ -6,9 +6,12 @@ import { getTashkentMonthBounds, TASHKENT_OFFSET_MS } from "@/lib/finance";
 import {
   generateFinanceCsv,
   generateFinanceXlsx,
-  MAX_FINANCE_EXPORT_ROWS,
+  DEFAULT_FINANCE_EXPORT_PAGE_SIZE,
+  MAX_FINANCE_EXPORT_PAGE_SIZE,
   type FinanceExportRow,
 } from "@/lib/finance-export";
+
+const MAX_EXPORT_RANGE_MS = 366 * 24 * 3600 * 1000;
 
 function formatTashkentDateString(date: Date): string {
   const shifted = new Date(date.getTime() + TASHKENT_OFFSET_MS);
@@ -45,23 +48,72 @@ export async function GET(req: Request) {
       );
     }
 
-    const rawLimit = searchParams.get("limit");
-    const parsedLimit = rawLimit ? parseInt(rawLimit, 10) : MAX_FINANCE_EXPORT_ROWS;
-    if (Number.isNaN(parsedLimit) || parsedLimit <= 0 || parsedLimit > MAX_FINANCE_EXPORT_ROWS) {
+    const periodParam = searchParams.get("period")?.trim() || null;
+    const startDateParam = searchParams.get("startDate")?.trim() || null;
+    const endDateParam = searchParams.get("endDate")?.trim() || null;
+
+    let startDate: Date;
+    let endDate: Date;
+    let periodLabel: string;
+
+    if (periodParam) {
+      if (!/^\d{4}-\d{2}$/.test(periodParam)) {
+        return NextResponse.json(
+          { error: "Invalid period format. Expected period=YYYY-MM" },
+          { status: 400 }
+        );
+      }
+      const [yStr, mStr] = periodParam.split("-");
+      const bounds = getTashkentMonthBounds(Number(yStr), Number(mStr));
+      startDate = bounds.startDate;
+      endDate = bounds.endDate;
+      periodLabel = periodParam;
+    } else if (startDateParam && endDateParam) {
+      startDate = new Date(startDateParam);
+      endDate = new Date(endDateParam);
+      if (
+        Number.isNaN(startDate.getTime()) ||
+        Number.isNaN(endDate.getTime()) ||
+        endDate < startDate ||
+        endDate.getTime() - startDate.getTime() > MAX_EXPORT_RANGE_MS
+      ) {
+        return NextResponse.json(
+          { error: "Invalid period date range for export (max range is 366 days)" },
+          { status: 400 }
+        );
+      }
+      periodLabel = `${startDate.toISOString().slice(0, 10)}_${endDate.toISOString().slice(0, 10)}`;
+    } else {
       return NextResponse.json(
-        { error: `Invalid row limit (must be between 1 and ${MAX_FINANCE_EXPORT_ROWS})` },
+        { error: "Mandatory period filter is required for export (provide period=YYYY-MM or startDate and endDate)" },
         { status: 400 }
       );
     }
 
-    const periodParam = searchParams.get("period");
+    const rawPage = searchParams.get("page");
+    const rawPageSize = searchParams.get("pageSize");
+    const page = rawPage ? parseInt(rawPage, 10) : 1;
+    const pageSize = rawPageSize ? parseInt(rawPageSize, 10) : DEFAULT_FINANCE_EXPORT_PAGE_SIZE;
+
+    if (Number.isNaN(page) || page < 1) {
+      return NextResponse.json({ error: "Invalid page parameter (must be >= 1)" }, { status: 400 });
+    }
+    if (Number.isNaN(pageSize) || pageSize < 1 || pageSize > MAX_FINANCE_EXPORT_PAGE_SIZE) {
+      return NextResponse.json(
+        { error: `Invalid pageSize parameter (must be between 1 and ${MAX_FINANCE_EXPORT_PAGE_SIZE})` },
+        { status: 400 }
+      );
+    }
+
     const type = searchParams.get("type");
     const accountId = searchParams.get("accountId");
     const categoryId = searchParams.get("categoryId");
     const branchId = searchParams.get("branchId");
     const groupId = searchParams.get("groupId");
 
-    const where: Record<string, unknown> = {};
+    const where: Record<string, unknown> = {
+      date: { gte: startDate, lte: endDate },
+    };
     if (type === "INCOME" || type === "EXPENSE" || type === "TRANSFER") {
       where.type = type;
     }
@@ -70,25 +122,25 @@ export async function GET(req: Request) {
     if (branchId) where.branchId = branchId;
     if (groupId) where.groupId = groupId;
 
-    if (periodParam && /^\d{4}-\d{2}$/.test(periodParam)) {
-      const [yStr, mStr] = periodParam.split("-");
-      const { startDate, endDate } = getTashkentMonthBounds(Number(yStr), Number(mStr));
-      where.date = { gte: startDate, lte: endDate };
-    }
-
     const tenantDb = tenantCtx.getTenantDb();
-    const transactions = await tenantDb.financeTransaction.findMany({
-      where,
-      include: {
-        account: { select: { name: true } },
-        targetAccount: { select: { name: true } },
-        category: { select: { name: true } },
-        branch: { select: { name: true } },
-        group: { select: { name: true } },
-      },
-      orderBy: [{ date: "desc" }, { createdAt: "desc" }],
-      take: parsedLimit,
-    });
+    const [totalRows, transactions] = await Promise.all([
+      tenantDb.financeTransaction.count({ where }),
+      tenantDb.financeTransaction.findMany({
+        where,
+        include: {
+          account: { select: { name: true } },
+          targetAccount: { select: { name: true } },
+          category: { select: { name: true } },
+          branch: { select: { name: true } },
+          group: { select: { name: true } },
+        },
+        orderBy: [{ date: "desc" }, { createdAt: "desc" }],
+        skip: (page - 1) * pageSize,
+        take: pageSize,
+      }),
+    ]);
+
+    const totalPages = Math.max(1, Math.ceil(totalRows / pageSize));
 
     const exportRows: FinanceExportRow[] = transactions.map((t) => ({
       id: t.id,
@@ -114,10 +166,20 @@ export async function GET(req: Request) {
       details: {
         format,
         rowCount: exportRows.length,
-        period: periodParam ?? "ALL",
+        totalRows,
+        page,
+        pageSize,
+        period: periodLabel,
       },
       ipAddress: ip,
     });
+
+    const paginationHeaders = {
+      "X-Export-Page": String(page),
+      "X-Export-Page-Size": String(pageSize),
+      "X-Export-Total-Rows": String(totalRows),
+      "X-Export-Total-Pages": String(totalPages),
+    };
 
     if (format === "xlsx") {
       const xlsxBuffer = generateFinanceXlsx(exportRows);
@@ -126,7 +188,8 @@ export async function GET(req: Request) {
         headers: {
           "Content-Type":
             "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-          "Content-Disposition": `attachment; filename="finance-export-${periodParam || "all"}.xlsx"`,
+          "Content-Disposition": `attachment; filename="finance-export-${periodLabel}-p${page}.xlsx"`,
+          ...paginationHeaders,
         },
       });
     }
@@ -136,7 +199,8 @@ export async function GET(req: Request) {
       status: 200,
       headers: {
         "Content-Type": "text/csv; charset=utf-8",
-        "Content-Disposition": `attachment; filename="finance-export-${periodParam || "all"}.csv"`,
+        "Content-Disposition": `attachment; filename="finance-export-${periodLabel}-p${page}.csv"`,
+        ...paginationHeaders,
       },
     });
   } catch (err: unknown) {
