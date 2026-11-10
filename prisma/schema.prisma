@@ -357,6 +357,7 @@ model Lesson {
   homeworks         Homework[]
   materials         Material[]
   grades            Grade[]
+  salaryTransactions FinanceTransaction[] @relation("LessonSalaryTransactions")
   centerId          String
   center            LearningCenter    @relation(fields: [centerId], references: [id], onDelete: Cascade)
 
@@ -1098,6 +1099,9 @@ model FinanceTransaction {
   courseId            String?
   branchId            String?
   centerPaymentId     String?
+  lessonId            String?
+  transferGroupId     String?
+  transferDirection   String? // OUT or IN
   isReversal          Boolean                @default(false)
   reversalOfId        String?                @unique
   reversalReason      String?
@@ -1113,10 +1117,12 @@ model FinanceTransaction {
   course        Course?             @relation(fields: [courseId], references: [id], onDelete: SetNull)
   branch        Branch?             @relation(fields: [branchId], references: [id], onDelete: SetNull)
   centerPayment CenterPayment?      @relation("PaymentFinanceTransactions", fields: [centerPaymentId], references: [id], onDelete: Restrict)
+  lesson        Lesson?             @relation("LessonSalaryTransactions", fields: [lessonId], references: [id], onDelete: Restrict)
   reversalOf    FinanceTransaction? @relation("TransactionReversal", fields: [reversalOfId], references: [id], onDelete: Restrict)
   reversedBy    FinanceTransaction? @relation("TransactionReversal")
 
   @@unique([centerPaymentId, isReversal])
+  @@unique([lessonId, isReversal])
   @@index([centerId])
   @@index([accountId])
   @@index([targetAccountId])
@@ -1127,6 +1133,8 @@ model FinanceTransaction {
   @@index([courseId])
   @@index([branchId])
   @@index([centerPaymentId])
+  @@index([lessonId])
+  @@index([transferGroupId])
 }
 
 model TeacherSalaryRate {

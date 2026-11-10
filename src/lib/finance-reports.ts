@@ -85,6 +85,7 @@ export async function generateFinanceReport(params: FinanceReportParams) {
         amount: true,
         accountId: true,
         targetAccountId: true,
+        transferDirection: true,
         categoryId: true,
         branchId: true,
         courseId: true,
@@ -181,12 +182,21 @@ export async function generateFinanceReport(params: FinanceReportParams) {
       existingCat.amount += signedAmount;
       byCategoryMap.set(catKey, existingCat);
     } else if (tx.type === "TRANSFER") {
-      totalTransferVolume += signedAmount;
-      const srcFlow = accountFlowMap.get(tx.accountId);
-      if (srcFlow) srcFlow.outflow += signedAmount;
-      if (tx.targetAccountId) {
-        const dstFlow = accountFlowMap.get(tx.targetAccountId);
+      if (tx.transferDirection === "OUT") {
+        totalTransferVolume += signedAmount;
+        const srcFlow = accountFlowMap.get(tx.accountId);
+        if (srcFlow) srcFlow.outflow += signedAmount;
+      } else if (tx.transferDirection === "IN") {
+        const dstFlow = accountFlowMap.get(tx.accountId);
         if (dstFlow) dstFlow.inflow += signedAmount;
+      } else {
+        totalTransferVolume += signedAmount;
+        const srcFlow = accountFlowMap.get(tx.accountId);
+        if (srcFlow) srcFlow.outflow += signedAmount;
+        if (tx.targetAccountId) {
+          const dstFlow = accountFlowMap.get(tx.targetAccountId);
+          if (dstFlow) dstFlow.inflow += signedAmount;
+        }
       }
     }
 

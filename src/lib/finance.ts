@@ -1,3 +1,4 @@
+import crypto from "crypto";
 import {
   AccountType,
   Currency,
@@ -96,10 +97,14 @@ export async function calculateAccountBalance(
     incomeReversed,
     expenseNormal,
     expenseReversed,
-    transferOutNormal,
-    transferOutReversed,
-    transferInNormal,
-    transferInReversed,
+    transferOutLegNormal,
+    transferOutLegReversed,
+    transferInLegNormal,
+    transferInLegReversed,
+    transferLegacyOutNormal,
+    transferLegacyOutReversed,
+    transferLegacyInNormal,
+    transferLegacyInReversed,
   ] = await Promise.all([
     tenantDb.financeTransaction.aggregate({
       where: { accountId, type: "INCOME", isReversal: false, ...dateFilter },
@@ -118,29 +123,176 @@ export async function calculateAccountBalance(
       _sum: { amount: true },
     }),
     tenantDb.financeTransaction.aggregate({
-      where: { accountId, type: "TRANSFER", isReversal: false, ...dateFilter },
+      where: { accountId, type: "TRANSFER", transferDirection: "OUT", isReversal: false, ...dateFilter },
       _sum: { amount: true },
     }),
     tenantDb.financeTransaction.aggregate({
-      where: { accountId, type: "TRANSFER", isReversal: true, ...dateFilter },
+      where: { accountId, type: "TRANSFER", transferDirection: "OUT", isReversal: true, ...dateFilter },
       _sum: { amount: true },
     }),
     tenantDb.financeTransaction.aggregate({
-      where: { targetAccountId: accountId, type: "TRANSFER", isReversal: false, ...dateFilter },
+      where: { accountId, type: "TRANSFER", transferDirection: "IN", isReversal: false, ...dateFilter },
       _sum: { amount: true },
     }),
     tenantDb.financeTransaction.aggregate({
-      where: { targetAccountId: accountId, type: "TRANSFER", isReversal: true, ...dateFilter },
+      where: { accountId, type: "TRANSFER", transferDirection: "IN", isReversal: true, ...dateFilter },
+      _sum: { amount: true },
+    }),
+    tenantDb.financeTransaction.aggregate({
+      where: { accountId, type: "TRANSFER", transferDirection: null, isReversal: false, ...dateFilter },
+      _sum: { amount: true },
+    }),
+    tenantDb.financeTransaction.aggregate({
+      where: { accountId, type: "TRANSFER", transferDirection: null, isReversal: true, ...dateFilter },
+      _sum: { amount: true },
+    }),
+    tenantDb.financeTransaction.aggregate({
+      where: { targetAccountId: accountId, type: "TRANSFER", transferDirection: null, isReversal: false, ...dateFilter },
+      _sum: { amount: true },
+    }),
+    tenantDb.financeTransaction.aggregate({
+      where: { targetAccountId: accountId, type: "TRANSFER", transferDirection: null, isReversal: true, ...dateFilter },
       _sum: { amount: true },
     }),
   ]);
 
   const inc = (incomeNormal._sum.amount ?? 0) - (incomeReversed._sum.amount ?? 0);
   const exp = (expenseNormal._sum.amount ?? 0) - (expenseReversed._sum.amount ?? 0);
-  const trOut = (transferOutNormal._sum.amount ?? 0) - (transferOutReversed._sum.amount ?? 0);
-  const trIn = (transferInNormal._sum.amount ?? 0) - (transferInReversed._sum.amount ?? 0);
+  const trOut =
+    (transferOutLegNormal._sum.amount ?? 0) -
+    (transferOutLegReversed._sum.amount ?? 0) +
+    ((transferLegacyOutNormal._sum.amount ?? 0) - (transferLegacyOutReversed._sum.amount ?? 0));
+  const trIn =
+    (transferInLegNormal._sum.amount ?? 0) -
+    (transferInLegReversed._sum.amount ?? 0) +
+    ((transferLegacyInNormal._sum.amount ?? 0) - (transferLegacyInReversed._sum.amount ?? 0));
 
   return inc - exp - trOut + trIn;
+}
+
+export interface RecordFinanceTransferInput {
+  centerId: string;
+  amount: number;
+  sourceAccountId: string;
+  targetAccountId: string;
+  date?: Date;
+  description?: string | null;
+  counterparty?: string | null;
+  branchId?: string | null;
+  createdBy: string;
+  simulateSecondLegError?: boolean;
+}
+
+/**
+ * Records an account-to-account transfer as TWO FinanceTransaction rows (OUT on sourceAccountId
+ * and IN on targetAccountId) inside a single atomic DB transaction (db.$transaction).
+ * If the second leg fails, the entire DB transaction rolls back so the first leg is never persisted alone.
+ */
+export async function recordFinanceTransfer(input: RecordFinanceTransferInput) {
+  if (!Number.isInteger(input.amount) || input.amount <= 0) {
+    throw new Error("Transaction amount must be a positive integer in UZS");
+  }
+  if (!input.sourceAccountId || !input.targetAccountId) {
+    throw new Error("Both sourceAccountId and targetAccountId are required for TRANSFER");
+  }
+  if (input.sourceAccountId === input.targetAccountId) {
+    throw new Error("Cannot transfer to the same account");
+  }
+
+  const txDate = input.date ?? new Date();
+  if (await isDateInClosedPeriod(input.centerId, txDate)) {
+    throw new Error("Cannot record transaction in a closed finance period");
+  }
+
+  const tenantDb = getTenantDb(input.centerId);
+  const [sourceAccount, targetAccount] = await Promise.all([
+    tenantDb.account.findFirst({ where: { id: input.sourceAccountId, isActive: true } }),
+    tenantDb.account.findFirst({ where: { id: input.targetAccountId, isActive: true } }),
+  ]);
+
+  if (!sourceAccount) {
+    throw new Error("Cross-tenant relation violation: sourceAccountId not found or inactive in this center");
+  }
+  if (!targetAccount) {
+    throw new Error("Cross-tenant relation violation: targetAccountId not found or inactive in this center");
+  }
+
+  if (input.branchId) {
+    const branch = await tenantDb.branch.findFirst({ where: { id: input.branchId } });
+    if (!branch) {
+      throw new Error("Cross-tenant relation violation: branchId does not belong to this center");
+    }
+  }
+
+  const transferGroupId = crypto.randomUUID();
+
+  return db.$transaction(async (tx) => {
+    const outTransaction = await tx.financeTransaction.create({
+      data: {
+        centerId: input.centerId,
+        type: "TRANSFER",
+        amount: input.amount,
+        currency: Currency.UZS,
+        accountId: input.sourceAccountId,
+        targetAccountId: input.targetAccountId,
+        transferGroupId,
+        transferDirection: "OUT",
+        date: txDate,
+        description: input.description ?? `Перевод на счёт ${targetAccount.name}`,
+        counterparty: input.counterparty ?? null,
+        branchId: input.branchId ?? null,
+        isReversal: false,
+        createdBy: input.createdBy,
+      },
+    });
+
+    if (input.simulateSecondLegError) {
+      throw new Error("Second leg of transfer failed: atomic rollback triggered");
+    }
+
+    const inTransaction = await tx.financeTransaction.create({
+      data: {
+        centerId: input.centerId,
+        type: "TRANSFER",
+        amount: input.amount,
+        currency: Currency.UZS,
+        accountId: input.targetAccountId,
+        targetAccountId: input.sourceAccountId,
+        transferGroupId,
+        transferDirection: "IN",
+        date: txDate,
+        description: input.description ?? `Перевод со счёта ${sourceAccount.name}`,
+        counterparty: input.counterparty ?? null,
+        branchId: input.branchId ?? null,
+        isReversal: false,
+        createdBy: input.createdBy,
+      },
+    });
+
+    await tx.auditLog.create({
+      data: {
+        centerId: input.centerId,
+        actorUserId: input.createdBy,
+        action: "FINANCE_TRANSFER_CREATED",
+        resource: "FinanceTransaction",
+        resourceId: outTransaction.id,
+        detailsJson: JSON.stringify({
+          transferGroupId,
+          outTransactionId: outTransaction.id,
+          inTransactionId: inTransaction.id,
+          amount: input.amount,
+          sourceAccountId: input.sourceAccountId,
+          targetAccountId: input.targetAccountId,
+        }),
+      },
+    });
+
+    return {
+      transferGroupId,
+      outTransaction,
+      inTransaction,
+    };
+  });
 }
 
 export interface RecordFinanceTransactionInput {
@@ -188,15 +340,18 @@ export async function recordFinanceTransaction(input: RecordFinanceTransactionIn
     if (!input.targetAccountId) {
       throw new Error("targetAccountId is required for TRANSFER transactions");
     }
-    if (input.targetAccountId === input.accountId) {
-      throw new Error("Cannot transfer to the same account");
-    }
-    const targetAccount = await tenantDb.account.findFirst({
-      where: { id: input.targetAccountId, isActive: true },
+    const transferResult = await recordFinanceTransfer({
+      centerId: input.centerId,
+      amount: input.amount,
+      sourceAccountId: input.accountId,
+      targetAccountId: input.targetAccountId,
+      date: txDate,
+      description: input.description,
+      counterparty: input.counterparty,
+      branchId: input.branchId,
+      createdBy: input.createdBy,
     });
-    if (!targetAccount) {
-      throw new Error("Target account not found or inactive in this center");
-    }
+    return transferResult.outTransaction;
   } else if (input.categoryId) {
     const category = await tenantDb.financeCategory.findFirst({
       where: { id: input.categoryId, isActive: true },
@@ -300,29 +455,89 @@ export async function reverseFinanceTransaction(input: ReverseFinanceTransaction
 
   let reversal;
   try {
-    reversal = await tenantDb.financeTransaction.create({
-      data: {
-        centerId: input.centerId,
-        type: original.type,
-        amount: original.amount,
-        currency: original.currency,
-        accountId: original.accountId,
-        targetAccountId: original.targetAccountId,
-        categoryId: original.categoryId,
-        date: reversalDate,
-        description: `СТОРНО: ${original.description ?? original.id} (${trimmedReason})`,
-        counterparty: original.counterparty,
-        studentMembershipId: original.studentMembershipId,
-        groupId: original.groupId,
-        courseId: original.courseId,
-        branchId: original.branchId,
-        centerPaymentId: original.centerPaymentId,
-        isReversal: true,
-        reversalOfId: original.id,
-        reversalReason: trimmedReason,
-        createdBy: input.actorUserId,
-      },
-    });
+    if (original.type === "TRANSFER" && original.transferGroupId) {
+      const sibling = await tenantDb.financeTransaction.findFirst({
+        where: {
+          transferGroupId: original.transferGroupId,
+          id: { not: original.id },
+          isReversal: false,
+        },
+      });
+      const reversalGroupId = crypto.randomUUID();
+
+      reversal = await db.$transaction(async (tx) => {
+        const revPrimary = await tx.financeTransaction.create({
+          data: {
+            centerId: input.centerId,
+            type: original.type,
+            amount: original.amount,
+            currency: original.currency,
+            accountId: original.accountId,
+            targetAccountId: original.targetAccountId,
+            transferGroupId: reversalGroupId,
+            transferDirection: original.transferDirection,
+            date: reversalDate,
+            description: `СТОРНО: ${original.description ?? original.id} (${trimmedReason})`,
+            counterparty: original.counterparty,
+            branchId: original.branchId,
+            isReversal: true,
+            reversalOfId: original.id,
+            reversalReason: trimmedReason,
+            createdBy: input.actorUserId,
+          },
+        });
+
+        if (sibling) {
+          await tx.financeTransaction.create({
+            data: {
+              centerId: input.centerId,
+              type: sibling.type,
+              amount: sibling.amount,
+              currency: sibling.currency,
+              accountId: sibling.accountId,
+              targetAccountId: sibling.targetAccountId,
+              transferGroupId: reversalGroupId,
+              transferDirection: sibling.transferDirection,
+              date: reversalDate,
+              description: `СТОРНО: ${sibling.description ?? sibling.id} (${trimmedReason})`,
+              counterparty: sibling.counterparty,
+              branchId: sibling.branchId,
+              isReversal: true,
+              reversalOfId: sibling.id,
+              reversalReason: trimmedReason,
+              createdBy: input.actorUserId,
+            },
+          });
+        }
+
+        return revPrimary;
+      });
+    } else {
+      reversal = await tenantDb.financeTransaction.create({
+        data: {
+          centerId: input.centerId,
+          type: original.type,
+          amount: original.amount,
+          currency: original.currency,
+          accountId: original.accountId,
+          targetAccountId: original.targetAccountId,
+          categoryId: original.categoryId,
+          date: reversalDate,
+          description: `СТОРНО: ${original.description ?? original.id} (${trimmedReason})`,
+          counterparty: original.counterparty,
+          studentMembershipId: original.studentMembershipId,
+          groupId: original.groupId,
+          courseId: original.courseId,
+          branchId: original.branchId,
+          centerPaymentId: original.centerPaymentId,
+          lessonId: original.lessonId,
+          isReversal: true,
+          reversalOfId: original.id,
+          reversalReason: trimmedReason,
+          createdBy: input.actorUserId,
+        },
+      });
+    }
   } catch (err: unknown) {
     const errStr = String(err);
     if (errStr.includes("Unique constraint") || errStr.includes("P2002")) {

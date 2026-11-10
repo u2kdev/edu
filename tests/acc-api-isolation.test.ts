@@ -302,7 +302,7 @@ describe("ACC-1 Item 4: Finance API Pagination, Filters, Search, Zod, Audit & Cr
       })
     );
 
-    // 1) Pagination: pageSize=2, page=1 -> returns 2 items, total=3, totalPages=2
+    // 1) Pagination: pageSize=2, page=1 -> returns 2 items, total=4 (1 INCOME + 1 EXPENSE + 2 TRANSFER legs), totalPages=2
     const page1Res = await getTransactions(
       new Request("http://localhost:3000/api/finance/transactions?page=1&pageSize=2", {
         headers: { Authorization: `Bearer ${tokenA}` },
@@ -311,7 +311,7 @@ describe("ACC-1 Item 4: Finance API Pagination, Filters, Search, Zod, Audit & Cr
     expect(page1Res.status).toBe(200);
     const page1Data = await page1Res.json();
     expect(page1Data.transactions.length).toBe(2);
-    expect(page1Data.pagination.total).toBe(3);
+    expect(page1Data.pagination.total).toBe(4);
     expect(page1Data.pagination.totalPages).toBe(2);
 
     // 2) Filter by type=EXPENSE
@@ -351,7 +351,7 @@ describe("ACC-1 Item 4: Finance API Pagination, Filters, Search, Zod, Audit & Cr
       })
     );
     const periodData = await periodRes.json();
-    expect(periodData.pagination.total).toBe(3);
+    expect(periodData.pagination.total).toBe(4);
   });
 
   it("2. strictly isolates tenants and rejects foreign center foreign keys (foreign accountId, targetAccountId, categoryId, groupId, branchId)", async () => {
