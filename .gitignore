@@ -41,8 +41,8 @@ yarn-error.log*
 # local databases & generated quality reports
 *.db
 *.db-journal
-reports/
-scratch/
+/reports/
+/scratch/
 build.log
 
 # python bytecode (tooling skills)
