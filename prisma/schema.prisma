@@ -41,6 +41,8 @@ model PlatformUser {
   passwordResetTokens PasswordResetToken[]
   userSessions        UserSession[]
   devicePushTokens    DevicePushToken[]
+  platformPaymentsRecorded PlatformPayment[]    @relation("PlatformPaymentRecorder")
+  platformExpensesCreated  PlatformExpense[]    @relation("PlatformExpenseCreator")
 
   @@index([email])
   @@index([phone])
@@ -101,6 +103,7 @@ model LearningCenter {
   financeTransactions FinanceTransaction[]
   financePeriods     FinancePeriod[]
   teacherSalaryRates TeacherSalaryRate[]
+  platformPayments   PlatformPayment[]
 
   @@index([slug])
   @@index([ownerId])
@@ -121,6 +124,7 @@ model SubscriptionPlan {
   updatedAt    DateTime @updatedAt
 
   subscriptions Subscription[]
+  platformPayments PlatformPayment[]
 }
 
 // Статусы подписки: TRIAL, ACTIVE, PAST_DUE, FROZEN, CANCELLED
@@ -138,6 +142,7 @@ model Subscription {
 
   center LearningCenter   @relation(fields: [centerId], references: [id], onDelete: Cascade)
   plan   SubscriptionPlan @relation(fields: [planId], references: [id])
+  platformPayments PlatformPayment[]
 
   @@index([centerId])
 }
@@ -1425,3 +1430,97 @@ enum Language {
   uz_Latn @map("uz-Latn")
   uz_Cyrl @map("uz-Cyrl")
 }
+
+// ----------------------------------------------------
+// 22. Финансы Платформы (Platform Finances - ACC-3)
+// ----------------------------------------------------
+
+enum PlatformPaymentStatus {
+  PENDING
+  PAID
+  FAILED
+  REFUNDED
+}
+
+enum PlatformPaymentType {
+  SUBSCRIPTION
+  ADDON
+  SETUP
+  OTHER
+}
+
+model PlatformPayment {
+  id             String                @id @default(uuid())
+  centerId       String
+  subscriptionId String?
+  planId         String?
+  amount         Int                   // Integer amount in UZS
+  currency       Currency              @default(UZS)
+  status         PlatformPaymentStatus @default(PAID)
+  paymentType    PlatformPaymentType   @default(SUBSCRIPTION)
+  paymentMethod  PaymentMethod         @default(BANK_TRANSFER)
+  periodStartsAt DateTime?
+  periodEndsAt   DateTime?
+  paidAt         DateTime?             @default(now())
+  invoiceNumber  String?
+  receiptUrl     String?
+  notes          String?
+  refundedAt     DateTime?
+  refundReason   String?
+  refundAmount   Int?
+  recordedBy     String?
+  createdAt      DateTime              @default(now())
+  updatedAt      DateTime              @updatedAt
+
+  center       LearningCenter    @relation(fields: [centerId], references: [id], onDelete: Cascade)
+  subscription Subscription?     @relation(fields: [subscriptionId], references: [id], onDelete: SetNull)
+  plan         SubscriptionPlan? @relation(fields: [planId], references: [id], onDelete: SetNull)
+  recorder     PlatformUser?     @relation("PlatformPaymentRecorder", fields: [recordedBy], references: [id], onDelete: SetNull)
+
+  @@index([centerId])
+  @@index([subscriptionId])
+  @@index([planId])
+  @@index([paidAt])
+  @@index([status])
+  @@index([invoiceNumber])
+}
+
+model PlatformExpenseCategory {
+  id          String   @id @default(uuid())
+  name        String   @unique
+  code        String?  @unique
+  description String?
+  isActive    Boolean  @default(true)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  expenses PlatformExpense[]
+}
+
+model PlatformExpense {
+  id             String   @id @default(uuid())
+  categoryId     String
+  amount         Int      // Integer amount in UZS > 0
+  currency       Currency @default(UZS)
+  date           DateTime @default(now())
+  title          String
+  description    String?
+  counterparty   String?  // Recipient / Vendor (e.g. AWS, Hetzner, Eskiz, Payroll)
+  receiptUrl     String?
+  isReversal     Boolean  @default(false)
+  reversalOfId   String?  @unique
+  reversalReason String?
+  createdBy      String
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  category   PlatformExpenseCategory @relation(fields: [categoryId], references: [id], onDelete: Restrict)
+  reversalOf PlatformExpense?        @relation("PlatformExpenseReversal", fields: [reversalOfId], references: [id], onDelete: Restrict)
+  reversedBy PlatformExpense?        @relation("PlatformExpenseReversal")
+  creator    PlatformUser            @relation("PlatformExpenseCreator", fields: [createdBy], references: [id], onDelete: Restrict)
+
+  @@index([categoryId])
+  @@index([date])
+  @@index([createdBy])
+}
+

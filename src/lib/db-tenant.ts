@@ -34,6 +34,7 @@ export const TENANT_MODELS = [
   "FinancePeriod",
   "FinanceTransaction",
   "TeacherSalaryRate",
+  "PlatformPayment",
 ];
 
 const TASHKENT_OFFSET_MS = 5 * 3600 * 1000;
