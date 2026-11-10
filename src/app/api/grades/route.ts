@@ -42,6 +42,13 @@ export async function GET(req: Request) {
       deletedAt: null, // exclude soft-deleted
     };
 
+    if (tenantCtx.role === "ACCOUNTANT" || tenantCtx.role === "CENTER_SUPPORT") {
+      return NextResponse.json(
+        { error: "Forbidden: Role does not have access to student grades" },
+        { status: 403 }
+      );
+    }
+
     // Role-based scoping
     if (tenantCtx.role === "TEACHER" && tenantCtx.membership) {
       // Teacher only sees grades for their own groups

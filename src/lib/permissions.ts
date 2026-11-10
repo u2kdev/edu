@@ -26,6 +26,7 @@ export type PlatformRole =
 export type CenterRole =
   | "DIRECTOR"           // Tenant Owner — sees business whole
   | "CENTER_ADMIN"       // Admin of the center
+  | "ACCOUNTANT"         // Center Accountant — center finances only, no grades or period close
   | "TEACHER"            // Teacher — manages own groups
   | "TEACHER_ASSISTANT"  // Limited teacher rights
   | "CENTER_SUPPORT"     // Support staff within center
@@ -35,6 +36,7 @@ export type CenterRole =
 export const CENTER_ROLES: CenterRole[] = [
   "DIRECTOR",
   "CENTER_ADMIN",
+  "ACCOUNTANT",
   "TEACHER",
   "TEACHER_ASSISTANT",
   "CENTER_SUPPORT",
@@ -85,6 +87,12 @@ export type Permission =
   | "payments.read"
   | "payments.manage"
   | "payments.refund"
+  // Finance Accounting
+  | "finance.read"
+  | "finance.write"
+  | "finance.storno"
+  | "finance.period.close"
+  | "finance.export"
   // Reports
   | "reports.read"
   | "reports.export"
@@ -165,6 +173,7 @@ const PLATFORM_ROLE_PERMISSIONS: Record<PlatformRole, Permission[]> = {
     "courses.read", "courses.create", "courses.manage",
     "schedule.read", "schedule.create", "schedule.manage",
     "payments.read", "payments.manage", "payments.refund",
+    "finance.read", "finance.write", "finance.storno", "finance.period.close", "finance.export",
     "reports.read", "reports.export",
     "users.read", "users.create", "users.manage", "users.block",
     "announcements.read", "announcements.create", "announcements.manage",
@@ -240,6 +249,7 @@ const CENTER_ROLE_PERMISSIONS: Record<CenterRole, Permission[]> = {
     "courses.read", "courses.create", "courses.manage",
     "schedule.read", "schedule.create", "schedule.manage",
     "payments.read", "payments.manage", "payments.refund",
+    "finance.read", "finance.write", "finance.storno", "finance.period.close", "finance.export",
     "reports.read", "reports.export",
     "users.read", "users.create", "users.manage", "users.block",
     "announcements.read", "announcements.create", "announcements.manage",
@@ -260,6 +270,7 @@ const CENTER_ROLE_PERMISSIONS: Record<CenterRole, Permission[]> = {
     "courses.read", "courses.create", "courses.manage",
     "schedule.read", "schedule.create", "schedule.manage",
     "payments.read", "payments.manage",
+    "finance.read", "finance.write",
     "reports.read", "reports.export",
     "users.read", "users.create", "users.manage",
     "announcements.read", "announcements.create", "announcements.manage",
@@ -268,6 +279,23 @@ const CENTER_ROLE_PERMISSIONS: Record<CenterRole, Permission[]> = {
     "settings.read",
     "invites.read", "invites.create", "invites.manage",
     "support.read", "support.create",
+  ],
+  ACCOUNTANT: [
+    // Accountant: center finances (read, write, storno, export), no grades, no period close
+    "finance.read",
+    "finance.write",
+    "finance.storno",
+    "finance.export",
+    "payments.read",
+    "payments.manage",
+    "payments.refund",
+    "reports.read",
+    "reports.export",
+    "branches.read",
+    "courses.read",
+    "groups.read",
+    "support.read",
+    "support.create",
   ],
   TEACHER: [
     // Teacher: only own groups, can create/grade assignments, mark attendance
@@ -376,6 +404,7 @@ export const CENTER_PERMISSIONS = [
   "courses.read", "courses.create", "courses.manage",
   "schedule.read", "schedule.create", "schedule.manage",
   "payments.read", "payments.manage", "payments.refund",
+  "finance.read", "finance.write", "finance.storno", "finance.period.close", "finance.export",
   "reports.read", "reports.export",
   "users.read", "users.create", "users.manage", "users.block",
   "announcements.read", "announcements.create", "announcements.manage",

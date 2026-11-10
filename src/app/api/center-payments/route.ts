@@ -23,6 +23,25 @@ export async function GET(req: Request) {
       });
       const studentIds = parentLinks.map((l: { studentMembershipId: string }) => l.studentMembershipId);
       whereCondition.studentMembershipId = { in: studentIds };
+    } else if (tenantCtx.role === "TEACHER" && tenantCtx.membership) {
+      const teacherGroups = await tenantDb.group.findMany({
+        where: { teacherMembershipId: tenantCtx.membership.id },
+        select: { id: true },
+      });
+      whereCondition.groupId = { in: teacherGroups.map((g: { id: string }) => g.id) };
+    } else if (tenantCtx.role === "TEACHER_ASSISTANT" && tenantCtx.membership) {
+      const assistantGroups = await tenantDb.group.findMany({
+        where: { assistantMembershipId: tenantCtx.membership.id },
+        select: { id: true },
+      });
+      whereCondition.groupId = { in: assistantGroups.map((g: { id: string }) => g.id) };
+    } else if (
+      tenantCtx.role !== "DIRECTOR" &&
+      tenantCtx.role !== "ACCOUNTANT" &&
+      tenantCtx.role !== "CENTER_ADMIN" &&
+      !tenantCtx.isPlatformStaff
+    ) {
+      return NextResponse.json({ error: "Forbidden: Access to payments denied" }, { status: 403 });
     }
 
     const payments = await tenantDb.centerPayment.findMany({

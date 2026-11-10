@@ -27,7 +27,7 @@ export async function GET(req: Request) {
 
     const staffMembers = await tenantDb.centerMembership.findMany({
       where: {
-        role: { in: ["DIRECTOR", "CENTER_ADMIN", "TEACHER", "CENTER_SUPPORT"] },
+        role: { in: ["DIRECTOR", "CENTER_ADMIN", "ACCOUNTANT", "TEACHER", "CENTER_SUPPORT"] },
       },
       include: {
         user: {
@@ -82,7 +82,7 @@ export async function POST(req: Request) {
     }
 
     // Validate staffRole — only center-level staff roles can be assigned
-    const allowedRoles = ["CENTER_ADMIN", "TEACHER", "CENTER_SUPPORT"];
+    const allowedRoles = ["CENTER_ADMIN", "ACCOUNTANT", "TEACHER", "CENTER_SUPPORT"];
     if (!allowedRoles.includes(staffRole)) {
       return NextResponse.json(
         { error: `Invalid role. Allowed: ${allowedRoles.join(", ")}` },
@@ -90,10 +90,10 @@ export async function POST(req: Request) {
       );
     }
 
-    // CENTER_ADMIN cannot create other CENTER_ADMINs unless they are DIRECTOR
-    if (staffRole === "CENTER_ADMIN" && role === "CENTER_ADMIN") {
+    // CENTER_ADMIN cannot create other CENTER_ADMINs or ACCOUNTANTs unless they are DIRECTOR
+    if ((staffRole === "CENTER_ADMIN" || staffRole === "ACCOUNTANT") && role === "CENTER_ADMIN") {
       return NextResponse.json(
-        { error: "Only Director can create Center Admin accounts" },
+        { error: "Only Director can create Center Admin or Accountant accounts" },
         { status: 403 }
       );
     }
@@ -269,7 +269,7 @@ export async function PATCH(req: Request) {
     if (status && ["ACTIVE", "INACTIVE", "SUSPENDED", "ARCHIVED"].includes(status)) {
       updateData.status = status as MembershipStatus;
     }
-    if (newRole && ["CENTER_ADMIN", "TEACHER", "CENTER_SUPPORT"].includes(newRole)) {
+    if (newRole && ["CENTER_ADMIN", "ACCOUNTANT", "TEACHER", "CENTER_SUPPORT"].includes(newRole)) {
       // Only Director can change roles
       if (role !== "DIRECTOR" && !tenantCtx.isPlatformStaff) {
         return NextResponse.json(
