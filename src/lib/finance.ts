@@ -310,6 +310,7 @@ export interface RecordFinanceTransactionInput {
   courseId?: string | null;
   branchId?: string | null;
   centerPaymentId?: string | null;
+  lessonId?: string | null;
   createdBy: string;
 }
 
@@ -381,6 +382,7 @@ export async function recordFinanceTransaction(input: RecordFinanceTransactionIn
       courseId: input.courseId ?? null,
       branchId: input.branchId ?? null,
       centerPaymentId: input.centerPaymentId ?? null,
+      lessonId: input.lessonId ?? null,
       isReversal: false,
       createdBy: input.createdBy,
     },
@@ -835,4 +837,138 @@ export async function syncCenterPaymentRefundToFinance(input: SyncCenterPaymentR
     }
     throw err;
   }
+}
+
+export interface DisburseTeacherSalariesInput {
+  centerId: string;
+  startDate: Date;
+  endDate: Date;
+  accountId: string;
+  categoryId: string;
+  actorUserId: string;
+  teacherMembershipId?: string;
+}
+
+/**
+ * Pays conducted (ACTIVE) lessons in [startDate, endDate] for teachers with active salary rates.
+ * Each conducted lesson is paid at most ONCE (enforced by @@unique([lessonId, isReversal])).
+ * Safe against repeated invocations and parallel Promise.all executions.
+ */
+export async function disburseTeacherSalaries(input: DisburseTeacherSalariesInput) {
+  const tenantDb = getTenantDb(input.centerId);
+
+  const [rates, lessons, existingSalaryTxs] = await Promise.all([
+    tenantDb.teacherSalaryRate.findMany({
+      where: {
+        isActive: true,
+        ...(input.teacherMembershipId ? { teacherMembershipId: input.teacherMembershipId } : {}),
+      },
+      include: {
+        teacher: {
+          include: { user: { select: { fullName: true } } },
+        },
+        group: {
+          select: { id: true, name: true, courseId: true, branchId: true },
+        },
+      },
+    }),
+    tenantDb.lesson.findMany({
+      where: {
+        status: "ACTIVE",
+        scheduledAt: {
+          gte: input.startDate,
+          lte: input.endDate,
+        },
+      },
+      include: {
+        scheduleSlot: {
+          select: {
+            groupId: true,
+            teacherMembershipId: true,
+            branchId: true,
+          },
+        },
+        module: {
+          select: { courseId: true },
+        },
+      },
+      orderBy: { scheduledAt: "asc" },
+    }),
+    tenantDb.financeTransaction.findMany({
+      where: {
+        lessonId: { not: null },
+        isReversal: false,
+      },
+      select: {
+        id: true,
+        lessonId: true,
+        amount: true,
+        reversedBy: { select: { id: true } },
+      },
+    }),
+  ]);
+
+  const paidLessonIds = new Set(
+    existingSalaryTxs.filter((tx) => !tx.reversedBy).map((tx) => tx.lessonId!)
+  );
+
+  let createdTransactionsCount = 0;
+  let totalDisbursedAmount = 0;
+  const createdTransactions = [];
+
+  for (const rate of rates) {
+    if (rate.rateType !== "HOURLY") continue;
+
+    const matchingLessons = lessons.filter((l) => {
+      const effectiveTeacherId =
+        l.substituteTeacherMembershipId ?? l.scheduleSlot?.teacherMembershipId;
+      if (effectiveTeacherId !== rate.teacherMembershipId) return false;
+      if (rate.groupId && l.scheduleSlot?.groupId !== rate.groupId) return false;
+      return true;
+    });
+
+    for (const lesson of matchingLessons) {
+      if (paidLessonIds.has(lesson.id)) continue;
+
+      const durationMin = lesson.durationMinutes || 60;
+      const lessonAmount = Math.round((durationMin * rate.amount) / 60);
+      if (lessonAmount <= 0) continue;
+
+      try {
+        const tx = await recordFinanceTransaction({
+          centerId: input.centerId,
+          type: "EXPENSE",
+          amount: lessonAmount,
+          accountId: input.accountId,
+          categoryId: input.categoryId,
+          date: lesson.scheduledAt ?? new Date(),
+          description: `Выплата ЗП за урок "${lesson.title}" (${durationMin} мин)`,
+          counterparty: rate.teacher?.user?.fullName ?? "Преподаватель",
+          groupId: lesson.scheduleSlot?.groupId ?? rate.groupId ?? null,
+          courseId: lesson.module?.courseId ?? rate.group?.courseId ?? null,
+          branchId: lesson.scheduleSlot?.branchId ?? rate.group?.branchId ?? null,
+          lessonId: lesson.id,
+          createdBy: input.actorUserId,
+        });
+        paidLessonIds.add(lesson.id);
+        createdTransactionsCount += 1;
+        totalDisbursedAmount += lessonAmount;
+        createdTransactions.push(tx);
+      } catch (err: unknown) {
+        const errStr = String(err);
+        if (errStr.includes("Unique constraint") || errStr.includes("P2002")) {
+          // Concurrent runner already paid this lesson; skip without duplicate
+          paidLessonIds.add(lesson.id);
+          continue;
+        }
+        throw err;
+      }
+    }
+  }
+
+  return {
+    createdTransactionsCount,
+    totalDisbursedAmount,
+    transactions: createdTransactions,
+  };
 }

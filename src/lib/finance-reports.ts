@@ -407,8 +407,12 @@ export interface TeacherSalaryRow {
   rateAmount: number;
   conductedLessonsCount: number;
   conductedMinutes: number;
+  paidLessonsCount: number;
+  unpaidLessonsCount: number;
   groupIncomeInPeriod: number;
   calculatedSalary: number;
+  paidSalaryAmount: number;
+  unpaidSalaryAmount: number;
 }
 
 /**
@@ -422,7 +426,7 @@ export async function calculateTeacherSalariesReport(params: {
 }) {
   const tenantDb = getTenantDb(params.centerId);
 
-  const [rates, lessons, groupIncomeTxs] = await Promise.all([
+  const [rates, lessons, groupIncomeTxs, lessonSalaryTxs] = await Promise.all([
     tenantDb.teacherSalaryRate.findMany({
       where: { isActive: true },
       include: {
@@ -463,7 +467,25 @@ export async function calculateTeacherSalariesReport(params: {
         isReversal: true,
       },
     }),
+    tenantDb.financeTransaction.findMany({
+      where: {
+        lessonId: { not: null },
+        isReversal: false,
+      },
+      select: {
+        lessonId: true,
+        amount: true,
+        reversedBy: { select: { id: true } },
+      },
+    }),
   ]);
+
+  const paidLessonAmountMap = new Map<string, number>();
+  for (const tx of lessonSalaryTxs) {
+    if (tx.lessonId && !tx.reversedBy) {
+      paidLessonAmountMap.set(tx.lessonId, tx.amount);
+    }
+  }
 
   const groupIncomeMap = new Map<string, number>();
   for (const tx of groupIncomeTxs) {
@@ -473,6 +495,8 @@ export async function calculateTeacherSalariesReport(params: {
   }
 
   let totalCalculatedSalary = 0;
+  let totalPaidSalary = 0;
+  let totalUnpaidSalary = 0;
   const teachers: TeacherSalaryRow[] = [];
 
   for (const rate of rates) {
@@ -490,21 +514,38 @@ export async function calculateTeacherSalariesReport(params: {
       0
     );
 
+    let paidLessonsCount = 0;
+    let paidSalaryAmount = 0;
+    for (const l of matchingLessons) {
+      if (paidLessonAmountMap.has(l.id)) {
+        paidLessonsCount += 1;
+        paidSalaryAmount += paidLessonAmountMap.get(l.id)!;
+      }
+    }
+    const unpaidLessonsCount = Math.max(0, conductedLessonsCount - paidLessonsCount);
+
     const groupIncomeInPeriod = rate.groupId
       ? Math.max(0, groupIncomeMap.get(rate.groupId) ?? 0)
       : 0;
 
     let calculatedSalary = 0;
     if (rate.rateType === "HOURLY") {
-      // rate.amount is UZS per 60 minutes
-      calculatedSalary = Math.round((conductedMinutes * rate.amount) / 60);
+      // Sum lesson-by-lesson integer amounts so calculatedSalary matches per-lesson disbursements
+      calculatedSalary = matchingLessons.reduce(
+        (sum, l) => sum + Math.round(((l.durationMinutes || 60) * rate.amount) / 60),
+        0
+      );
     } else if (rate.rateType === "PERCENTAGE") {
       calculatedSalary = Math.round((groupIncomeInPeriod * rate.amount) / 100);
     } else if (rate.rateType === "FIXED") {
       calculatedSalary = rate.amount;
     }
 
+    const unpaidSalaryAmount = Math.max(0, calculatedSalary - paidSalaryAmount);
+
     totalCalculatedSalary += calculatedSalary;
+    totalPaidSalary += paidSalaryAmount;
+    totalUnpaidSalary += unpaidSalaryAmount;
 
     teachers.push({
       rateId: rate.id,
@@ -516,13 +557,19 @@ export async function calculateTeacherSalariesReport(params: {
       rateAmount: rate.amount,
       conductedLessonsCount,
       conductedMinutes,
+      paidLessonsCount,
+      unpaidLessonsCount,
       groupIncomeInPeriod,
       calculatedSalary,
+      paidSalaryAmount,
+      unpaidSalaryAmount,
     });
   }
 
   return {
     totalCalculatedSalary,
+    totalPaidSalary,
+    totalUnpaidSalary,
     currency: "UZS",
     teachers,
   };
