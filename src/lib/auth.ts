@@ -36,7 +36,7 @@ export function getJwtSecret(): string {
 }
 
 export type PlatformRole = "NONE" | "DEVELOPER" | "SUPERADMIN" | "PLATFORM_ADMIN" | "FULL_ACCESS" | "PLATFORM_SUPPORT" | "SEO_ADMIN";
-export type CenterRole = "DIRECTOR" | "CENTER_ADMIN" | "TEACHER" | "TEACHER_ASSISTANT" | "CENTER_SUPPORT" | "STUDENT" | "PARENT";
+export type CenterRole = "DIRECTOR" | "CENTER_ADMIN" | "ACCOUNTANT" | "TEACHER" | "TEACHER_ASSISTANT" | "CENTER_SUPPORT" | "STUDENT" | "PARENT";
 
 export interface JWTPayload {
   userId: string;

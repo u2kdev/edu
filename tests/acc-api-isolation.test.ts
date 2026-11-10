@@ -99,19 +99,17 @@ describe("ACC-1 Item 4: Finance API Pagination, Filters, Search, Zod, Audit & Cr
     tokenA = await signJWT({
       userId: dirAUserId,
       email: userA.email,
-      fullName: userA.fullName,
       platformRole: "NONE",
       activeCenterId: centerAId,
-      activeRole: "DIRECTOR",
+      activeCenterRole: "DIRECTOR",
     });
 
     tokenB = await signJWT({
       userId: dirBUserId,
       email: userB.email,
-      fullName: userB.fullName,
       platformRole: "NONE",
       activeCenterId: centerBId,
-      activeRole: "DIRECTOR",
+      activeCenterRole: "DIRECTOR",
     });
 
     const branchA = await db.branch.create({

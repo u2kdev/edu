@@ -82,10 +82,9 @@ describe("ACC-1 Item 3: ACCOUNTANT Role & Role × Endpoint Permission Matrix", (
       tokens[role] = await signJWT({
         userId: u.id,
         email: u.email,
-        fullName: u.fullName,
         platformRole: "NONE",
         activeCenterId: centerId,
-        activeRole: role,
+        activeCenterRole: role,
       });
     }
 

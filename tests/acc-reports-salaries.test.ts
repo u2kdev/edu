@@ -73,10 +73,9 @@ describe("ACC-1 Item 5: Financial Reports (P&L, Cash Flow, Breakdowns, Debtors A
     directorToken = await signJWT({
       userId: directorUserId,
       email: dirUser.email,
-      fullName: dirUser.fullName,
       platformRole: "NONE",
       activeCenterId: centerId,
-      activeRole: "DIRECTOR",
+      activeCenterRole: "DIRECTOR",
     });
 
     // Create 2 teachers and 3 students
