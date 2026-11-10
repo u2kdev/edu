@@ -710,6 +710,12 @@
     "aging61plus": "61+ дней",
     "rateHourly": "Почасовая ставка",
     "ratePercentage": "Процент от группы",
-    "rateFixed": "Фиксированный оклад"
+    "rateFixed": "Фиксированный оклад",
+    "platformFinance": "Финансы платформы",
+    "mrr": "Регулярная месячная выручка (MRR)",
+    "centerSubscriptions": "Оплаты подписок центров",
+    "platformTariffs": "Тарифные планы платформы",
+    "platformExpenses": "Расходы платформы",
+    "mobileFinance": "Мобильный финансовый кабинет"
   }
 }

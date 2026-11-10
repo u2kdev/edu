@@ -710,6 +710,12 @@
     "aging61plus": "61+ kun",
     "rateHourly": "Soatbay stavka",
     "ratePercentage": "Guruhdan foiz",
-    "rateFixed": "Belgilangan maosh"
+    "rateFixed": "Belgilangan maosh",
+    "platformFinance": "Platforma moliyasi",
+    "mrr": "Oylik doimiy daromad (MRR)",
+    "centerSubscriptions": "Markazlar obuna to'lovlari",
+    "platformTariffs": "Platforma tarif rejalari",
+    "platformExpenses": "Platforma xarajatlari",
+    "mobileFinance": "Mobil moliyaviy kabinet"
   }
 }

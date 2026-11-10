@@ -336,7 +336,7 @@ describe("ACC-1b Item 6: Platform Roles on /api/finance/* (No Access Without Imp
     const impToken = setCookieHeader.match(/auth_token=([^;]+)/)![1];
 
     // Test both impersonation session token AND header-based impersonation
-    const authContexts = [
+    const authContexts: Record<string, string>[] = [
       {
         Authorization: `Bearer ${impToken}`,
         "Content-Type": "application/json",

@@ -50,4 +50,19 @@ describe("i18n", () => {
   it("falls back to the key itself for unknown keys", () => {
     expect(t("ru", "does.not.exist")).toBe("does.not.exist");
   });
+
+  it("ACC-1b Item 8: includes ACC-3 platform finance keys (MRR, center subscriptions, tariffs, platform expenses) and MOBILE-FIN keys in ru and uz-Latn", () => {
+    expect(t("ru", "finance.platformFinance")).toBe("Финансы платформы");
+    expect(t("uz-Latn", "finance.platformFinance")).toBe("Platforma moliyasi");
+    expect(t("ru", "finance.mrr")).toContain("MRR");
+    expect(t("uz-Latn", "finance.mrr")).toContain("MRR");
+    expect(t("ru", "finance.centerSubscriptions")).toBe("Оплаты подписок центров");
+    expect(t("uz-Latn", "finance.centerSubscriptions")).toBe("Markazlar obuna to'lovlari");
+    expect(t("ru", "finance.platformTariffs")).toBe("Тарифные планы платформы");
+    expect(t("uz-Latn", "finance.platformTariffs")).toBe("Platforma tarif rejalari");
+    expect(t("ru", "finance.platformExpenses")).toBe("Расходы платформы");
+    expect(t("uz-Latn", "finance.platformExpenses")).toBe("Platforma xarajatlari");
+    expect(t("ru", "finance.mobileFinance")).toBe("Мобильный финансовый кабинет");
+    expect(t("uz-Latn", "finance.mobileFinance")).toBe("Mobil moliyaviy kabinet");
+  });
 });
