@@ -29,7 +29,59 @@ export const TENANT_MODELS = [
   "ActivityLog",
   "Notification",
   "DevicePushToken",
+  "Account",
+  "FinanceCategory",
+  "FinancePeriod",
+  "FinanceTransaction",
+  "TeacherSalaryRate",
 ];
+
+const TASHKENT_OFFSET_MS = 5 * 3600 * 1000;
+
+function getTashkentYearMonthFromDate(date: Date): { year: number; month: number } {
+  const shifted = new Date(date.getTime() + TASHKENT_OFFSET_MS);
+  return {
+    year: shifted.getUTCFullYear(),
+    month: shifted.getUTCMonth() + 1,
+  };
+}
+
+async function validateFinanceTransactionWrite(data: Record<string, unknown>, centerId: string) {
+  const amount = data.amount;
+  if (typeof amount !== "number" || !Number.isInteger(amount) || amount <= 0) {
+    throw new Error("Transaction amount must be a positive integer in UZS");
+  }
+
+  const rawDate = data.date;
+  const txDate =
+    rawDate instanceof Date
+      ? rawDate
+      : typeof rawDate === "string" || typeof rawDate === "number"
+        ? new Date(rawDate)
+        : new Date();
+
+  const { year, month } = getTashkentYearMonthFromDate(txDate);
+  const closedPeriod = await db.financePeriod.findFirst({
+    where: {
+      centerId,
+      status: "CLOSED",
+      OR: [
+        { year, month },
+        {
+          startDate: { lte: txDate },
+          endDate: { gte: txDate },
+        },
+      ],
+    },
+    select: { id: true, year: true, month: true },
+  });
+
+  if (closedPeriod) {
+    throw new Error(
+      `Cannot record transaction in a closed finance period (${closedPeriod.year}-${String(closedPeriod.month).padStart(2, "0")})`
+    );
+  }
+}
 
 type DelegateMethods = {
   findFirst: (a: unknown) => Promise<{ id?: string; centerId?: string } | null>;
@@ -155,6 +207,15 @@ export function getTenantDb(rawCenterId?: string | null, options?: { isReadOnly?
             }
 
             if (
+              model === "FinanceTransaction" &&
+              ["update", "updateMany", "updateManyAndReturn", "upsert", "delete", "deleteMany"].includes(operation)
+            ) {
+              throw new Error(
+                "FinanceTransaction records are immutable and cannot be modified or deleted; use reversal (storno) instead"
+              );
+            }
+
+            if (
               [
                 "findFirst",
                 "findFirstOrThrow",
@@ -250,6 +311,9 @@ export function getTenantDb(rawCenterId?: string | null, options?: { isReadOnly?
             if (operation === "create") {
               if (args.data && typeof args.data === "object") {
                 await validateForeignRelations(args.data as Record<string, unknown>, centerId);
+                if (model === "FinanceTransaction") {
+                  await validateFinanceTransactionWrite(args.data as Record<string, unknown>, centerId);
+                }
               }
               args.data = { ...((args.data as Record<string, unknown> | null | undefined) || {}), centerId };
             }
@@ -259,12 +323,18 @@ export function getTenantDb(rawCenterId?: string | null, options?: { isReadOnly?
                 for (const item of args.data) {
                   if (item && typeof item === "object") {
                     await validateForeignRelations(item as Record<string, unknown>, centerId);
+                    if (model === "FinanceTransaction") {
+                      await validateFinanceTransactionWrite(item as Record<string, unknown>, centerId);
+                    }
                   }
                 }
                 args.data = (args.data as Record<string, unknown>[]).map((d) => ({ ...d, centerId }));
               } else {
                 if (args.data && typeof args.data === "object") {
                   await validateForeignRelations(args.data as Record<string, unknown>, centerId);
+                  if (model === "FinanceTransaction") {
+                    await validateFinanceTransactionWrite(args.data as Record<string, unknown>, centerId);
+                  }
                 }
                 args.data = { ...((args.data as Record<string, unknown> | null | undefined) || {}), centerId };
               }

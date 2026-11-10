@@ -96,6 +96,11 @@ model LearningCenter {
   TestQuestion       TestQuestion[]
   TestAttempt        TestAttempt[]
   Enrollment         Enrollment[]
+  accounts           Account[]
+  financeCategories  FinanceCategory[]
+  financeTransactions FinanceTransaction[]
+  financePeriods     FinancePeriod[]
+  teacherSalaryRates TeacherSalaryRate[]
 
   @@index([slug])
   @@index([ownerId])
@@ -152,9 +157,10 @@ model Branch {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  center        LearningCenter @relation(fields: [centerId], references: [id], onDelete: Cascade)
+  center        LearningCenter       @relation(fields: [centerId], references: [id], onDelete: Cascade)
   groups        Group[]
   scheduleSlots ScheduleSlot[]
+  financeTransactions FinanceTransaction[]
 
   @@index([centerId])
 }
@@ -220,6 +226,9 @@ model CenterMembership {
   gradesFinalized      Grade[]               @relation("GradeFinalizerGrades")
   announcements        Announcement[]        @relation("AnnouncementAuthor")
   createdScheduleSlots ScheduleSlot[]        @relation("ScheduleCreator")
+  studentFinanceTransactions FinanceTransaction[] @relation("StudentFinanceTransactions")
+  closedFinancePeriods FinancePeriod[]       @relation("PeriodCloser")
+  teacherSalaryRates   TeacherSalaryRate[]   @relation("TeacherSalaryRates")
 
   @@unique([userId, centerId, role])
   @@index([userId])
@@ -296,6 +305,7 @@ model Course {
   modules CourseModule[]
   groups  Group[]
   invites InviteCode[]
+  financeTransactions FinanceTransaction[]
 
   @@index([centerId])
   @@index([subjectId])
@@ -417,6 +427,8 @@ model Group {
   scheduleSlots        ScheduleSlot[]
   grades               Grade[]
   announcements        Announcement[]
+  financeTransactions  FinanceTransaction[]
+  teacherSalaryRates   TeacherSalaryRate[]
 
   @@index([courseId])
   @@index([teacherMembershipId])
@@ -588,6 +600,7 @@ model CenterPayment {
   center  LearningCenter   @relation(fields: [centerId], references: [id], onDelete: Cascade)
   student CenterMembership @relation("StudentPayments", fields: [studentMembershipId], references: [id], onDelete: Restrict)
   group   Group?           @relation(fields: [groupId], references: [id], onDelete: SetNull)
+  financeTransactions FinanceTransaction[] @relation("PaymentFinanceTransactions")
 
   @@index([centerId])
   @@index([studentMembershipId])
@@ -1006,8 +1019,168 @@ model EmailOutbox {
 }
 
 // ----------------------------------------------------
+// 22. Финансовый Учёт (Accounts, Categories, Transactions, Periods, Salaries)
+// ----------------------------------------------------
+
+model Account {
+  id          String      @id @default(uuid())
+  centerId    String
+  name        String
+  type        AccountType @default(CASH) // CASH, CARD, BANK
+  currency    Currency    @default(UZS)
+  isActive    Boolean     @default(true)
+  isDefault   Boolean     @default(false)
+  description String?
+  createdAt   DateTime    @default(now())
+  updatedAt   DateTime    @updatedAt
+
+  center            LearningCenter       @relation(fields: [centerId], references: [id], onDelete: Cascade)
+  transactions      FinanceTransaction[] @relation("AccountTransactions")
+  incomingTransfers FinanceTransaction[] @relation("TargetAccountTransfers")
+
+  @@unique([centerId, name])
+  @@index([centerId])
+}
+
+model FinanceCategory {
+  id          String              @id @default(uuid())
+  centerId    String
+  name        String
+  type        FinanceCategoryType // INCOME, EXPENSE
+  code        String?
+  description String?
+  isActive    Boolean             @default(true)
+  createdAt   DateTime            @default(now())
+  updatedAt   DateTime            @updatedAt
+
+  center       LearningCenter       @relation(fields: [centerId], references: [id], onDelete: Cascade)
+  transactions FinanceTransaction[]
+
+  @@unique([centerId, name, type])
+  @@index([centerId])
+}
+
+model FinancePeriod {
+  id                   String              @id @default(uuid())
+  centerId             String
+  year                 Int
+  month                Int
+  startDate            DateTime
+  endDate              DateTime
+  status               FinancePeriodStatus @default(OPEN) // OPEN, CLOSED
+  closedAt             DateTime?
+  closedByMembershipId String?
+  notes                String?
+  createdAt            DateTime            @default(now())
+  updatedAt            DateTime            @updatedAt
+
+  center   LearningCenter    @relation(fields: [centerId], references: [id], onDelete: Cascade)
+  closedBy CenterMembership? @relation("PeriodCloser", fields: [closedByMembershipId], references: [id], onDelete: SetNull)
+
+  @@unique([centerId, year, month])
+  @@index([centerId])
+}
+
+model FinanceTransaction {
+  id                  String                 @id @default(uuid())
+  centerId            String
+  type                FinanceTransactionType // INCOME, EXPENSE, TRANSFER
+  amount              Int // Strictly integer > 0 in UZS
+  currency            Currency               @default(UZS)
+  accountId           String
+  targetAccountId     String?
+  categoryId          String?
+  date                DateTime               @default(now())
+  description         String?
+  counterparty        String?
+  studentMembershipId String?
+  groupId             String?
+  courseId            String?
+  branchId            String?
+  centerPaymentId     String?
+  isReversal          Boolean                @default(false)
+  reversalOfId        String?                @unique
+  reversalReason      String?
+  createdBy           String
+  createdAt           DateTime               @default(now())
+
+  center        LearningCenter      @relation(fields: [centerId], references: [id], onDelete: Cascade)
+  account       Account             @relation("AccountTransactions", fields: [accountId], references: [id], onDelete: Restrict)
+  targetAccount Account?            @relation("TargetAccountTransfers", fields: [targetAccountId], references: [id], onDelete: Restrict)
+  category      FinanceCategory?    @relation(fields: [categoryId], references: [id], onDelete: Restrict)
+  student       CenterMembership?   @relation("StudentFinanceTransactions", fields: [studentMembershipId], references: [id], onDelete: Restrict)
+  group         Group?              @relation(fields: [groupId], references: [id], onDelete: SetNull)
+  course        Course?             @relation(fields: [courseId], references: [id], onDelete: SetNull)
+  branch        Branch?             @relation(fields: [branchId], references: [id], onDelete: SetNull)
+  centerPayment CenterPayment?      @relation("PaymentFinanceTransactions", fields: [centerPaymentId], references: [id], onDelete: Restrict)
+  reversalOf    FinanceTransaction? @relation("TransactionReversal", fields: [reversalOfId], references: [id], onDelete: Restrict)
+  reversedBy    FinanceTransaction? @relation("TransactionReversal")
+
+  @@unique([centerPaymentId, isReversal])
+  @@index([centerId])
+  @@index([accountId])
+  @@index([targetAccountId])
+  @@index([categoryId])
+  @@index([date])
+  @@index([studentMembershipId])
+  @@index([groupId])
+  @@index([courseId])
+  @@index([branchId])
+  @@index([centerPaymentId])
+}
+
+model TeacherSalaryRate {
+  id                  String         @id @default(uuid())
+  centerId            String
+  teacherMembershipId String
+  groupId             String?
+  rateType            SalaryRateType @default(HOURLY) // HOURLY, PERCENTAGE, FIXED
+  amount              Int // UZS per hour (HOURLY), percent integer 0-100 (PERCENTAGE), or monthly UZS (FIXED)
+  currency            Currency       @default(UZS)
+  isActive            Boolean        @default(true)
+  createdAt           DateTime       @default(now())
+  updatedAt           DateTime       @updatedAt
+
+  center  LearningCenter   @relation(fields: [centerId], references: [id], onDelete: Cascade)
+  teacher CenterMembership @relation("TeacherSalaryRates", fields: [teacherMembershipId], references: [id], onDelete: Restrict)
+  group   Group?           @relation(fields: [groupId], references: [id], onDelete: SetNull)
+
+  @@index([centerId])
+  @@index([teacherMembershipId])
+  @@index([groupId])
+}
+
+// ----------------------------------------------------
 // Enums (typed statuses / categories)
 // ----------------------------------------------------
+
+enum AccountType {
+  CASH
+  CARD
+  BANK
+}
+
+enum FinanceCategoryType {
+  INCOME
+  EXPENSE
+}
+
+enum FinanceTransactionType {
+  INCOME
+  EXPENSE
+  TRANSFER
+}
+
+enum FinancePeriodStatus {
+  OPEN
+  CLOSED
+}
+
+enum SalaryRateType {
+  HOURLY
+  PERCENTAGE
+  FIXED
+}
 
 enum AttendanceStatus {
   PRESENT
@@ -1082,6 +1255,7 @@ enum SubscriptionStatus {
 enum MembershipRole {
   DIRECTOR
   CENTER_ADMIN
+  ACCOUNTANT
   TEACHER
   TEACHER_ASSISTANT
   CENTER_SUPPORT
