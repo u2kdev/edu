@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { requireTenantAccess, logAuditEvent } from "@/lib/tenant";
+import { syncCenterPaymentToFinance, syncCenterPaymentRefundToFinance } from "@/lib/finance";
 import type { PaymentMethod, CenterPaymentStatus, Currency } from "@prisma/client";
 
 const PAYMENT_METHODS: PaymentMethod[] = ["CASH", "ONLINE", "BANK_TRANSFER"];
@@ -53,8 +54,8 @@ export async function POST(req: Request) {
 
     const tenantDb = tenantCtx.getTenantDb();
 
-    if (tenantCtx.role !== "DIRECTOR" && tenantCtx.role !== "CENTER_ADMIN" && !tenantCtx.isPlatformStaff) {
-      return NextResponse.json({ error: "Forbidden: Only Director or Center Admin can process payments" }, { status: 403 });
+    if (tenantCtx.role !== "DIRECTOR" && tenantCtx.role !== "CENTER_ADMIN" && tenantCtx.role !== "ACCOUNTANT" && !tenantCtx.isPlatformStaff) {
+      return NextResponse.json({ error: "Forbidden: Only Director, Accountant, or Center Admin can process payments" }, { status: 403 });
     }
 
     const {
@@ -101,6 +102,14 @@ export async function POST(req: Request) {
       details: { amount: payment.amount, status: payment.status, studentId: studentMembershipId },
     });
 
+    if (payment.status === "PAID" || payment.status === "PARTIALLY_PAID") {
+      await syncCenterPaymentToFinance({
+        centerId: tenantCtx.center.id,
+        paymentId: payment.id,
+        actorUserId: tenantCtx.session.user.id,
+      });
+    }
+
     return NextResponse.json({ success: true, payment });
   } catch (err: unknown) {
     const error = err as { message?: string };
@@ -119,20 +128,21 @@ export async function PATCH(req: Request) {
 
     const tenantDb = tenantCtx.getTenantDb();
 
-    if (tenantCtx.role !== "DIRECTOR" && !tenantCtx.isPlatformStaff) {
-      return NextResponse.json({ error: "Forbidden: Only Director can process refunds" }, { status: 403 });
+    if (tenantCtx.role !== "DIRECTOR" && tenantCtx.role !== "ACCOUNTANT" && !tenantCtx.isPlatformStaff) {
+      return NextResponse.json({ error: "Forbidden: Only Director or Accountant can process refunds" }, { status: 403 });
     }
 
-    const { paymentId, status } = await req.json();
+    const { paymentId, status, reason } = await req.json();
 
     if (!paymentId) {
       return NextResponse.json({ error: "paymentId is required" }, { status: 400 });
     }
 
+    const nextStatus = status || "REFUNDED";
     await tenantDb.centerPayment.updateMany({
       where: { id: paymentId },
       data: {
-        status: status || "REFUNDED",
+        status: nextStatus,
         refundedAt: new Date(),
       },
     });
@@ -146,6 +156,15 @@ export async function PATCH(req: Request) {
       resourceId: payment?.id,
       details: { amount: payment?.amount },
     });
+
+    if (payment && nextStatus === "REFUNDED") {
+      await syncCenterPaymentRefundToFinance({
+        centerId: tenantCtx.center.id,
+        paymentId: payment.id,
+        actorUserId: tenantCtx.session.user.id,
+        reason: typeof reason === "string" && reason.trim() ? reason.trim() : "Возврат оплаты студенту",
+      });
+    }
 
     return NextResponse.json({ success: true, payment });
   } catch (err: unknown) {

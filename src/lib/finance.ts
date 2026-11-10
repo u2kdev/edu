@@ -485,3 +485,127 @@ export async function ensureDefaultPaymentAccountAndCategory(
 
   return { accountId: account.id, categoryId: category.id };
 }
+
+export interface SyncCenterPaymentInput {
+  centerId: string;
+  paymentId: string;
+  actorUserId: string;
+  accountId?: string;
+  categoryId?: string;
+}
+
+/**
+ * Idempotently creates an INCOME FinanceTransaction for a PAID / PARTIALLY_PAID CenterPayment.
+ * Protected against race conditions (Promise.all) by the unique constraint @@unique([centerPaymentId, isReversal]).
+ */
+export async function syncCenterPaymentToFinance(input: SyncCenterPaymentInput) {
+  const tenantDb = getTenantDb(input.centerId);
+
+  const existing = await tenantDb.financeTransaction.findFirst({
+    where: { centerPaymentId: input.paymentId, isReversal: false },
+  });
+  if (existing) {
+    return existing;
+  }
+
+  const payment = await tenantDb.centerPayment.findFirst({
+    where: { id: input.paymentId },
+    include: {
+      student: {
+        include: { user: { select: { fullName: true } } },
+      },
+      group: {
+        select: { id: true, name: true, courseId: true, branchId: true },
+      },
+    },
+  });
+
+  if (!payment) {
+    throw new Error("CenterPayment not found in this center");
+  }
+
+  if (payment.status !== "PAID" && payment.status !== "PARTIALLY_PAID") {
+    return null;
+  }
+
+  const intAmount = Math.round(payment.amount);
+  if (intAmount <= 0) {
+    return null;
+  }
+
+  const defaults = await ensureDefaultPaymentAccountAndCategory(input.centerId, payment.paymentMethod);
+  const accountId = input.accountId ?? defaults.accountId;
+  const categoryId = input.categoryId ?? defaults.categoryId;
+
+  try {
+    return await recordFinanceTransaction({
+      centerId: input.centerId,
+      type: "INCOME",
+      amount: intAmount,
+      accountId,
+      categoryId,
+      date: payment.paidAt ?? payment.createdAt,
+      description: `Оплата студента${payment.group ? ` (${payment.group.name})` : ""}`,
+      counterparty: payment.student?.user?.fullName ?? null,
+      studentMembershipId: payment.studentMembershipId,
+      groupId: payment.groupId,
+      courseId: payment.group?.courseId ?? null,
+      branchId: payment.group?.branchId ?? null,
+      centerPaymentId: payment.id,
+      createdBy: input.actorUserId,
+    });
+  } catch (err: unknown) {
+    const raced = await tenantDb.financeTransaction.findFirst({
+      where: { centerPaymentId: input.paymentId, isReversal: false },
+    });
+    if (raced) {
+      return raced;
+    }
+    throw err;
+  }
+}
+
+export interface SyncCenterPaymentRefundInput {
+  centerId: string;
+  paymentId: string;
+  actorUserId: string;
+  reason?: string;
+}
+
+/**
+ * Idempotently creates a reversal (storno) FinanceTransaction when a CenterPayment is REFUNDED.
+ */
+export async function syncCenterPaymentRefundToFinance(input: SyncCenterPaymentRefundInput) {
+  const tenantDb = getTenantDb(input.centerId);
+
+  const existingReversal = await tenantDb.financeTransaction.findFirst({
+    where: { centerPaymentId: input.paymentId, isReversal: true },
+  });
+  if (existingReversal) {
+    return existingReversal;
+  }
+
+  const originalIncome = await tenantDb.financeTransaction.findFirst({
+    where: { centerPaymentId: input.paymentId, isReversal: false },
+  });
+  if (!originalIncome) {
+    return null;
+  }
+
+  try {
+    return await reverseFinanceTransaction({
+      centerId: input.centerId,
+      transactionId: originalIncome.id,
+      reason: input.reason?.trim() || "Возврат оплаты студенту",
+      actorUserId: input.actorUserId,
+    });
+  } catch (err: unknown) {
+    const raced = await tenantDb.financeTransaction.findFirst({
+      where: { centerPaymentId: input.paymentId, isReversal: true },
+    });
+    if (raced) {
+      return raced;
+    }
+    throw err;
+  }
+}
