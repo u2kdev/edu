@@ -1,3 +1,5 @@
+declare const __DEV__: boolean | undefined;
+
 let platformOS = "android";
 try {
   // eslint-disable-next-line @typescript-eslint/no-require-imports
