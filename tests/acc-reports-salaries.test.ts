@@ -3,6 +3,7 @@ import { db } from "../src/lib/db";
 import { signJWT } from "../src/lib/auth";
 import {
   recordFinanceTransaction,
+  recordFinanceTransfer,
   reverseFinanceTransaction,
   getTashkentMonthBounds,
 } from "../src/lib/finance";
@@ -448,5 +449,248 @@ describe("ACC-1 Item 5: Financial Reports (P&L, Cash Flow, Breakdowns, Debtors A
     const apiData = await apiRes.json();
     expect(apiData.report.pnl.netProfit).toBe(2500000);
     expect(apiData.salaries.totalCalculatedSalary).toBe(360000 + 594000);
+  });
+
+  it("4. verifies Asia/Tashkent month end boundary: 2026-10-31T23:59:59+05:00 (2026-10-31T18:59:59Z) is included in October, while 2026-11-01T00:00:00+05:00 is in November", async () => {
+    const octEndTx = await recordFinanceTransaction({
+      centerId,
+      type: "INCOME",
+      amount: 111000,
+      accountId: cashAccId,
+      categoryId: catTuitionId,
+      date: new Date("2026-10-31T23:59:59+05:00"),
+      description: "Последняя секунда октября по Ташкенту",
+      createdBy: directorUserId,
+    });
+    const novStartTx = await recordFinanceTransaction({
+      centerId,
+      type: "INCOME",
+      amount: 222000,
+      accountId: cashAccId,
+      categoryId: catTuitionId,
+      date: new Date("2026-11-01T00:00:00+05:00"),
+      description: "Первая секунда ноября по Ташкенту",
+      createdBy: directorUserId,
+    });
+
+    const octBounds = getTashkentMonthBounds(2026, 10);
+    const novBounds = getTashkentMonthBounds(2026, 11);
+
+    const octReport = await generateFinanceReport({ centerId, ...octBounds });
+    const novReport = await generateFinanceReport({ centerId, ...novBounds });
+
+    // Previous Oct income was 3,000,000 + 111,000 = 3,111,000 (excluding 222,000)
+    expect(octReport.pnl.totalIncome).toBe(3111000);
+    expect(novReport.pnl.totalIncome).toBe(222000);
+
+    // Clean up these two boundary test rows via reversal so subsequent manual checks stay exact
+    await reverseFinanceTransaction({
+      centerId,
+      transactionId: octEndTx.id,
+      reason: "Очистка граничного теста октября",
+      actorUserId: directorUserId,
+      date: new Date("2026-10-31T23:59:59+05:00"),
+    });
+    await reverseFinanceTransaction({
+      centerId,
+      transactionId: novStartTx.id,
+      reason: "Очистка граничного теста ноября",
+      actorUserId: directorUserId,
+      date: new Date("2026-11-01T00:00:01+05:00"),
+    });
+  });
+
+  it("5. verifies storno of INCOME reduces totalIncome and netProfit without inflating totalExpense", async () => {
+    const incTx = await recordFinanceTransaction({
+      centerId,
+      type: "INCOME",
+      amount: 500000,
+      accountId: cashAccId,
+      categoryId: catTuitionId,
+      branchId: branch1Id,
+      courseId: course1Id,
+      groupId: group1Id,
+      date: new Date("2026-10-20T10:00:00+05:00"),
+      description: "Ошибочный приход 500к",
+      createdBy: directorUserId,
+    });
+
+    const octBounds = getTashkentMonthBounds(2026, 10);
+    const beforeStorno = await generateFinanceReport({ centerId, ...octBounds });
+    expect(beforeStorno.pnl.totalIncome).toBe(3500000);
+    expect(beforeStorno.pnl.totalExpense).toBe(500000);
+
+    await reverseFinanceTransaction({
+      centerId,
+      transactionId: incTx.id,
+      reason: "Возврат ошибочного прихода",
+      actorUserId: directorUserId,
+      date: new Date("2026-10-20T12:00:00+05:00"),
+    });
+
+    const afterStorno = await generateFinanceReport({ centerId, ...octBounds });
+    // Income returns to 3,000,000, Expense stays 500,000 (not 1,000,000!)
+    expect(afterStorno.pnl.totalIncome).toBe(3000000);
+    expect(afterStorno.pnl.totalExpense).toBe(500000);
+    expect(afterStorno.pnl.netProfit).toBe(2500000);
+  });
+
+  it("6. verifies account Cash Flow (periodInflow, periodOutflow, currentBalance) including two-leg TRANSFER between Cash and Bank", async () => {
+    // Perform transfer of 300,000 UZS from Cash to Bank on Oct 22
+    const tr = await recordFinanceTransfer({
+      centerId,
+      amount: 300000,
+      sourceAccountId: cashAccId,
+      targetAccountId: bankAccId,
+      date: new Date("2026-10-22T14:00:00+05:00"),
+      description: "Инкассация 300к",
+      createdBy: directorUserId,
+    });
+
+    const octBounds = getTashkentMonthBounds(2026, 10);
+    const rep = await generateFinanceReport({ centerId, ...octBounds });
+
+    const cashRow = rep.accountsCashflow.find((a) => a.accountId === cashAccId);
+    const bankRow = rep.accountsCashflow.find((a) => a.accountId === bankAccId);
+
+    // Cash in Oct: Inflow = 1,200,000; Outflow = 500,000 (rent) + 300,000 (transfer out) = 800,000
+    // Cash total balance (including Sept 400,000): 400,000 + 1,200,000 - 800,000 = 800,000
+    expect(cashRow?.periodInflow).toBe(1200000);
+    expect(cashRow?.periodOutflow).toBe(800000);
+    expect(cashRow?.currentBalance).toBe(800000);
+
+    // Bank in Oct: Inflow = 1,800,000 (income) + 300,000 (transfer in) = 2,100,000; Outflow = 0
+    expect(bankRow?.periodInflow).toBe(2100000);
+    expect(bankRow?.periodOutflow).toBe(0);
+    expect(bankRow?.currentBalance).toBe(2100000);
+    expect(rep.pnl.totalTransferVolume).toBe(300000);
+
+    // Reverse transfer to keep baseline clean
+    await reverseFinanceTransaction({
+      centerId,
+      transactionId: tr.outTransaction.id,
+      reason: "Отмена тестовой инкассации",
+      actorUserId: directorUserId,
+      date: new Date("2026-10-22T15:00:00+05:00"),
+    });
+  });
+
+  it("7. verifies Category breakdown hides zeroed-out reversed categories and accurately sums active categories", async () => {
+    const octBounds = getTashkentMonthBounds(2026, 10);
+    const rep = await generateFinanceReport({ centerId, ...octBounds });
+
+    // Tax category had 200,000 expense and -200,000 storno -> net 0 -> filtered out of active breakdown
+    const taxCatRow = rep.byCategory.find((c) => c.categoryId === catTaxId);
+    expect(taxCatRow).toBeUndefined();
+
+    const tuitionCatRow = rep.byCategory.find((c) => c.categoryId === catTuitionId);
+    const rentCatRow = rep.byCategory.find((c) => c.categoryId === catRentId);
+    expect(tuitionCatRow?.amount).toBe(3000000);
+    expect(rentCatRow?.amount).toBe(500000);
+  });
+
+  it("8. verifies Multi-Month breakdown (byMonth) across September and October in Asia/Tashkent", async () => {
+    const start = getTashkentMonthBounds(2026, 9).startDate;
+    const end = getTashkentMonthBounds(2026, 10).endDate;
+    const multiRep = await generateFinanceReport({
+      centerId,
+      startDate: start,
+      endDate: end,
+    });
+
+    expect(multiRep.byMonth.length).toBe(2);
+    expect(multiRep.byMonth[0]).toEqual({
+      month: "2026-09",
+      income: 400000,
+      expense: 0,
+      net: 400000,
+    });
+    expect(multiRep.byMonth[1]).toEqual({
+      month: "2026-10",
+      income: 3000000,
+      expense: 500000,
+      net: 2500000,
+    });
+  });
+
+  it("9. verifies Debtors exact aging boundary days (30, 31, 60, 61 days) and discount deduction", async () => {
+    const asOf = new Date("2026-12-31T12:00:00+05:00");
+
+    // Create a temporary payment with discount: original 1,000,000, discount 150,000, paid 250,000 -> debt 600,000
+    // Created exactly 30 days before asOf (2026-12-01T12:00:00+05:00) -> bucket "0-30"
+    const p30 = await db.centerPayment.create({
+      data: {
+        centerId,
+        studentMembershipId: student1MemId,
+        groupId: group1Id,
+        amount: 250000,
+        originalAmount: 1000000,
+        discountAmount: 150000,
+        status: "PARTIALLY_PAID",
+        createdAt: new Date("2026-12-01T12:00:00+05:00"),
+      },
+    });
+
+    // Created exactly 60 days before asOf (2026-11-01T12:00:00+05:00) -> bucket "31-60"
+    const p60 = await db.centerPayment.create({
+      data: {
+        centerId,
+        studentMembershipId: student2MemId,
+        groupId: group2Id,
+        amount: 300000,
+        originalAmount: 300000,
+        discountAmount: 0,
+        status: "PENDING",
+        createdAt: new Date("2026-11-01T12:00:00+05:00"),
+      },
+    });
+
+    const rep = await calculateDebtorsReport({ centerId, asOfDate: asOf });
+    const row30 = rep.debtors.find((d) => d.paymentId === p30.id);
+    const row60 = rep.debtors.find((d) => d.paymentId === p60.id);
+
+    expect(row30?.daysOverdue).toBe(30);
+    expect(row30?.agingBucket).toBe("0-30");
+    expect(row30?.debtAmount).toBe(600000);
+
+    expect(row60?.daysOverdue).toBe(60);
+    expect(row60?.agingBucket).toBe("31-60");
+    expect(row60?.debtAmount).toBe(300000);
+
+    await db.centerPayment.deleteMany({ where: { id: { in: [p30.id, p60.id] } } });
+  });
+
+  it("10. verifies FIXED teacher salary rate and integer rounding on fractional HOURLY lessons (45 min at 100,001 UZS/h)", async () => {
+    // Update Teacher 1 rate to 100,001 UZS/hour and add a 45-minute lesson in November 2026:
+    // 45 * 100,001 / 60 = 75,000.75 -> Math.round = 75,001 UZS
+    const rate = await db.teacherSalaryRate.findFirstOrThrow({
+      where: { centerId, teacherMembershipId: teacher1MemId },
+    });
+    await db.teacherSalaryRate.update({
+      where: { id: rate.id },
+      data: { amount: 100001 },
+    });
+
+    const mod = await db.courseModule.findFirstOrThrow({ where: { centerId, courseId: course1Id } });
+    const slot = await db.scheduleSlot.findFirstOrThrow({ where: { centerId, groupId: group1Id } });
+
+    const novLesson = await db.lesson.create({
+      data: {
+        centerId,
+        moduleId: mod.id,
+        scheduleSlotId: slot.id,
+        title: "Nov 45m Lesson",
+        status: "ACTIVE",
+        durationMinutes: 45,
+        scheduledAt: new Date("2026-11-10T10:00:00+05:00"),
+      },
+    });
+
+    const novBounds = getTashkentMonthBounds(2026, 11);
+    const salRep = await calculateTeacherSalariesReport({ centerId, ...novBounds });
+    const t1 = salRep.teachers.find((t) => t.teacherMembershipId === teacher1MemId);
+    expect(t1?.calculatedSalary).toBe(75001);
+
+    await db.lesson.delete({ where: { id: novLesson.id } });
   });
 });
