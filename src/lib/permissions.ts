@@ -281,14 +281,12 @@ const CENTER_ROLE_PERMISSIONS: Record<CenterRole, Permission[]> = {
     "support.read", "support.create",
   ],
   ACCOUNTANT: [
-    // Accountant: center finances (read, write, storno, export), no grades, no period close
+    // Accountant: center finances (read, write, export), no storno, no period close, no grades
     "finance.read",
     "finance.write",
-    "finance.storno",
     "finance.export",
     "payments.read",
     "payments.manage",
-    "payments.refund",
     "reports.read",
     "reports.export",
     "branches.read",

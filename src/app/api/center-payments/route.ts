@@ -147,8 +147,8 @@ export async function PATCH(req: Request) {
 
     const tenantDb = tenantCtx.getTenantDb();
 
-    if (tenantCtx.role !== "DIRECTOR" && tenantCtx.role !== "ACCOUNTANT" && !tenantCtx.isPlatformStaff) {
-      return NextResponse.json({ error: "Forbidden: Only Director or Accountant can process refunds" }, { status: 403 });
+    if (tenantCtx.role !== "DIRECTOR" && !tenantCtx.isPlatformStaff) {
+      return NextResponse.json({ error: "Forbidden: Only Director can process refunds" }, { status: 403 });
     }
 
     const { paymentId, status, reason } = await req.json();

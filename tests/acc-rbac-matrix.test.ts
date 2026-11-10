@@ -221,10 +221,10 @@ describe("ACC-1 Item 3: ACCOUNTANT Role & Role × Endpoint Permission Matrix", (
     expect(hasPermission("finance.period.close", "NONE", "DIRECTOR")).toBe(true);
     expect(hasPermission("finance.export", "NONE", "DIRECTOR")).toBe(true);
 
-    // ACCOUNTANT has read, write, storno, export, but NOT period.close and NOT grades.read
+    // ACCOUNTANT has read, write, export, but NOT storno, NOT period.close and NOT grades.read
     expect(hasPermission("finance.read", "NONE", "ACCOUNTANT")).toBe(true);
     expect(hasPermission("finance.write", "NONE", "ACCOUNTANT")).toBe(true);
-    expect(hasPermission("finance.storno", "NONE", "ACCOUNTANT")).toBe(true);
+    expect(hasPermission("finance.storno", "NONE", "ACCOUNTANT")).toBe(false);
     expect(hasPermission("finance.export", "NONE", "ACCOUNTANT")).toBe(true);
     expect(hasPermission("finance.period.close", "NONE", "ACCOUNTANT")).toBe(false);
     expect(hasPermission("grades.read", "NONE", "ACCOUNTANT")).toBe(false);
@@ -296,7 +296,7 @@ describe("ACC-1 Item 3: ACCOUNTANT Role & Role × Endpoint Permission Matrix", (
     }
   });
 
-  it("4. enforces Role × Endpoint matrix for Storno (/api/finance/transactions/[id]/reverse): DIRECTOR & ACCOUNTANT allowed, CENTER_ADMIN & others 403", async () => {
+  it("4. enforces Role × Endpoint matrix for Storno (/api/finance/transactions/[id]/reverse): ONLY DIRECTOR allowed, ACCOUNTANT, CENTER_ADMIN & others 403", async () => {
     // Create two transactions to reverse
     const tx1 = await db.financeTransaction.create({
       data: {
@@ -321,8 +321,8 @@ describe("ACC-1 Item 3: ACCOUNTANT Role & Role × Endpoint Permission Matrix", (
       },
     });
 
-    // CENTER_ADMIN, TEACHER, STUDENT, PARENT -> 403 on storno
-    for (const role of ["CENTER_ADMIN", "TEACHER", "STUDENT", "PARENT"]) {
+    // ACCOUNTANT, CENTER_ADMIN, TEACHER, STUDENT, PARENT -> 403 on storno
+    for (const role of ["ACCOUNTANT", "CENTER_ADMIN", "TEACHER", "STUDENT", "PARENT"]) {
       const res = await reverseTransactionRoute(
         makeReq(`http://localhost:3000/api/finance/transactions/${tx1.id}/reverse`, role, "POST", {
           reason: "Попытка сторно без прав",
@@ -331,15 +331,6 @@ describe("ACC-1 Item 3: ACCOUNTANT Role & Role × Endpoint Permission Matrix", (
       );
       expect(res.status).toBe(403);
     }
-
-    // ACCOUNTANT -> 200 on storno
-    const accRes = await reverseTransactionRoute(
-      makeReq(`http://localhost:3000/api/finance/transactions/${tx1.id}/reverse`, "ACCOUNTANT", "POST", {
-        reason: "Сторно бухгалтером",
-      }),
-      { params: Promise.resolve({ id: tx1.id }) }
-    );
-    expect(accRes.status).toBe(200);
 
     // DIRECTOR -> 200 on storno
     const dirRes = await reverseTransactionRoute(

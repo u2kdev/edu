@@ -21,7 +21,7 @@ export async function POST(
 
     if (!canStorno) {
       return NextResponse.json(
-        { error: "Forbidden: Only Director or Accountant can reverse (storno) transactions" },
+        { error: "Forbidden: Only Director can reverse (storno) transactions" },
         { status: 403 }
       );
     }
