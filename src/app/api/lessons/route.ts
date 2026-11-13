@@ -58,6 +58,23 @@ export async function POST(req: Request) {
       }
     }
 
+    if (scheduledAt) {
+      const schedDate = new Date(scheduledAt);
+      const holiday = await tenantDb.holiday.findFirst({
+        where: {
+          centerId: tenantCtx.center.id,
+          startDate: { lte: schedDate },
+          endDate: { gte: schedDate },
+        },
+      });
+      if (holiday) {
+        return NextResponse.json(
+          { error: `Нельзя запланировать занятие на праздничный день: "${holiday.name}"`, holidayName: holiday.name },
+          { status: 400 }
+        );
+      }
+    }
+
     // Get highest orderIndex for this module
     const maxLesson = await tenantDb.lesson.findFirst({
       where: { moduleId },
@@ -175,7 +192,25 @@ export async function PATCH(req: Request) {
     if (lessonType !== undefined && LESSON_TYPES.includes(lessonType)) updateData.lessonType = lessonType;
     if (status !== undefined && LESSON_STATUSES.includes(status)) updateData.status = status;
     if (cancelledReason !== undefined) updateData.cancelledReason = cancelledReason;
-    if (scheduledAt !== undefined) updateData.scheduledAt = scheduledAt ? new Date(scheduledAt) : null;
+    if (scheduledAt !== undefined && scheduledAt !== null) {
+      const schedDate = new Date(scheduledAt);
+      const holiday = await tenantDb.holiday.findFirst({
+        where: {
+          centerId: tenantCtx.center.id,
+          startDate: { lte: schedDate },
+          endDate: { gte: schedDate },
+        },
+      });
+      if (holiday) {
+        return NextResponse.json(
+          { error: `Нельзя запланировать занятие на праздничный день: "${holiday.name}"`, holidayName: holiday.name },
+          { status: 400 }
+        );
+      }
+      updateData.scheduledAt = schedDate;
+    } else if (scheduledAt === null) {
+      updateData.scheduledAt = null;
+    }
     if (durationMinutes !== undefined) updateData.durationMinutes = parseInt(durationMinutes);
     if (content !== undefined) updateData.content = content;
     if (videoUrl !== undefined) updateData.videoUrl = videoUrl;

@@ -52,6 +52,10 @@ __pycache__/
 # Telegram dev-transmitter bot (contains live secrets — keep out of VCS)
 transmitter/
 
+# uploads
+/public/uploads/*
+!/public/uploads/.gitkeep
+
 # local agent tooling (skills, reach tooling, cookies) — never publish
 .agents/
 skills-lock.json

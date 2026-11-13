@@ -10,6 +10,7 @@ import {
   type CsvPreviewData,
   type StudentItem,
 } from "./students-utils";
+import type { CredentialsData } from "@/components/CredentialsModal";
 
 /** Locale-independent fallback copy, owned by the public entry module. */
 export interface StudentsMessages {
@@ -52,6 +53,7 @@ export function useStudents({ role, locale, messages }: UseStudentsArgs) {
   const [addWithInvite, setAddWithInvite] = useState(true);
   const [addLoading, setAddLoading] = useState(false);
   const [addCreatedCode, setAddCreatedCode] = useState<string | null>(null);
+  const [createdCredentials, setCreatedCredentials] = useState<CredentialsData | null>(null);
 
   // CSV modal state
   const [csvContent, setCsvContent] = useState("");
@@ -144,6 +146,10 @@ export function useStudents({ role, locale, messages }: UseStudentsArgs) {
 
   const handleAddSubmit = async (e: FormEvent) => {
     e.preventDefault();
+    if (!addEmail && !addPhone) {
+      alert("Необходимо указать email или номер телефона");
+      return;
+    }
     setAddLoading(true);
     try {
       const res = await fetch("/api/students", {
@@ -151,8 +157,8 @@ export function useStudents({ role, locale, messages }: UseStudentsArgs) {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           fullName: addFullName,
-          email: addEmail,
-          phone: addPhone,
+          email: addEmail || undefined,
+          phone: addPhone || undefined,
           groupId: addGroupId || undefined,
           withInvite: addWithInvite,
         }),
@@ -161,6 +167,9 @@ export function useStudents({ role, locale, messages }: UseStudentsArgs) {
       if (!res.ok) {
         alert(data.error || messages.createError);
       } else {
+        if (data.credentials) {
+          setCreatedCredentials(data.credentials);
+        }
         if (data.inviteCode) {
           setAddCreatedCode(data.inviteCode);
         } else {
@@ -257,6 +266,8 @@ export function useStudents({ role, locale, messages }: UseStudentsArgs) {
     setAddWithInvite,
     addLoading,
     addCreatedCode,
+    createdCredentials,
+    setCreatedCredentials,
     handleAddSubmit,
     showCsvModal,
     openCsvModal,

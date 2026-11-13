@@ -15,7 +15,7 @@ export async function POST(req: Request) {
       return apiError("Too many attempts", "RATE_LIMITED", 429);
     }
 
-    const session = await getAuthSession();
+    const session = await getAuthSession(req);
     if (!session) {
       return NextResponse.json({ error: "Для погашения инвайта войдите в аккаунт" }, { status: 401 });
     }
@@ -101,6 +101,41 @@ export async function POST(req: Request) {
             },
           });
         }
+      }
+    }
+
+    // If invite is for PARENT and carries a studentMembershipId, establish confirmed ParentLink
+    if (invite.targetRole === "PARENT" && invite.studentMembershipId) {
+      const existingLink = await tenantDb.parentLink.findFirst({
+        where: {
+          parentMembershipId: membership.id,
+          studentMembershipId: invite.studentMembershipId,
+        },
+      });
+
+      if (!existingLink) {
+        await tenantDb.parentLink.create({
+          data: {
+            parentMembershipId: membership.id,
+            studentMembershipId: invite.studentMembershipId,
+            status: "CONFIRMED",
+            initiatedBy: "PARENT",
+            inviteCodeUsed: invite.code,
+            confirmedAt: new Date(),
+          },
+        });
+      } else if (existingLink.status !== "CONFIRMED") {
+        await tenantDb.parentLink.updateMany({
+          where: {
+            parentMembershipId: membership.id,
+            studentMembershipId: invite.studentMembershipId,
+          },
+          data: {
+            status: "CONFIRMED",
+            confirmedAt: new Date(),
+            inviteCodeUsed: invite.code,
+          },
+        });
       }
     }
 

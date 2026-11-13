@@ -11,10 +11,10 @@ export default async function DeveloperLayout({ children }: { children: ReactNod
   }
 
   const role = session.user.platformRole;
-  const isDeveloper = ["SUPERADMIN", "DEVELOPER"].includes(role);
+  const isDeveloper = role === "DEVELOPER";
 
   if (!isDeveloper) {
-    redirect("/platform"); // Redirect regular platform owners back to their dashboard
+    redirect("/platform-admin"); // Redirect regular platform owners back to their dashboard
   }
 
   return (
@@ -45,7 +45,7 @@ export default async function DeveloperLayout({ children }: { children: ReactNod
           </Link>
           
           <div className="pt-4 mt-4 border-t border-zinc-900">
-            <Link href="/platform" className="flex items-center gap-3 px-3 py-2 text-sm rounded hover:bg-zinc-900 text-brand-400 transition-colors">
+            <Link href="/platform-admin" className="flex items-center gap-3 px-3 py-2 text-sm rounded hover:bg-zinc-900 text-brand-400 transition-colors">
               <Server className="w-4 h-4" />
               Return to Platform UI
             </Link>

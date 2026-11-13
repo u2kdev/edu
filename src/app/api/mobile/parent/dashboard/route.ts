@@ -96,6 +96,14 @@ export async function GET(req: Request) {
     const targetStudentId = activeChildItem.membershipId;
     const targetGroupIds = activeChildItem.groups.map((g) => g.id);
 
+    const requestedGroupId = searchParams.get("groupId");
+    if (requestedGroupId && !targetGroupIds.includes(requestedGroupId) && !tenantCtx.isPlatformStaff) {
+      return NextResponse.json(
+        { error: "Forbidden: Child is not enrolled in this group" },
+        { status: 403 }
+      );
+    }
+
     // 3. Child's attendance metrics
     const attendances = await tenantDb.attendance.findMany({
       where: { studentMembershipId: targetStudentId },

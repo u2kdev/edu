@@ -11,6 +11,7 @@ export const SENSITIVE_ACTIONS = [
   "payments.manage",
   "payments.refund",
   "users.block",
+  "users.reset_password",
   "password.change"
 ];
 
@@ -99,6 +100,8 @@ export type Permission =
   // Users / Staff
   | "users.read"
   | "users.create"
+  | "users.update"
+  | "users.reset_password"
   | "users.manage"
   | "users.block"
   // Announcements
@@ -134,8 +137,21 @@ export type Permission =
   | "platform.plans.manage"
   | "platform.billing.read"
   | "platform.billing.manage"
+  | "platform.billing.refund"
+  | "platform.expenses.manage"
   | "platform.impersonation"
   | "platform.support"
+  | "platform.announcements.read"
+  | "platform.announcements.manage"
+  | "platform.system.health"
+  | "platform.users.read"
+  | "platform.users.write"
+  | "platform.users.delete"
+  | "platform.users.reset_password"
+  | "platform.team.manage"
+  | "platform.audit.read"
+  | "platform.settings.read"
+  | "platform.settings.manage"
   | "platform.infrastructure"   // DEVELOPER only
   | "platform.database"         // DEVELOPER only
   | "platform.logs"             // DEVELOPER only
@@ -157,8 +173,21 @@ const PLATFORM_ROLE_PERMISSIONS: Record<PlatformRole, Permission[]> = {
     "platform.plans.manage",
     "platform.billing.read",
     "platform.billing.manage",
+    "platform.billing.refund",
+    "platform.expenses.manage",
     "platform.impersonation",
     "platform.support",
+    "platform.announcements.read",
+    "platform.announcements.manage",
+    "platform.system.health",
+    "platform.users.read",
+    "platform.users.write",
+    "platform.users.delete",
+    "platform.users.reset_password",
+    "platform.team.manage",
+    "platform.audit.read",
+    "platform.settings.read",
+    "platform.settings.manage",
     "platform.infrastructure",
     "platform.database",
     "platform.logs",
@@ -175,7 +204,7 @@ const PLATFORM_ROLE_PERMISSIONS: Record<PlatformRole, Permission[]> = {
     "payments.read", "payments.manage", "payments.refund",
     "finance.read", "finance.write", "finance.storno", "finance.period.close", "finance.export",
     "reports.read", "reports.export",
-    "users.read", "users.create", "users.manage", "users.block",
+    "users.read", "users.create", "users.update", "users.reset_password", "users.manage", "users.block",
     "announcements.read", "announcements.create", "announcements.manage",
     "materials.read", "materials.upload", "materials.manage",
     "branches.read", "branches.manage",
@@ -195,8 +224,22 @@ const PLATFORM_ROLE_PERMISSIONS: Record<PlatformRole, Permission[]> = {
     "platform.plans.manage",
     "platform.billing.read",
     "platform.billing.manage",
+    "platform.billing.refund",
+    "platform.expenses.manage",
     "platform.impersonation",
     "platform.support",
+    "platform.announcements.read",
+    "platform.announcements.manage",
+    "platform.system.health",
+    "platform.users.read",
+    "platform.users.write",
+    "platform.users.delete",
+    "platform.users.reset_password",
+    "platform.team.manage",
+    "platform.audit.read",
+    "platform.settings.read",
+    "platform.settings.manage",
+    "platform.security",
     "audit.read",
     "support.read",
     "support.create",
@@ -209,7 +252,15 @@ const PLATFORM_ROLE_PERMISSIONS: Record<PlatformRole, Permission[]> = {
     "platform.tenants.read",
     "platform.plans.manage",
     "platform.billing.read",
+    "platform.billing.manage",
     "platform.support",
+    "platform.announcements.read",
+    "platform.announcements.manage",
+    "platform.system.health",
+    "platform.users.read",
+    "platform.users.write",
+    "platform.users.reset_password",
+    "platform.settings.read",
     "audit.read",
     "support.read",
     "support.create",
@@ -218,6 +269,7 @@ const PLATFORM_ROLE_PERMISSIONS: Record<PlatformRole, Permission[]> = {
     "platform.dashboard",
     "platform.tenants.read",
     "platform.support",
+    "platform.system.health",
     "audit.read",
     "support.read",
     "support.create",
@@ -228,10 +280,15 @@ const PLATFORM_ROLE_PERMISSIONS: Record<PlatformRole, Permission[]> = {
     "platform.tenants.read",
     "platform.impersonation",
     "platform.support",
+    "platform.announcements.read",
+    "platform.system.health",
     "support.read",
     "support.create",
   ],
-  SEO_ADMIN: [],
+  SEO_ADMIN: [
+    "platform.settings.read",
+    "platform.settings.manage",
+  ],
   NONE: [],
 };
 
@@ -251,7 +308,7 @@ const CENTER_ROLE_PERMISSIONS: Record<CenterRole, Permission[]> = {
     "payments.read", "payments.manage", "payments.refund",
     "finance.read", "finance.write", "finance.storno", "finance.period.close", "finance.export",
     "reports.read", "reports.export",
-    "users.read", "users.create", "users.manage", "users.block",
+    "users.read", "users.create", "users.update", "users.reset_password", "users.manage", "users.block",
     "announcements.read", "announcements.create", "announcements.manage",
     "materials.read", "materials.upload", "materials.manage",
     "branches.read", "branches.manage",
@@ -272,7 +329,7 @@ const CENTER_ROLE_PERMISSIONS: Record<CenterRole, Permission[]> = {
     "payments.read", "payments.manage",
     "finance.read", "finance.write",
     "reports.read", "reports.export",
-    "users.read", "users.create", "users.manage",
+    "users.read", "users.create", "users.update", "users.reset_password", "users.manage",
     "announcements.read", "announcements.create", "announcements.manage",
     "materials.read", "materials.upload", "materials.manage",
     "branches.read",
@@ -329,6 +386,7 @@ const CENTER_ROLE_PERMISSIONS: Record<CenterRole, Permission[]> = {
     "support.read", "support.create",
   ],
   STUDENT: [
+    "groups.read",         // enrolled groups only — enforced via DTO
     "grades.read",         // own only — enforced at query level
     "attendance.read",     // own only
     "assignments.read",
@@ -339,6 +397,7 @@ const CENTER_ROLE_PERMISSIONS: Record<CenterRole, Permission[]> = {
     "support.read", "support.create",
   ],
   PARENT: [
+    "groups.read",         // children groups only — enforced via DTO
     "grades.read",         // children only
     "attendance.read",     // children only
     "assignments.read",    // children only

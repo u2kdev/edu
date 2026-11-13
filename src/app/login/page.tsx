@@ -45,7 +45,7 @@ export default function LoginPage() {
       const res = await fetch("/api/auth/login", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ email, password, rememberMe }),
+        body: JSON.stringify({ login: email, email, password, rememberMe }),
       });
 
       const data = await res.json();
@@ -72,6 +72,12 @@ export default function LoginPage() {
         } else {
           setErrorBanner(data.error || "Ошибка при входе");
         }
+        return;
+      }
+
+      if (data.data?.mustChangePassword || data.mustChangePassword) {
+        router.push("/account/change-password");
+        router.refresh();
         return;
       }
 
@@ -203,22 +209,22 @@ export default function LoginPage() {
               <form onSubmit={handleSubmit} className="space-y-4">
                 <div>
                   <label className="mb-1.5 block text-xs font-semibold uppercase tracking-wider text-ink-soft">
-                    Email
+                    {locale === "ru" ? "Email, телефон или логин" : "Email, telefon yoki login"}
                   </label>
                   <div className="relative">
                     <Mail className="absolute left-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-ink-faint" />
                     <input
-                      type="email"
+                      type="text"
                       required
                       value={email}
                       disabled={loading}
                       onChange={(e) => setEmail(e.target.value)}
-                      placeholder="user@example.com"
-                      className={inputClass(fieldErrors.email)}
+                      placeholder={locale === "ru" ? "user@example.com / +998901234567 / username" : "user@example.com / +998901234567 / login"}
+                      className={inputClass(fieldErrors.email || fieldErrors.login)}
                     />
                   </div>
-                  {fieldErrors.email && (
-                    <p className="mt-1 text-xs text-rose-600">{fieldErrors.email}</p>
+                  {(fieldErrors.email || fieldErrors.login) && (
+                    <p className="mt-1 text-xs text-rose-600">{fieldErrors.email || fieldErrors.login}</p>
                   )}
                 </div>
 

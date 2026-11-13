@@ -1,19 +1,33 @@
+import { notFound } from "next/navigation";
+import Link from "next/link";
 // Reason: Exception: First platform owner initialization is a global platform model operation.
 // eslint-disable-next-line no-restricted-imports
 import { db } from "@/lib/db";
-import { redirect } from "next/navigation";
-import Link from "next/link";
+import { verifySetupTokenValue } from "@/lib/setup-token";
 import SetupForm from "./SetupForm";
 
 export const dynamic = "force-dynamic";
 
-export default async function SetupPage() {
+interface SetupPageProps {
+  searchParams?: Promise<{ token?: string }> | { token?: string };
+}
+
+export default async function SetupPage({ searchParams }: SetupPageProps) {
+  const resolvedSearchParams = searchParams ? await Promise.resolve(searchParams) : undefined;
+  const token = resolvedSearchParams?.token;
+
+  // 1. Without valid setup token from URL -> 404 Not Found
+  if (!verifySetupTokenValue(token)) {
+    notFound();
+  }
+
+  // 2. If platform already initialized -> 404 Not Found
   const superadminCount = await db.platformUser.count({
     where: { platformRole: "SUPERADMIN" },
   });
 
   if (superadminCount > 0) {
-    redirect("/login");
+    notFound();
   }
 
   return (
@@ -25,7 +39,7 @@ export default async function SetupPage() {
             Создание первой учетной записи владельца (SUPERADMIN). После создания страница будет навсегда закрыта.
           </p>
         </div>
-        <SetupForm />
+        <SetupForm setupToken={token} />
         <div className="mt-6 text-center text-xs text-slate-500">
           Уже настроено? <Link href="/login" className="text-brand-400 hover:underline">Войти</Link>
         </div>

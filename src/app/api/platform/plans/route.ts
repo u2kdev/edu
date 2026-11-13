@@ -2,12 +2,12 @@ import { NextResponse } from "next/server";
 // Reason: Exception: Platform routes manage global models.
 // eslint-disable-next-line no-restricted-imports
 import { db } from "@/lib/db";
-import { requirePlatformOwner, handlePlatformError } from "@/lib/platformAuth";
+import { requirePlatformPermission, handlePlatformError } from "@/lib/platformAuth";
 import { logAuditEvent } from "@/lib/tenant";
 
-export async function GET() {
+export async function GET(req: Request) {
   try {
-    await requirePlatformOwner();
+    await requirePlatformPermission("platform.plans.manage", req);
     const plans = await db.subscriptionPlan.findMany({
       orderBy: { priceMonthly: "asc" },
       include: {
@@ -22,7 +22,7 @@ export async function GET() {
 
 export async function POST(req: Request) {
   try {
-    const session = await requirePlatformOwner();
+    const session = await requirePlatformPermission("platform.plans.manage", req);
     const { name, maxStudents, maxTeachers, maxCourses, maxBranches, maxStorage, priceMonthly, featuresJson, isActive } = await req.json();
 
     if (!name || priceMonthly === undefined || maxStudents === undefined) {
@@ -59,7 +59,7 @@ export async function POST(req: Request) {
 
 export async function PATCH(req: Request) {
   try {
-    const session = await requirePlatformOwner();
+    const session = await requirePlatformPermission("platform.plans.manage", req);
     const { id, name, maxStudents, maxTeachers, maxCourses, maxBranches, maxStorage, priceMonthly, featuresJson, isActive } = await req.json();
 
     if (!id) return NextResponse.json({ error: "Plan ID required" }, { status: 400 });

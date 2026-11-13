@@ -24,10 +24,14 @@ export function formatDateTime(date: Date | string | null | undefined): string {
   });
 }
 
-export function formatCurrency(amount: number, currency: string = "RUB"): string {
-  return new Intl.NumberFormat("ru-RU", {
-    style: "currency",
-    currency: currency,
-    maximumFractionDigits: 0,
-  }).format(amount);
+export function formatCurrency(amount: number, currency: string = "UZS"): string {
+  try {
+    return new Intl.NumberFormat("ru-RU", {
+      style: "currency",
+      currency: currency || "UZS",
+      maximumFractionDigits: 0,
+    }).format(amount);
+  } catch {
+    return `${amount.toLocaleString("ru-RU")} ${currency || "UZS"}`;
+  }
 }

@@ -292,7 +292,6 @@ const navLabels = {
   subscriptions: t("ru", "platform.subscriptions"),
   support: t("ru", "platform.support"),
   audit: t("ru", "platform.auditLog"),
-  impersonate: t("ru", "platform.impersonate"),
 };
 
 const superadmin = { fullName: "Азиз Каримов", email: "aziz@example.uz", platformRole: "SUPERADMIN" };
@@ -323,7 +322,6 @@ describe("PlatformSidebar", () => {
     );
     expect(screen.getByText(navLabels.analytics)).toBeTruthy();
     expect(screen.getByText(navLabels.support)).toBeTruthy();
-    expect(screen.getByText(navLabels.impersonate)).toBeTruthy();
     expect(screen.queryByText(navLabels.centers)).toBeNull();
     expect(screen.queryByText(navLabels.plans)).toBeNull();
     expect(screen.queryByText(navLabels.audit)).toBeNull();
@@ -335,7 +333,6 @@ describe("PlatformSidebar", () => {
     expect(screen.getByText(navLabels.centers)).toBeTruthy();
     expect(screen.getByText(navLabels.support)).toBeTruthy();
     expect(screen.queryByText(navLabels.plans)).toBeNull();
-    expect(screen.queryByText(navLabels.impersonate)).toBeNull();
   });
 
   it("activates a non-exact item when the path is nested below it", () => {

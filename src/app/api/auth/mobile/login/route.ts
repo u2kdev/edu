@@ -2,6 +2,7 @@
 // eslint-disable-next-line no-restricted-imports
 import { db } from "@/lib/db";
 import { comparePassword, signJWT, hashJti, hashToken, generateRefreshToken, JWTPayload } from "@/lib/auth";
+import { normalizePhone } from "@/lib/phone";
 import { checkRateLimit } from "@/lib/rate-limit";
 import { getClientIp } from "@/lib/ip";
 import { apiError, apiSuccess, handleApiError } from "@/lib/api-response";
@@ -20,8 +21,39 @@ export async function POST(req: Request) {
 
     const body = await req.json();
     const parsed = mobileLoginSchema.parse(body);
-    const { email: rawEmail, password, deviceName, deviceId, platform } = parsed;
-    const email = rawEmail.toLowerCase().trim();
+    const { password, deviceName, deviceId, platform } = parsed;
+    const rawLogin = (parsed.login || parsed.email || "").trim();
+    const loginLower = rawLogin.toLowerCase();
+    const normalizedPhone = normalizePhone(rawLogin);
+
+    // Find user by email, phone, or username (excluding soft-deleted)
+    const user = await db.platformUser.findFirst({
+      where: {
+        OR: [
+          { email: loginLower },
+          ...(normalizedPhone ? [{ phone: normalizedPhone }] : []),
+          { username: loginLower },
+        ],
+        deletedAt: null,
+      },
+      include: {
+        memberships: {
+          where: { status: "ACTIVE" },
+          include: {
+            center: {
+              select: {
+                id: true,
+                name: true,
+                slug: true,
+                status: true,
+              },
+            },
+          },
+        },
+      },
+    });
+
+    const email = user ? user.email : loginLower;
 
     // 1. Check LoginAttempt (Brute-force protection)
     const attempts = await db.loginAttempt.findMany({
@@ -50,25 +82,6 @@ export async function POST(req: Request) {
     if (ipAttempt && ipAttempt.lockoutUntil && new Date() < ipAttempt.lockoutUntil) {
       return apiError("auth.invalidCredentials", "UNAUTHORIZED", 401);
     }
-
-    const user = await db.platformUser.findUnique({
-      where: { email },
-      include: {
-        memberships: {
-          where: { status: "ACTIVE" },
-          include: {
-            center: {
-              select: {
-                id: true,
-                name: true,
-                slug: true,
-                status: true,
-              },
-            },
-          },
-        },
-      },
-    });
 
     const handleFailure = async (reason: string, actorUserId: string | null = null) => {
       const ipAttemptsCount = (ipAttempt?.attempts || 0) + 1;
@@ -131,10 +144,16 @@ export async function POST(req: Request) {
       );
     }
 
-    // Reset attempts upon success
-    await db.loginAttempt.deleteMany({
-      where: { email },
-    });
+    // Reset attempts upon success and record lastLoginAt
+    await Promise.all([
+      db.loginAttempt.deleteMany({
+        where: { email },
+      }),
+      db.platformUser.update({
+        where: { id: user.id },
+        data: { lastLoginAt: new Date() },
+      }),
+    ]);
 
     const jti = uuidv4();
     const expiresIn = "15m";
@@ -202,14 +221,17 @@ export async function POST(req: Request) {
     return apiSuccess({
       token,
       refreshToken,
+      mustChangePassword: user.mustChangePassword,
       user: {
         id: user.id,
         email: user.email,
+        username: user.username,
         fullName: user.fullName,
         platformRole: user.platformRole,
         preferredLanguage: user.preferredLanguage,
         avatarUrl: user.avatarUrl,
         emailVerified: user.emailVerified,
+        mustChangePassword: user.mustChangePassword,
       },
       memberships: formattedMemberships,
       activeCenterId: activeMembership?.centerId || null,

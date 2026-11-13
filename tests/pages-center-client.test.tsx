@@ -12,7 +12,7 @@ const { pushMock } = vi.hoisted(() => ({ pushMock: vi.fn() }));
 vi.mock("next/navigation", () => ({
   useRouter: () => ({
     push: pushMock,
-    replace: vi.fn(),
+    replace: pushMock,
     refresh: vi.fn(),
     back: vi.fn(),
     prefetch: vi.fn(),
@@ -33,65 +33,10 @@ afterEach(() => {
   vi.restoreAllMocks();
 });
 
-describe("ChangePasswordPage", () => {
-  it("renders both password fields and the hint", () => {
-    const { container } = render(<ChangePasswordPage />);
-
-    expect(screen.getAllByText(ru("profile.changePassword")).length).toBeGreaterThan(0);
-    expect(screen.getByText(ru("auth.currentPassword"))).toBeTruthy();
-    expect(screen.getByText(ru("auth.passwordHint"))).toBeTruthy();
-    expect(container.querySelectorAll('input[type="password"]')).toHaveLength(2);
-  });
-
-  it("submits a new password and clears the form on success", async () => {
-    const { calls } = installFetchMock([
-      { match: "/api/auth/password/change", method: "POST", reply: jsonResponse({ success: true }) },
-    ]);
-    const { container } = render(<ChangePasswordPage />);
-    const [current, next] = container.querySelectorAll('input[type="password"]');
-
-    fireEvent.change(current, { target: { value: "old-pass" } });
-    fireEvent.change(next, { target: { value: "new-pass-1!" } });
-    fireEvent.submit(container.querySelector("form")!);
-
-    await waitFor(() => expect(screen.getByText(ru("auth.changePasswordSuccess"))).toBeTruthy());
-    expect(sentBody(calls[0])).toEqual({ currentPassword: "old-pass", newPassword: "new-pass-1!" });
-    expect((current as HTMLInputElement).value).toBe("");
-    expect((next as HTMLInputElement).value).toBe("");
-  });
-
-  it("shows a validation detail, a plain message and a network error", async () => {
-    installFetchMock([
-      {
-        match: "/api/auth/password/change",
-        method: "POST",
-        reply: jsonResponse(
-          { error: { code: "VALIDATION_ERROR", details: [{ message: "auth.passwordHint" }] } },
-          400,
-        ),
-      },
-    ]);
-    const first = render(<ChangePasswordPage />);
-    fireEvent.submit(first.container.querySelector("form")!);
-    await waitFor(() => expect(screen.getByText(ru("auth.passwordHint"))).toBeTruthy());
-    first.unmount();
-
-    installFetchMock([
-      {
-        match: "/api/auth/password/change",
-        method: "POST",
-        reply: jsonResponse({ error: { message: "auth.token.required" } }, 401),
-      },
-    ]);
-    const second = render(<ChangePasswordPage />);
-    fireEvent.submit(second.container.querySelector("form")!);
-    await waitFor(() => expect(screen.getByText(ru("auth.token.required"))).toBeTruthy());
-    second.unmount();
-
-    installFetchMock([]);
-    const third = render(<ChangePasswordPage />);
-    fireEvent.submit(third.container.querySelector("form")!);
-    await waitFor(() => expect(screen.getByText(ru("common.error"))).toBeTruthy());
+describe("ChangePasswordPage (redirect)", () => {
+  it("redirects to /account/change-password", () => {
+    render(<ChangePasswordPage />);
+    expect(pushMock).toHaveBeenCalledWith("/account/change-password");
   });
 });
 

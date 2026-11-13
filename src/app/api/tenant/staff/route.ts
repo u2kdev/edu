@@ -7,6 +7,8 @@ import { requireTenantAccess, logAuditEvent } from "@/lib/tenant";
 import { hasPermission } from "@/lib/permissions";
 import { checkSubscriptionLimit } from "@/lib/limits";
 import { sendPasswordSetupLink } from "@/lib/password-reset";
+import { normalizePhone } from "@/lib/phone";
+import { generateSecurePassword } from "@/lib/generatePassword";
 import type { MembershipRole, MembershipStatus } from "@prisma/client";
 import crypto from "crypto";
 
@@ -27,7 +29,7 @@ export async function GET(req: Request) {
 
     const staffMembers = await tenantDb.centerMembership.findMany({
       where: {
-        role: { in: ["DIRECTOR", "CENTER_ADMIN", "ACCOUNTANT", "TEACHER", "CENTER_SUPPORT"] },
+        role: { in: ["DIRECTOR", "CENTER_ADMIN", "ACCOUNTANT", "TEACHER", "TEACHER_ASSISTANT", "CENTER_SUPPORT"] },
       },
       include: {
         user: {
@@ -38,6 +40,7 @@ export async function GET(req: Request) {
             fullName: true,
             avatarUrl: true,
             isActive: true,
+            lastLoginAt: true,
             createdAt: true,
           },
         },
@@ -71,18 +74,18 @@ export async function POST(req: Request) {
       );
     }
 
-    const { email, fullName, phone, staffRole } = await req.json();
+    const { email, fullName, phone, staffRole, password } = await req.json();
 
-    // Validate required fields
-    if (!email || !fullName || !staffRole) {
+    // Validate required fields: Full name & role required, plus either email or phone
+    if (!fullName || !staffRole || (!email && !phone)) {
       return NextResponse.json(
-        { error: "Email, full name, and role are required" },
+        { error: "ФИО, роль и (email или телефон) обязательны" },
         { status: 400 }
       );
     }
 
     // Validate staffRole — only center-level staff roles can be assigned
-    const allowedRoles = ["CENTER_ADMIN", "ACCOUNTANT", "TEACHER", "CENTER_SUPPORT"];
+    const allowedRoles = ["CENTER_ADMIN", "ACCOUNTANT", "TEACHER", "TEACHER_ASSISTANT", "CENTER_SUPPORT"];
     if (!allowedRoles.includes(staffRole)) {
       return NextResponse.json(
         { error: `Invalid role. Allowed: ${allowedRoles.join(", ")}` },
@@ -98,13 +101,20 @@ export async function POST(req: Request) {
       );
     }
 
-    const cleanEmail = email.toLowerCase().trim();
+    const cleanEmail = email ? email.toLowerCase().trim() : null;
+    const normalizedPhone = phone ? normalizePhone(phone) : null;
+    const finalEmail = cleanEmail || `phone_${(normalizedPhone || "staff").replace(/[^\d]/g, "")}_${Date.now()}@noemail.local`;
 
     // Check if user already has this role in this center
     const existingMembership = await tenantDb.centerMembership.findFirst({
       where: {
         role: staffRole,
-        user: { email: cleanEmail },
+        user: {
+          OR: [
+            ...(cleanEmail ? [{ email: cleanEmail }] : []),
+            ...(normalizedPhone ? [{ phone: normalizedPhone }] : []),
+          ],
+        },
       },
     });
 
@@ -116,24 +126,31 @@ export async function POST(req: Request) {
     }
 
     // Find or create the user (Platform Level)
-    let user = await db.platformUser.findUnique({
-      where: { email: cleanEmail },
+    let user = await db.platformUser.findFirst({
+      where: {
+        OR: [
+          ...(cleanEmail ? [{ email: cleanEmail }] : []),
+          ...(normalizedPhone ? [{ phone: normalizedPhone }] : []),
+        ],
+      },
     });
 
-    // Generate a temporary password (user will be sent an invite to set their own)
-    const tempPassword = crypto.randomBytes(12).toString("base64url");
-    const tempPasswordHash = await hashPassword(tempPassword);
+    const rawPassword = password && password.trim().length >= 6
+      ? password.trim()
+      : generateSecurePassword(16);
+    const tempPasswordHash = await hashPassword(rawPassword);
 
     let isNewUser = false;
     if (!user) {
       user = await db.platformUser.create({
         data: {
-          email: cleanEmail,
+          email: finalEmail,
           fullName,
-          phone: phone || null,
+          phone: normalizedPhone,
           passwordHash: tempPasswordHash,
           preferredLanguage: center.defaultLanguage || "ru",
-          emailVerified: new Date(),
+          mustChangePassword: true,
+          emailVerified: cleanEmail ? null : new Date(),
         },
       });
       isNewUser = true;
@@ -166,7 +183,7 @@ export async function POST(req: Request) {
       },
     });
 
-    // Audit log
+    // Audit log (NEVER LOG PASSWORDS)
     await logAuditEvent({
       centerId: center.id,
       actorUserId: session.user.id,
@@ -174,15 +191,13 @@ export async function POST(req: Request) {
       resource: "CenterMembership",
       resourceId: membership.id,
       details: {
-        addedUserEmail: cleanEmail,
+        addedUserEmail: cleanEmail || finalEmail,
         addedUserName: fullName,
         assignedRole: staffRole,
       },
     });
 
-    // Email a single-use "set your password" link so the new account is usable.
-    // (Runs only after the membership was created successfully.)
-    if (isNewUser) {
+    if (isNewUser && cleanEmail) {
       await sendPasswordSetupLink({
         userId: user.id,
         email: user.email,
@@ -193,13 +208,30 @@ export async function POST(req: Request) {
       });
     }
 
-    // For now, return the temporary password in dev mode only
-    return NextResponse.json({
-      success: true,
-      membership,
-      // Only include temp password in development
-      ...(process.env.NODE_ENV === "development" ? { tempPassword } : {}),
-    });
+    const baseUrl = process.env.NEXTAUTH_URL || "https://e-darschi.uz";
+    const primaryLogin = cleanEmail || normalizedPhone || user.email;
+
+    return NextResponse.json(
+      {
+        success: true,
+        membership,
+        credentials: {
+          login: primaryLogin,
+          password: isNewUser ? rawPassword : "(действующий пароль аккаунта)",
+          loginUrl: `${baseUrl}/login`,
+          fullName: user.fullName,
+          role: staffRole,
+          mustChangePassword: true,
+        },
+      },
+      {
+        headers: {
+          "Cache-Control": "no-store, no-cache, must-revalidate, proxy-revalidate",
+          Pragma: "no-cache",
+          Expires: "0",
+        },
+      }
+    );
   } catch (err: unknown) {
     console.error("Staff creation error:", err);
     const error = err as { message?: string };
@@ -341,12 +373,15 @@ export async function DELETE(req: Request) {
 
     const { searchParams } = new URL(req.url);
     let membershipId = searchParams.get("membershipId");
+    let reason = req.headers.get("x-action-reason") || "";
+
     if (!membershipId) {
       try {
-        const body = (await req.json()) as { membershipId?: string };
+        const body = (await req.json()) as { membershipId?: string; reason?: string };
         membershipId = body?.membershipId || null;
+        if (body?.reason) reason = body.reason.trim();
       } catch {
-        // Body might be empty or invalid json
+        // Body might be empty
       }
     }
 
@@ -369,6 +404,7 @@ export async function DELETE(req: Request) {
       );
     }
 
+    // Role-specific authorization and checks
     if (membership.role === "DIRECTOR") {
       return NextResponse.json(
         { error: "Cannot delete the Director" },
@@ -376,14 +412,60 @@ export async function DELETE(req: Request) {
       );
     }
 
-    if (
-      role === "CENTER_ADMIN" &&
-      membership.role === "CENTER_ADMIN"
-    ) {
-      return NextResponse.json(
-        { error: "Only Director can delete administrative staff" },
-        { status: 403 }
-      );
+    if (membership.role === "STUDENT") {
+      // Check if student has related records before attempting delete
+      const [hasPayments, hasGrades, hasAttendance, hasEnrollments] = await Promise.all([
+        tenantDb.centerPayment.count({ where: { studentMembershipId: membershipId } }),
+        tenantDb.grade.count({ where: { studentMembershipId: membershipId } }),
+        tenantDb.attendance.count({ where: { studentMembershipId: membershipId } }),
+        tenantDb.enrollment.count({ where: { studentMembershipId: membershipId } }),
+      ]);
+
+      const hasRecords = hasPayments > 0 || hasGrades > 0 || hasAttendance > 0 || hasEnrollments > 0;
+      if (hasRecords) {
+        return NextResponse.json(
+          {
+            error:
+              "Невозможно удалить студента с существующими записями (платежи, оценки, посещаемость). Рекомендуется архивировать студента.",
+            hint: "архивировать",
+            code: "CANNOT_DELETE_HAS_RECORDS",
+            details: {
+              payments: hasPayments,
+              grades: hasGrades,
+              attendance: hasAttendance,
+              enrollments: hasEnrollments,
+            },
+          },
+          { status: 409 }
+        );
+      }
+    } else {
+      // Staff deletion checks
+      if (
+        role === "CENTER_ADMIN" &&
+        ["CENTER_ADMIN", "ACCOUNTANT", "DIRECTOR"].includes(membership.role)
+      ) {
+        return NextResponse.json(
+          { error: "Only Director can delete administrative staff or accountants" },
+          { status: 403 }
+        );
+      }
+
+      if (membership.role === "TEACHER" || membership.role === "TEACHER_ASSISTANT") {
+        const activeGroups = await tenantDb.group.count({
+          where: { teacherMembershipId: membershipId },
+        });
+        if (activeGroups > 0) {
+          return NextResponse.json(
+            {
+              error: `Преподаватель прикреплен к ${activeGroups} активным группам. Переназначьте группы перед удалением или архивируйте сотрудника.`,
+              hint: "архивировать",
+              code: "TEACHER_HAS_ACTIVE_GROUPS",
+            },
+            { status: 409 }
+          );
+        }
+      }
     }
 
     try {
@@ -409,7 +491,7 @@ export async function DELETE(req: Request) {
         return NextResponse.json(
           {
             error:
-              "Невозможно удалить студента с существующими записями (платежи, оценки, посещаемость). Рекомендуется архивировать студента.",
+              "Невозможно удалить запись из-за существующих связей в базе данных. Рекомендуется архивировать участника.",
             hint: "архивировать",
             code: "CANNOT_DELETE_HAS_RECORDS",
           },
@@ -419,15 +501,18 @@ export async function DELETE(req: Request) {
       throw err;
     }
 
+    const auditAction = membership.role === "STUDENT" ? "STUDENT_DELETED" : "STAFF_MEMBER_DELETED";
+
     await logAuditEvent({
       centerId: center.id,
       actorUserId: session.user.id,
-      action: "MEMBER_DELETED",
+      action: auditAction,
       resource: "CenterMembership",
       resourceId: membershipId,
       details: {
         targetEmail: membership.user.email,
-        role: membership.role,
+        targetRole: membership.role,
+        reason: reason || undefined,
       },
     });
 

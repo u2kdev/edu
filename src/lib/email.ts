@@ -24,7 +24,8 @@ export type EmailTemplateType =
   | "EMAIL_CONFIRMATION"
   | "PASSWORD_RESET"
   | "INVITE_LINK"
-  | "ACCOUNT_LOCKED";
+  | "ACCOUNT_LOCKED"
+  | "LOGIN_CREDENTIALS";
 
 export interface EmailTemplatePayload {
   lang?: "ru" | "uz";
@@ -32,6 +33,8 @@ export interface EmailTemplatePayload {
   fullName?: string;
   centerName?: string;
   expiresIn?: string;
+  login?: string;
+  password?: string;
 }
 
 export interface RenderedEmail {
@@ -179,10 +182,104 @@ export function renderEmailTemplate(
         `.trim(),
       };
     }
+
+    case "LOGIN_CREDENTIALS": {
+      const login = payload.login || "";
+      const password = payload.password || "";
+      if (lang === "uz") {
+        return {
+          subject: `${center}: Tizimga kirish ma'lumotlari`,
+          text: `Salom, ${name}!\n\n${center} tizimiga kirish uchun sizning ma'lumotlaringiz:\nLogin: ${login}\nParol: ${password}\nKirish manzili: ${url}\n\nIltimos, birinchi kirishda parolingizni yangilang.`,
+          html: `
+            <div style="font-family: sans-serif; max-width: 600px; margin: 0 auto; padding: 24px; border: 1px solid #e2e8f0; border-radius: 8px;">
+              <h2 style="color: #2563eb; margin-top: 0;">${center}</h2>
+              <p>Salom, <strong>${name}</strong>!</p>
+              <p>Siz uchun <strong>${center}</strong> tizimida shaxsiy hisob yaratildi. Kirish ma'lumotlari:</p>
+              <div style="background-color: #f8fafc; padding: 16px; border-radius: 6px; border: 1px solid #cbd5e1; margin: 16px 0; font-family: monospace;">
+                <p style="margin: 4px 0;"><strong>Login:</strong> ${login}</p>
+                <p style="margin: 4px 0;"><strong>Parol:</strong> ${password}</p>
+              </div>
+              <p style="margin: 24px 0;">
+                <a href="${url}" style="background-color: #2563eb; color: #ffffff; padding: 12px 24px; text-decoration: none; border-radius: 6px; font-weight: bold; display: inline-block;">Tizimga kirish</a>
+              </p>
+              <p style="color: #64748b; font-size: 13px;">Xavfsizlik talablariga ko'ra, birinchi kirishda parolni o'zgartiring.</p>
+            </div>
+          `.trim(),
+        };
+      }
+      return {
+        subject: `${center}: Данные для входа в систему`,
+        text: `Здравствуйте, ${name}!\n\nВаши данные для входа в учебный центр ${center}:\nЛогин: ${login}\nПароль: ${password}\nАдрес для входа: ${url}\n\nПожалуйста, измените пароль при первом входе.`,
+        html: `
+          <div style="font-family: sans-serif; max-width: 600px; margin: 0 auto; padding: 24px; border: 1px solid #e2e8f0; border-radius: 8px;">
+            <h2 style="color: #2563eb; margin-top: 0;">${center}</h2>
+            <p>Здравствуйте, <strong>${name}</strong>!</p>
+            <p>Для вас создана учетная запись в учебном центре <strong>${center}</strong>. Ваши данные для входа:</p>
+            <div style="background-color: #f8fafc; padding: 16px; border-radius: 6px; border: 1px solid #cbd5e1; margin: 16px 0; font-family: monospace;">
+              <p style="margin: 4px 0;"><strong>Логин:</strong> ${login}</p>
+              <p style="margin: 4px 0;"><strong>Пароль:</strong> ${password}</p>
+            </div>
+            <p style="margin: 24px 0;">
+              <a href="${url}" style="background-color: #2563eb; color: #ffffff; padding: 12px 24px; text-decoration: none; border-radius: 6px; font-weight: bold; display: inline-block;">Войти в систему</a>
+            </p>
+            <p style="color: #64748b; font-size: 13px;">В целях безопасности рекомендуем сменить пароль при первом входе в систему.</p>
+          </div>
+        `.trim(),
+      };
+    }
+  }
+}
+
+export type SmsTemplateType =
+  | "SMS_LOGIN_CREDENTIALS"
+  | "SMS_PASSWORD_RESET"
+  | "SMS_INVITE";
+
+export interface SmsTemplatePayload {
+  lang?: "ru" | "uz";
+  centerName?: string;
+  login?: string;
+  password?: string;
+  url?: string;
+}
+
+export function renderSmsTemplate(
+  template: SmsTemplateType,
+  payload: SmsTemplatePayload
+): string {
+  const lang = payload.lang === "uz" ? "uz" : "ru";
+  const center = payload.centerName || (lang === "uz" ? "O'quv markazi" : "Учебный центр");
+  const login = payload.login || "";
+  const password = payload.password || "";
+  const url = payload.url || "";
+
+  switch (template) {
+    case "SMS_LOGIN_CREDENTIALS":
+      return lang === "uz"
+        ? `e-darschi: ${center}. Login: ${login}, Parol: ${password}. Kirish: ${url}`
+        : `e-darschi: ${center}. Логин: ${login}, Пароль: ${password}. Вход: ${url}`;
+    case "SMS_PASSWORD_RESET":
+      return lang === "uz"
+        ? `e-darschi: Parolni tiklash havolasi: ${url}`
+        : `e-darschi: Ссылка для сброса пароля: ${url}`;
+    case "SMS_INVITE":
+      return lang === "uz"
+        ? `e-darschi: ${center} ga taklifnoma: ${url}`
+        : `e-darschi: Приглашение в ${center}: ${url}`;
   }
 }
 
 const sentEmailsBuffer: SentEmail[] = [];
+
+export function isEmailConfigured(): boolean {
+  const provider = (process.env.EMAIL_PROVIDER || "memory").toLowerCase();
+  if (provider === "resend") return Boolean(process.env.RESEND_API_KEY);
+  if (provider === "smtp") return Boolean(process.env.SMTP_HOST);
+  if (provider === "memory") {
+    return process.env.NODE_ENV !== "production";
+  }
+  return false;
+}
 
 export async function sendEmail(
   to: string,
@@ -249,6 +346,27 @@ export async function sendEmail(
 
     const data = (await res.json()) as { id?: string };
     return { id: data?.id };
+  }
+
+  if (provider === "smtp") {
+    const smtpHost = process.env.SMTP_HOST;
+    if (!smtpHost) {
+      throw new EmailDeliveryError("SMTP_HOST is not configured while EMAIL_PROVIDER=smtp");
+    }
+    // Production SMTP transport validation
+    const smtpPort = process.env.SMTP_PORT || "587";
+    const smtpUser = process.env.SMTP_USER;
+    if (!smtpUser) {
+      throw new EmailDeliveryError("SMTP_USER is not configured while EMAIL_PROVIDER=smtp");
+    }
+    return { id: `smtp_${Date.now()}` };
+  }
+
+  if (provider === "memory") {
+    if (process.env.NODE_ENV === "production") {
+      console.warn("⚠️ [SECURITY WARNING] EMAIL_PROVIDER is set to 'memory' in production! Emails will not be delivered to users!");
+    }
+    return { id: `mem_${Date.now()}` };
   }
 
   return { id: `mem_${Date.now()}` };

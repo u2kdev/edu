@@ -36,39 +36,152 @@ export async function GET(req: Request) {
       whereCondition = { lessonId };
     }
 
-    // For STUDENT role: only return homeworks for groups they're enrolled in
+    let scopedLessonIds: string[] | null = null;
+    let allowedSubmissionStudentIds: string[] | null = null;
+
     if (tenantCtx.role === "STUDENT" && tenantCtx.membership) {
       const enrollments = await tenantDb.enrollment.findMany({
-        where: { studentMembershipId: tenantCtx.membership.id },
-        select: { group: { select: { course: { select: { modules: { select: { lessons: { select: { id: true } } } } } } } } },
+        where: {
+          studentMembershipId: tenantCtx.membership.id,
+          status: "ACTIVE",
+        },
+        select: {
+          group: {
+            select: {
+              course: {
+                select: {
+                  modules: {
+                    select: { lessons: { select: { id: true } } },
+                  },
+                },
+              },
+            },
+          },
+        },
       });
-      const lessonIds: string[] = [];
+      scopedLessonIds = [];
       for (const en of enrollments) {
         for (const mod of en.group.course.modules) {
           for (const les of mod.lessons) {
-            lessonIds.push(les.id);
+            scopedLessonIds.push(les.id);
           }
         }
       }
-      whereCondition = { lessonId: { in: lessonIds } };
+      allowedSubmissionStudentIds = [tenantCtx.membership.id];
+    } else if (tenantCtx.role === "PARENT" && tenantCtx.membership) {
+      const parentLinks = await tenantDb.parentLink.findMany({
+        where: {
+          parentMembershipId: tenantCtx.membership.id,
+          status: "CONFIRMED",
+        },
+        select: { studentMembershipId: true },
+      });
+      const childIds = parentLinks.map(
+        (l: { studentMembershipId: string }) => l.studentMembershipId
+      );
+      allowedSubmissionStudentIds = childIds;
+
+      const enrollments =
+        childIds.length > 0
+          ? await tenantDb.enrollment.findMany({
+              where: {
+                studentMembershipId: { in: childIds },
+                status: "ACTIVE",
+              },
+              select: {
+                group: {
+                  select: {
+                    course: {
+                      select: {
+                        modules: {
+                          select: { lessons: { select: { id: true } } },
+                        },
+                      },
+                    },
+                  },
+                },
+              },
+            })
+          : [];
+
+      scopedLessonIds = [];
+      for (const en of enrollments) {
+        for (const mod of en.group.course.modules) {
+          for (const les of mod.lessons) {
+            scopedLessonIds.push(les.id);
+          }
+        }
+      }
+    } else if (
+      (tenantCtx.role === "TEACHER" || tenantCtx.role === "TEACHER_ASSISTANT") &&
+      tenantCtx.membership
+    ) {
+      const groups = await tenantDb.group.findMany({
+        where:
+          tenantCtx.role === "TEACHER"
+            ? { teacherMembershipId: tenantCtx.membership.id }
+            : { assistantMembershipId: tenantCtx.membership.id },
+        select: {
+          course: {
+            select: {
+              modules: {
+                select: { lessons: { select: { id: true } } },
+              },
+            },
+          },
+        },
+      });
+      scopedLessonIds = [];
+      for (const g of groups) {
+        for (const mod of g.course.modules) {
+          for (const les of mod.lessons) {
+            scopedLessonIds.push(les.id);
+          }
+        }
+      }
+    }
+
+    if (scopedLessonIds !== null) {
+      if (lessonId) {
+        if (!scopedLessonIds.includes(lessonId)) {
+          return NextResponse.json(
+            { error: "Forbidden: You do not have access to this lesson's homework" },
+            { status: 403 }
+          );
+        }
+        whereCondition = { lessonId };
+      } else {
+        whereCondition = { lessonId: { in: scopedLessonIds } };
+      }
     }
 
     const homeworks = await tenantDb.homework.findMany({
       where: whereCondition,
       include: {
         materials: { include: { material: true } },
-        submissions: tenantCtx.role === "STUDENT"
-          ? {
-              where: { studentMembershipId: tenantCtx.membership?.id },
-              include: {
-                student: { include: { user: { select: { fullName: true, email: true } } } },
+        submissions:
+          allowedSubmissionStudentIds !== null
+            ? {
+                where: {
+                  studentMembershipId: { in: allowedSubmissionStudentIds },
+                },
+                include: {
+                  student: {
+                    include: {
+                      user: { select: { fullName: true, email: true } },
+                    },
+                  },
+                },
+              }
+            : {
+                include: {
+                  student: {
+                    include: {
+                      user: { select: { fullName: true, email: true } },
+                    },
+                  },
+                },
               },
-            }
-          : {
-              include: {
-                student: { include: { user: { select: { fullName: true, email: true } } } },
-              },
-            },
       },
       orderBy: { createdAt: "desc" },
     });
@@ -208,6 +321,7 @@ export async function PATCH(req: Request) {
       homeworkId,
       submissionText,
       filesJson,
+      attachments,
       grade,
       feedback,
       studentMembershipId,
@@ -218,11 +332,12 @@ export async function PATCH(req: Request) {
       return NextResponse.json({ error: "homeworkId required" }, { status: 400 });
     }
 
-    if (action === "GRADE") {
+    if (action === "GRADE" || action === "REVIEW") {
       if (
         tenantCtx.role !== "DIRECTOR" &&
         tenantCtx.role !== "CENTER_ADMIN" &&
         tenantCtx.role !== "TEACHER" &&
+        tenantCtx.role !== "TEACHER_ASSISTANT" &&
         !tenantCtx.isPlatformStaff
       ) {
         return NextResponse.json({ error: "Forbidden" }, { status: 403 });
@@ -232,6 +347,14 @@ export async function PATCH(req: Request) {
     // SECURITY: Verify homework belongs to this tenant
     const homework = await tenantDb.homework.findFirst({
       where: { id: homeworkId },
+      include: {
+        lesson: {
+          select: {
+            id: true,
+            module: { select: { courseId: true } },
+          },
+        },
+      },
     });
     if (!homework) {
       return NextResponse.json({ error: "Homework not found or access denied" }, { status: 404 });
@@ -241,6 +364,24 @@ export async function PATCH(req: Request) {
     if (action === "SUBMIT") {
       if (tenantCtx.role !== "STUDENT" || !tenantCtx.membership) {
         return NextResponse.json({ error: "Only students can submit homework" }, { status: 403 });
+      }
+
+      // Verify student is enrolled in a group belonging to this homework's course
+      const courseId = homework.lesson?.module?.courseId;
+      if (courseId) {
+        const enrolled = await tenantDb.enrollment.findFirst({
+          where: {
+            studentMembershipId: tenantCtx.membership.id,
+            status: "ACTIVE",
+            group: { courseId },
+          },
+        });
+        if (!enrolled) {
+          return NextResponse.json(
+            { error: "Forbidden: You are not enrolled in the course for this homework" },
+            { status: 403 }
+          );
+        }
       }
 
       // Check existing submission
@@ -256,11 +397,14 @@ export async function PATCH(req: Request) {
       }
 
       const statusToSet = "SUBMITTED";
-      const filesPayload = filesJson
-        ? typeof filesJson === "string"
-          ? filesJson
-          : JSON.stringify(filesJson)
-        : null;
+      const rawAttachments = attachments !== undefined ? attachments : filesJson;
+      let filesPayload: string | null = null;
+      if (rawAttachments !== undefined && rawAttachments !== null) {
+        filesPayload =
+          typeof rawAttachments === "string"
+            ? rawAttachments
+            : JSON.stringify(rawAttachments);
+      }
 
       if (existing) {
         await tenantDb.homeworkSubmission.updateMany({
@@ -304,12 +448,13 @@ export async function PATCH(req: Request) {
       return NextResponse.json({ success: true, submission });
     }
 
-    // Action B: Teacher/Admin grades homework
-    if (action === "GRADE") {
+    // Action B: Teacher/Admin/Assistant grades or reviews homework
+    if (action === "GRADE" || action === "REVIEW") {
       if (
         tenantCtx.role !== "DIRECTOR" &&
         tenantCtx.role !== "CENTER_ADMIN" &&
         tenantCtx.role !== "TEACHER" &&
+        tenantCtx.role !== "TEACHER_ASSISTANT" &&
         !tenantCtx.isPlatformStaff
       ) {
         return NextResponse.json({ error: "Forbidden" }, { status: 403 });
@@ -330,6 +475,33 @@ export async function PATCH(req: Request) {
         return NextResponse.json({ error: "Student not found in this center" }, { status: 404 });
       }
 
+      const numericGrade =
+        grade !== undefined && grade !== null && grade !== ""
+          ? parseInt(String(grade))
+          : null;
+
+      // SECURITY: TEACHER_ASSISTANT can only review their assigned groups and CANNOT set numeric grades
+      if (tenantCtx.role === "TEACHER_ASSISTANT" && tenantCtx.membership) {
+        if (numericGrade !== null) {
+          return NextResponse.json(
+            { error: "Teacher assistants cannot set final grades, only reviews and feedback" },
+            { status: 403 }
+          );
+        }
+        const isInAssistantGroup = await tenantDb.enrollment.findFirst({
+          where: {
+            studentMembershipId,
+            group: { assistantMembershipId: tenantCtx.membership.id },
+          },
+        });
+        if (!isInAssistantGroup) {
+          return NextResponse.json(
+            { error: "You can only review students in your assigned groups" },
+            { status: 403 }
+          );
+        }
+      }
+
       // SECURITY: TEACHER can only grade students in their own groups
       if (tenantCtx.role === "TEACHER" && tenantCtx.membership) {
         const isInTeacherGroup = await tenantDb.enrollment.findFirst({
@@ -342,11 +514,6 @@ export async function PATCH(req: Request) {
           return NextResponse.json({ error: "You can only grade students in your own groups" }, { status: 403 });
         }
       }
-
-      const numericGrade =
-        grade !== undefined && grade !== null && grade !== ""
-          ? parseInt(String(grade))
-          : null;
       if (numericGrade !== null && (isNaN(numericGrade) || numericGrade < 0 || numericGrade > 100)) {
         return NextResponse.json({ error: "Grade must be between 0 and 100" }, { status: 400 });
       }

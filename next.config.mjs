@@ -3,6 +3,45 @@ const nextConfig = {
   experimental: {
     optimizePackageImports: ['lucide-react'],
   },
+  async redirects() {
+    return [
+      {
+        source: '/platform',
+        destination: '/platform-admin',
+        permanent: false,
+      },
+      {
+        source: '/platform/tenants',
+        destination: '/platform-admin/centers',
+        permanent: false,
+      },
+      {
+        source: '/platform/tenants/create',
+        destination: '/platform-admin/centers/create',
+        permanent: false,
+      },
+      {
+        source: '/platform/tenants/:id',
+        destination: '/platform-admin/centers/:id',
+        permanent: false,
+      },
+      {
+        source: '/platform/subscriptions',
+        destination: '/platform-admin/subscriptions',
+        permanent: false,
+      },
+      {
+        source: '/platform/support',
+        destination: '/platform-admin/support',
+        permanent: false,
+      },
+      {
+        source: '/platform/:path*',
+        destination: '/platform-admin/:path*',
+        permanent: false,
+      },
+    ];
+  },
   async headers() {
     return [
       {

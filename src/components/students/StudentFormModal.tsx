@@ -87,11 +87,10 @@ export function StudentFormModal({
 
             <div>
               <label className="block text-xs font-semibold text-slate-300 uppercase tracking-wider mb-1.5">
-                {t(locale, "students.email")} *
+                {t(locale, "students.email")} (необязательно, если указан телефон)
               </label>
               <input
                 type="email"
-                required
                 value={email}
                 onChange={(e) => onEmailChange(e.target.value)}
                 placeholder="alisher@example.uz"

@@ -1,6 +1,6 @@
 "use client";
 
-import { FileText } from "lucide-react";
+import { FileText, Download, Printer } from "lucide-react";
 import { t } from "@/i18n";
 import type { CsvImportResult, CsvPreviewData } from "./students-utils";
 
@@ -85,12 +85,41 @@ export function CsvImportModal({
 
         {/* Execution Report */}
         {result && (
-          <div className="p-3 bg-emerald-500/10 rounded-xl border border-emerald-500/20 space-y-2 text-xs">
-            <p className="text-emerald-300 font-bold">
+          <div className="p-4 bg-emerald-500/10 rounded-2xl border border-emerald-500/20 space-y-3 text-xs">
+            <p className="text-emerald-300 font-bold text-sm">
               {t(locale, "students.csvImportSuccess", {
                 count: result.createdCount,
               })}
             </p>
+            {result.credentials && result.credentials.length > 0 && (
+              <div className="p-3 bg-slate-900/90 rounded-xl border border-emerald-500/30 space-y-2">
+                <span className="text-[11px] font-semibold text-slate-300 block">
+                  Данные для входа созданных пользователей (доступны только сейчас):
+                </span>
+                <div className="flex gap-2">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const csvHeader = "ФИО,Логин,Пароль,Роль\n";
+                      const csvRows = result.credentials!
+                        .map((c) => `"${c.fullName}","${c.login}","${c.password}","${c.role}"`)
+                        .join("\n");
+                      const blob = new Blob([csvHeader + csvRows], { type: "text/csv;charset=utf-8;" });
+                      const url = URL.createObjectURL(blob);
+                      const a = document.createElement("a");
+                      a.href = url;
+                      a.download = `logins_passwords_${Date.now()}.csv`;
+                      a.click();
+                      URL.revokeObjectURL(url);
+                    }}
+                    className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-emerald-600 hover:bg-emerald-500 text-white rounded-lg text-xs font-semibold"
+                  >
+                    <Download className="w-3.5 h-3.5" />
+                    <span>Скачать логины и пароли (CSV)</span>
+                  </button>
+                </div>
+              </div>
+            )}
             {result.errors.length > 0 && (
               <div className="max-h-24 overflow-y-auto space-y-1 p-2 bg-rose-500/10 rounded border border-rose-500/20 text-rose-300">
                 <p className="font-bold">{t(locale, "students.csvImportErrorsTitle")}:</p>

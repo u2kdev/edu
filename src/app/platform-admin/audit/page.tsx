@@ -1,13 +1,26 @@
 import { getAuthSession } from "@/lib/auth";
+// Reason: Exception: Platform routes manage global models.
+// eslint-disable-next-line no-restricted-imports
 import { db } from "@/lib/db";
 import { redirect } from "next/navigation";
-import { Shield, Clock, User, Building2, Terminal } from "lucide-react";
+import { Shield } from "lucide-react";
+import PlatformAuditInteractive from "@/components/platform/PlatformAuditInteractive";
 
-export default async function PlatformAuditLogPage() {
+function formatDetails(raw: string | null): string {
+  if (!raw) return "—";
+  try {
+    const parsed = JSON.parse(raw);
+    return JSON.stringify(parsed);
+  } catch {
+    return raw;
+  }
+}
+
+export default async function PlatformAuditPage() {
   const session = await getAuthSession();
   if (!session) redirect("/login");
 
-  if (session.user.platformRole !== "SUPERADMIN") {
+  if (session.user.platformRole !== "SUPERADMIN" && session.user.platformRole !== "DEVELOPER") {
     redirect("/platform-admin");
   }
 
@@ -23,101 +36,84 @@ export default async function PlatformAuditLogPage() {
   return (
     <div className="space-y-6">
       {/* Header */}
-      <div>
-        <div className="flex items-center gap-2 mb-2">
-          <span className="px-3 py-0.5 bg-blue-100 text-blue-700 text-xs font-semibold rounded-full border border-blue-200">
-            SUPERADMIN ONLY
-          </span>
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+        <div className="flex items-center gap-3">
+          <div className="p-2 bg-indigo-50 dark:bg-indigo-900/20 rounded-lg text-indigo-600 dark:text-indigo-400">
+            <Shield className="w-6 h-6" />
+          </div>
+          <div>
+            <h1 className="text-2xl font-bold text-zinc-900 dark:text-zinc-100">
+              Журнал аудита платформы
+            </h1>
+            <p className="text-sm text-zinc-500 dark:text-zinc-400">
+              Сквозной протокол действий администраторов, финансовых и системных событий • Всего записей: {logs.length}
+            </p>
+          </div>
         </div>
-        <h1 className="text-2xl md:text-3xl font-extrabold text-slate-900 tracking-tight">
-          Журнал аудита платформы
-        </h1>
-        <p className="text-sm text-slate-500 mt-1">
-          Сквозной протокол безопасности, системных событий, модификации тарифов и статусов учебных центров
-        </p>
       </div>
 
-      {/* Audit Log Table */}
-      <div className="bg-white rounded-2xl border border-slate-200/90 shadow-sm overflow-hidden">
-        <div className="p-4 border-b border-slate-100 flex items-center justify-between bg-slate-50/50">
-          <span className="text-xs font-semibold text-slate-600 uppercase">
-            Последние 50 записей системного аудита
-          </span>
-          <span className="text-xs font-medium text-slate-500">
-            Всего записей: {logs.length}
-          </span>
-        </div>
+      {/* Interactive search, filters & export toolbar */}
+      <PlatformAuditInteractive />
 
+      {/* Audit Log Table */}
+      <div className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl overflow-hidden shadow-sm">
         <div className="overflow-x-auto">
-          <table className="w-full text-sm">
-            <thead>
-              <tr className="bg-slate-50/80 text-xs font-semibold text-slate-500 uppercase tracking-wider border-b border-slate-200/70">
-                <th className="text-left px-6 py-3.5">Время</th>
-                <th className="text-left px-6 py-3.5">Событие / Действие</th>
-                <th className="text-left px-6 py-3.5">Инициатор</th>
-                <th className="text-left px-6 py-3.5">Учебный центр</th>
-                <th className="text-left px-6 py-3.5">Ресурс и детали</th>
+          <table className="w-full text-sm text-left">
+            <thead className="bg-zinc-50 dark:bg-zinc-800/50 text-xs font-semibold text-zinc-500 uppercase border-b border-zinc-200 dark:border-zinc-700">
+              <tr>
+                <th className="px-4 py-3">Дата и время</th>
+                <th className="px-4 py-3">Действие</th>
+                <th className="px-4 py-3">Актор</th>
+                <th className="px-4 py-3">Центр</th>
+                <th className="px-4 py-3">Ресурс</th>
+                <th className="px-4 py-3">IP-адрес</th>
+                <th className="px-4 py-3">Детали</th>
               </tr>
             </thead>
-            <tbody className="divide-y divide-slate-100">
+            <tbody className="divide-y divide-zinc-100 dark:divide-zinc-800">
               {logs.length === 0 ? (
                 <tr>
-                  <td colSpan={5} className="px-6 py-12 text-center text-sm text-slate-400">
+                  <td colSpan={7} className="px-4 py-8 text-center text-zinc-400">
                     Журнал аудита пуст
                   </td>
                 </tr>
               ) : (
                 logs.map((log) => {
-                  let formattedDetails = "";
-                  if (log.detailsJson) {
-                    try {
-                      formattedDetails = JSON.stringify(JSON.parse(log.detailsJson));
-                    } catch {
-                      formattedDetails = log.detailsJson;
-                    }
-                  }
+                  const actorText = log.actor
+                    ? `${log.actor.fullName || log.actor.email} (${log.actor.email})`
+                    : "Система";
+                  const centerText = log.center ? `${log.center.name} (${log.center.slug})` : "— (Платформа)";
+                  const detailsFormatted = formatDetails(log.detailsJson);
 
                   return (
-                    <tr key={log.id} className="hover:bg-slate-50/70 transition-colors">
-                      <td className="px-6 py-3.5 whitespace-nowrap text-xs text-slate-500 font-mono">
-                        {new Date(log.createdAt).toLocaleString()}
+                    <tr key={log.id} className="hover:bg-zinc-50 dark:hover:bg-zinc-800/40 transition">
+                      <td className="px-4 py-3 whitespace-nowrap text-xs text-zinc-500 font-mono">
+                        {new Date(log.createdAt).toLocaleString("ru-RU")}
                       </td>
-                      <td className="px-6 py-3.5">
-                        <span className="inline-flex px-2.5 py-0.5 rounded-md text-xs font-mono font-semibold bg-blue-50 text-blue-700 border border-blue-200">
+                      <td className="px-4 py-3">
+                        <span className="font-semibold text-zinc-900 dark:text-zinc-100">
                           {log.action}
                         </span>
                       </td>
-                      <td className="px-6 py-3.5">
-                        {log.actor ? (
-                          <div>
-                            <div className="font-semibold text-slate-900 text-xs">
-                              {log.actor.fullName}
-                            </div>
-                            <div className="text-[11px] text-slate-400">{log.actor.email}</div>
-                          </div>
-                        ) : (
-                          <span className="text-xs text-slate-400 italic">Система</span>
+                      <td className="px-4 py-3 text-xs">
+                        <div className="font-medium text-zinc-800 dark:text-zinc-200">
+                          {log.actor?.fullName || "Система"}
+                        </div>
+                        {log.actor?.email && (
+                          <div className="text-zinc-400 text-[11px]">{log.actor.email}</div>
                         )}
                       </td>
-                      <td className="px-6 py-3.5 text-xs text-slate-700">
-                        {log.center ? (
-                          <div>
-                            <span className="font-medium text-slate-900">{log.center.name}</span>
-                            <span className="block text-[11px] text-slate-400 font-mono">
-                              {log.center.slug}
-                            </span>
-                          </div>
-                        ) : (
-                          <span className="text-slate-400">— (Платформа)</span>
-                        )}
+                      <td className="px-4 py-3 text-xs text-zinc-600 dark:text-zinc-400">
+                        {centerText}
                       </td>
-                      <td className="px-6 py-3.5 text-xs text-slate-600 font-mono max-w-xs truncate">
-                        <div className="font-semibold text-slate-800">{log.resource}</div>
-                        {formattedDetails && (
-                          <div className="text-[11px] text-slate-500 truncate" title={formattedDetails}>
-                            {formattedDetails}
-                          </div>
-                        )}
+                      <td className="px-4 py-3 text-xs font-mono text-zinc-600 dark:text-zinc-400">
+                        {log.resource}
+                      </td>
+                      <td className="px-4 py-3 text-xs font-mono text-zinc-500">
+                        {log.ipAddress || "—"}
+                      </td>
+                      <td className="px-4 py-3 text-xs font-mono text-zinc-600 dark:text-zinc-300 max-w-xs truncate">
+                        {detailsFormatted}
                       </td>
                     </tr>
                   );

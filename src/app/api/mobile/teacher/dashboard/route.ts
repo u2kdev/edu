@@ -69,6 +69,15 @@ export async function GET(req: Request) {
 
     const groupIds = groups.map((g) => g.id);
 
+    const { searchParams } = new URL(req.url);
+    const filterGroupId = searchParams.get("groupId");
+    if (filterGroupId && !groupIds.includes(filterGroupId) && !tenantCtx.isPlatformStaff) {
+      return NextResponse.json(
+        { error: "Forbidden: You are not assigned to this group" },
+        { status: 403 }
+      );
+    }
+
     // 2. Fetch teacher's schedule slots
     const scheduleSlots = await tenantDb.scheduleSlot.findMany({
       where: {

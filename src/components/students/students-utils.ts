@@ -14,6 +14,7 @@ export interface StudentItem {
     fullName: string;
     email: string;
     phone?: string | null;
+    lastLoginAt?: string | null;
   };
   enrollments: {
     id: string;
@@ -49,6 +50,7 @@ export interface CsvPreviewData {
 export interface CsvImportResult {
   createdCount: number;
   errors: { row: number; error: string }[];
+  credentials?: Array<{ login: string; password: string; fullName: string; role: string }>;
 }
 
 export interface StudentsQueryParams {

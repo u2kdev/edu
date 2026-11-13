@@ -8,7 +8,7 @@ import { getTenantDb } from "@/lib/db-tenant";
 
 export async function POST(req: Request) {
   try {
-    const session = await getAuthSession();
+    const session = await getAuthSession(req);
     if (!session) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
@@ -51,12 +51,18 @@ export async function POST(req: Request) {
         return NextResponse.json({ error: "Could not resolve creator membership" }, { status: 403 });
       }
 
+      // 30 days expiry by default
+      const expiresAt = new Date();
+      expiresAt.setDate(expiresAt.getDate() + 30);
+
       const parentInvite = await tenantDb.inviteCode.create({
         data: {
           centerId: tenantCtx.center.id,
           code,
           targetRole: "PARENT",
+          studentMembershipId: studentMem.id,
           maxUses: 2, // Allow up to 2 parents (e.g. mom and dad)
+          expiresAt,
           createdByMembershipId,
         },
       });
@@ -64,6 +70,7 @@ export async function POST(req: Request) {
       return NextResponse.json({
         success: true,
         parentInviteCode: code,
+        expiresAt,
         studentName: studentMem.user.fullName,
         studentMembershipId: studentMem.id,
       });
@@ -103,10 +110,11 @@ export async function POST(req: Request) {
         });
       }
 
-      // Find student membership associated with creator or find target student if specified
-      if (studentId) {
+      // Find student membership from invite code or request
+      const studentIdToLink = codeObj.studentMembershipId || studentId;
+      if (studentIdToLink) {
         const studentMem = await tenantDb.centerMembership.findFirst({
-          where: { id: studentId, role: "STUDENT" },
+          where: { id: studentIdToLink, role: "STUDENT" },
         });
 
         if (studentMem) {
@@ -118,7 +126,7 @@ export async function POST(req: Request) {
           if (existingLink) {
              await tenantDb.parentLink.updateMany({
                where: { parentMembershipId: parentMem.id, studentMembershipId: studentMem.id },
-               data: { status: "CONFIRMED", confirmedAt: new Date() }
+               data: { status: "CONFIRMED", confirmedAt: new Date(), inviteCodeUsed: inviteCode }
              });
           } else {
             try {
@@ -137,7 +145,7 @@ export async function POST(req: Request) {
               if (error.code === 'P2002') {
                 await tenantDb.parentLink.updateMany({
                   where: { parentMembershipId: parentMem.id, studentMembershipId: studentMem.id },
-                  data: { status: "CONFIRMED", confirmedAt: new Date() }
+                  data: { status: "CONFIRMED", confirmedAt: new Date(), inviteCodeUsed: inviteCode }
                 });
               } else {
                 throw e;
@@ -147,11 +155,45 @@ export async function POST(req: Request) {
         }
       }
 
+      // Increment usage
+      await tenantDb.inviteCode.updateMany({
+        where: { id: codeObj.id },
+        data: { usesCount: { increment: 1 } },
+      });
+
       return NextResponse.json({
         success: true,
         parentMembershipId: parentMem.id,
         centerName: codeObj.center.name,
       });
+    }
+
+    // Action 3: Admin revokes a parent invite code
+    if (action === "REVOKE_PARENT_CODE") {
+      const tenantCtx = await requireTenantAccess(req);
+      const tenantDb = tenantCtx.getTenantDb();
+
+      if (
+        tenantCtx.role !== "DIRECTOR" &&
+        tenantCtx.role !== "CENTER_ADMIN" &&
+        !tenantCtx.isPlatformStaff
+      ) {
+        return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+      }
+
+      if (!inviteCode) {
+        return NextResponse.json({ error: "Не указан код для отзыва" }, { status: 400 });
+      }
+
+      await tenantDb.inviteCode.updateMany({
+        where: {
+          centerId: tenantCtx.center.id,
+          code: inviteCode.toUpperCase().trim(),
+        },
+        data: { isRevoked: true },
+      });
+
+      return NextResponse.json({ success: true, message: "Код успешно отозван" });
     }
 
     return NextResponse.json({ error: "Invalid action" }, { status: 400 });

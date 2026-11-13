@@ -18,17 +18,13 @@ export default async function CenterHomeworkPage() {
   const userRole = session.activeCenterRole || "";
   const currentMembership = session.memberships.find((m) => m.centerId === centerId);
 
-  // Platform staff (DEVELOPER / SUPERADMIN / PLATFORM_SUPPORT) may browse any center.
   const isPlatformStaff =
     tenantCtx.isPlatformStaff || session.user.platformRole === "SUPERADMIN";
-  // The center-wide scope is reserved for management and platform staff.
   const isCenterWide =
     userRole === "DIRECTOR" || userRole === "CENTER_ADMIN" || isPlatformStaff;
 
-  // SECURITY: scope homework by role. Default is an empty scope — roles that do
-  // not match an explicit branch (or lack a membership in the active center)
-  // see nothing instead of the whole center's assignments.
   let homeworksWhere: Prisma.HomeworkWhereInput = { id: { in: [] } };
+  let allowedSubmissionStudentIds: string[] | null = null;
 
   if (isCenterWide) {
     homeworksWhere = { lesson: { module: { course: { centerId } } } };
@@ -36,7 +32,6 @@ export default async function CenterHomeworkPage() {
     (userRole === "TEACHER" || userRole === "TEACHER_ASSISTANT") &&
     currentMembership
   ) {
-    // Homework belongs to a course; a teacher sees courses of their own groups.
     const groups = await tenantCtx.getTenantDb().group.findMany({
       where:
         userRole === "TEACHER_ASSISTANT"
@@ -49,8 +44,9 @@ export default async function CenterHomeworkPage() {
       lesson: { module: { course: { centerId, id: { in: courseIds } } } },
     };
   } else if (userRole === "STUDENT" && currentMembership) {
+    allowedSubmissionStudentIds = [currentMembership.id];
     const enrollments = await tenantCtx.getTenantDb().enrollment.findMany({
-      where: { studentMembershipId: currentMembership.id },
+      where: { studentMembershipId: currentMembership.id, status: "ACTIVE" },
       select: { group: { select: { courseId: true } } },
     });
     const courseIds = [...new Set(enrollments.map((e) => e.group.courseId))];
@@ -63,10 +59,14 @@ export default async function CenterHomeworkPage() {
       select: { studentMembershipId: true },
     });
     const childIds = childLinks.map((l) => l.studentMembershipId);
-    const enrollments = await tenantCtx.getTenantDb().enrollment.findMany({
-      where: { studentMembershipId: { in: childIds } },
-      select: { group: { select: { courseId: true } } },
-    });
+    allowedSubmissionStudentIds = childIds;
+    const enrollments =
+      childIds.length > 0
+        ? await tenantCtx.getTenantDb().enrollment.findMany({
+            where: { studentMembershipId: { in: childIds }, status: "ACTIVE" },
+            select: { group: { select: { courseId: true } } },
+          })
+        : [];
     const courseIds = [...new Set(enrollments.map((e) => e.group.courseId))];
     homeworksWhere = {
       lesson: { module: { course: { centerId, id: { in: courseIds } } } },
@@ -82,11 +82,21 @@ export default async function CenterHomeworkPage() {
           material: { select: { id: true, title: true, materialType: true } },
         },
       },
-      submissions: {
-        include: {
-          student: { include: { user: { select: { fullName: true, email: true } } } },
-        },
-      },
+      submissions:
+        allowedSubmissionStudentIds !== null
+          ? {
+              where: {
+                studentMembershipId: { in: allowedSubmissionStudentIds },
+              },
+              include: {
+                student: { include: { user: { select: { fullName: true, email: true } } } },
+              },
+            }
+          : {
+              include: {
+                student: { include: { user: { select: { fullName: true, email: true } } } },
+              },
+            },
     },
     orderBy: { createdAt: "desc" },
   });

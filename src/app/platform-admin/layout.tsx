@@ -10,10 +10,15 @@ export default async function PlatformAdminLayout({
   const session = await getAuthSession();
   if (!session) redirect("/login");
 
+  if (session.user.mustChangePassword) {
+    redirect("/account/change-password");
+  }
+
   const locale = session.user.preferredLanguage;
 
   // Only platform-level roles can access this section
   const allowedPlatformRoles = [
+    "DEVELOPER",
     "SUPERADMIN",
     "PLATFORM_ADMIN",
     "FULL_ACCESS",

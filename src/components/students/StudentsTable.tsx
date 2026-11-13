@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { Clock } from "lucide-react";
 import { t } from "@/i18n";
 import {
   activeEnrollments,
@@ -24,6 +25,7 @@ export function StudentsTable({ students, locale }: StudentsTableProps) {
               <th className="px-5 py-3.5 font-semibold">{t(locale, "students.fullName")}</th>
               <th className="px-5 py-3.5 font-semibold">{t(locale, "students.email")} / {t(locale, "students.phone")}</th>
               <th className="px-5 py-3.5 font-semibold">{t(locale, "students.groups")}</th>
+              <th className="px-5 py-3.5 font-semibold">Последний вход</th>
               <th className="px-5 py-3.5 font-semibold">{t(locale, "students.status")}</th>
               <th className="px-5 py-3.5 font-semibold text-right">{t(locale, "students.actions")}</th>
             </tr>
@@ -67,6 +69,18 @@ export function StudentsTable({ students, locale }: StudentsTableProps) {
                     ) : (
                       <span className="text-slate-500 italic">
                         {t(locale, "students.noGroups")}
+                      </span>
+                    )}
+                  </td>
+                  <td className="px-5 py-3.5">
+                    {student.user.lastLoginAt ? (
+                      <span className="font-mono text-[11px] text-slate-300">
+                        {new Date(student.user.lastLoginAt).toLocaleDateString()}
+                      </span>
+                    ) : (
+                      <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-amber-500/10 text-amber-400 border border-amber-500/20 text-[10px] font-semibold">
+                        <Clock className="w-3 h-3" />
+                        Ни разу не входил
                       </span>
                     )}
                   </td>

@@ -376,8 +376,20 @@ describe("StaffManager (UI)", () => {
     expect(screen.getByPlaceholderText("+998 90 123 45 67")).toBeTruthy();
 
     const select = roleSelect(container);
-    expect(optionValues(select)).toEqual(["CENTER_ADMIN", "TEACHER", "CENTER_SUPPORT"]);
-    expect(optionLabels(select)).toEqual(["Админ центра", "Преподаватель", "Саппорт центра"]);
+    expect(optionValues(select)).toEqual([
+      "CENTER_ADMIN",
+      "ACCOUNTANT",
+      "TEACHER",
+      "TEACHER_ASSISTANT",
+      "CENTER_SUPPORT",
+    ]);
+    expect(optionLabels(select)).toEqual([
+      "Админ центра",
+      "Бухгалтер",
+      "Преподаватель",
+      "Помощник преподавателя",
+      "Саппорт центра",
+    ]);
     expect(select.value).toBe("TEACHER");
   });
 

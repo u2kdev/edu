@@ -3,7 +3,11 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 
-export default function SetupForm() {
+interface SetupFormProps {
+  setupToken?: string;
+}
+
+export default function SetupForm({ setupToken }: SetupFormProps) {
   const router = useRouter();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -17,9 +21,14 @@ export default function SetupForm() {
     setError(null);
 
     try {
+      const headers: Record<string, string> = { "Content-Type": "application/json" };
+      if (setupToken) {
+        headers["x-setup-token"] = setupToken;
+      }
+
       const res = await fetch("/api/platform/first-owner", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers,
         body: JSON.stringify({ email, password, fullName }),
       });
 

@@ -45,6 +45,9 @@ export interface JWTPayload {
   activeCenterId?: string;
   activeCenterRole?: CenterRole | string;
   impersonatorUserId?: string;
+  impersonatedUserId?: string;
+  originalToken?: string;
+  startedAt?: number;
   jti?: string;
 }
 
@@ -121,10 +124,12 @@ export async function getAuthSession(req?: Request): Promise<{
     id: string;
     email: string;
     fullName: string;
+    username?: string | null;
     platformRole: PlatformRole | string;
     avatarUrl?: string | null;
     preferredLanguage: string;
     emailVerified: Date | null;
+    mustChangePassword?: boolean;
   };
   activeCenterId?: string;
   activeCenterRole?: CenterRole | string;
@@ -148,6 +153,15 @@ export async function getAuthSession(req?: Request): Promise<{
     if (authHeader && authHeader.startsWith("Bearer ")) {
       token = authHeader.substring(7).trim();
     }
+    if (!token) {
+      const cookieHeader = req.headers.get("cookie");
+      if (cookieHeader) {
+        const match = cookieHeader.match(/(?:^|;\s*)(?:auth_token|session)=([^;]+)/);
+        if (match) {
+          token = match[1];
+        }
+      }
+    }
   }
 
   // 2. Check next/headers if not extracted from req
@@ -167,7 +181,7 @@ export async function getAuthSession(req?: Request): Promise<{
   if (!token) {
     try {
       const cookieStore = cookies();
-      token = cookieStore.get("auth_token")?.value;
+      token = cookieStore.get("auth_token")?.value || cookieStore.get("session")?.value;
     } catch {
       // outside request scope
     }
@@ -225,7 +239,7 @@ export async function getAuthSession(req?: Request): Promise<{
     },
   });
 
-  if (!user || !user.isActive) return null;
+  if (!user || !user.isActive || user.deletedAt) return null;
 
   const membershipsFormatted = user.memberships.map((m) => ({
     id: m.id,
@@ -267,11 +281,13 @@ export async function getAuthSession(req?: Request): Promise<{
     user: {
       id: user.id,
       email: user.email,
+      username: user.username,
       fullName: user.fullName,
       platformRole: user.platformRole,
       avatarUrl: user.avatarUrl,
       preferredLanguage: languageToLocale(user.preferredLanguage),
       emailVerified: user.emailVerified,
+      mustChangePassword: user.mustChangePassword,
     },
     activeCenterId,
     activeCenterRole,

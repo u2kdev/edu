@@ -1,5 +1,7 @@
 import { NextResponse } from "next/server";
 import { requireTenantAccess, logAuditEvent } from "@/lib/tenant";
+import { assertGroupAccess, requireCenterPermission } from "@/lib/tenant-access";
+import { notifyParentsOnAttendance } from "@/lib/notifications";
 import { z } from "zod";
 
 const AttendanceStatusEnum = z.enum(["PRESENT", "ABSENT", "EXCUSED", "LATE"]);
@@ -16,7 +18,13 @@ export async function POST(req: Request) {
   try {
     const tenantCtx = await requireTenantAccess(req);
     const tenantDb = tenantCtx.getTenantDb();
-    if (tenantCtx.role !== "DIRECTOR" && tenantCtx.role !== "CENTER_ADMIN" && tenantCtx.role !== "TEACHER" && !tenantCtx.isPlatformStaff) {
+    if (
+      tenantCtx.role !== "DIRECTOR" &&
+      tenantCtx.role !== "CENTER_ADMIN" &&
+      tenantCtx.role !== "TEACHER" &&
+      tenantCtx.role !== "TEACHER_ASSISTANT" &&
+      !tenantCtx.isPlatformStaff
+    ) {
       return NextResponse.json({ error: "Forbidden" }, { status: 403 });
     }
 
@@ -31,14 +39,8 @@ export async function POST(req: Request) {
 
     const { lessonId, groupId, defaultStatus, studentStatusMap } = parsed.data;
 
-    if (tenantCtx.role === "TEACHER" && tenantCtx.membership) {
-      const isTeacherGroup = await tenantDb.group.findFirst({
-        where: { id: groupId, teacherMembershipId: tenantCtx.membership.id },
-      });
-      if (!isTeacherGroup) {
-        return NextResponse.json({ error: "You can only mark attendance for your own groups" }, { status: 403 });
-      }
-    }
+    // Use centralized group access assertion (handles TEACHER and TEACHER_ASSISTANT)
+    await assertGroupAccess(tenantCtx, groupId, "attendance");
 
     // Verify lesson belongs to the group and center
     const lesson = await tenantDb.lesson.findFirst({
@@ -140,6 +142,13 @@ export async function POST(req: Request) {
           }
         }
       }
+
+      await notifyParentsOnAttendance({
+        centerId: tenantCtx.center.id,
+        lessonId,
+        studentMembershipId: en.studentMembershipId,
+        status,
+      });
     }
 
     await logAuditEvent({

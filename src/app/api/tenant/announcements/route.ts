@@ -94,13 +94,16 @@ export async function POST(req: Request) {
     const tenantCtx = await requireTenantAccess(req);
     const tenantDb = tenantCtx.getTenantDb();
 
-    // Teachers can create announcements for their own groups only
-    if (
-      tenantCtx.role !== "DIRECTOR" &&
-      tenantCtx.role !== "CENTER_ADMIN" &&
-      tenantCtx.role !== "TEACHER" &&
-      !tenantCtx.isPlatformStaff
-    ) {
+    // Director, Admin, Teacher, and Assistant can create announcements
+    const isPrivileged =
+      tenantCtx.role === "DIRECTOR" ||
+      tenantCtx.role === "CENTER_ADMIN" ||
+      tenantCtx.isPlatformStaff;
+
+    const isTeacherOrAssistant =
+      tenantCtx.role === "TEACHER" || tenantCtx.role === "TEACHER_ASSISTANT";
+
+    if (!isPrivileged && !isTeacherOrAssistant) {
       return NextResponse.json({ error: "Forbidden: Cannot create announcements" }, { status: 403 });
     }
 
@@ -114,21 +117,44 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: "Title and body are required" }, { status: 400 });
     }
 
-    if (tenantCtx.role === "TEACHER" && groupId) {
-      const group = await tenantDb.group.findFirst({
+    // Teachers and Assistants MUST specify a group and it must be their own group
+    if (isTeacherOrAssistant) {
+      if (!groupId) {
+        return NextResponse.json(
+          { error: "Forbidden: Teachers and assistants can only post announcements to specific groups" },
+          { status: 403 }
+        );
+      }
+
+      if (targetRole) {
+        return NextResponse.json(
+          { error: "Forbidden: Teachers and assistants cannot broadcast by role" },
+          { status: 403 }
+        );
+      }
+
+      const isAssigned = await tenantDb.group.findFirst({
         where: {
           id: groupId,
-          teacherMembershipId: tenantCtx.membership.id,
+          centerId: tenantCtx.center.id,
+          OR: [
+            { teacherMembershipId: tenantCtx.membership.id },
+            { assistantMembershipId: tenantCtx.membership.id },
+          ],
         },
       });
-      if (!group) {
-        return NextResponse.json({ error: "You can only post announcements to your own groups" }, { status: 403 });
+
+      if (!isAssigned) {
+        return NextResponse.json(
+          { error: "Forbidden: You are not assigned to this group" },
+          { status: 403 }
+        );
       }
     }
 
     if (groupId) {
       const group = await tenantDb.group.findFirst({
-        where: { id: groupId },
+        where: { id: groupId, centerId: tenantCtx.center.id },
       });
       if (!group) return NextResponse.json({ error: "Group not found" }, { status: 404 });
     }
@@ -143,9 +169,9 @@ export async function POST(req: Request) {
         authorId: tenantCtx.membership.id,
         title: title.trim(),
         body: body.trim(),
-        targetRole: targetRole || null,
+        targetRole: isPrivileged ? targetRole || null : null,
         groupId: groupId || null,
-        isPinned: isPinned ?? false,
+        isPinned: isPrivileged ? isPinned ?? false : false,
         publishAt: publishAt ? new Date(publishAt) : new Date(),
         expiresAt: expiresAt ? new Date(expiresAt) : null,
       },
@@ -181,7 +207,10 @@ export async function PATCH(req: Request) {
     });
     if (!existing) return NextResponse.json({ error: "Announcement not found" }, { status: 404 });
 
-    if (tenantCtx.role === "TEACHER" && tenantCtx.membership) {
+    const isTeacherOrAssistant =
+      tenantCtx.role === "TEACHER" || tenantCtx.role === "TEACHER_ASSISTANT";
+
+    if (isTeacherOrAssistant && tenantCtx.membership) {
       if (existing.authorId !== tenantCtx.membership.id) {
         return NextResponse.json({ error: "You can only edit your own announcements" }, { status: 403 });
       }
@@ -238,13 +267,16 @@ export async function DELETE(req: Request) {
     });
     if (!existing) return NextResponse.json({ error: "Announcement not found" }, { status: 404 });
 
-    if (tenantCtx.role === "TEACHER" && tenantCtx.membership && existing.authorId !== tenantCtx.membership.id) {
+    const isTeacherOrAssistant =
+      tenantCtx.role === "TEACHER" || tenantCtx.role === "TEACHER_ASSISTANT";
+
+    if (isTeacherOrAssistant && tenantCtx.membership && existing.authorId !== tenantCtx.membership.id) {
       return NextResponse.json({ error: "You can only delete your own announcements" }, { status: 403 });
     }
     if (
+      !isTeacherOrAssistant &&
       tenantCtx.role !== "DIRECTOR" &&
       tenantCtx.role !== "CENTER_ADMIN" &&
-      tenantCtx.role !== "TEACHER" &&
       !tenantCtx.isPlatformStaff
     ) {
       return NextResponse.json({ error: "Forbidden" }, { status: 403 });

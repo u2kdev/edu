@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { requireTenantAccess } from "@/lib/tenant";
 import { checkSubscriptionLimit } from "@/lib/limits";
 import { hashPassword } from "@/lib/auth";
+import { generateSecurePassword } from "@/lib/generatePassword";
 import crypto from "crypto";
 
 interface CsvRow {
@@ -171,6 +172,12 @@ export async function POST(req: Request) {
 
     let createdCount = 0;
     const executionErrors: { row: number; error: string }[] = [...errors];
+    const credentialsList: Array<{
+      login: string;
+      password: string;
+      fullName: string;
+      role: string;
+    }> = [];
 
     for (const row of validRows) {
       try {
@@ -178,18 +185,21 @@ export async function POST(req: Request) {
           where: { email: row.email },
         });
 
+        let isNewUser = false;
+        const rawPassword = generateSecurePassword(16);
         if (!user) {
-          const tempPassword = crypto.randomBytes(16).toString("hex");
-          const passwordHash = await hashPassword(tempPassword);
+          const passwordHash = await hashPassword(rawPassword);
           user = await tenantDb.platformUser.create({
             data: {
               email: row.email,
               fullName: row.fullName,
               phone: row.phone || null,
               passwordHash,
+              mustChangePassword: true,
               emailVerified: new Date(),
             },
           });
+          isNewUser = true;
         }
 
         let membership = await tenantDb.centerMembership.findFirst({
@@ -236,6 +246,13 @@ export async function POST(req: Request) {
           });
         }
 
+        credentialsList.push({
+          login: user.email,
+          password: isNewUser ? rawPassword : "(действующий пароль аккаунта)",
+          fullName: user.fullName,
+          role: "STUDENT",
+        });
+
         createdCount++;
       } catch (err: unknown) {
         const error = err as { message?: string; status?: number };
@@ -246,11 +263,21 @@ export async function POST(req: Request) {
       }
     }
 
-    return NextResponse.json({
-      success: true,
-      createdCount,
-      errors: executionErrors,
-    });
+    return NextResponse.json(
+      {
+        success: true,
+        createdCount,
+        errors: executionErrors,
+        credentials: credentialsList,
+      },
+      {
+        headers: {
+          "Cache-Control": "no-store, no-cache, must-revalidate, proxy-revalidate",
+          Pragma: "no-cache",
+          Expires: "0",
+        },
+      }
+    );
   } catch (err: unknown) {
     const error = err as { message?: string; status?: number };
     return NextResponse.json(

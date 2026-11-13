@@ -1,9 +1,13 @@
 "use client";
 
 import type { FormEvent } from "react";
-import { AlertCircle, CheckCircle2, ExternalLink, Loader2 } from "lucide-react";
+import { AlertCircle, CheckCircle2, Download, ExternalLink, Loader2 } from "lucide-react";
 import { t } from "@/i18n";
-import { parseSubmissionLinks, type GradeTarget } from "./homework-utils";
+import {
+  parseSubmissionFiles,
+  parseSubmissionLinks,
+  type GradeTarget,
+} from "./homework-utils";
 
 interface GradeHomeworkModalProps {
   locale: string;
@@ -35,6 +39,7 @@ export function GradeHomeworkModal({
   onClose,
 }: GradeHomeworkModalProps) {
   const submissionLinks = target.filesJson ? parseSubmissionLinks(target.filesJson) : null;
+  const submissionFiles = parseSubmissionFiles(target.filesJson);
 
   return (
     <div className="fixed inset-0 z-50 bg-black/70 backdrop-blur-sm flex items-center justify-center p-4">
@@ -78,6 +83,27 @@ export function GradeHomeworkModal({
                 ))}
               </div>
             )}
+          </div>
+        )}
+
+        {submissionFiles.length > 0 && (
+          <div className="p-3 rounded-xl bg-slate-900 border border-slate-800 text-xs text-slate-300 space-y-1.5">
+            <span className="font-semibold text-slate-400 block">Прикреплённые файлы:</span>
+            <div className="flex flex-wrap gap-2">
+              {submissionFiles.map((f, i) => (
+                <a
+                  key={i}
+                  href={f.fileUrl}
+                  download={f.fileName}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-slate-800 hover:bg-slate-700 text-brand-400"
+                >
+                  <Download className="w-3 h-3" />
+                  <span>{f.fileName}</span>
+                </a>
+              ))}
+            </div>
           </div>
         )}
 

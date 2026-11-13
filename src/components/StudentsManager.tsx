@@ -9,6 +9,7 @@ import { StudentsTable } from "./students/StudentsTable";
 import { StudentCard } from "./students/StudentCard";
 import { StudentFormModal } from "./students/StudentFormModal";
 import { CsvImportModal } from "./students/CsvImportModal";
+import { CredentialsModal } from "@/components/CredentialsModal";
 
 export type { GroupOption, StudentItem } from "./students/students-utils";
 
@@ -74,6 +75,8 @@ export default function StudentsManager({
     setAddWithInvite,
     addLoading,
     addCreatedCode,
+    createdCredentials,
+    setCreatedCredentials,
     handleAddSubmit,
     showCsvModal,
     openCsvModal,
@@ -218,6 +221,16 @@ export default function StudentsManager({
           onPreview={handleCsvPreview}
           onExecute={handleCsvExecute}
           onClose={closeCsvModal}
+        />
+      )}
+
+      {/* Single-display credentials modal */}
+      {createdCredentials && (
+        <CredentialsModal
+          isOpen={Boolean(createdCredentials)}
+          onClose={() => setCreatedCredentials(null)}
+          credentials={createdCredentials}
+          locale={locale}
         />
       )}
     </div>

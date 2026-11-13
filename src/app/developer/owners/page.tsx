@@ -32,12 +32,8 @@ export default function PlatformOwnersPage() {
             <Users className="w-6 h-6 text-emerald-400" />
             Platform Administrators
           </h1>
-          <p className="text-zinc-500 mt-1">Manage global system administrators and developers</p>
+          <p className="text-zinc-500 mt-1">Global system administrators and developers (Read-only)</p>
         </div>
-        <button className="px-4 py-2 bg-emerald-600 hover:bg-emerald-500 text-white text-sm font-medium rounded flex items-center gap-2 transition-colors">
-          <Plus className="w-4 h-4" />
-          Add Administrator
-        </button>
       </div>
 
       <div className="bg-zinc-900 border border-zinc-800 rounded p-4">
@@ -88,10 +84,8 @@ export default function PlatformOwnersPage() {
                     <td className="py-3 px-4 text-zinc-500 text-xs">
                       {new Date(owner.createdAt).toLocaleDateString()}
                     </td>
-                    <td className="py-3 px-4 text-right">
-                      <button className="text-zinc-500 hover:text-emerald-400 transition-colors text-xs">
-                        Configure
-                      </button>
+                    <td className="py-3 px-4 text-right text-xs text-zinc-600">
+                      System Managed
                     </td>
                   </tr>
                 ))

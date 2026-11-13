@@ -206,7 +206,7 @@ describe("Platform Organizations (Real DB)", () => {
       setAuth(superAdminId, "SUPERADMIN");
       const slug = `suspend-${Date.now()}`;
       const cReq = await createCenter(mockRequest("/api/platform/centers", {
-        name: "Center Name", slug, directorEmail: `d-${slug}@x.com`, directorFullName: "Dir Name", timeZone: "Asia/Tashkent"
+        name: `Center ${slug}`, slug, directorEmail: `d-${slug}@x.com`, directorFullName: "Dir Name", timeZone: "Asia/Tashkent"
       }));
       const cData = await cReq.json();
       const centerId = cData.center.id;
@@ -241,7 +241,7 @@ describe("Platform Organizations (Real DB)", () => {
       const slug = `perm-${Date.now()}`;
       setAuth(superAdminId, "SUPERADMIN");
       const cReq = await createCenter(mockRequest("/api/platform/centers", {
-        name: "Center Name", slug, directorEmail: `d-${slug}@x.com`, directorFullName: "Dir Name", timeZone: "Asia/Tashkent"
+        name: `Center ${slug}`, slug, directorEmail: `d-${slug}@x.com`, directorFullName: "Dir Name", timeZone: "Asia/Tashkent"
       }));
       const centerId = (await cReq.json()).center.id;
 
@@ -277,7 +277,7 @@ describe("Rate Limit on change director", () => {
         method: "POST",
         headers: { "Content-Type": "application/json", "x-forwarded-for": ip },
         body: JSON.stringify({
-          name: "Center Name", slug: `rldir-${Date.now()}`, directorEmail: `d1-rldir-${Date.now()}@x.com`, directorFullName: "Dir Name", timeZone: "Asia/Tashkent"
+          name: `Center-${Date.now()}`, slug: `rldir-${Date.now()}`, directorEmail: `d1-rldir-${Date.now()}@x.com`, directorFullName: "Dir Name", timeZone: "Asia/Tashkent"
         }),
       });
       const res1 = await createCenter(reqCenter);

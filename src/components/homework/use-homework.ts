@@ -3,11 +3,14 @@
 import { useState, type FormEvent } from "react";
 import { t } from "@/i18n";
 import {
-  buildSubmissionFiles,
+  buildSubmissionFilesWithAttachments,
+  isParentRole,
   isStudentRole,
   isTeacherRole,
   matchesHomeworkFilter,
+  parseSubmissionFiles,
   type GradeTarget,
+  type HomeworkAttachmentItem,
   type HomeworkItem,
   type HomeworkSubmission,
 } from "./homework-utils";
@@ -33,6 +36,10 @@ export function useHomework({
   const [submissionText, setSubmissionText] = useState("");
   const [linkUrl, setLinkUrl] = useState("");
   const [linkTitle, setLinkTitle] = useState("");
+  const [attachments, setAttachments] = useState<HomeworkAttachmentItem[]>([]);
+  const [isLockedAccepted, setIsLockedAccepted] = useState(false);
+  const [uploadingFile, setUploadingFile] = useState(false);
+  const [uploadError, setUploadError] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [submitSuccess, setSubmitSuccess] = useState<string | null>(null);
   const [submitError, setSubmitError] = useState<string | null>(null);
@@ -47,11 +54,10 @@ export function useHomework({
 
   const isStudent = isStudentRole(userRole);
   const isTeacher = isTeacherRole(userRole);
+  const isParent = isParentRole(userRole);
 
-  // The toolbar filter now really filters. `homeworkList` stays intact, so
-  // switching back to ALL never loses rows.
   const visibleHomeworks = homeworkList.filter((hw) =>
-    matchesHomeworkFilter(hw, filterStatus, { isStudent, userMembershipId }),
+    matchesHomeworkFilter(hw, filterStatus, { isStudent, userMembershipId })
   );
 
   const handleOpenSubmit = (hw: HomeworkItem) => {
@@ -60,21 +66,70 @@ export function useHomework({
     setSubmissionText(existing?.submissionText || "");
     setLinkUrl("");
     setLinkTitle("");
+    setAttachments(parseSubmissionFiles(existing?.filesJson || null));
+    setIsLockedAccepted(existing?.status === "ACCEPTED");
+    setUploadError(null);
     setSubmitSuccess(null);
     setSubmitError(null);
   };
 
   const closeSubmit = () => setSubmittingHwId(null);
 
+  const handleUploadFiles = async (fileList: FileList | null) => {
+    if (!fileList || fileList.length === 0 || isLockedAccepted) return;
+    setUploadingFile(true);
+    setUploadError(null);
+
+    try {
+      const uploaded: HomeworkAttachmentItem[] = [];
+      for (const file of Array.from(fileList)) {
+        const formData = new FormData();
+        formData.append("file", file);
+        formData.append("category", "HOMEWORK");
+
+        const res = await fetch("/api/upload", {
+          method: "POST",
+          body: formData,
+        });
+        const data = (await res.json()) as {
+          error?: string;
+          fileUrl?: string;
+          originalName?: string;
+          sizeBytes?: number;
+          mimeType?: string;
+        };
+        if (!res.ok || !data.fileUrl) {
+          throw new Error(data.error || "Не удалось загрузить файл");
+        }
+        uploaded.push({
+          fileUrl: data.fileUrl,
+          fileName: data.originalName || file.name,
+          sizeBytes: data.sizeBytes ?? file.size,
+          mimeType: data.mimeType ?? file.type,
+        });
+      }
+      setAttachments((prev) => [...prev, ...uploaded]);
+    } catch (err: unknown) {
+      setUploadError(err instanceof Error ? err.message : "Ошибка загрузки файла");
+    } finally {
+      setUploadingFile(false);
+    }
+  };
+
+  const handleRemoveAttachment = (idx: number) => {
+    if (isLockedAccepted) return;
+    setAttachments((prev) => prev.filter((_, i) => i !== idx));
+  };
+
   const handleSubmit = async (e: FormEvent) => {
     e.preventDefault();
-    if (!submittingHwId) return;
+    if (!submittingHwId || isLockedAccepted) return;
 
     setIsSubmitting(true);
     setSubmitError(null);
     setSubmitSuccess(null);
 
-    const filesPayload = buildSubmissionFiles(linkUrl, linkTitle);
+    const filesPayload = buildSubmissionFilesWithAttachments(linkUrl, linkTitle, attachments);
 
     try {
       const res = await fetch("/api/homework", {
@@ -90,7 +145,6 @@ export function useHomework({
 
       if (res.ok) {
         setSubmitSuccess(t(locale, "homework.submitSuccess"));
-        // Update local state
         setHomeworkList((prev) =>
           prev.map((hw) => {
             if (hw.id !== submittingHwId) return hw;
@@ -165,7 +219,6 @@ export function useHomework({
       });
 
       if (res.ok) {
-        // Update local state
         setHomeworkList((prev) =>
           prev.map((hw) => {
             if (hw.id !== gradingSubmission.hwId) return hw;
@@ -200,6 +253,7 @@ export function useHomework({
     setFilterStatus,
     isStudent,
     isTeacher,
+    isParent,
     // Student submit modal
     submittingHwId,
     handleOpenSubmit,
@@ -210,6 +264,12 @@ export function useHomework({
     setLinkUrl,
     linkTitle,
     setLinkTitle,
+    attachments,
+    isLockedAccepted,
+    uploadingFile,
+    uploadError,
+    handleUploadFiles,
+    handleRemoveAttachment,
     isSubmitting,
     submitSuccess,
     submitError,

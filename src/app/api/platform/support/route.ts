@@ -2,65 +2,132 @@ import { NextResponse } from "next/server";
 // Reason: Exception: Platform routes manage global models.
 // eslint-disable-next-line no-restricted-imports
 import { db } from "@/lib/db";
-import { requirePlatformOwner, handlePlatformError } from "@/lib/platformAuth";
-import type { TicketStatus } from "@prisma/client";
-
-const TICKET_STATUSES: TicketStatus[] = ["OPEN", "IN_PROGRESS", "RESOLVED", "CLOSED"];
+import { getAuthSession } from "@/lib/auth";
+import { requirePlatformPermission, handlePlatformError } from "@/lib/platformAuth";
+import type { Prisma, TicketStatus, TicketPriority } from "@prisma/client";
+import { z } from "zod";
 
 export async function GET(req: Request) {
   try {
-    await requirePlatformOwner();
+    await requirePlatformPermission("platform.support", req);
     const { searchParams } = new URL(req.url);
-    const status = searchParams.get("status");
+    const status = searchParams.get("status")?.trim() || "";
+    const priority = searchParams.get("priority")?.trim() || "";
+    const search = searchParams.get("search")?.trim() || "";
+    const unansweredOnly = searchParams.get("unanswered") === "true";
+    const page = Math.max(1, parseInt(searchParams.get("page") || "1", 10));
+    const limit = Math.min(100, Math.max(1, parseInt(searchParams.get("limit") || "25", 10)));
+    const skip = (page - 1) * limit;
 
-    const whereClause: { status?: TicketStatus } = {};
-    if (status && TICKET_STATUSES.includes(status as TicketStatus)) {
-      whereClause.status = status as TicketStatus;
+    const twentyFourHoursAgo = new Date(Date.now() - 24 * 60 * 60 * 1000);
+
+    const where: Prisma.SupportTicketWhereInput = {};
+
+    if (status && status !== "ALL") {
+      where.status = status as TicketStatus;
     }
 
-    const tickets = await db.supportTicket.findMany({
-      where: whereClause,
-      include: {
-        creator: { select: { fullName: true, email: true } },
-        center: { select: { name: true, slug: true } },
-        _count: { select: { messages: true } },
-      },
-      orderBy: { createdAt: "desc" },
-    });
+    if (priority && priority !== "ALL") {
+      where.priority = priority as TicketPriority;
+    }
 
-    return NextResponse.json({ tickets });
+    if (unansweredOnly) {
+      where.status = { in: ["OPEN", "IN_PROGRESS"] };
+      where.createdAt = { lte: twentyFourHoursAgo };
+    }
+
+    if (search) {
+      where.OR = [
+        { subject: { contains: search, mode: "insensitive" } },
+        { creator: { fullName: { contains: search, mode: "insensitive" } } },
+        { center: { name: { contains: search, mode: "insensitive" } } },
+      ];
+    }
+
+    const [tickets, totalCount, unansweredCount] = await Promise.all([
+      db.supportTicket.findMany({
+        where,
+        include: {
+          creator: { select: { fullName: true, email: true } },
+          center: { select: { id: true, name: true, slug: true } },
+          assignedTo: { select: { id: true, fullName: true } },
+          _count: { select: { messages: true } },
+        },
+        orderBy: { createdAt: "desc" },
+        skip,
+        take: limit,
+      }),
+      db.supportTicket.count({ where }),
+      db.supportTicket.count({
+        where: {
+          status: { in: ["OPEN", "IN_PROGRESS"] },
+          createdAt: { lte: twentyFourHoursAgo },
+        },
+      }),
+    ]);
+
+    return NextResponse.json({
+      success: true,
+      tickets,
+      pagination: {
+        page,
+        limit,
+        total: totalCount,
+        totalPages: Math.ceil(totalCount / limit),
+      },
+      unansweredCount,
+    });
   } catch (err: unknown) {
     return handlePlatformError(err);
   }
 }
 
-export async function PATCH(req: Request) {
+export async function POST(req: Request) {
   try {
-    const session = await requirePlatformOwner();
-    const { id, status } = await req.json();
-
-    if (!id || !status) {
-      return NextResponse.json({ error: "Ticket ID and status required" }, { status: 400 });
+    const session = await getAuthSession(req);
+    if (!session?.user) {
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
-    const ticket = await db.supportTicket.update({
-      where: { id },
-      data: { status },
-      include: { creator: { select: { fullName: true, email: true } } },
-    });
+    const body = await req.json();
+    const parsed = z
+      .object({
+        subject: z.string().min(2, "Тема должна содержать минимум 2 символа").max(200),
+        message: z.string().min(5, "Сообщение должно содержать минимум 5 символов"),
+        priority: z.enum(["LOW", "MEDIUM", "HIGH", "URGENT"]).optional().default("MEDIUM"),
+        centerId: z.string().uuid().optional(),
+      })
+      .safeParse(body);
 
-    // Optionally add an audit log for ticket status change
-    await db.auditLog.create({
+    if (!parsed.success) {
+      return NextResponse.json({ error: parsed.error.issues[0]?.message || "Validation failed" }, { status: 400 });
+    }
+
+    const { subject, message, priority, centerId } = parsed.data;
+
+    const ticket = await db.supportTicket.create({
       data: {
-        actorUserId: session.user.id,
-        action: "PLATFORM_TICKET_UPDATED",
-        resource: "SupportTicket",
-        resourceId: ticket.id,
-        detailsJson: JSON.stringify({ status }),
+        subject,
+        priority,
+        centerId: centerId || null,
+        creatorUserId: session.user.id,
+        status: "OPEN",
+        messages: {
+          create: {
+            message,
+            senderUserId: session.user.id,
+            isInternal: false,
+          },
+        },
+      },
+      include: {
+        creator: { select: { fullName: true, email: true } },
+        center: { select: { id: true, name: true, slug: true } },
+        messages: true,
       },
     });
 
-    return NextResponse.json({ success: true, ticket });
+    return NextResponse.json({ success: true, ticket }, { status: 201 });
   } catch (err: unknown) {
     return handlePlatformError(err);
   }

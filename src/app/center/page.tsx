@@ -1,3 +1,4 @@
+import type { Prisma } from "@prisma/client";
 import { requireTenantPageAccess } from "@/lib/tenant";
 import { getAuthSession } from "@/lib/auth";
 import { redirect } from "next/navigation";
@@ -5,9 +6,21 @@ import Link from "next/link";
 import {
   Users, BookOpen, CreditCard, Sparkles, CheckCircle2,
   ArrowRight, AlertTriangle, CalendarDays, ClipboardCheck,
-  Flame, Clock, ShieldCheck, BarChart3, GraduationCap, Plus
+  Flame, Clock, ShieldCheck, BarChart3, GraduationCap, Plus,
+  Building2, Layers, AlertCircle, UserX, CalendarX, FileWarning
 } from "lucide-react";
 import { t, formatCurrencyLocalized, formatDateLocalized } from "@/i18n";
+import { getCenterSubscriptionUsage } from "@/lib/limits";
+import { calculateStudentDebts } from "@/lib/finance";
+import {
+  calculateStudentBalances,
+  StudentBalanceSummaryDTO,
+} from "@/lib/student-balance";
+import { CenterTrendCharts, DailyTrendPoint } from "@/components/dashboard/CenterTrendCharts";
+import {
+  ParentChildSwitcherBar,
+  ParentChildFilterSlot,
+} from "@/components/dashboard/ParentChildFilter";
 
 export default async function CenterDashboardPage() {
   const tenantCtx = await requireTenantPageAccess();
@@ -85,6 +98,17 @@ interface UrgentHomeworkItem {
   let pendingHomeworksCount = 0;
   let urgentHomeworks: UrgentHomeworkItem[] = [];
   let attendanceRate: number | null = null;
+  let debtorsCount = 0;
+  let totalDebtAmount = 0;
+  let groupsWithoutTeacherCount = 0;
+  let groupsWithoutScheduleCount = 0;
+  let unmarkedLessonsCount = 0;
+  let inactiveTeachersCount = 0;
+  let trendPoints: DailyTrendPoint[] = [];
+  let todayLessonsCount = 0;
+  let teacherUnmarkedCount = 0;
+  let teacherUpcomingHomeworks: Array<{ id: string; title: string; dueDate: Date | null }> = [];
+  let teacherAtRiskStudents: Array<{ id: string; name: string; group: string; rate: number | null }> = [];
 
   activeStudentsCount = await tenantCtx.getTenantDb().centerMembership.count({
     where: { centerId: activeCenterId, role: "STUDENT", status: "ACTIVE" },
@@ -139,6 +163,125 @@ interface UrgentHomeworkItem {
       orderBy: [{ dayOfWeek: "asc" }, { startTime: "asc" }],
       take: 6,
     });
+
+    // 1. Debtors calculation
+    const debtCalc = await calculateStudentDebts(activeCenterId).catch(() => null);
+    if (debtCalc) {
+      debtorsCount = debtCalc.summary.debtorsCount;
+      totalDebtAmount = debtCalc.summary.totalDebt;
+    }
+
+    const tdb = tenantCtx.getTenantDb();
+
+    // 2. Groups without teacher
+    groupsWithoutTeacherCount = tdb.group?.count
+      ? await tdb.group.count({
+          where: { centerId: activeCenterId, teacherMembershipId: null },
+        })
+      : 0;
+
+    // 3. Groups without schedule
+    groupsWithoutScheduleCount = tdb.group?.count
+      ? await tdb.group.count({
+          where: {
+            centerId: activeCenterId,
+            scheduleSlots: { none: { status: "ACTIVE" } },
+          },
+        })
+      : 0;
+
+    // 4. Lessons without attendance for 3 days
+    const threeDaysAgo = new Date(Date.now() - 3 * 24 * 60 * 60 * 1000);
+    unmarkedLessonsCount = tdb.lesson?.count
+      ? await tdb.lesson.count({
+          where: {
+            module: { course: { centerId: activeCenterId } },
+            scheduledAt: { gte: threeDaysAgo, lte: new Date() },
+            attendances: { none: {} },
+          },
+        })
+      : 0;
+
+    // 5. Inactive teachers (no login for 14 days or never)
+    const fourteenDaysAgo = new Date(Date.now() - 14 * 24 * 60 * 60 * 1000);
+    inactiveTeachersCount = tdb.centerMembership?.count
+      ? await tdb.centerMembership.count({
+          where: {
+            centerId: activeCenterId,
+            role: "TEACHER",
+            status: "ACTIVE",
+            OR: [
+              { user: { lastLoginAt: null } },
+              { user: { lastLoginAt: { lt: fourteenDaysAgo } } },
+            ],
+          },
+        })
+      : 0;
+
+    // 6. 90-day trend data for Attendance & Revenue
+    const ninetyDaysAgo = new Date(Date.now() - 90 * 24 * 60 * 60 * 1000);
+    const [recentAttendances, recentPayments] = await Promise.all([
+      tdb.attendance?.findMany
+        ? tdb.attendance.findMany({
+            where: {
+              lesson: { module: { course: { centerId: activeCenterId } } },
+              createdAt: { gte: ninetyDaysAgo },
+            },
+            select: { createdAt: true, status: true },
+          })
+        : Promise.resolve([]),
+      tdb.centerPayment?.findMany
+        ? tdb.centerPayment.findMany({
+            where: {
+              centerId: activeCenterId,
+              status: "PAID",
+              paidAt: { gte: ninetyDaysAgo },
+            },
+            select: { paidAt: true, amount: true },
+          })
+        : Promise.resolve([]),
+    ]);
+
+    const dayMap = new Map<string, { totalAttendance: number; presentAttendance: number; revenue: number }>();
+    for (let i = 89; i >= 0; i--) {
+      const d = new Date(Date.now() - i * 24 * 60 * 60 * 1000);
+      const key = d.toISOString().slice(0, 10);
+      dayMap.set(key, { totalAttendance: 0, presentAttendance: 0, revenue: 0 });
+    }
+
+    for (const a of recentAttendances) {
+      if (!a.createdAt) continue;
+      const key = a.createdAt.toISOString().slice(0, 10);
+      const existing = dayMap.get(key);
+      if (existing) {
+        existing.totalAttendance++;
+        if (a.status === "PRESENT" || a.status === "LATE") {
+          existing.presentAttendance++;
+        }
+      }
+    }
+
+    for (const p of recentPayments) {
+      if (p.paidAt) {
+        const key = p.paidAt.toISOString().slice(0, 10);
+        const existing = dayMap.get(key);
+        if (existing) {
+          existing.revenue += p.amount;
+        }
+      }
+    }
+
+    trendPoints = Array.from(dayMap.entries()).map(([date, val]) => {
+      const d = new Date(date);
+      const label = d.toLocaleDateString(locale === "uz" ? "uz-UZ" : "ru-RU", { day: "numeric", month: "short" });
+      return {
+        date,
+        label,
+        totalAttendance: val.totalAttendance,
+        presentAttendance: val.presentAttendance,
+        revenue: val.revenue,
+      };
+    });
   }
 
   // Teacher specific schedule and pending homework reviews
@@ -162,49 +305,155 @@ interface UrgentHomeworkItem {
   let teacherScheduleSlots: TeacherScheduleSlotItem[] = [];
   let pendingReviewsList: PendingReviewItem[] = [];
 
-  if (activeRole === "TEACHER") {
+  if (activeRole === "TEACHER" || activeRole === "TEACHER_ASSISTANT") {
     const teacherMem = session.memberships.find((m) => m.centerId === activeCenterId);
     if (teacherMem) {
-      teacherScheduleSlots = await tenantCtx.getTenantDb().scheduleSlot.findMany({
-        where: {
-          centerId: activeCenterId,
-          teacherMembershipId: teacherMem.id,
-          status: "ACTIVE",
-        },
-        include: {
-          group: { include: { course: { select: { title: true } } } },
-        },
-        orderBy: [{ dayOfWeek: "asc" }, { startTime: "asc" }],
-      });
+      const tdb = tenantCtx.getTenantDb();
+      const memberGroups = tdb.group?.findMany
+        ? await tdb.group.findMany({
+            where: {
+              centerId: activeCenterId,
+              OR: [
+                { teacherMembershipId: teacherMem.id },
+                { assistantMembershipId: teacherMem.id },
+              ],
+            },
+            select: { id: true },
+          })
+        : [];
+      const memberGroupIds = memberGroups.map((g) => g.id);
 
-      pendingHomeworksCount = await tenantCtx.getTenantDb().homeworkSubmission.count({
-        where: {
-          homework: { lesson: { module: { course: { centerId: activeCenterId } } } },
-          grade: null,
-          status: "SUBMITTED",
-        },
-      });
+      teacherScheduleSlots = tdb.scheduleSlot?.findMany
+        ? await tdb.scheduleSlot.findMany({
+            where: {
+              centerId: activeCenterId,
+              ...(memberGroupIds.length > 0
+                ? {
+                    OR: [
+                      { teacherMembershipId: teacherMem.id },
+                      { groupId: { in: memberGroupIds } },
+                    ],
+                  }
+                : { teacherMembershipId: teacherMem.id }),
+              status: "ACTIVE",
+            },
+            include: {
+              group: { include: { course: { select: { title: true } } } },
+            },
+            orderBy: [{ dayOfWeek: "asc" }, { startTime: "asc" }],
+          })
+        : [];
 
-      const rawSubmissions = await tenantCtx.getTenantDb().homeworkSubmission.findMany({
-        where: {
-          homework: { lesson: { module: { course: { centerId: activeCenterId } } } },
-          grade: null,
-          status: "SUBMITTED",
-        },
-        include: {
-          student: { include: { user: { select: { fullName: true, email: true } } } },
-          homework: { select: { title: true } },
-        },
-        orderBy: { submittedAt: "desc" },
-        take: 5,
-      });
+      const reviewFilter: Prisma.HomeworkSubmissionWhereInput =
+        memberGroupIds.length > 0
+          ? {
+              OR: [
+                { groupId: { in: memberGroupIds } },
+                {
+                  student: {
+                    enrollments: {
+                      some: { groupId: { in: memberGroupIds }, status: "ACTIVE" },
+                    },
+                  },
+                },
+              ],
+              homework: { lesson: { module: { course: { centerId: activeCenterId } } } },
+              grade: null,
+              status: "SUBMITTED",
+            }
+          : {
+              homework: { lesson: { module: { course: { centerId: activeCenterId } } } },
+              grade: null,
+              status: "SUBMITTED",
+            };
 
-      pendingReviewsList = rawSubmissions.map((s) => ({
-        id: s.id,
-        studentName: s.student.user.fullName || s.student.user.email,
-        homeworkTitle: s.homework.title,
-        submittedAt: s.submittedAt,
-      }));
+      if (memberGroupIds.length > 0 || tdb.homeworkSubmission?.count) {
+        pendingHomeworksCount = tdb.homeworkSubmission?.count
+          ? await tdb.homeworkSubmission.count({ where: reviewFilter })
+          : 0;
+
+        const rawSubmissions = tdb.homeworkSubmission?.findMany
+          ? await tdb.homeworkSubmission.findMany({
+              where: reviewFilter,
+              include: {
+                student: { include: { user: { select: { fullName: true, email: true } } } },
+                homework: { select: { title: true } },
+              },
+              orderBy: { submittedAt: "desc" },
+              take: 5,
+            })
+          : [];
+
+        pendingReviewsList = rawSubmissions.map((s) => ({
+          id: s.id,
+          studentName: s.student.user.fullName || s.student.user.email,
+          homeworkTitle: s.homework.title,
+          submittedAt: s.submittedAt,
+        }));
+      }
+
+      if (memberGroupIds.length > 0) {
+        // Teacher / Assistant extra KPIs
+        const todayDayOfWeek = new Date().getDay();
+        todayLessonsCount = teacherScheduleSlots.filter((s) => s.dayOfWeek === todayDayOfWeek).length;
+
+        const thirtyDaysAgo = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000);
+        teacherUnmarkedCount = tdb.lesson?.count
+          ? await tdb.lesson.count({
+              where: {
+                centerId: activeCenterId,
+                status: "ACTIVE",
+                scheduledAt: { lt: new Date(), gte: thirtyDaysAgo },
+                attendances: { none: {} },
+                module: { course: { groups: { some: { id: { in: memberGroupIds } } } } },
+              },
+            })
+          : 0;
+
+        teacherUpcomingHomeworks = tdb.homework?.findMany
+          ? await tdb.homework.findMany({
+              where: {
+                centerId: activeCenterId,
+                dueDate: { gte: new Date(), lte: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000) },
+                lesson: { module: { course: { groups: { some: { id: { in: memberGroupIds } } } } } },
+              },
+              select: { id: true, title: true, dueDate: true },
+              orderBy: { dueDate: "asc" },
+              take: 4,
+            })
+          : [];
+
+        const teacherEnrollments = tdb.enrollment?.findMany
+          ? await tdb.enrollment.findMany({
+              where: { groupId: { in: memberGroupIds }, status: "ACTIVE" },
+              include: {
+                student: {
+                  include: {
+                    user: { select: { fullName: true } },
+                    attendances: { select: { status: true } },
+                  },
+                },
+                group: { select: { name: true } },
+              },
+            })
+          : [];
+
+        teacherAtRiskStudents = teacherEnrollments
+          .map((en) => {
+            const atts = en.student.attendances || [];
+            const tot = atts.length;
+            const pres = atts.filter((a) => a.status === "PRESENT" || a.status === "LATE").length;
+            const rate = tot > 0 ? Math.round((pres / tot) * 100) : null;
+            return {
+              id: en.student.id,
+              name: en.student.user.fullName,
+              group: en.group.name,
+              rate,
+            };
+          })
+          .filter((s) => s.rate !== null && s.rate < 80)
+          .slice(0, 5);
+      }
     }
   }
 
@@ -364,12 +613,32 @@ interface UrgentHomeworkItem {
     }
   }
 
+  let studentBalanceSummary: StudentBalanceSummaryDTO | null = null;
+  if (activeRole === "STUDENT") {
+    const studentMem = session.memberships.find((m) => m.centerId === activeCenterId);
+    if (studentMem) {
+      try {
+        const balances = await calculateStudentBalances({
+          centerId: activeCenterId,
+          studentMembershipIds: [studentMem.id],
+        });
+        studentBalanceSummary = balances[0] || null;
+      } catch {
+        studentBalanceSummary = null;
+      }
+    }
+  }
+
   // Parent specific data
   interface ParentChildDetail {
     id: string;
     studentMembershipId: string;
     fullName: string;
     email: string;
+    debtAmount: number;
+    totalPaid: number;
+    nextPaymentAmount: number | null;
+    nextPaymentDate: string | null;
     enrollments: Array<{ id: string; groupName: string; courseTitle: string }>;
     scheduleSlots: Array<{
       id: string;
@@ -380,6 +649,13 @@ interface UrgentHomeworkItem {
       courseTitle: string;
       groupName: string;
       teacherName: string;
+    }>;
+    homeworkItems: Array<{
+      id: string;
+      title: string;
+      courseTitle: string;
+      dueDate: Date | null;
+      status: string;
     }>;
     attendanceRate: number | null;
     attendedClasses: number;
@@ -403,6 +679,11 @@ interface UrgentHomeworkItem {
   }
 
   let detailedChildren: ParentChildDetail[] = [];
+  let subUsage: Awaited<ReturnType<typeof getCenterSubscriptionUsage>> | null = null;
+
+  if (activeRole === "DIRECTOR" || activeRole === "CENTER_ADMIN") {
+    subUsage = await getCenterSubscriptionUsage(activeCenterId);
+  }
 
   if (activeRole === "PARENT") {
     const parentMem = session.memberships.find((m) => m.centerId === activeCenterId);
@@ -423,9 +704,61 @@ interface UrgentHomeworkItem {
         },
       });
 
+      const childIdsAll = rawLinks.map((l) => l.student.id);
+      let childBalances: StudentBalanceSummaryDTO[] = [];
+      if (childIdsAll.length > 0) {
+        try {
+          childBalances = await calculateStudentBalances({
+            centerId: activeCenterId,
+            studentMembershipIds: childIdsAll,
+          });
+        } catch {
+          childBalances = [];
+        }
+      }
+      const childBalanceMap = new Map(
+        childBalances.map((b) => [b.studentMembershipId, b])
+      );
+
       for (const link of rawLinks) {
         const sMemId = link.student.id;
         const childGroupIds = link.student.enrollments.map((en) => en.group.id);
+        const childCourseIds = link.student.enrollments.map(
+          (en) => en.group.courseId
+        );
+        const childBal = childBalanceMap.get(sMemId);
+
+        let childHomeworks: ParentChildDetail["homeworkItems"] = [];
+        if (childCourseIds.length > 0) {
+          const hws = await tenantCtx.getTenantDb().homework.findMany({
+            where: {
+              lesson: {
+                module: { courseId: { in: childCourseIds } },
+              },
+            },
+            include: {
+              lesson: {
+                include: {
+                  module: {
+                    include: { course: { select: { title: true } } },
+                  },
+                },
+              },
+              submissions: {
+                where: { studentMembershipId: sMemId },
+              },
+            },
+            orderBy: { createdAt: "desc" },
+            take: 4,
+          });
+          childHomeworks = hws.map((hw) => ({
+            id: hw.id,
+            title: hw.title,
+            courseTitle: hw.lesson.module.course.title,
+            dueDate: hw.dueDate,
+            status: hw.submissions[0]?.status || "NOT_SUBMITTED",
+          }));
+        }
 
         let childSchedule: ParentChildDetail["scheduleSlots"] = [];
         if (childGroupIds.length > 0) {
@@ -494,12 +827,17 @@ interface UrgentHomeworkItem {
           studentMembershipId: sMemId,
           fullName: link.student.user.fullName,
           email: link.student.user.email,
+          debtAmount: childBal?.debtAmount ?? 0,
+          totalPaid: childBal?.totalPaid ?? 0,
+          nextPaymentAmount: childBal?.nextPayment?.amount ?? null,
+          nextPaymentDate: childBal?.nextPayment?.dueDate ?? null,
           enrollments: link.student.enrollments.map((en) => ({
             id: en.id,
             groupName: en.group.name,
             courseTitle: en.group.course.title,
           })),
           scheduleSlots: childSchedule,
+          homeworkItems: childHomeworks,
           attendanceRate: childAttRate,
           attendedClasses,
           totalClasses,
@@ -540,6 +878,7 @@ interface UrgentHomeworkItem {
                 {activeRole === "DIRECTOR" && t(locale, "dashboard.directorCabinet")}
                 {activeRole === "CENTER_ADMIN" && t(locale, "dashboard.adminCabinet")}
                 {activeRole === "TEACHER" && t(locale, "dashboard.teacherCabinet")}
+                {activeRole === "TEACHER_ASSISTANT" && t(locale, "dashboard.assistantCabinet")}
                 {activeRole === "STUDENT" && t(locale, "dashboard.studentCabinet")}
                 {activeRole === "PARENT" && t(locale, "dashboard.parentCabinet")}
               </span>
@@ -556,7 +895,7 @@ interface UrgentHomeworkItem {
             </p>
           </div>
 
-          {activeRole === "TEACHER" && (
+          {(activeRole === "TEACHER" || activeRole === "TEACHER_ASSISTANT") && (
             <div className="glass-panel p-4 rounded-2xl border border-amber-500/30 bg-amber-950/20 text-right shrink-0">
               <div className="text-xs text-slate-400 uppercase tracking-wider font-semibold">{t(locale, "dashboard.pendingHomeworks")}</div>
               <div className="text-2xl font-extrabold text-amber-400 mt-0.5">{t(locale, "dashboard.homeworksCount", { count: pendingHomeworksCount })}</div>
@@ -582,8 +921,93 @@ interface UrgentHomeworkItem {
       </div>
 
       {/* Teacher View: Schedule & Pending Reviews */}
-      {activeRole === "TEACHER" && (
+      {(activeRole === "TEACHER" || activeRole === "TEACHER_ASSISTANT") && (
         <div className="space-y-8">
+          {/* Teacher & Assistant KPIs */}
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+            <div className="glass-panel p-4 rounded-2xl border border-slate-800 space-y-1">
+              <span className="text-xs font-semibold text-slate-400 uppercase tracking-wider">
+                {t(locale, "dashboard.todayLessons")}
+              </span>
+              <div className="text-2xl font-bold text-white">{todayLessonsCount}</div>
+              <p className="text-[11px] text-slate-500">
+                {t(locale, "dashboard.byTodaySchedule")}
+              </p>
+            </div>
+
+            <Link
+              href="/center/attendance"
+              className="glass-panel p-4 rounded-2xl border border-slate-800 hover:border-amber-500/50 transition-colors space-y-1 block"
+            >
+              <span className="text-xs font-semibold text-slate-400 uppercase tracking-wider">
+                {t(locale, "dashboard.unmarkedAttendance")}
+              </span>
+              <div className={`text-2xl font-bold ${teacherUnmarkedCount > 0 ? "text-amber-400" : "text-emerald-400"}`}>
+                {teacherUnmarkedCount}
+              </div>
+              <p className="text-[11px] text-slate-500">
+                {teacherUnmarkedCount > 0
+                  ? t(locale, "dashboard.needsMarking")
+                  : t(locale, "dashboard.allMarked")}
+              </p>
+            </Link>
+
+            <Link
+              href="/center/homework?status=SUBMITTED"
+              className="glass-panel p-4 rounded-2xl border border-slate-800 hover:border-brand-500/50 transition-colors space-y-1 block"
+            >
+              <span className="text-xs font-semibold text-slate-400 uppercase tracking-wider">
+                {t(locale, "dashboard.homeworksToCheck")}
+              </span>
+              <div className={`text-2xl font-bold ${pendingHomeworksCount > 0 ? "text-amber-400" : "text-slate-300"}`}>
+                {pendingHomeworksCount}
+              </div>
+              <p className="text-[11px] text-slate-500">
+                {t(locale, "dashboard.awaitingCheck")}
+              </p>
+            </Link>
+
+            <Link
+              href="/center/groups"
+              className="glass-panel p-4 rounded-2xl border border-slate-800 hover:border-rose-500/50 transition-colors space-y-1 block"
+            >
+              <span className="text-xs font-semibold text-slate-400 uppercase tracking-wider">
+                {t(locale, "dashboard.riskGroup")}
+              </span>
+              <div className={`text-2xl font-bold ${teacherAtRiskStudents.length > 0 ? "text-rose-400" : "text-emerald-400"}`}>
+                {teacherAtRiskStudents.length}
+              </div>
+              <p className="text-[11px] text-slate-500">
+                {teacherAtRiskStudents.length > 0
+                  ? t(locale, "dashboard.studentsWithAbsences")
+                  : t(locale, "dashboard.noLaggingStudents")}
+              </p>
+            </Link>
+          </div>
+
+          {/* Unmarked Attendance Alert */}
+          {teacherUnmarkedCount > 0 && (
+            <div className="p-4 rounded-2xl bg-amber-500/10 border border-amber-500/30 flex items-center justify-between gap-4">
+              <div className="flex items-center gap-3">
+                <AlertTriangle className="w-5 h-5 text-amber-400 shrink-0" />
+                <div>
+                  <h4 className="text-sm font-bold text-white">
+                    {t(locale, "dashboard.unmarkedLessonsTitle")}
+                  </h4>
+                  <p className="text-xs text-slate-300 mt-0.5">
+                    {t(locale, "dashboard.unmarkedLessonsBody", { count: teacherUnmarkedCount })}
+                  </p>
+                </div>
+              </div>
+              <Link
+                href="/center/attendance"
+                className="px-3.5 py-1.5 bg-amber-600 hover:bg-amber-500 text-white rounded-xl text-xs font-bold shrink-0 transition-colors"
+              >
+                {t(locale, "dashboard.fillJournal")}
+              </Link>
+            </div>
+          )}
+
           {/* My Schedule Grid */}
           <div className="space-y-4">
             <div className="flex items-center justify-between">
@@ -717,6 +1141,64 @@ interface UrgentHomeworkItem {
       {/* Student View: Academic Performance, Schedule, Deadlines & Courses */}
       {activeRole === "STUDENT" && (
         <div className="space-y-8">
+          {/* Student Balance Summary Card */}
+          {studentBalanceSummary && (
+            <div className="glass-panel p-6 rounded-2xl border border-slate-800 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+              <div className="space-y-1">
+                <span className="text-xs font-semibold text-slate-400 uppercase tracking-wider">
+                  {t(locale, "dashboard.studentBalanceTitle")}
+                </span>
+                <div className="flex flex-wrap items-baseline gap-4 pt-1">
+                  <div>
+                    <span className="text-xs text-slate-400 mr-1.5">{t(locale, "dashboard.currentDebt")}</span>
+                    <span
+                      className={`text-xl font-extrabold ${
+                        studentBalanceSummary.debtAmount > 0
+                          ? "text-rose-400"
+                          : "text-emerald-400"
+                      }`}
+                    >
+                      {formatCurrencyLocalized(
+                        studentBalanceSummary.debtAmount,
+                        locale,
+                        "UZS"
+                      )}
+                    </span>
+                  </div>
+                  <div>
+                    <span className="text-xs text-slate-400 mr-1.5">{t(locale, "dashboard.totalPaidLabel")}</span>
+                    <span className="text-base font-bold text-slate-200">
+                      {formatCurrencyLocalized(
+                        studentBalanceSummary.totalPaid,
+                        locale,
+                        "UZS"
+                      )}
+                    </span>
+                  </div>
+                  {studentBalanceSummary.nextPayment && (
+                    <div>
+                      <span className="text-xs text-slate-400 mr-1.5">{t(locale, "dashboard.nextPaymentLabel")}</span>
+                      <span className="text-sm font-semibold text-amber-400">
+                        {formatCurrencyLocalized(
+                          studentBalanceSummary.nextPayment.amount,
+                          locale,
+                          "UZS"
+                        )}
+                      </span>
+                    </div>
+                  )}
+                </div>
+              </div>
+              <Link
+                href="/center/payments"
+                className="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl bg-brand-600 hover:bg-brand-500 text-white text-xs font-bold shrink-0 transition-all"
+              >
+                <CreditCard className="w-4 h-4" />
+                <span>{t(locale, "dashboard.paymentHistoryAndReceipts")}</span>
+              </Link>
+            </div>
+          )}
+
           {/* Academic Performance & Attendance Overview */}
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
             {/* GPA & Attendance Summary */}
@@ -988,9 +1470,25 @@ interface UrgentHomeworkItem {
       {/* Parent View: Multi-child Overview */}
       {activeRole === "PARENT" && (
         <div className="space-y-6">
-          <h2 className="text-xl font-bold text-white flex items-center gap-2">
-            <span>{t(locale, "dashboard.childrenOverview")}</span>
-          </h2>
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+            <h2 className="text-xl font-bold text-white flex items-center gap-2">
+              <span>{t(locale, "dashboard.childrenOverview")}</span>
+            </h2>
+            <Link
+              href="/center/support"
+              className="inline-flex items-center gap-2 px-4 py-2 rounded-xl bg-indigo-600/20 hover:bg-indigo-600/30 border border-indigo-500/30 text-indigo-300 text-xs font-semibold transition-all self-start sm:self-auto"
+            >
+              <span>💬 {t(locale, "dashboard.supportCenterRequest")}</span>
+              <ArrowRight className="w-3.5 h-3.5" />
+            </Link>
+          </div>
+
+          <ParentChildSwitcherBar
+            childrenList={detailedChildren.map((c) => ({
+              studentMembershipId: c.studentMembershipId,
+              fullName: c.fullName,
+            }))}
+          />
 
           {detailedChildren.length === 0 ? (
             <div className="glass-panel p-8 rounded-2xl border border-slate-800 text-center space-y-2">
@@ -1011,7 +1509,11 @@ interface UrgentHomeworkItem {
               };
 
               return (
-                <div key={child.id} className="glass-panel p-6 rounded-2xl border border-slate-800 space-y-6">
+                <ParentChildFilterSlot
+                  key={child.id}
+                  studentMembershipId={child.studentMembershipId}
+                >
+                <div className="glass-panel p-6 rounded-2xl border border-slate-800 space-y-6">
                   {/* Child Top Bar */}
                   <div className="flex flex-col sm:flex-row sm:items-center justify-between border-b border-slate-800 pb-4 gap-4">
                     <div className="flex items-center gap-3">
@@ -1020,16 +1522,37 @@ interface UrgentHomeworkItem {
                       </div>
                       <div>
                         <h3 className="text-lg font-bold text-white">{child.fullName}</h3>
-                        <p className="text-xs text-slate-400">{child.email}</p>
+                        {child.email && (
+                          <p className="text-xs text-slate-400">{child.email}</p>
+                        )}
+                        <p className="text-xs text-slate-400">
+                          {t(locale, "dashboard.debtShort")}{" "}
+                          <span
+                            className={`font-bold ${
+                              child.debtAmount > 0 ? "text-rose-400" : "text-emerald-400"
+                            }`}
+                          >
+                            {formatCurrencyLocalized(child.debtAmount, locale, "UZS")}
+                          </span>{" "}
+                          • {t(locale, "dashboard.paidShort")} {formatCurrencyLocalized(child.totalPaid, locale, "UZS")}
+                        </p>
                       </div>
                     </div>
 
-                    <Link
-                      href="/center/payments"
-                      className="px-4 py-2 bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold rounded-xl transition-all shadow-lg shadow-emerald-600/20 self-start sm:self-auto"
-                    >
-                      💳 {t(locale, "dashboard.parentPayNext")}
-                    </Link>
+                    <div className="flex flex-wrap items-center gap-2">
+                      <Link
+                        href="/center/homework"
+                        className="px-3.5 py-2 bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-semibold rounded-xl transition-all"
+                      >
+                        📝 {t(locale, "dashboard.hwShort")} ({child.homeworkItems.length})
+                      </Link>
+                      <Link
+                        href="/center/payments"
+                        className="px-4 py-2 bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold rounded-xl transition-all shadow-lg shadow-emerald-600/20"
+                      >
+                        💳 {t(locale, "dashboard.parentPayNext")}
+                      </Link>
+                    </div>
                   </div>
 
                   {/* Child Academic & Attendance Stats Row */}
@@ -1176,6 +1699,27 @@ interface UrgentHomeworkItem {
                         </ul>
                       </div>
 
+                      {/* Homework Summary for Child */}
+                      <div className="p-4 rounded-xl bg-slate-900/60 border border-slate-800">
+                        <span className="text-xs font-semibold text-slate-400 uppercase tracking-wider">
+                          {t(locale, "dashboard.childHomeworksTitle")}
+                        </span>
+                        {child.homeworkItems.length === 0 ? (
+                          <p className="text-xs text-slate-500 mt-2">{t(locale, "dashboard.noActiveHomeworks")}</p>
+                        ) : (
+                          <ul className="mt-2 space-y-1.5 text-xs">
+                            {child.homeworkItems.map((hw) => (
+                              <li key={hw.id} className="flex items-center justify-between text-slate-200">
+                                <span className="truncate mr-2">{hw.title}</span>
+                                <span className="px-2 py-0.5 rounded bg-slate-800 text-[10px] font-semibold text-brand-300 shrink-0">
+                                  {hw.status}
+                                </span>
+                              </li>
+                            ))}
+                          </ul>
+                        )}
+                      </div>
+
                       {/* Payment History */}
                       <div className="p-4 rounded-xl bg-slate-900/60 border border-slate-800">
                         <span className="text-xs font-semibold text-slate-400 uppercase tracking-wider">
@@ -1197,6 +1741,7 @@ interface UrgentHomeworkItem {
                     </div>
                   </div>
                 </div>
+                </ParentChildFilterSlot>
               );
             })
           )}
@@ -1206,6 +1751,307 @@ interface UrgentHomeworkItem {
       {/* Director & Admin Dashboard */}
       {(activeRole === "DIRECTOR" || activeRole === "CENTER_ADMIN") && (
         <div className="space-y-6">
+          {/* Subscription and Limits Overview */}
+          {subUsage?.subscription && (
+            <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+              {/* Subscription Card */}
+              <div className="glass-panel p-6 rounded-2xl border border-slate-800 space-y-4">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <div className="w-9 h-9 rounded-xl bg-brand-500/10 border border-brand-500/20 flex items-center justify-center text-brand-400">
+                      <ShieldCheck className="w-5 h-5" />
+                    </div>
+                    <div>
+                      <div className="text-xs text-slate-400 uppercase tracking-wider font-semibold">{t(locale, "dashboard.subscriptionPlanTitle")}</div>
+                      <h3 className="text-lg font-bold text-white">{subUsage.subscription.planName}</h3>
+                    </div>
+                  </div>
+                  <span className={`px-2.5 py-1 rounded-full text-xs font-semibold ${
+                    subUsage.subscription.status === "ACTIVE"
+                      ? "bg-emerald-500/10 text-emerald-400 border border-emerald-500/20"
+                      : subUsage.subscription.status === "TRIAL"
+                      ? "bg-blue-500/10 text-blue-400 border border-blue-500/20"
+                      : "bg-amber-500/10 text-amber-400 border border-amber-500/20"
+                  }`}>
+                    {subUsage.subscription.status}
+                  </span>
+                </div>
+
+                <div className="pt-2 border-t border-slate-800/80 grid grid-cols-2 gap-4">
+                  <div>
+                    <div className="text-[11px] text-slate-500 uppercase tracking-wider font-semibold">
+                      {subUsage.subscription.isTrial ? t(locale, "dashboard.trialDaysLabel") : t(locale, "dashboard.daysToRenewalLabel")}
+                    </div>
+                    <div className="text-2xl font-black text-brand-400 mt-0.5">
+                      {t(locale, "dashboard.daysShort", { count: subUsage.subscription.daysRemaining })}
+                    </div>
+                  </div>
+                  <div>
+                    <div className="text-[11px] text-slate-500 uppercase tracking-wider font-semibold">{t(locale, "dashboard.expiresAtLabel")}</div>
+                    <div className="text-xs font-semibold text-slate-300 mt-1">
+                      {subUsage.subscription.expiresAt
+                        ? formatDateLocalized(subUsage.subscription.expiresAt, locale)
+                        : t(locale, "dashboard.unlimitedLabel")}
+                    </div>
+                  </div>
+                </div>
+
+                <div className="pt-2 border-t border-slate-800/80 flex items-center justify-between text-xs">
+                  <span className="text-slate-400">{t(locale, "dashboard.planQuestions")}</span>
+                  <Link
+                    href="/center/support"
+                    className="text-brand-400 hover:text-brand-300 font-medium hover:underline flex items-center gap-1"
+                  >
+                    {t(locale, "dashboard.supportShort")}
+                    <ArrowRight className="w-3.5 h-3.5" />
+                  </Link>
+                </div>
+              </div>
+
+              {/* Limits and Progress Bars */}
+              <div className="lg:col-span-2 glass-panel p-6 rounded-2xl border border-slate-800 flex flex-col justify-between space-y-4">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <h3 className="text-sm font-bold text-white uppercase tracking-wider flex items-center gap-2">
+                      <Layers className="w-4 h-4 text-brand-400" />
+                      {t(locale, "dashboard.planLimitsTitle")}
+                    </h3>
+                    <p className="text-xs text-slate-400 mt-0.5">
+                      {t(locale, "dashboard.planLimitsSubtitle")}
+                    </p>
+                  </div>
+                  {subUsage.hasWarnings && (
+                    <span className="px-2.5 py-1 rounded-full text-xs font-semibold bg-amber-500/10 text-amber-400 border border-amber-500/20 flex items-center gap-1">
+                      <AlertTriangle className="w-3.5 h-3.5" />
+                      {t(locale, "dashboard.quotaWarning90")}
+                    </span>
+                  )}
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                  {subUsage.limits.map((lim) => (
+                    <div key={lim.resource} className="p-3.5 rounded-xl bg-slate-900/60 border border-slate-800/80 space-y-2">
+                      <div className="flex items-center justify-between text-xs">
+                        <span className="font-semibold text-slate-300">{lim.label}</span>
+                        <span className={`font-bold ${lim.isReached ? "text-rose-400" : lim.isWarning ? "text-amber-400" : "text-white"}`}>
+                          {lim.current} / {lim.max} <span className="text-slate-500 font-normal">({lim.percent}%)</span>
+                        </span>
+                      </div>
+                      <div className="w-full bg-slate-800 h-2 rounded-full overflow-hidden">
+                        <div
+                          className={`h-full rounded-full transition-all duration-500 ${
+                            lim.isReached
+                              ? "bg-rose-500"
+                              : lim.isWarning
+                              ? "bg-amber-500"
+                              : "bg-brand-500"
+                          }`}
+                          style={{ width: `${lim.percent}%` }}
+                        />
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* Needs Attention Block */}
+          <div className="space-y-4">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <div className="w-8 h-8 rounded-lg bg-amber-500/10 border border-amber-500/20 flex items-center justify-center text-amber-400">
+                  <AlertTriangle className="w-4 h-4" />
+                </div>
+                <div>
+                  <h2 className="text-lg font-bold text-white">
+                    {t(locale, "dashboard.needsAttentionTitle")}
+                  </h2>
+                  <p className="text-xs text-slate-400">
+                    {t(locale, "dashboard.needsAttentionSubtitle")}
+                  </p>
+                </div>
+              </div>
+            </div>
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+              {/* 1. Debtors */}
+              <div className="glass-panel p-4 rounded-xl border border-slate-800 flex flex-col justify-between space-y-3">
+                <div className="flex items-start justify-between">
+                  <div className="space-y-1">
+                    <span className="text-xs font-semibold text-slate-400 uppercase tracking-wider">
+                      {t(locale, "dashboard.debtorsTitle")}
+                    </span>
+                    <div className="text-xl font-bold text-rose-400">
+                      {t(locale, "dashboard.studentsCountUnit", { count: debtorsCount })}
+                    </div>
+                    <p className="text-xs text-slate-500">
+                      {t(locale, "dashboard.debtSumPrefix")}: {formatCurrencyLocalized(totalDebtAmount, locale, "UZS")}
+                    </p>
+                  </div>
+                  <div className="w-9 h-9 rounded-lg bg-rose-500/10 border border-rose-500/20 flex items-center justify-center text-rose-400">
+                    <CreditCard className="w-4 h-4" />
+                  </div>
+                </div>
+                <Link
+                  href="/center/finance"
+                  className="text-xs font-semibold text-rose-400 hover:text-rose-300 flex items-center gap-1 hover:underline pt-2 border-t border-slate-800/80"
+                >
+                  <span>{t(locale, "dashboard.goToDebts")}</span>
+                  <ArrowRight className="w-3.5 h-3.5" />
+                </Link>
+              </div>
+
+              {/* 2. Low Attendance */}
+              <div className="glass-panel p-4 rounded-xl border border-slate-800 flex flex-col justify-between space-y-3">
+                <div className="flex items-start justify-between">
+                  <div className="space-y-1">
+                    <span className="text-xs font-semibold text-slate-400 uppercase tracking-wider">
+                      {t(locale, "dashboard.lowAttendanceTitle")}
+                    </span>
+                    <div className={`text-xl font-bold ${atRiskStudentsCount > 0 ? "text-amber-400" : "text-emerald-400"}`}>
+                      {t(locale, "dashboard.studentsCountUnit", { count: atRiskStudentsCount })}
+                    </div>
+                    <p className="text-xs text-slate-500">
+                      {atRiskStudentsCount > 0
+                        ? t(locale, "dashboard.inAbsenceRisk")
+                        : t(locale, "dashboard.allStudentsNormal")}
+                    </p>
+                  </div>
+                  <div className="w-9 h-9 rounded-lg bg-amber-500/10 border border-amber-500/20 flex items-center justify-center text-amber-400">
+                    <AlertCircle className="w-4 h-4" />
+                  </div>
+                </div>
+                <Link
+                  href="/center/attendance"
+                  className="text-xs font-semibold text-amber-400 hover:text-amber-300 flex items-center gap-1 hover:underline pt-2 border-t border-slate-800/80"
+                >
+                  <span>{t(locale, "dashboard.openJournal")}</span>
+                  <ArrowRight className="w-3.5 h-3.5" />
+                </Link>
+              </div>
+
+              {/* 3. Groups without teacher */}
+              <div className="glass-panel p-4 rounded-xl border border-slate-800 flex flex-col justify-between space-y-3">
+                <div className="flex items-start justify-between">
+                  <div className="space-y-1">
+                    <span className="text-xs font-semibold text-slate-400 uppercase tracking-wider">
+                      {t(locale, "dashboard.groupsNoTeacherTitle")}
+                    </span>
+                    <div className={`text-xl font-bold ${groupsWithoutTeacherCount > 0 ? "text-purple-400" : "text-slate-300"}`}>
+                      {t(locale, "dashboard.groupsCountUnit", { count: groupsWithoutTeacherCount })}
+                    </div>
+                    <p className="text-xs text-slate-500">
+                      {groupsWithoutTeacherCount > 0
+                        ? t(locale, "dashboard.needAssignTeacher")
+                        : t(locale, "dashboard.allGroupsStaffed")}
+                    </p>
+                  </div>
+                  <div className="w-9 h-9 rounded-lg bg-purple-500/10 border border-purple-500/20 flex items-center justify-center text-purple-400">
+                    <UserX className="w-4 h-4" />
+                  </div>
+                </div>
+                <Link
+                  href="/center/groups"
+                  className="text-xs font-semibold text-purple-400 hover:text-purple-300 flex items-center gap-1 hover:underline pt-2 border-t border-slate-800/80"
+                >
+                  <span>{t(locale, "dashboard.assignTeacherCta")}</span>
+                  <ArrowRight className="w-3.5 h-3.5" />
+                </Link>
+              </div>
+
+              {/* 4. Groups without schedule */}
+              <div className="glass-panel p-4 rounded-xl border border-slate-800 flex flex-col justify-between space-y-3">
+                <div className="flex items-start justify-between">
+                  <div className="space-y-1">
+                    <span className="text-xs font-semibold text-slate-400 uppercase tracking-wider">
+                      {t(locale, "dashboard.groupsNoScheduleTitle")}
+                    </span>
+                    <div className={`text-xl font-bold ${groupsWithoutScheduleCount > 0 ? "text-blue-400" : "text-slate-300"}`}>
+                      {t(locale, "dashboard.groupsCountUnit", { count: groupsWithoutScheduleCount })}
+                    </div>
+                    <p className="text-xs text-slate-500">
+                      {groupsWithoutScheduleCount > 0
+                        ? t(locale, "dashboard.noActiveSlots")
+                        : t(locale, "dashboard.scheduleComplete")}
+                    </p>
+                  </div>
+                  <div className="w-9 h-9 rounded-lg bg-blue-500/10 border border-blue-500/20 flex items-center justify-center text-blue-400">
+                    <CalendarX className="w-4 h-4" />
+                  </div>
+                </div>
+                <Link
+                  href="/center/schedule"
+                  className="text-xs font-semibold text-blue-400 hover:text-blue-300 flex items-center gap-1 hover:underline pt-2 border-t border-slate-800/80"
+                >
+                  <span>{t(locale, "dashboard.configureScheduleCta")}</span>
+                  <ArrowRight className="w-3.5 h-3.5" />
+                </Link>
+              </div>
+
+              {/* 5. Unmarked attendance for 3 days */}
+              <div className="glass-panel p-4 rounded-xl border border-slate-800 flex flex-col justify-between space-y-3">
+                <div className="flex items-start justify-between">
+                  <div className="space-y-1">
+                    <span className="text-xs font-semibold text-slate-400 uppercase tracking-wider">
+                      {t(locale, "dashboard.missedAttendance3d")}
+                    </span>
+                    <div className={`text-xl font-bold ${unmarkedLessonsCount > 0 ? "text-rose-400" : "text-emerald-400"}`}>
+                      {t(locale, "dashboard.lessonsCountUnit", { count: unmarkedLessonsCount })}
+                    </div>
+                    <p className="text-xs text-slate-500">
+                      {unmarkedLessonsCount > 0
+                        ? t(locale, "dashboard.lessonsWithoutJournal")
+                        : t(locale, "dashboard.allMarksFilled")}
+                    </p>
+                  </div>
+                  <div className="w-9 h-9 rounded-lg bg-rose-500/10 border border-rose-500/20 flex items-center justify-center text-rose-400">
+                    <FileWarning className="w-4 h-4" />
+                  </div>
+                </div>
+                <Link
+                  href="/center/attendance"
+                  className="text-xs font-semibold text-rose-400 hover:text-rose-300 flex items-center gap-1 hover:underline pt-2 border-t border-slate-800/80"
+                >
+                  <span>{t(locale, "dashboard.checkMarksCta")}</span>
+                  <ArrowRight className="w-3.5 h-3.5" />
+                </Link>
+              </div>
+
+              {/* 6. Inactive Teachers */}
+              <div className="glass-panel p-4 rounded-xl border border-slate-800 flex flex-col justify-between space-y-3">
+                <div className="flex items-start justify-between">
+                  <div className="space-y-1">
+                    <span className="text-xs font-semibold text-slate-400 uppercase tracking-wider">
+                      {t(locale, "dashboard.inactiveTeachersTitle")}
+                    </span>
+                    <div className={`text-xl font-bold ${inactiveTeachersCount > 0 ? "text-amber-400" : "text-slate-300"}`}>
+                      {t(locale, "dashboard.teachersCountUnit", { count: inactiveTeachersCount })}
+                    </div>
+                    <p className="text-xs text-slate-500">
+                      {inactiveTeachersCount > 0
+                        ? t(locale, "dashboard.inactiveTeachersDesc")
+                        : t(locale, "dashboard.allTeachersActive")}
+                    </p>
+                  </div>
+                  <div className="w-9 h-9 rounded-lg bg-slate-800 flex items-center justify-center text-slate-400">
+                    <Users className="w-4 h-4" />
+                  </div>
+                </div>
+                <Link
+                  href="/center/staff"
+                  className="text-xs font-semibold text-brand-400 hover:text-brand-300 flex items-center gap-1 hover:underline pt-2 border-t border-slate-800/80"
+                >
+                  <span>{t(locale, "dashboard.teachersListCta")}</span>
+                  <ArrowRight className="w-3.5 h-3.5" />
+                </Link>
+              </div>
+            </div>
+          </div>
+
+          {/* 30-Day Trend Charts Component */}
+          <CenterTrendCharts data={trendPoints} locale={locale} />
+
           {/* Key Metrics Grid */}
           <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
             <div className="glass-panel p-6 rounded-2xl border border-slate-800 flex items-center justify-between">

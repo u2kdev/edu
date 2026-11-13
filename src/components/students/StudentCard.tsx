@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { Clock } from "lucide-react";
 import { t } from "@/i18n";
 import {
   activeEnrollments,
@@ -35,6 +36,18 @@ export function StudentCard({ student, locale }: StudentCardProps) {
               {student.user.phone}
             </p>
           )}
+          <div className="mt-1">
+            {student.user.lastLoginAt ? (
+              <span className="text-[10px] text-slate-400 font-mono">
+                Вход: {new Date(student.user.lastLoginAt).toLocaleDateString()}
+              </span>
+            ) : (
+              <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full bg-amber-500/10 text-amber-400 border border-amber-500/20 text-[9px] font-semibold">
+                <Clock className="w-2.5 h-2.5" />
+                Ни разу не входил
+              </span>
+            )}
+          </div>
         </div>
         <span
           className={`px-2 py-0.5 text-[10px] font-semibold rounded-full ${studentStatusBadgeTone(

@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { requireTenantAccess } from "@/lib/tenant";
+import { checkRateLimit, getClientIp } from "@/lib/rate-limit";
 
 export async function POST(req: Request) {
   try {
@@ -10,6 +11,17 @@ export async function POST(req: Request) {
       return NextResponse.json(
         { error: "Only members can start tests" },
         { status: 403 }
+      );
+    }
+
+    // Rate limiting: max 20 start requests per minute
+    const ip = getClientIp(req);
+    const rateLimitKey = `test_start:${tenantCtx.session.user.id}:${ip}`;
+    const allowed = await checkRateLimit(rateLimitKey, 20, 60 * 1000);
+    if (!allowed) {
+      return NextResponse.json(
+        { error: "Too many test attempts, please try again later" },
+        { status: 429 }
       );
     }
 

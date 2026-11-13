@@ -1,158 +1,199 @@
 import { NextResponse } from "next/server";
-import { requireTenantAccess, logAuditEvent } from "@/lib/tenant";
+import { requireTenantAccess, TenantAccessError, logAuditEvent } from "@/lib/tenant";
+import { hasPermission } from "@/lib/permissions";
+import { getScopedMaterialWhere, assertGroupAccess } from "@/lib/tenant-access";
+import { checkStorageQuota } from "@/lib/storage";
+import { z } from "zod";
+import { MaterialType, Prisma } from "@prisma/client";
 
-// GET /api/materials?lessonId=xxx - List materials for a lesson
+const createMaterialSchema = z.object({
+  title: z.string().min(2, "Title is required"),
+  description: z.string().optional().nullable(),
+  contentText: z.string().optional().nullable(),
+  type: z.string().optional(),
+  materialType: z.string().optional(),
+  fileUrl: z.string().optional().nullable(),
+  externalUrl: z.string().optional().nullable(),
+  fileSizeBytes: z.number().int().optional().nullable(),
+  durationMinutes: z.number().int().optional().nullable(),
+  courseId: z.string().uuid().optional().nullable(),
+  groupId: z.string().uuid().optional().nullable(),
+  lessonId: z.string().uuid().optional().nullable(),
+});
+
+function resolveMaterialType(raw?: string, hasExternalOnly?: boolean): MaterialType {
+  if (!raw) {
+    return hasExternalOnly ? MaterialType.LINK : MaterialType.LECTURE;
+  }
+  const upper = raw.toUpperCase();
+  if (upper in MaterialType) {
+    return upper as MaterialType;
+  }
+  if (upper === "VIDEO") return MaterialType.VIDEO;
+  if (upper === "LINK") return MaterialType.LINK;
+  if (upper === "BOOK" || upper === "PDF") return MaterialType.BOOK;
+  if (upper === "TEST") return MaterialType.TEST;
+  return MaterialType.LECTURE;
+}
+
 export async function GET(req: Request) {
   try {
     const tenantCtx = await requireTenantAccess(req);
-    const tenantDb = tenantCtx.getTenantDb();
+    const { center, getTenantDb } = tenantCtx;
+    const tenantDb = getTenantDb();
+
     const { searchParams } = new URL(req.url);
-    const lessonId = searchParams.get("lessonId");
+    const courseId = searchParams.get("courseId");
+    const groupId = searchParams.get("groupId");
+    const rawType = searchParams.get("type") || searchParams.get("materialType");
+    const search = searchParams.get("search");
 
-    const materials = await tenantDb.material.findMany({
-      where: {
-        ...(lessonId ? { lessonId } : {}),
-      },
-      include: {
-        test: {
-          include: {
-            questions: true,
-          },
+    const scopedWhere = await getScopedMaterialWhere(tenantCtx);
+    const filterWhere: Prisma.MaterialWhereInput = {};
+
+    if (courseId) filterWhere.courseId = courseId;
+    if (groupId) filterWhere.groupId = groupId;
+    if (rawType && rawType in MaterialType) {
+      filterWhere.materialType = rawType as MaterialType;
+    }
+    if (search) {
+      filterWhere.OR = [
+        { title: { contains: search, mode: "insensitive" } },
+        { contentText: { contains: search, mode: "insensitive" } },
+      ];
+    }
+
+    const [materials, quota] = await Promise.all([
+      tenantDb.material.findMany({
+        where: {
+          AND: [scopedWhere, filterWhere],
         },
-      },
-      orderBy: { orderIndex: "asc" },
-    });
-
-    // SECURITY: never expose correct answers to students/parents.
-    // Teachers, center admins, directors and platform staff may see them.
-    const canSeeAnswers =
-      tenantCtx.isPlatformStaff ||
-      ["DIRECTOR", "CENTER_ADMIN", "TEACHER", "TEACHER_ASSISTANT"].includes(tenantCtx.role);
-
-    const sanitized = materials.map((material) => {
-      const test = material.test;
-      if (!test) return material;
-      return {
-        ...material,
-        test: {
-          ...test,
-          questions: test.questions.map((question) =>
-            canSeeAnswers ? question : { ...question, correctAnswer: null }
-          ),
+        include: {
+          course: { select: { id: true, title: true } },
+          group: { select: { id: true, name: true } },
+          lesson: { select: { id: true, title: true } },
         },
-      };
-    });
+        orderBy: { createdAt: "desc" },
+      }),
+      checkStorageQuota(center.id),
+    ]);
 
-    return NextResponse.json({ materials: sanitized });
-  } catch (err: unknown) {
-    const error = err as { message?: string; status?: number };
-    return NextResponse.json({ error: error.status ? error.message : "Server error" }, { status: error.status || 500 });
+    return NextResponse.json({
+      materials,
+      quota: {
+        ...quota,
+        usedMb: Math.round((quota.usedBytes / (1024 * 1024)) * 100) / 100,
+        maxMb: Math.round(quota.maxBytes / (1024 * 1024)),
+      },
+    });
+  } catch (error) {
+    if (error instanceof TenantAccessError) {
+      return NextResponse.json({ error: error.message }, { status: error.status });
+    }
+    console.error("[GET /api/materials]", error);
+    return NextResponse.json({ error: "Internal Server Error" }, { status: 500 });
   }
 }
 
-// POST /api/materials - Create a material (Video, Lecture, Book, Test)
 export async function POST(req: Request) {
   try {
     const tenantCtx = await requireTenantAccess(req);
-    const tenantDb = tenantCtx.getTenantDb();
-    if (tenantCtx.role !== "DIRECTOR" && tenantCtx.role !== "CENTER_ADMIN" && tenantCtx.role !== "TEACHER" && !tenantCtx.isPlatformStaff) {
-      return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+    const { center, role, session, getTenantDb } = tenantCtx;
+    const tenantDb = getTenantDb();
+
+    if (
+      !hasPermission("materials.upload", session.user.platformRole, role) &&
+      !hasPermission("materials.manage", session.user.platformRole, role) &&
+      role !== "TEACHER" &&
+      role !== "TEACHER_ASSISTANT"
+    ) {
+      return NextResponse.json(
+        { error: "Forbidden: Cannot upload materials" },
+        { status: 403 }
+      );
+    }
+
+    const body = await req.json();
+    const parsed = createMaterialSchema.safeParse(body);
+    if (!parsed.success) {
+      return NextResponse.json(
+        { error: "Validation error", details: parsed.error.format() },
+        { status: 400 }
+      );
     }
 
     const {
-      lessonId,
       title,
-      materialType,
+      description,
       contentText,
+      type,
+      materialType,
       fileUrl,
       externalUrl,
+      fileSizeBytes,
       durationMinutes,
-      pagesRange,
-      testConfig, // Optional test configuration if materialType === 'TEST'
-    } = await req.json();
+      courseId,
+      groupId,
+      lessonId,
+    } = parsed.data;
 
-    if (!title || !materialType) {
-      return NextResponse.json({ error: "Title and materialType are required" }, { status: 400 });
+    if (!fileUrl && !externalUrl && !contentText && !description) {
+      return NextResponse.json(
+        { error: "File URL, external link, or text content is required" },
+        { status: 400 }
+      );
     }
 
-    const validTypes = ["VIDEO", "LECTURE", "BOOK", "TEST"];
-    if (!validTypes.includes(materialType)) {
-      return NextResponse.json({ error: "Invalid materialType" }, { status: 400 });
+    if (groupId && (role === "TEACHER" || role === "TEACHER_ASSISTANT")) {
+      await assertGroupAccess(tenantCtx, groupId, "read");
     }
 
-    // Get max orderIndex
-    const maxMat = await tenantDb.material.findFirst({
-      where: { ...(lessonId ? { lessonId } : {}) },
-      orderBy: { orderIndex: "desc" },
-    });
-
-    const nextOrder = (maxMat?.orderIndex ?? 0) + 1;
+    const resolvedMaterialType = resolveMaterialType(
+      materialType || type,
+      Boolean(externalUrl && !fileUrl)
+    );
 
     const material = await tenantDb.material.create({
       data: {
-        centerId: tenantCtx.center.id,
-        lessonId: lessonId || null,
-        title,
-        materialType,
-        contentText: contentText || null,
+        centerId: center.id,
+        title: title.trim(),
+        contentText: contentText ?? description ?? null,
+        materialType: resolvedMaterialType,
         fileUrl: fileUrl || null,
         externalUrl: externalUrl || null,
-        durationMinutes: durationMinutes ? parseInt(durationMinutes) : null,
-        pagesRange: pagesRange || null,
-        orderIndex: nextOrder,
+        fileSizeBytes: fileSizeBytes ?? null,
+        durationMinutes: durationMinutes ?? null,
+        courseId: courseId || null,
+        groupId: groupId || null,
+        lessonId: lessonId || null,
+      },
+      include: {
+        course: { select: { id: true, title: true } },
+        group: { select: { id: true, name: true } },
+        lesson: { select: { id: true, title: true } },
       },
     });
 
-    // If materialType is TEST, create associated Test & Questions
-    if (materialType === "TEST" && testConfig) {
-      const test = await tenantDb.test.create({
-        data: {
-          centerId: tenantCtx.center.id,
-          materialId: material.id,
-          timeLimitMinutes: testConfig.timeLimitMinutes ? parseInt(testConfig.timeLimitMinutes) : null,
-          maxAttempts: testConfig.maxAttempts ? parseInt(testConfig.maxAttempts) : 1,
-          passingScorePercent: testConfig.passingScorePercent ? parseInt(testConfig.passingScorePercent) : 60,
-          shuffleQuestions: testConfig.shuffleQuestions ?? false,
-        },
-      });
-
-      if (Array.isArray(testConfig.questions) && testConfig.questions.length > 0) {
-        for (let i = 0; i < testConfig.questions.length; i++) {
-          const q = testConfig.questions[i];
-          await tenantDb.testQuestion.create({
-            data: {
-              centerId: tenantCtx.center.id,
-              testId: test.id,
-              questionText: q.questionText,
-              questionType: q.questionType || "SINGLE_CHOICE",
-              optionsJson: q.options ? JSON.stringify(q.options) : null, // [{text, isCorrect}]
-              correctAnswer: q.correctAnswer || null,
-              points: q.points ? parseInt(q.points) : 1,
-              orderIndex: i + 1,
-            },
-          });
-        }
-      }
-    }
-
     await logAuditEvent({
-      centerId: tenantCtx.center.id,
-      actorUserId: tenantCtx.session.user.id,
-      action: "MATERIAL_CREATED",
+      centerId: center.id,
+      actorUserId: session.user.id,
+      action: "CREATE_MATERIAL",
       resource: "Material",
       resourceId: material.id,
-      details: { title, materialType, lessonId },
+      details: {
+        title: material.title,
+        materialType: material.materialType,
+        courseId,
+        groupId,
+      },
     });
 
-    const fullMaterial = await tenantDb.material.findFirst({
-      where: { id: material.id },
-      include: { test: { include: { questions: true } } },
-    });
-
-    return NextResponse.json({ success: true, material: fullMaterial });
-  } catch (err: unknown) {
-    console.error("Material create error:", err);
-    const error = err as { message?: string; status?: number };
-    return NextResponse.json({ error: error.status ? error.message : "Server error" }, { status: error.status || 500 });
+    return NextResponse.json({ material }, { status: 201 });
+  } catch (error) {
+    if (error instanceof TenantAccessError) {
+      return NextResponse.json({ error: error.message }, { status: error.status });
+    }
+    console.error("[POST /api/materials]", error);
+    return NextResponse.json({ error: "Internal Server Error" }, { status: 500 });
   }
 }

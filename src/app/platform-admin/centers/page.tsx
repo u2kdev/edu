@@ -11,6 +11,7 @@ import {
   ChevronLeft,
   ChevronRight,
   ShieldAlert,
+  Download,
 } from "lucide-react";
 import ImpersonateButton from "@/components/ImpersonateButton";
 
@@ -21,6 +22,7 @@ interface CenterListItem {
   email?: string | null;
   phone?: string | null;
   status: string;
+  organizationKind?: "LEARNING_CENTER" | "SCHOOL" | "KINDERGARTEN" | "OTHER" | null;
   owner?: { id: string; fullName: string; email: string } | null;
 }
 
@@ -32,6 +34,7 @@ export default function PlatformCentersPage() {
   const [totalPages, setTotalPages] = useState(1);
   const [search, setSearch] = useState("");
   const [status, setStatus] = useState("");
+  const [organizationKind, setOrganizationKind] = useState("");
   const [debouncedSearch, setDebouncedSearch] = useState("");
 
   useEffect(() => {
@@ -50,6 +53,7 @@ export default function PlatformCentersPage() {
         page: page.toString(),
         ...(debouncedSearch && { q: debouncedSearch }),
         ...(status && { status }),
+        ...(organizationKind && { organizationKind }),
       });
       const res = await fetch(`/api/platform/centers?${query}`);
       if (!res.ok) throw new Error("Не удалось загрузить список центров");
@@ -61,17 +65,25 @@ export default function PlatformCentersPage() {
     } finally {
       setLoading(false);
     }
-  }, [page, debouncedSearch, status]);
+  }, [page, debouncedSearch, status, organizationKind]);
 
   useEffect(() => {
     fetchCenters();
   }, [fetchCenters]);
 
-  const statusBadges: Record<string, { bg: string; text: string; border: string }> = {
-    ACTIVE: { bg: "bg-emerald-50", text: "text-emerald-700", border: "border-emerald-200" },
-    TRIAL: { bg: "bg-blue-50", text: "text-blue-700", border: "border-blue-200" },
-    PAUSED: { bg: "bg-amber-50", text: "text-amber-700", border: "border-amber-200" },
-    BLOCKED: { bg: "bg-rose-50", text: "text-rose-700", border: "border-rose-200" },
+  const statusBadges: Record<string, { bg: string; text: string; border: string; label?: string }> = {
+    ACTIVE: { bg: "bg-emerald-50", text: "text-emerald-700", border: "border-emerald-200", label: "ACTIVE" },
+    TRIAL: { bg: "bg-blue-50", text: "text-blue-700", border: "border-blue-200", label: "TRIAL" },
+    PAUSED: { bg: "bg-amber-50", text: "text-amber-700", border: "border-amber-200", label: "PAUSED" },
+    BLOCKED: { bg: "bg-rose-50", text: "text-rose-700", border: "border-rose-200", label: "BLOCKED" },
+    CANCELLED: { bg: "bg-slate-100", text: "text-slate-700", border: "border-slate-300", label: "АРХИВ" },
+  };
+
+  const kindBadges: Record<string, { label: string; bg: string; text: string }> = {
+    LEARNING_CENTER: { label: "Учебный центр", bg: "bg-indigo-50", text: "text-indigo-700" },
+    SCHOOL: { label: "Школа", bg: "bg-blue-50", text: "text-blue-700" },
+    KINDERGARTEN: { label: "Детский сад", bg: "bg-emerald-50", text: "text-emerald-700" },
+    OTHER: { label: "Другое", bg: "bg-slate-100", text: "text-slate-700" },
   };
 
   return (
@@ -86,17 +98,27 @@ export default function PlatformCentersPage() {
             Управление организациями, статусами доступа и техническая поддержка на платформе e-darischi
           </p>
         </div>
-        <Link
-          href="/platform-admin/centers/create"
-          className="inline-flex items-center gap-2 px-4 py-2.5 bg-blue-600 hover:bg-blue-700 active:scale-[0.98] text-white text-sm font-semibold rounded-xl shadow-sm transition-all shrink-0"
-        >
-          <Plus className="w-4 h-4" />
-          <span>Добавить центр</span>
-        </Link>
+        <div className="flex items-center gap-2.5">
+          <a
+            href="/api/platform/centers/export"
+            download
+            className="inline-flex items-center gap-2 px-3.5 py-2.5 bg-white border border-slate-200 text-slate-700 hover:bg-slate-50 text-sm font-medium rounded-xl shadow-sm transition-colors"
+          >
+            <Download className="w-4 h-4 text-slate-500" />
+            <span>Экспорт CSV</span>
+          </a>
+          <Link
+            href="/platform-admin/centers/create"
+            className="inline-flex items-center gap-2 px-4 py-2.5 bg-blue-600 hover:bg-blue-700 active:scale-[0.98] text-white text-sm font-semibold rounded-xl shadow-sm transition-all shrink-0"
+          >
+            <Plus className="w-4 h-4" />
+            <span>Добавить центр</span>
+          </Link>
+        </div>
       </div>
 
       {/* Search & Status Filters */}
-      <div className="bg-white p-4 rounded-2xl border border-slate-200/90 shadow-sm flex flex-col md:flex-row gap-4 items-center justify-between">
+      <div className="bg-white p-4 rounded-2xl border border-slate-200/90 shadow-sm flex flex-col md:flex-row gap-3 items-center justify-between">
         <div className="relative flex-1 w-full">
           <Search className="w-4 h-4 text-slate-400 absolute left-3.5 top-1/2 -translate-y-1/2" />
           <input
@@ -108,21 +130,36 @@ export default function PlatformCentersPage() {
           />
         </div>
 
-        <div className="flex items-center gap-2 w-full md:w-auto">
-          <Filter className="w-4 h-4 text-slate-400 shrink-0" />
+        <div className="flex flex-wrap items-center gap-2 w-full md:w-auto">
+          <select
+            value={organizationKind}
+            onChange={(e) => {
+              setOrganizationKind(e.target.value);
+              setPage(1);
+            }}
+            className="w-full sm:w-44 py-2.5 px-3 bg-slate-50 border border-slate-200 rounded-xl text-sm text-slate-700 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 cursor-pointer"
+          >
+            <option value="">Все типы орг-ции</option>
+            <option value="LEARNING_CENTER">Учебный центр</option>
+            <option value="SCHOOL">Школа</option>
+            <option value="KINDERGARTEN">Детский сад</option>
+            <option value="OTHER">Другое</option>
+          </select>
+
           <select
             value={status}
             onChange={(e) => {
               setStatus(e.target.value);
               setPage(1);
             }}
-            className="w-full md:w-48 py-2.5 px-3 bg-slate-50 border border-slate-200 rounded-xl text-sm text-slate-700 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 cursor-pointer"
+            className="w-full sm:w-44 py-2.5 px-3 bg-slate-50 border border-slate-200 rounded-xl text-sm text-slate-700 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 cursor-pointer"
           >
             <option value="">Все статусы</option>
             <option value="ACTIVE">ACTIVE (Активные)</option>
             <option value="TRIAL">TRIAL (Пробный)</option>
             <option value="PAUSED">PAUSED (Замороженные)</option>
             <option value="BLOCKED">BLOCKED (Заблокированные)</option>
+            <option value="CANCELLED">CANCELLED (Архив)</option>
           </select>
         </div>
       </div>
@@ -166,12 +203,23 @@ export default function PlatformCentersPage() {
                   return (
                     <tr key={center.id} className="hover:bg-slate-50/70 transition-colors">
                       <td className="px-6 py-4">
-                        <Link
-                          href={`/platform-admin/centers/${center.id}`}
-                          className="font-semibold text-slate-900 hover:text-blue-600 transition-colors block"
-                        >
-                          {center.name}
-                        </Link>
+                        <div className="flex items-center gap-2">
+                          <Link
+                            href={`/platform-admin/centers/${center.id}`}
+                            className="font-semibold text-slate-900 hover:text-blue-600 transition-colors"
+                          >
+                            {center.name}
+                          </Link>
+                          {center.organizationKind && kindBadges[center.organizationKind] && (
+                            <span
+                              className={`inline-flex px-2 py-0.5 rounded text-[11px] font-medium ${
+                                kindBadges[center.organizationKind].bg
+                              } ${kindBadges[center.organizationKind].text}`}
+                            >
+                              {kindBadges[center.organizationKind].label}
+                            </span>
+                          )}
+                        </div>
                         <div className="text-xs text-slate-500 font-mono mt-0.5">{center.slug}</div>
                       </td>
                       <td className="px-6 py-4">

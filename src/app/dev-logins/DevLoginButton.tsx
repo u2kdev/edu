@@ -20,7 +20,7 @@ export function DevLoginButton({ userId, userName, role }: { userId: string, use
         if (role === "SUPERADMIN" || role === "DEVELOPER") {
           router.push("/developer");
         } else if (role === "PLATFORM_ADMIN") {
-          router.push("/platform");
+          router.push("/platform-admin");
         } else {
           router.push("/dashboard");
         }

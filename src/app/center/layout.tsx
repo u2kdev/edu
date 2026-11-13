@@ -1,14 +1,19 @@
 export const dynamic = "force-dynamic";
 
-import { requireTenantPageAccess } from "@/lib/tenant";
+import { requireTenantPageAccess, TenantSuspendedError } from "@/lib/tenant";
 import { getAuthSession } from "@/lib/auth";
 import { redirect } from "next/navigation";
+import { cookies } from "next/headers";
+import ImpersonationBanner from "@/components/ImpersonationBanner";
+import CenterSuspendedPage from "./suspended/page";
 import Link from "next/link";
 import {
   BookOpen, Users, CalendarDays, ClipboardCheck,
   CreditCard, KeyRound, UserPlus, HelpCircle,
   Settings, ChevronRight, Home, GraduationCap,
-  Building2, BarChart3, Megaphone, Bell, User
+  Building2, BarChart3, Megaphone, Bell, User, Heart,
+  FolderOpen, FileCheck2, CalendarRange, Wallet,
+  ClipboardList, Activity
 } from "lucide-react";
 import LanguageSwitcher from "@/components/LanguageSwitcher";
 import WorkspaceSwitcher from "@/components/WorkspaceSwitcher";
@@ -24,6 +29,10 @@ export default async function CenterLayout({
   // redirected to /login instead of crashing the layout with a 500.
   const session = await getAuthSession();
   if (!session) redirect("/login");
+
+  if (session.user.mustChangePassword) {
+    redirect("/account/change-password");
+  }
 
   const locale = session.user.preferredLanguage;
 
@@ -59,19 +68,42 @@ export default async function CenterLayout({
     );
   }
 
-  const tenantCtx = await requireTenantPageAccess();
+  let tenantCtx;
+  let isSuspended = false;
+
+  try {
+    tenantCtx = await requireTenantPageAccess({ allowSuspended: true });
+  } catch (err) {
+    if (err instanceof TenantSuspendedError) {
+      isSuspended = true;
+    } else {
+      throw err;
+    }
+  }
+
+  const activeRole = session.activeCenterRole || "";
+  const isDirector = activeRole === "DIRECTOR";
+
+  if (isSuspended) {
+    return <CenterSuspendedPage />;
+  }
 
   // Load center data
-  const center = await tenantCtx.getTenantDb().learningCenter.findUnique({
+  const center = await tenantCtx!.getTenantDb().learningCenter.findUnique({
     where: { id: session.activeCenterId },
   });
 
   if (!center) redirect("/login");
 
-  const activeRole = session.activeCenterRole || "";
+  const isBlockedOrCancelled = center.status === "BLOCKED" || center.status === "CANCELLED";
+  const isOverdueOrPaused = center.status === "OVERDUE" || center.status === "PAUSED";
+
+  if (isBlockedOrCancelled || (isOverdueOrPaused && !isDirector)) {
+    return <CenterSuspendedPage />;
+  }
 
   // Load unread notification count for the notification bell
-  const unreadNotifCount = await tenantCtx.getTenantDb().notification.count({
+  const unreadNotifCount = await tenantCtx!.getTenantDb().notification.count({
     where: {
       userId: session.user.id,
       isRead: false,
@@ -90,7 +122,7 @@ export default async function CenterLayout({
           href: "/center",
           icon: Home,
           label: t(locale, "nav.dashboard"),
-          roles: ["DIRECTOR", "CENTER_ADMIN", "TEACHER", "CENTER_SUPPORT", "STUDENT", "PARENT"],
+          roles: ["DIRECTOR", "CENTER_ADMIN", "ACCOUNTANT", "TEACHER", "TEACHER_ASSISTANT", "CENTER_SUPPORT", "STUDENT", "PARENT"],
         },
       ],
     },
@@ -116,10 +148,22 @@ export default async function CenterLayout({
           roles: ["DIRECTOR", "CENTER_ADMIN", "TEACHER", "TEACHER_ASSISTANT"],
         },
         {
+          href: "/center/parents",
+          icon: Heart,
+          label: t(locale, "nav.parents"),
+          roles: ["DIRECTOR", "CENTER_ADMIN"],
+        },
+        {
           href: "/center/schedule",
           icon: CalendarDays,
           label: t(locale, "nav.schedule"),
           roles: ["DIRECTOR", "CENTER_ADMIN", "TEACHER", "TEACHER_ASSISTANT", "STUDENT", "PARENT"],
+        },
+        {
+          href: "/center/materials",
+          icon: FolderOpen,
+          label: t(locale, "nav.materials"),
+          roles: ["DIRECTOR", "CENTER_ADMIN", "TEACHER", "TEACHER_ASSISTANT", "STUDENT"],
         },
       ],
     },
@@ -143,6 +187,18 @@ export default async function CenterLayout({
           icon: BookOpen,
           label: t(locale, "nav.homework"),
           roles: ["DIRECTOR", "CENTER_ADMIN", "TEACHER", "TEACHER_ASSISTANT", "STUDENT", "PARENT"],
+        },
+        {
+          href: "/center/tests",
+          icon: FileCheck2,
+          label: t(locale, "nav.tests"),
+          roles: ["DIRECTOR", "CENTER_ADMIN", "TEACHER", "TEACHER_ASSISTANT", "STUDENT"],
+        },
+        {
+          href: "/center/substitutions",
+          icon: CalendarRange,
+          label: t(locale, "nav.substitutions"),
+          roles: ["DIRECTOR", "CENTER_ADMIN", "TEACHER", "TEACHER_ASSISTANT"],
         },
       ],
     },
@@ -173,6 +229,12 @@ export default async function CenterLayout({
           roles: ["DIRECTOR", "CENTER_ADMIN", "TEACHER", "TEACHER_ASSISTANT", "CENTER_SUPPORT", "STUDENT", "PARENT"],
         },
         {
+          href: "/center/my-salary",
+          icon: Wallet,
+          label: t(locale, "nav.mySalary"),
+          roles: ["TEACHER", "TEACHER_ASSISTANT"],
+        },
+        {
           href: "/center/staff",
           icon: UserPlus,
           label: t(locale, "nav.staff"),
@@ -185,22 +247,52 @@ export default async function CenterLayout({
           roles: ["DIRECTOR", "CENTER_ADMIN"],
         },
         {
+          href: "/center/settings/calendar",
+          icon: CalendarRange,
+          label: t(locale, "nav.calendarSettings"),
+          roles: ["DIRECTOR", "CENTER_ADMIN"],
+        },
+        {
           href: "/center/payments",
           icon: CreditCard,
           label: t(locale, "nav.payments"),
-          roles: ["DIRECTOR", "CENTER_ADMIN", "STUDENT", "PARENT"],
+          roles: ["DIRECTOR", "CENTER_ADMIN", "ACCOUNTANT", "STUDENT", "PARENT"],
+        },
+        {
+          href: "/center/finance",
+          icon: Wallet,
+          label: t(locale, "nav.finance"),
+          roles: ["DIRECTOR", "CENTER_ADMIN", "ACCOUNTANT"],
         },
         {
           href: "/center/reports",
           icon: BarChart3,
           label: t(locale, "nav.reports"),
+          roles: ["DIRECTOR", "CENTER_ADMIN", "ACCOUNTANT"],
+        },
+        {
+          href: "/center/activity",
+          icon: Activity,
+          label: t(locale, "nav.activity"),
+          roles: ["DIRECTOR", "CENTER_ADMIN"],
+        },
+        {
+          href: "/center/audit",
+          icon: ClipboardList,
+          label: t(locale, "nav.audit"),
+          roles: ["DIRECTOR", "CENTER_ADMIN"],
+        },
+        {
+          href: "/center/settings",
+          icon: Settings,
+          label: t(locale, "nav.centerSettings"),
           roles: ["DIRECTOR", "CENTER_ADMIN"],
         },
         {
           href: "/center/support",
           icon: HelpCircle,
           label: t(locale, "nav.support"),
-          roles: ["DIRECTOR", "CENTER_ADMIN", "CENTER_SUPPORT", "STUDENT", "PARENT"],
+          roles: ["DIRECTOR", "CENTER_ADMIN", "ACCOUNTANT", "TEACHER", "TEACHER_ASSISTANT", "CENTER_SUPPORT", "STUDENT", "PARENT"],
         },
       ],
     },
@@ -210,6 +302,7 @@ export default async function CenterLayout({
   const roleLabels: Record<string, string> = {
     DIRECTOR: t(locale, "dashboard.directorCabinet"),
     CENTER_ADMIN: t(locale, "dashboard.adminCabinet"),
+    ACCOUNTANT: t(locale, "dashboard.accountantCabinet"),
     TEACHER: t(locale, "dashboard.teacherCabinet"),
     TEACHER_ASSISTANT: t(locale, "dashboard.teacherAssistantCabinet"),
     CENTER_SUPPORT: t(locale, "support.title"),
@@ -217,10 +310,49 @@ export default async function CenterLayout({
     PARENT: t(locale, "dashboard.parentCabinet"),
   };
 
+  const isImpersonating = Boolean(
+    session.impersonatorUserId || cookies().get("platform_impersonation_original")?.value
+  );
+
   return (
-    <div className="min-h-screen bg-slate-950 flex">
-      {/* Sidebar */}
-      <aside className="w-72 min-h-screen glass-panel border-r border-slate-800/80 flex flex-col sticky top-0 h-screen overflow-y-auto">
+    <div className="min-h-screen bg-slate-950 flex flex-col">
+      {isImpersonating && (
+        <ImpersonationBanner
+          userName={session.user.fullName}
+          role={session.activeCenterRole || tenantCtx?.role || "MEMBER"}
+          centerName={center.name}
+          locale={locale}
+        />
+      )}
+      {isOverdueOrPaused && isDirector && (
+        <div className="bg-amber-500/10 border-b border-amber-500/30 px-6 py-2.5 flex items-center justify-between text-xs text-amber-300">
+          <div className="flex items-center gap-2">
+            <span className="font-bold uppercase tracking-wider px-2 py-0.5 rounded bg-amber-500/20 border border-amber-500/30">
+              {center.status}
+            </span>
+            <span>
+              {t(locale, "dashboard.suspendedNotice")}
+            </span>
+          </div>
+          <div className="flex items-center gap-3">
+            <Link
+              href="/center/suspended"
+              className="underline hover:text-white"
+            >
+              {t(locale, "dashboard.moreDetails")}
+            </Link>
+            <Link
+              href="/center/support"
+              className="px-3 py-1 rounded-lg bg-amber-600 hover:bg-amber-500 text-white font-medium transition-colors"
+            >
+              {t(locale, "dashboard.writeToSupport")}
+            </Link>
+          </div>
+        </div>
+      )}
+      <div className="flex flex-1 min-h-0">
+        {/* Sidebar */}
+        <aside className="w-72 min-h-screen glass-panel border-r border-slate-800/80 flex flex-col sticky top-0 h-screen overflow-y-auto">
         {/* Center branding header */}
         <div className="p-5 border-b border-slate-800/60">
           <Link href="/center" className="flex items-center gap-3 group">
@@ -345,6 +477,7 @@ export default async function CenterLayout({
         </div>
         <div className="flex-1 p-8 overflow-y-auto">{children}</div>
       </main>
+      </div>
     </div>
   );
 }

@@ -115,7 +115,17 @@ export default function CourseManager({ initialCourses, role, locale = "ru" }: C
                     </div>
                   </div>
 
-                  <div className="flex items-center gap-6">
+                  <div className="flex items-center gap-4">
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        router.push(`/center/courses/${course.id}`);
+                      }}
+                      className="px-3 py-1.5 rounded-lg bg-brand-500/10 hover:bg-brand-500/20 text-brand-300 border border-brand-500/30 text-xs font-semibold flex items-center gap-1.5 transition-colors"
+                    >
+                      <Layers className="w-3.5 h-3.5" />
+                      <span>Конструктор</span>
+                    </button>
                     <div className="text-right hidden sm:block text-xs text-slate-400">
                       <div>{t(locale, "courses.modulesCount", { count: course.modules.length })}</div>
                       <div>{t(locale, "courses.groupsCount", { count: course.groups.length })}</div>

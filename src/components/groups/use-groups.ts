@@ -11,6 +11,7 @@ import {
   type GroupEnrollment,
   type GroupItem,
   type TeacherOption,
+  type AssistantOption,
   type TransferTarget,
 } from "./groups-utils";
 
@@ -24,6 +25,7 @@ export interface UseGroupsArgs {
   initialGroups: GroupItem[];
   courses: CourseOption[];
   teachers: TeacherOption[];
+  assistants?: AssistantOption[];
   role?: string;
   locale: string;
   messages: GroupsMessages;
@@ -33,6 +35,7 @@ export function useGroups({
   initialGroups,
   courses,
   teachers,
+  assistants = [],
   role,
   locale,
   messages,
@@ -45,6 +48,7 @@ export function useGroups({
   const [courseId, setCourseId] = useState(courses[0]?.id || "");
   const [name, setName] = useState("");
   const [teacherMembershipId, setTeacherMembershipId] = useState("");
+  const [assistantMembershipId, setAssistantMembershipId] = useState("");
   const [maxStudents, setMaxStudents] = useState("30");
   const [loading, setLoading] = useState(false);
 
@@ -52,6 +56,7 @@ export function useGroups({
   const [editingGroup, setEditingGroup] = useState<GroupItem | null>(null);
   const [editName, setEditName] = useState("");
   const [editTeacherId, setEditTeacherId] = useState("");
+  const [editAssistantId, setEditAssistantId] = useState("");
   const [editMaxStudents, setEditMaxStudents] = useState("30");
 
   // Transfer Modal
@@ -72,6 +77,7 @@ export function useGroups({
     setEditingGroup(group);
     setEditName(group.name);
     setEditTeacherId(group.teacher?.id || "");
+    setEditAssistantId(group.assistant?.id || "");
     setEditMaxStudents(group.maxStudents.toString());
   };
   const closeEditModal = () => setEditingGroup(null);
@@ -102,12 +108,19 @@ export function useGroups({
       const res = await fetch("/api/groups", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ courseId, name, teacherMembershipId, maxStudents }),
+        body: JSON.stringify({
+          courseId,
+          name,
+          teacherMembershipId: teacherMembershipId || null,
+          assistantMembershipId: assistantMembershipId || null,
+          maxStudents,
+        }),
       });
       const data = await res.json();
       if (res.ok) {
         setShowCreateModal(false);
         setName("");
+        setAssistantMembershipId("");
         router.refresh();
       } else {
         alert(data.error || messages.createError);
@@ -130,6 +143,7 @@ export function useGroups({
         body: JSON.stringify({
           name: editName,
           teacherMembershipId: editTeacherId || null,
+          assistantMembershipId: editAssistantId || null,
           maxStudents: editMaxStudents,
         }),
       });
@@ -143,6 +157,7 @@ export function useGroups({
                   name: editName,
                   maxStudents: parseInt(editMaxStudents) || 30,
                   teacher: teachers.find((teacher) => teacher.id === editTeacherId) || null,
+                  assistant: assistants.find((ast) => ast.id === editAssistantId) || null,
                 }
               : g
           )
@@ -232,6 +247,8 @@ export function useGroups({
     setName,
     teacherMembershipId,
     setTeacherMembershipId,
+    assistantMembershipId,
+    setAssistantMembershipId,
     maxStudents,
     setMaxStudents,
     handleCreateGroup,
@@ -243,6 +260,8 @@ export function useGroups({
     setEditName,
     editTeacherId,
     setEditTeacherId,
+    editAssistantId,
+    setEditAssistantId,
     editMaxStudents,
     setEditMaxStudents,
     handleEditGroup,

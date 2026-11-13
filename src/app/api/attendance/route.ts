@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { requireTenantAccess, logAuditEvent } from "@/lib/tenant";
-import { sendNotification } from "@/lib/notifications";
+import { notifyParentsOnAttendance } from "@/lib/notifications";
 import type { AttendanceStatus } from "@prisma/client";
 
 // GET /api/attendance?lessonId=xxx - Get attendance for a lesson
@@ -129,22 +129,28 @@ export async function POST(req: Request) {
       );
     }
 
-    // SECURITY: If teacher, verify students belong to teacher's groups or teacher is substitute
-    if (tenantCtx.role === "TEACHER" && tenantCtx.membership && attendanceRecords.length > 0) {
+    // SECURITY: If teacher or assistant, verify students belong to teacher/assistant's groups or teacher is substitute
+    if ((tenantCtx.role === "TEACHER" || tenantCtx.role === "TEACHER_ASSISTANT") && tenantCtx.membership && attendanceRecords.length > 0) {
       const isSubstitute = lesson.substituteTeacherMembershipId === tenantCtx.membership.id;
       if (!isSubstitute) {
-        const teacherGroups = await tenantDb.group.findMany({
-          where: { teacherMembershipId: tenantCtx.membership.id },
+        const assignedGroups = await tenantDb.group.findMany({
+          where: {
+            centerId: tenantCtx.center.id,
+            OR: [
+              { teacherMembershipId: tenantCtx.membership.id },
+              { assistantMembershipId: tenantCtx.membership.id },
+            ],
+          },
           select: { id: true },
         });
         const allowedEnrollments = await tenantDb.enrollment.findMany({
-          where: { groupId: { in: teacherGroups.map((g: { id: string }) => g.id) } },
+          where: { groupId: { in: assignedGroups.map((g: { id: string }) => g.id) } },
           select: { studentMembershipId: true },
         });
         const allowedStudentIds = new Set(allowedEnrollments.map((e: { studentMembershipId: string }) => e.studentMembershipId));
         const unauthorizedRecord = attendanceRecords.find((r) => !allowedStudentIds.has(r.studentMembershipId));
         if (unauthorizedRecord) {
-          return NextResponse.json({ error: "Teachers can only mark attendance for students in their own groups" }, { status: 403 });
+          return NextResponse.json({ error: "Teachers and assistants can only mark attendance for students in their own groups" }, { status: 403 });
         }
       }
     }
@@ -228,29 +234,15 @@ export async function POST(req: Request) {
       }
     }
 
-    // Auto notification for ABSENT or LATE students to Parents
+    // Idempotent notification for ABSENT / LATE (and status corrections) to confirmed Parents
     for (const r of attendanceRecords) {
-      if (r.status === "ABSENT" || r.status === "LATE") {
-        const parentLinks = await tenantDb.parentLink.findMany({
-          where: { studentMembershipId: r.studentMembershipId, status: "CONFIRMED" },
-          include: { parent: { include: { user: true } }, student: { include: { user: true } } },
-        });
-
-        for (const link of parentLinks) {
-          if (link.parent.userId) {
-            await sendNotification({
-              userId: link.parent.userId,
-              centerId: tenantCtx.center.id,
-              type: r.status === "ABSENT" ? "ATTENDANCE_ABSENT" : "ATTENDANCE_LATE",
-              titleKey: r.status === "ABSENT" ? "notification.attendanceAbsent.title" : "notification.attendanceLate.title",
-              bodyKey: r.status === "ABSENT" ? "notification.attendanceAbsent.body" : "notification.attendanceLate.body",
-              bodyParams: { lessonId, studentName: link.student.user.fullName },
-              recipientPhone: link.parent.user.phone || undefined,
-              channel: link.parent.user.phone ? "SMS" : "IN_APP",
-            });
-          }
-        }
-      }
+      await notifyParentsOnAttendance({
+        centerId: tenantCtx.center.id,
+        lessonId,
+        studentMembershipId: r.studentMembershipId,
+        status: r.status,
+        note: r.note,
+      });
     }
 
     await logAuditEvent({

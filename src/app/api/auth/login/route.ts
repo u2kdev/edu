@@ -3,6 +3,7 @@ import { z } from "zod";
 // eslint-disable-next-line no-restricted-imports
 import { db } from "@/lib/db";
 import { comparePassword, signJWT, JWTPayload } from "@/lib/auth";
+import { normalizePhone } from "@/lib/phone";
 import { checkRateLimit } from "@/lib/rate-limit";
 import { getClientIp } from "@/lib/ip";
 import { sendEmail, enqueueEmailOutbox } from '@/lib/email';
@@ -24,8 +25,24 @@ export async function POST(req: Request) {
 
     const body = await req.json();
     const parsed = loginSchema.parse(body);
-    const { email: rawEmail, password, rememberMe } = parsed;
-    const email = rawEmail.toLowerCase().trim();
+    const { password, rememberMe } = parsed;
+    const rawLogin = (parsed.login || parsed.email || "").trim();
+    const loginLower = rawLogin.toLowerCase();
+    const normalizedPhone = normalizePhone(rawLogin);
+
+    // Find user by email, phone, or username (excluding soft-deleted)
+    const user = await db.platformUser.findFirst({
+      where: {
+        OR: [
+          { email: loginLower },
+          ...(normalizedPhone ? [{ phone: normalizedPhone }] : []),
+          { username: loginLower },
+        ],
+        deletedAt: null,
+      },
+    });
+
+    const email = user ? user.email : loginLower;
 
     // 1. Check LoginAttempt (Brute-force protection per IP & GLOBAL)
     const attempts = await db.loginAttempt.findMany({
@@ -54,10 +71,6 @@ export async function POST(req: Request) {
     if (ipAttempt && ipAttempt.lockoutUntil && new Date() < ipAttempt.lockoutUntil) {
       return apiError("auth.invalidCredentials", "UNAUTHORIZED", 401);
     }
-
-    const user = await db.platformUser.findUnique({
-      where: { email },
-    });
 
     const handleFailure = async (reason: string, actorUserId: string | null = null) => {
       // 1. IP Attempt Logic
@@ -146,10 +159,33 @@ export async function POST(req: Request) {
       );
     }
 
-    // Success -> Reset ALL attempts for this email
-    await db.loginAttempt.deleteMany({
-      where: { email }
-    });
+    // 2FA TOTP check
+    if (user.twoFactorEnabled && user.twoFactorSecret) {
+      if (!parsed.twoFactorCode) {
+        return apiSuccess({
+          requiresTwoFactor: true,
+          email: user.email,
+          message: "auth.twoFactorRequired",
+        });
+      }
+
+      const { verifyTotpCode } = await import("@/lib/totp");
+      const is2faValid = verifyTotpCode(user.twoFactorSecret, parsed.twoFactorCode);
+      if (!is2faValid) {
+        return apiError("auth.invalid2faCode", "UNAUTHORIZED", 401);
+      }
+    }
+
+    // Success -> Reset ALL attempts for this email and record lastLoginAt
+    await Promise.all([
+      db.loginAttempt.deleteMany({
+        where: { email }
+      }),
+      db.platformUser.update({
+        where: { id: user.id },
+        data: { lastLoginAt: new Date() },
+      }),
+    ]);
 
     const jti = uuidv4();
     const expiresIn = rememberMe ? "30d" : "1d";
@@ -189,20 +225,27 @@ export async function POST(req: Request) {
       });
     } catch (e) {}
 
-    cookies().set("auth_token", token, {
-      httpOnly: true,
-      secure: process.env.NODE_ENV === "production",
-      sameSite: "lax",
-      path: "/",
-      maxAge: rememberMe ? 30 * 24 * 60 * 60 : 24 * 60 * 60,
-    });
+    try {
+      cookies().set("auth_token", token, {
+        httpOnly: true,
+        secure: process.env.NODE_ENV === "production",
+        sameSite: "lax",
+        path: "/",
+        maxAge: rememberMe ? 30 * 24 * 60 * 60 : 24 * 60 * 60,
+      });
+    } catch {
+      // Outside request context (e.g. unit tests)
+    }
 
     return apiSuccess({
+      mustChangePassword: user.mustChangePassword,
       user: {
         id: user.id,
         email: user.email,
         fullName: user.fullName,
+        username: user.username,
         role: user.platformRole,
+        mustChangePassword: user.mustChangePassword,
       }
     });
   } catch (error: unknown) {

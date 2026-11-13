@@ -2,11 +2,13 @@
 
 import { useState, useEffect } from "react";
 import type { ComponentType } from "react";
+import Link from "next/link";
 import {
   UserPlus, Shield, GraduationCap, HeadphonesIcon,
   CheckCircle2, XCircle, Mail, Phone,
-  Loader2, AlertTriangle, Archive, Trash2
+  Loader2, AlertTriangle, Archive, Trash2, Clock, Search, ExternalLink, Key
 } from "lucide-react";
+import { CredentialsModal, type CredentialsData } from "@/components/CredentialsModal";
 
 interface StaffMember {
   id: string;
@@ -20,6 +22,7 @@ interface StaffMember {
     fullName: string;
     avatarUrl: string | null;
     isActive: boolean;
+    lastLoginAt: string | null;
     createdAt: string;
   };
 }
@@ -42,11 +45,23 @@ const ROLE_CONFIG: Record<string, { label: string; labelUz: string; icon: Compon
     icon: Shield,
     color: "text-blue-400 bg-blue-500/10 border-blue-500/20",
   },
+  ACCOUNTANT: {
+    label: "Бухгалтер",
+    labelUz: "Hisobchi",
+    icon: Shield,
+    color: "text-amber-400 bg-amber-500/10 border-amber-500/20",
+  },
   TEACHER: {
     label: "Преподаватель",
     labelUz: "Oʻqituvchi",
     icon: GraduationCap,
     color: "text-emerald-400 bg-emerald-500/10 border-emerald-500/20",
+  },
+  TEACHER_ASSISTANT: {
+    label: "Помощник преподавателя",
+    labelUz: "Oʻqituvchi yordamchisi",
+    icon: GraduationCap,
+    color: "text-teal-400 bg-teal-500/10 border-teal-500/20",
   },
   CENTER_SUPPORT: {
     label: "Саппорт центра",
@@ -70,11 +85,20 @@ export default function StaffManager({ locale, currentRole }: StaffManagerProps)
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
 
+  // Search and filter
+  const [search, setSearch] = useState("");
+  const [filterNeverLoggedIn, setFilterNeverLoggedIn] = useState(false);
+
+  // Single-display credentials
+  const [credentials, setCredentials] = useState<CredentialsData | null>(null);
+
   // Form fields
   const [newEmail, setNewEmail] = useState("");
   const [newName, setNewName] = useState("");
   const [newPhone, setNewPhone] = useState("");
   const [newRole, setNewRole] = useState("TEACHER");
+  const [manualPassword, setManualPassword] = useState("");
+  const [isManualPassword, setIsManualPassword] = useState(false);
 
   const isUz = locale === "uz-Latn";
 
@@ -88,7 +112,7 @@ export default function StaffManager({ locale, currentRole }: StaffManagerProps)
       const res = await fetch("/api/tenant/staff");
       const data = await res.json();
       if (data.staff) setStaff(data.staff);
-    } catch (err) {
+    } catch {
       setError("Failed to load staff");
     }
     setLoading(false);
@@ -100,15 +124,22 @@ export default function StaffManager({ locale, currentRole }: StaffManagerProps)
     setError(null);
     setSuccess(null);
 
+    if (!newEmail && !newPhone) {
+      setError(isUz ? "Email yoki telefon kiritilishi shart" : "Необходимо указать email или телефон");
+      setSaving(false);
+      return;
+    }
+
     try {
       const res = await fetch("/api/tenant/staff", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          email: newEmail,
+          email: newEmail || undefined,
           fullName: newName,
           phone: newPhone || undefined,
           staffRole: newRole,
+          password: isManualPassword ? manualPassword : undefined,
         }),
       });
 
@@ -120,6 +151,10 @@ export default function StaffManager({ locale, currentRole }: StaffManagerProps)
         return;
       }
 
+      if (data.credentials) {
+        setCredentials(data.credentials);
+      }
+
       setSuccess(
         isUz
           ? `${newName} muvaffaqiyatli qoʻshildi!`
@@ -129,9 +164,11 @@ export default function StaffManager({ locale, currentRole }: StaffManagerProps)
       setNewName("");
       setNewPhone("");
       setNewRole("TEACHER");
+      setManualPassword("");
+      setIsManualPassword(false);
       setShowAddForm(false);
       await loadStaff();
-    } catch (err) {
+    } catch {
       setError("Network error");
     }
     setSaving(false);
@@ -218,8 +255,22 @@ export default function StaffManager({ locale, currentRole }: StaffManagerProps)
   // Available roles that current user can assign
   const assignableRoles =
     currentRole === "DIRECTOR"
-      ? ["CENTER_ADMIN", "TEACHER", "CENTER_SUPPORT"]
+      ? ["CENTER_ADMIN", "ACCOUNTANT", "TEACHER", "TEACHER_ASSISTANT", "CENTER_SUPPORT"]
       : ["TEACHER", "CENTER_SUPPORT"];
+
+  const filteredStaff = staff.filter((m) => {
+    const q = search.toLowerCase();
+    const matchesSearch =
+      m.user.fullName.toLowerCase().includes(q) ||
+      (m.user.email && m.user.email.toLowerCase().includes(q)) ||
+      (m.user.phone && m.user.phone.includes(q)) ||
+      m.role.toLowerCase().includes(q);
+
+    if (!matchesSearch) return false;
+    if (filterNeverLoggedIn && m.user.lastLoginAt) return false;
+
+    return true;
+  });
 
   if (loading) {
     return (
@@ -294,13 +345,12 @@ export default function StaffManager({ locale, currentRole }: StaffManagerProps)
             </div>
             <div>
               <label className="block text-xs font-semibold text-slate-400 uppercase tracking-wider mb-1.5">
-                Email *
+                Email
               </label>
               <input
                 type="email"
                 value={newEmail}
                 onChange={(e) => setNewEmail(e.target.value)}
-                required
                 placeholder="staff@example.com"
                 className="w-full px-4 py-2.5 bg-slate-900/80 border border-slate-700 rounded-xl text-white text-sm placeholder:text-slate-500 focus:outline-none focus:border-brand-500 transition-colors"
               />
@@ -337,6 +387,44 @@ export default function StaffManager({ locale, currentRole }: StaffManagerProps)
             </div>
           </div>
 
+          {/* Access Credentials Options */}
+          <div className="pt-2 border-t border-slate-800 space-y-3">
+            <div className="flex items-center gap-4 text-xs text-slate-300">
+              <label className="flex items-center gap-2 cursor-pointer">
+                <input
+                  type="radio"
+                  name="passwordMode"
+                  checked={!isManualPassword}
+                  onChange={() => setIsManualPassword(false)}
+                  className="text-brand-500 focus:ring-brand-500"
+                />
+                <span>Сгенерировать безопасный пароль автоматически</span>
+              </label>
+              <label className="flex items-center gap-2 cursor-pointer">
+                <input
+                  type="radio"
+                  name="passwordMode"
+                  checked={isManualPassword}
+                  onChange={() => setIsManualPassword(true)}
+                  className="text-brand-500 focus:ring-brand-500"
+                />
+                <span>Задать пароль вручную</span>
+              </label>
+            </div>
+
+            {isManualPassword && (
+              <div className="max-w-md">
+                <input
+                  type="password"
+                  value={manualPassword}
+                  onChange={(e) => setManualPassword(e.target.value)}
+                  placeholder="Минимум 6 символов"
+                  className="w-full px-4 py-2 bg-slate-900 border border-slate-700 rounded-xl text-white text-xs"
+                />
+              </div>
+            )}
+          </div>
+
           <div className="flex items-center gap-3 pt-2">
             <button
               type="submit"
@@ -357,9 +445,34 @@ export default function StaffManager({ locale, currentRole }: StaffManagerProps)
         </form>
       )}
 
+      {/* Toolbar */}
+      <div className="glass-panel p-4 rounded-2xl border border-slate-800 flex flex-col sm:flex-row items-center gap-3">
+        <div className="relative flex-1 w-full">
+          <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-slate-500" />
+          <input
+            type="text"
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            placeholder="Поиск сотрудника по имени, email, телефону..."
+            className="w-full pl-9 pr-4 py-2 bg-slate-900 border border-slate-800 rounded-xl text-xs text-white placeholder-slate-500 focus:outline-none focus:border-brand-500"
+          />
+        </div>
+
+        <button
+          onClick={() => setFilterNeverLoggedIn(!filterNeverLoggedIn)}
+          className={`px-3 py-2 text-xs font-semibold rounded-xl border transition-colors whitespace-nowrap ${
+            filterNeverLoggedIn
+              ? "bg-amber-500/20 border-amber-500/40 text-amber-300"
+              : "bg-slate-900 border-slate-800 text-slate-400 hover:text-white"
+          }`}
+        >
+          Ни разу не входили
+        </button>
+      </div>
+
       {/* Staff List */}
       <div className="space-y-3">
-        {staff.map((member) => {
+        {filteredStaff.map((member) => {
           const roleConfig = ROLE_CONFIG[member.role] || {
             label: member.role,
             labelUz: member.role,
@@ -368,6 +481,7 @@ export default function StaffManager({ locale, currentRole }: StaffManagerProps)
           };
           const RoleIcon = roleConfig.icon;
           const isInactive = member.status !== "ACTIVE";
+          const isSynthetic = member.user.email.endsWith("@noemail.local");
 
           return (
             <div
@@ -384,9 +498,14 @@ export default function StaffManager({ locale, currentRole }: StaffManagerProps)
               {/* Info */}
               <div className="flex-1 min-w-0">
                 <div className="flex items-center gap-2">
-                  <span className="text-sm font-semibold text-white truncate">
-                    {member.user.fullName}
-                  </span>
+                  <Link
+                    href={`/center/staff/${member.id}`}
+                    className="text-sm font-semibold text-white hover:text-brand-300 transition-colors truncate flex items-center gap-1.5"
+                  >
+                    <span>{member.user.fullName}</span>
+                    <ExternalLink className="w-3.5 h-3.5 opacity-60" />
+                  </Link>
+
                   {member.status === "ARCHIVED" ? (
                     <span className="px-2 py-0.5 rounded-full bg-amber-500/10 text-amber-400 text-[10px] font-semibold border border-amber-500/20">
                       {isUz ? "Arxivlangan" : "Архивирован"}
@@ -397,15 +516,31 @@ export default function StaffManager({ locale, currentRole }: StaffManagerProps)
                     </span>
                   ) : null}
                 </div>
-                <div className="flex items-center gap-3 mt-1 text-xs text-slate-400">
-                  <span className="flex items-center gap-1">
-                    <Mail className="w-3 h-3" />
-                    {member.user.email}
-                  </span>
+
+                <div className="flex flex-wrap items-center gap-3 mt-1 text-xs text-slate-400">
+                  {!isSynthetic && (
+                    <span className="flex items-center gap-1">
+                      <Mail className="w-3 h-3" />
+                      {member.user.email}
+                    </span>
+                  )}
                   {member.user.phone && (
                     <span className="flex items-center gap-1">
                       <Phone className="w-3 h-3" />
                       {member.user.phone}
+                    </span>
+                  )}
+
+                  {/* Last Login Indicator */}
+                  {member.user.lastLoginAt ? (
+                    <span className="flex items-center gap-1 text-[11px] text-slate-400 font-mono">
+                      <Clock className="w-3 h-3 text-slate-500" />
+                      {new Date(member.user.lastLoginAt).toLocaleDateString()}
+                    </span>
+                  ) : (
+                    <span className="inline-flex items-center gap-1 px-2 py-0.5 bg-amber-500/10 text-amber-400 border border-amber-500/20 rounded-full text-[10px] font-semibold">
+                      <Clock className="w-3 h-3" />
+                      Ни разу не входил
                     </span>
                   )}
                 </div>
@@ -422,6 +557,13 @@ export default function StaffManager({ locale, currentRole }: StaffManagerProps)
               {/* Actions */}
               {member.role !== "DIRECTOR" && (
                 <div className="flex items-center gap-1 shrink-0">
+                  <Link
+                    href={`/center/staff/${member.id}`}
+                    className="p-2 rounded-lg transition-colors text-slate-400 hover:text-white hover:bg-slate-800"
+                    title="Профиль и доступ"
+                  >
+                    <Key className="w-4 h-4" />
+                  </Link>
                   <button
                     onClick={() => toggleStatus(member.id, member.status)}
                     className={`p-2 rounded-lg transition-colors ${
@@ -463,17 +605,27 @@ export default function StaffManager({ locale, currentRole }: StaffManagerProps)
           );
         })}
 
-        {staff.length === 0 && (
+        {filteredStaff.length === 0 && (
           <div className="glass-panel p-8 rounded-2xl border border-slate-800 text-center">
             <UserPlus className="w-10 h-10 text-slate-600 mx-auto mb-3" />
             <p className="text-slate-400">
               {isUz
                 ? "Hali xodimlar qoʻshilmagan"
-                : "Сотрудники ещё не добавлены"}
+                : "Сотрудники не найдены"}
             </p>
           </div>
         )}
       </div>
+
+      {/* Single-display Credentials Modal */}
+      {credentials && (
+        <CredentialsModal
+          isOpen={Boolean(credentials)}
+          onClose={() => setCredentials(null)}
+          credentials={credentials}
+          locale={locale}
+        />
+      )}
     </div>
   );
 }

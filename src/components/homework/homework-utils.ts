@@ -92,9 +92,19 @@ export function isStudentRole(role: string): boolean {
   return role === "STUDENT";
 }
 
-/** Teachers, directors and center admins may grade submissions. */
+/** Teachers, assistants, directors and center admins may review/grade submissions. */
 export function isTeacherRole(role: string): boolean {
-  return role === "TEACHER" || role === "DIRECTOR" || role === "CENTER_ADMIN";
+  return (
+    role === "TEACHER" ||
+    role === "TEACHER_ASSISTANT" ||
+    role === "DIRECTOR" ||
+    role === "CENTER_ADMIN"
+  );
+}
+
+/** Parents can inspect their confirmed children's submissions (read-only). */
+export function isParentRole(role: string): boolean {
+  return role === "PARENT";
 }
 
 /** The current user's submission for a homework, if they have one. */
@@ -133,12 +143,68 @@ export function parseSubmissionLinks(
   }
 }
 
-/** SUBMIT payload: at most one external link, or null when none was given. */
+export interface HomeworkAttachmentItem {
+  fileUrl: string;
+  fileName: string;
+  sizeBytes?: number;
+  mimeType?: string;
+}
+
+/**
+ * Uploaded files stored in a submission's filesJson (either { files: [...] } or legacy array).
+ */
+export function parseSubmissionFiles(filesJson: string | null): HomeworkAttachmentItem[] {
+  if (!filesJson) return [];
+  try {
+    const parsed = JSON.parse(filesJson) as
+      | Array<string | { fileUrl?: string; fileName?: string; originalName?: string; sizeBytes?: number; mimeType?: string }>
+      | { files?: Array<string | { fileUrl?: string; fileName?: string; originalName?: string; sizeBytes?: number; mimeType?: string }> };
+    const list = Array.isArray(parsed) ? parsed : Array.isArray(parsed?.files) ? parsed.files : [];
+    return list
+      .map((item): HomeworkAttachmentItem | null => {
+        if (typeof item === "string") {
+          return { fileUrl: item, fileName: item.split("/").pop() || "Файл" };
+        }
+        if (item && typeof item === "object" && typeof item.fileUrl === "string") {
+          return {
+            fileUrl: item.fileUrl,
+            fileName: item.fileName || item.originalName || item.fileUrl.split("/").pop() || "Файл",
+            sizeBytes: typeof item.sizeBytes === "number" ? item.sizeBytes : undefined,
+            mimeType: typeof item.mimeType === "string" ? item.mimeType : undefined,
+          };
+        }
+        return null;
+      })
+      .filter((x): x is HomeworkAttachmentItem => x !== null);
+  } catch {
+    return [];
+  }
+}
+
+/** SUBMIT payload: preserves `{ links }` shape when no files attached, and adds `files` when present. */
 export function buildSubmissionFiles(
   linkUrl: string,
   linkTitle: string
 ): { links: Array<{ title: string; url: string }> } | null {
   return linkUrl ? { links: [{ title: linkTitle || "Link", url: linkUrl }] } : null;
+}
+
+export function buildSubmissionFilesWithAttachments(
+  linkUrl: string,
+  linkTitle: string,
+  attachments: HomeworkAttachmentItem[]
+):
+  | {
+      links?: Array<{ title: string; url: string }>;
+      files?: HomeworkAttachmentItem[];
+    }
+  | null {
+  const baseLinks = buildSubmissionFiles(linkUrl, linkTitle);
+  if (attachments.length === 0) return baseLinks;
+  return {
+    ...(baseLinks || {}),
+    files: attachments,
+  };
 }
 
 /** The submission a teacher is currently grading. */

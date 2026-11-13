@@ -2,11 +2,11 @@ import { NextResponse } from "next/server";
 // Reason: Exception: Developer routes operate on platform models.
 // eslint-disable-next-line no-restricted-imports
 import { db } from "@/lib/db";
-import { requireDeveloper, handlePlatformError } from "@/lib/platformAuth";
+import { requirePlatformPermission, handlePlatformError } from "@/lib/platformAuth";
 
 export async function GET(req: Request) {
   try {
-    await requireDeveloper();
+    await requirePlatformPermission("audit.read", req);
     const { searchParams } = new URL(req.url);
     const take = Math.min(500, Math.max(1, Number(searchParams.get("limit")) || 100));
     const centerId = searchParams.get("centerId");

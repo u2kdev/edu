@@ -1,4 +1,6 @@
 import { getAuthSession } from "@/lib/auth";
+// Reason: Exception: Platform routes manage global models.
+// eslint-disable-next-line no-restricted-imports
 import { db } from "@/lib/db";
 import { redirect } from "next/navigation";
 import Link from "next/link";
@@ -12,11 +14,11 @@ import {
   Wrench,
   ChevronRight,
   Shield,
-  FileText,
   Sparkles,
 } from "lucide-react";
 import { t, formatDateLocalized } from "@/i18n";
 import ImpersonateButton from "@/components/ImpersonateButton";
+import PlatformDashboardInteractive from "@/components/platform/PlatformDashboardInteractive";
 
 export default async function PlatformAdminDashboard() {
   const session = await getAuthSession();
@@ -24,6 +26,9 @@ export default async function PlatformAdminDashboard() {
 
   const locale = session.user.preferredLanguage;
   const isFullAccess = session.user.platformRole === "FULL_ACCESS";
+  const emailMisconfigured =
+    (process.env.EMAIL_PROVIDER || "memory").toLowerCase() === "memory" &&
+    process.env.NODE_ENV === "production";
 
   // Platform analytics with real database aggregations
   const totalCenters = await db.learningCenter.count();
@@ -87,6 +92,24 @@ export default async function PlatformAdminDashboard() {
 
   return (
     <div className="space-y-8">
+      {/* Email misconfiguration warning */}
+      {emailMisconfigured && (
+        <div className="p-4 rounded-2xl bg-rose-50 border border-rose-300 text-rose-900 text-sm flex flex-col sm:flex-row sm:items-center justify-between gap-3 shadow-sm">
+          <div className="flex items-center gap-3">
+            <AlertTriangle className="w-5 h-5 text-rose-600 shrink-0" />
+            <div>
+              <strong className="font-bold">Почта не настроена, письма не отправляются:</strong> В боевом режиме используется провайдер памяти (EMAIL_PROVIDER=memory).
+            </div>
+          </div>
+          <Link
+            href="/platform-admin/system-health"
+            className="px-3 py-1.5 bg-rose-600 hover:bg-rose-700 text-white rounded-lg text-xs font-semibold shrink-0 transition-colors inline-block text-center"
+          >
+            Состояние системы
+          </Link>
+        </div>
+      )}
+
       {/* FULL_ACCESS Engineering Banner */}
       {isFullAccess && (
         <div className="p-4 rounded-2xl bg-indigo-50 border border-indigo-200 text-indigo-900 text-xs flex items-center justify-between shadow-sm">
@@ -100,18 +123,18 @@ export default async function PlatformAdminDashboard() {
       )}
 
       {/* Header Banner */}
-      <div className="bg-gradient-to-r from-blue-50/90 via-indigo-50/40 to-white p-6 md:p-8 rounded-2xl border border-slate-200/90 shadow-sm flex flex-col md:flex-row md:items-center justify-between gap-6">
+      <div className="bg-gradient-to-r from-blue-50/90 via-indigo-50/40 to-white dark:from-zinc-900 dark:via-zinc-900/60 dark:to-zinc-900 p-6 md:p-8 rounded-2xl border border-slate-200/90 dark:border-zinc-800 shadow-sm flex flex-col md:flex-row md:items-center justify-between gap-6">
         <div>
           <div className="flex items-center gap-2 mb-2">
-            <span className="px-3 py-1 bg-blue-100 border border-blue-200 text-blue-700 text-xs font-semibold uppercase tracking-wider rounded-full flex items-center gap-1.5">
-              <Sparkles className="w-3.5 h-3.5 text-blue-600" />
+            <span className="px-3 py-1 bg-blue-100 dark:bg-blue-900/40 border border-blue-200 dark:border-blue-800 text-blue-700 dark:text-blue-300 text-xs font-semibold uppercase tracking-wider rounded-full flex items-center gap-1.5">
+              <Sparkles className="w-3.5 h-3.5 text-blue-600 dark:text-blue-400" />
               {t(locale, "platform.title")}
             </span>
           </div>
-          <h1 className="text-2xl md:text-3xl font-extrabold text-slate-900 tracking-tight">
+          <h1 className="text-2xl md:text-3xl font-extrabold text-slate-900 dark:text-zinc-100 tracking-tight">
             {t(locale, "dashboard.welcome", { name: session.user.fullName })}
           </h1>
-          <p className="text-sm text-slate-600 mt-1">
+          <p className="text-sm text-slate-600 dark:text-zinc-400 mt-1">
             {t(locale, "platform.analytics")} — {t(locale, "roles." + session.user.platformRole)}
           </p>
         </div>
@@ -127,25 +150,34 @@ export default async function PlatformAdminDashboard() {
           </Link>
           <Link
             href="/platform-admin/plans"
-            className="inline-flex items-center gap-2 px-4 py-2.5 bg-white hover:bg-slate-50 active:scale-[0.98] text-slate-700 text-sm font-semibold rounded-xl border border-slate-200 shadow-sm transition-all"
+            className="inline-flex items-center gap-2 px-4 py-2.5 bg-white dark:bg-zinc-800 hover:bg-slate-50 dark:hover:bg-zinc-700 text-slate-700 dark:text-zinc-200 text-sm font-semibold rounded-xl border border-slate-200 dark:border-zinc-700 shadow-sm transition-all"
           >
             <CreditCard className="w-4 h-4 text-slate-500" />
             <span>{t(locale, "platform.plans")}</span>
           </Link>
           <Link
             href="/platform-admin/audit"
-            className="inline-flex items-center gap-2 px-4 py-2.5 bg-white hover:bg-slate-50 active:scale-[0.98] text-slate-700 text-sm font-semibold rounded-xl border border-slate-200 shadow-sm transition-all"
+            className="inline-flex items-center gap-2 px-4 py-2.5 bg-white dark:bg-zinc-800 hover:bg-slate-50 dark:hover:bg-zinc-700 text-slate-700 dark:text-zinc-200 text-sm font-semibold rounded-xl border border-slate-200 dark:border-zinc-700 shadow-sm transition-all"
           >
             <Shield className="w-4 h-4 text-slate-500" />
             <span>{t(locale, "platform.auditLog")}</span>
           </Link>
+          <Link
+            href="/platform-admin/system-health"
+            className="inline-flex items-center gap-2 px-4 py-2.5 bg-white dark:bg-zinc-800 hover:bg-slate-50 dark:hover:bg-zinc-700 text-slate-700 dark:text-zinc-200 text-sm font-semibold rounded-xl border border-slate-200 dark:border-zinc-700 shadow-sm transition-all"
+          >
+            <Activity className="w-4 h-4 text-slate-500" />
+            <span>Состояние системы</span>
+          </Link>
         </div>
       </div>
 
+      {/* Interactive 6-Blocks Management Dashboard (Finances, Growth, Numbers, Attention, Events, Health) */}
+      <PlatformDashboardInteractive />
+
       {/* Metrics Grid */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-5">
-        {/* Card 1: Centers */}
-        <div className="bg-white p-5 rounded-2xl border border-slate-200/90 shadow-sm hover:shadow-md transition-shadow">
+        <div className="bg-white dark:bg-zinc-900 p-5 rounded-2xl border border-slate-200/90 dark:border-zinc-800 shadow-sm hover:shadow-md transition-shadow">
           <div className="flex items-center justify-between">
             <span className="text-xs font-semibold text-slate-500 uppercase tracking-wider">
               {t(locale, "platform.centerManagement")}
@@ -154,8 +186,8 @@ export default async function PlatformAdminDashboard() {
               <Building2 className="w-5 h-5" />
             </div>
           </div>
-          <div className="text-3xl font-bold text-slate-900 mt-2">{totalCenters}</div>
-          <div className="flex items-center gap-2 mt-2 pt-2 border-t border-slate-100 text-xs">
+          <div className="text-3xl font-bold text-slate-900 dark:text-zinc-100 mt-2">{totalCenters}</div>
+          <div className="flex items-center gap-2 mt-2 pt-2 border-t border-slate-100 dark:border-zinc-800 text-xs">
             <span className="font-medium text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded-md border border-emerald-200">
               {activeCenters} {t(locale, "platform.active").toLowerCase()}
             </span>
@@ -172,8 +204,7 @@ export default async function PlatformAdminDashboard() {
           </div>
         </div>
 
-        {/* Card 2: Students */}
-        <div className="bg-white p-5 rounded-2xl border border-slate-200/90 shadow-sm hover:shadow-md transition-shadow">
+        <div className="bg-white dark:bg-zinc-900 p-5 rounded-2xl border border-slate-200/90 dark:border-zinc-800 shadow-sm hover:shadow-md transition-shadow">
           <div className="flex items-center justify-between">
             <span className="text-xs font-semibold text-slate-500 uppercase tracking-wider">
               Ученики платформы
@@ -182,14 +213,13 @@ export default async function PlatformAdminDashboard() {
               <Users className="w-5 h-5" />
             </div>
           </div>
-          <div className="text-3xl font-bold text-slate-900 mt-2">{totalStudents}</div>
-          <div className="text-xs text-slate-500 mt-2 pt-2 border-t border-slate-100">
+          <div className="text-3xl font-bold text-slate-900 dark:text-zinc-100 mt-2">{totalStudents}</div>
+          <div className="text-xs text-slate-500 mt-2 pt-2 border-t border-slate-100 dark:border-zinc-800">
             {totalUsers} аккаунтов зарегистрировано
           </div>
         </div>
 
-        {/* Card 3: Teachers */}
-        <div className="bg-white p-5 rounded-2xl border border-slate-200/90 shadow-sm hover:shadow-md transition-shadow">
+        <div className="bg-white dark:bg-zinc-900 p-5 rounded-2xl border border-slate-200/90 dark:border-zinc-800 shadow-sm hover:shadow-md transition-shadow">
           <div className="flex items-center justify-between">
             <span className="text-xs font-semibold text-slate-500 uppercase tracking-wider">
               Учителя платформы
@@ -198,14 +228,13 @@ export default async function PlatformAdminDashboard() {
               <Activity className="w-5 h-5" />
             </div>
           </div>
-          <div className="text-3xl font-bold text-slate-900 mt-2">{totalTeachers}</div>
-          <div className="text-xs text-slate-500 mt-2 pt-2 border-t border-slate-100">
+          <div className="text-3xl font-bold text-slate-900 dark:text-zinc-100 mt-2">{totalTeachers}</div>
+          <div className="text-xs text-slate-500 mt-2 pt-2 border-t border-slate-100 dark:border-zinc-800">
             Активные преподавательские профили
           </div>
         </div>
 
-        {/* Card 4: Subscriptions / Trials */}
-        <div className="bg-white p-5 rounded-2xl border border-slate-200/90 shadow-sm hover:shadow-md transition-shadow">
+        <div className="bg-white dark:bg-zinc-900 p-5 rounded-2xl border border-slate-200/90 dark:border-zinc-800 shadow-sm hover:shadow-md transition-shadow">
           <div className="flex items-center justify-between">
             <span className="text-xs font-semibold text-slate-500 uppercase tracking-wider">
               {t(locale, "platform.trial")}
@@ -214,8 +243,8 @@ export default async function PlatformAdminDashboard() {
               <Clock className="w-5 h-5" />
             </div>
           </div>
-          <div className="text-3xl font-bold text-slate-900 mt-2">{trialCenters}</div>
-          <div className="text-xs text-slate-500 mt-2 pt-2 border-t border-slate-100">
+          <div className="text-3xl font-bold text-slate-900 dark:text-zinc-100 mt-2">{trialCenters}</div>
+          <div className="text-xs text-slate-500 mt-2 pt-2 border-t border-slate-100 dark:border-zinc-800">
             {expiringSubscriptions.length > 0 ? (
               <span className="text-amber-700 font-medium flex items-center gap-1">
                 <AlertTriangle className="w-3.5 h-3.5" />
@@ -247,10 +276,10 @@ export default async function PlatformAdminDashboard() {
             {expiringSubscriptions.map((sub) => (
               <div
                 key={sub.id}
-                className="bg-white p-3.5 rounded-xl border border-amber-200/60 shadow-sm flex items-center justify-between"
+                className="bg-white dark:bg-zinc-800 p-3.5 rounded-xl border border-amber-200/60 shadow-sm flex items-center justify-between"
               >
                 <div>
-                  <div className="text-sm font-semibold text-slate-900">{sub.center.name}</div>
+                  <div className="text-sm font-semibold text-slate-900 dark:text-zinc-100">{sub.center.name}</div>
                   <div className="text-xs text-slate-500">
                     Тариф: {sub.plan.name} • До: {formatDateLocalized(sub.currentPeriodEndsAt, locale)}
                   </div>
@@ -268,10 +297,10 @@ export default async function PlatformAdminDashboard() {
       )}
 
       {/* Recent Centers Table */}
-      <div className="bg-white rounded-2xl border border-slate-200/90 shadow-sm overflow-hidden">
-        <div className="p-5 md:p-6 border-b border-slate-100 flex items-center justify-between">
+      <div className="bg-white dark:bg-zinc-900 rounded-2xl border border-slate-200/90 dark:border-zinc-800 shadow-sm overflow-hidden">
+        <div className="p-5 md:p-6 border-b border-slate-100 dark:border-zinc-800 flex items-center justify-between">
           <div>
-            <h2 className="text-lg font-bold text-slate-900">
+            <h2 className="text-lg font-bold text-slate-900 dark:text-zinc-100">
               Недавно добавленные центры и быстрый доступ
             </h2>
             <p className="text-xs text-slate-500 mt-0.5">
@@ -290,7 +319,7 @@ export default async function PlatformAdminDashboard() {
         <div className="overflow-x-auto">
           <table className="w-full text-sm">
             <thead>
-              <tr className="bg-slate-50/80 text-xs font-semibold text-slate-500 uppercase tracking-wider border-b border-slate-200/70">
+              <tr className="bg-slate-50/80 dark:bg-zinc-800/50 text-xs font-semibold text-slate-500 uppercase tracking-wider border-b border-slate-200/70 dark:border-zinc-700">
                 <th className="text-left px-6 py-3.5">{t(locale, "platform.centerName")}</th>
                 <th className="text-left px-6 py-3.5">{t(locale, "roles.DIRECTOR")}</th>
                 <th className="text-left px-6 py-3.5">{t(locale, "common.status")}</th>
@@ -298,7 +327,7 @@ export default async function PlatformAdminDashboard() {
                 <th className="text-right px-6 py-3.5">Быстрый вход</th>
               </tr>
             </thead>
-            <tbody className="divide-y divide-slate-100">
+            <tbody className="divide-y divide-slate-100 dark:divide-zinc-800">
               {recentCenters.map((center) => {
                 const badge = statusBadges[center.status] || {
                   bg: "bg-slate-100",
@@ -306,18 +335,18 @@ export default async function PlatformAdminDashboard() {
                   border: "border-slate-200",
                 };
                 return (
-                  <tr key={center.id} className="hover:bg-slate-50/70 transition-colors">
+                  <tr key={center.id} className="hover:bg-slate-50/70 dark:hover:bg-zinc-800/40 transition-colors">
                     <td className="px-6 py-4">
                       <Link
                         href={`/platform-admin/centers/${center.id}`}
-                        className="font-semibold text-slate-900 hover:text-blue-600 transition-colors"
+                        className="font-semibold text-slate-900 dark:text-zinc-100 hover:text-blue-600 transition-colors"
                       >
                         {center.name}
                       </Link>
                       <div className="text-xs text-slate-500 font-mono mt-0.5">{center.slug}</div>
                     </td>
                     <td className="px-6 py-4">
-                      <div className="text-slate-800 font-medium">{center.owner.fullName}</div>
+                      <div className="text-slate-800 dark:text-zinc-200 font-medium">{center.owner.fullName}</div>
                       <div className="text-xs text-slate-500">{center.owner.email}</div>
                     </td>
                     <td className="px-6 py-4">
@@ -327,7 +356,7 @@ export default async function PlatformAdminDashboard() {
                         {t(locale, "platform." + center.status.toLowerCase())}
                       </span>
                     </td>
-                    <td className="px-6 py-4 text-slate-700 font-medium">
+                    <td className="px-6 py-4 text-slate-700 dark:text-zinc-300 font-medium">
                       {center.subscriptions[0]?.plan?.name || "—"}
                     </td>
                     <td className="px-6 py-4 text-right">

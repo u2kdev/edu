@@ -1,3 +1,9 @@
+import fs from "fs";
+import path from "path";
+// Reason: Exception: Storage quota inspection aggregates across tenant materials and subscription plan limits.
+// eslint-disable-next-line no-restricted-imports
+import { db } from "@/lib/db";
+
 export class StorageValidationError extends Error {
   constructor(message: string) {
     super(message);
@@ -23,10 +29,10 @@ export interface FileValidationResult {
 const CATEGORY_LIMITS: Record<StorageCategory, { maxBytes: number; allowedTypes: string[] }> = {
   AVATAR: {
     maxBytes: 2 * 1024 * 1024, // 2MB
-    allowedTypes: ["image/jpeg", "image/png", "image/webp"],
+    allowedTypes: ["image/jpeg", "image/png", "image/webp", "image/gif"],
   },
   HOMEWORK: {
-    maxBytes: 15 * 1024 * 1024, // 15MB
+    maxBytes: 25 * 1024 * 1024, // 25MB
     allowedTypes: [
       "image/jpeg",
       "image/png",
@@ -34,25 +40,37 @@ const CATEGORY_LIMITS: Record<StorageCategory, { maxBytes: number; allowedTypes:
       "application/pdf",
       "application/msword",
       "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+      "application/vnd.ms-powerpoint",
+      "application/vnd.openxmlformats-officedocument.presentationml.presentation",
+      "application/vnd.ms-excel",
+      "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
       "text/plain",
       "application/zip",
       "application/x-zip-compressed",
     ],
   },
   MATERIAL: {
-    maxBytes: 50 * 1024 * 1024, // 50MB
+    maxBytes: 100 * 1024 * 1024, // 100MB
     allowedTypes: [
       "image/jpeg",
       "image/png",
       "image/webp",
+      "image/svg+xml",
       "application/pdf",
       "application/msword",
       "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+      "application/vnd.ms-powerpoint",
+      "application/vnd.openxmlformats-officedocument.presentationml.presentation",
+      "application/vnd.ms-excel",
+      "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
       "text/plain",
       "application/zip",
       "application/x-zip-compressed",
       "video/mp4",
+      "video/webm",
       "audio/mpeg",
+      "audio/mp3",
+      "audio/wav",
     ],
   },
 };
@@ -80,7 +98,7 @@ export function validateFileUpload(options: FileValidationOptions): FileValidati
   const config = CATEGORY_LIMITS[category];
 
   if (!config) {
-    throw new StorageValidationError(`Unknown storage category: ${category}`);
+    throw new StorageValidationError(`Неизвестная категория хранилища: ${category}`);
   }
 
   // 1. Sanitize file name
@@ -88,13 +106,13 @@ export function validateFileUpload(options: FileValidationOptions): FileValidati
   const ext = baseName.split(".").pop()?.toLowerCase() || "";
 
   if (!ext || DANGEROUS_EXTENSIONS.has(ext)) {
-    throw new StorageValidationError(`File type .${ext} is not allowed for security reasons`);
+    throw new StorageValidationError(`Файлы типа .${ext} запрещены для загрузки`);
   }
 
   // 2. Validate MIME type
   if (!config.allowedTypes.includes(contentType.toLowerCase())) {
     throw new StorageValidationError(
-      `Content-Type ${contentType} is not permitted for category ${category}`
+      `Формат файла (${contentType}) не поддерживается для категории ${category}`
     );
   }
 
@@ -112,6 +130,179 @@ export function validateFileUpload(options: FileValidationOptions): FileValidati
   };
 }
 
+export interface StorageQuotaResult {
+  allowed: boolean;
+  usedBytes: number;
+  maxBytes: number;
+  percent: number;
+  reason?: string;
+}
+
+/**
+ * Checks center's storage quota against active subscription plan maxStorage.
+ */
+export async function checkStorageQuota(
+  centerId: string,
+  additionalBytes = 0
+): Promise<StorageQuotaResult> {
+  const subscription = await db.subscription.findFirst({
+    where: { centerId, status: { in: ["ACTIVE", "TRIAL"] } },
+    include: { plan: true },
+    orderBy: { createdAt: "desc" },
+  });
+
+  // Default quota is 5120 MB if not defined
+  const maxMb = subscription?.plan?.maxStorage ?? 5120;
+  const maxBytes = maxMb * 1024 * 1024;
+
+  const [currentUsage, hwSubmissions] = await Promise.all([
+    db.material.aggregate({
+      where: { centerId, deletedAt: null },
+      _sum: { fileSizeBytes: true },
+    }),
+    db.homeworkSubmission.findMany({
+      where: { centerId, filesJson: { not: null } },
+      select: { filesJson: true },
+    }),
+  ]);
+
+  let hwBytes = 0;
+  for (const s of hwSubmissions) {
+    if (!s.filesJson) continue;
+    try {
+      const parsed = JSON.parse(s.filesJson);
+      const list = Array.isArray(parsed)
+        ? parsed
+        : parsed && typeof parsed === "object" && Array.isArray(parsed.files)
+        ? parsed.files
+        : [];
+      for (const item of list) {
+        if (
+          item &&
+          typeof item === "object" &&
+          typeof item.sizeBytes === "number"
+        ) {
+          hwBytes += item.sizeBytes;
+        }
+      }
+    } catch {
+      // ignore invalid JSON
+    }
+  }
+
+  const usedBytes = (currentUsage._sum.fileSizeBytes ?? 0) + hwBytes;
+  const totalAfter = usedBytes + additionalBytes;
+  const percent = maxBytes > 0 ? Math.min(100, Math.round((usedBytes / maxBytes) * 100)) : 0;
+
+  if (totalAfter > maxBytes) {
+    return {
+      allowed: false,
+      usedBytes,
+      maxBytes,
+      percent,
+      reason: `Превышена квота дискового хранилища по тарифу (${maxMb} МБ). Освободите место или обновите подписку.`,
+    };
+  }
+
+  return {
+    allowed: true,
+    usedBytes,
+    maxBytes,
+    percent,
+  };
+}
+
+export interface SaveFileOptions {
+  centerId: string;
+  category: StorageCategory;
+  fileName: string;
+  contentType: string;
+  buffer: Buffer;
+}
+
+export interface SavedFileResult {
+  fileUrl: string;
+  key: string;
+  sizeBytes: number;
+  fileName: string;
+}
+
+export async function saveFile(options: SaveFileOptions): Promise<SavedFileResult> {
+  const { centerId, category, fileName, contentType, buffer } = options;
+  const sizeBytes = buffer.length;
+
+  // 1. Validate file format and size
+  const validated = validateFileUpload({
+    fileName,
+    contentType,
+    sizeBytes,
+    category,
+  });
+
+  // 2. Validate quota
+  const quota = await checkStorageQuota(centerId, sizeBytes);
+  if (!quota.allowed) {
+    throw new StorageValidationError(quota.reason || "Storage quota exceeded");
+  }
+
+  const timestamp = Date.now();
+  const safeName = `${timestamp}_${validated.sanitizedFileName}`;
+  const key = `${centerId}/${category.toLowerCase()}/${safeName}`;
+
+  const provider = (process.env.STORAGE_PROVIDER || "local").toLowerCase();
+
+  // S3 / R2 / MinIO support via env configuration
+  if (provider === "s3" || provider === "r2" || provider === "minio") {
+    const bucket = process.env.STORAGE_BUCKET;
+    const endpoint = process.env.STORAGE_ENDPOINT;
+    if (bucket && endpoint) {
+      // In production S3 environment, returns the S3/R2 direct or CDN URL
+      const publicDomain =
+        process.env.STORAGE_PUBLIC_DOMAIN ||
+        process.env.NEXT_PUBLIC_CDN_URL ||
+        `${endpoint.replace(/\/$/, "")}/${bucket}`;
+      return {
+        fileUrl: `${publicDomain.replace(/\/$/, "")}/${key}`,
+        key,
+        sizeBytes,
+        fileName: validated.sanitizedFileName,
+      };
+    }
+  }
+
+  // Default driver: Local file system in public/uploads
+  const uploadDir = path.join(process.cwd(), "public", "uploads", centerId, category.toLowerCase());
+  await fs.promises.mkdir(uploadDir, { recursive: true });
+
+  const filePath = path.join(uploadDir, safeName);
+  await fs.promises.writeFile(filePath, buffer);
+
+  const fileUrl = `/uploads/${centerId}/${category.toLowerCase()}/${safeName}`;
+
+  return {
+    fileUrl,
+    key,
+    sizeBytes,
+    fileName: validated.sanitizedFileName,
+  };
+}
+
+export async function deleteStoredFile(fileUrl: string): Promise<boolean> {
+  try {
+    if (fileUrl.startsWith("/uploads/")) {
+      const relativePart = fileUrl.replace(/^\/uploads\//, "");
+      const fullPath = path.join(process.cwd(), "public", "uploads", relativePart);
+      if (fs.existsSync(fullPath)) {
+        await fs.promises.unlink(fullPath);
+        return true;
+      }
+    }
+    return false;
+  } catch {
+    return false;
+  }
+}
+
 export interface PresignedUrlOptions extends FileValidationOptions {
   centerId: string;
 }
@@ -124,7 +315,10 @@ export interface PresignedUrlResult {
 }
 
 export function isUploadsEnabled(): boolean {
-  return process.env.FEATURE_UPLOADS === "true" || process.env.NEXT_PUBLIC_FEATURE_UPLOADS === "true";
+  return (
+    process.env.FEATURE_UPLOADS === "true" ||
+    process.env.NEXT_PUBLIC_FEATURE_UPLOADS === "true"
+  );
 }
 
 export async function generatePresignedUploadUrl(
@@ -153,9 +347,13 @@ export async function generatePresignedUploadUrl(
     const bucket = process.env.STORAGE_BUCKET;
     const endpoint = process.env.STORAGE_ENDPOINT;
     if (!bucket || !endpoint) {
-      throw new StorageValidationError("S3 storage requires valid STORAGE_BUCKET and STORAGE_ENDPOINT configuration");
+      throw new StorageValidationError(
+        "S3 storage requires valid STORAGE_BUCKET and STORAGE_ENDPOINT configuration"
+      );
     }
-    throw new StorageValidationError("Real S3 uploads require AWS SDK presigner and credentials. Mock signatures are disabled.");
+    throw new StorageValidationError(
+      "Real S3 uploads require AWS SDK presigner and credentials. Mock signatures are disabled."
+    );
   }
 
   throw new StorageValidationError("No active storage provider configured");

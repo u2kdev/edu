@@ -51,7 +51,7 @@ describe("TRUST-3 Item 2: getClientIp proxy security, default unknown, NaN handl
     }
   });
 
-  it("default (hops not set or 0): returns 'unknown', ignores spoofed x-forwarded-for, cf-connecting-ip and x-real-ip", () => {
+  it("default (hops not set or 0): ignores spoofed headers, returns fingerprint or unknown if fallback disabled", () => {
     const req = new Request("http://localhost/api/test", {
       headers: {
         "x-forwarded-for": "1.2.3.4, 5.6.7.8",
@@ -59,8 +59,14 @@ describe("TRUST-3 Item 2: getClientIp proxy security, default unknown, NaN handl
         "x-real-ip": "8.8.8.8",
       },
     });
+    // With fallbackToFingerprint: false, returns 'unknown'
+    expect(getClientIp(req, { fallbackToFingerprint: false })).toBe("unknown");
+
+    // With default options, returns client fingerprint fp_... (ignoring spoofed headers)
     const ip = getClientIp(req);
-    expect(ip).toBe("unknown");
+    expect(ip).toMatch(/^fp_[0-9a-f]{16}$/);
+    expect(ip).not.toBe("1.2.3.4");
+    expect(ip).not.toBe("9.9.9.9");
   });
 
   it("TRUST_PROXY_HEADERS=true allows cf-connecting-ip and x-real-ip when hops=0", () => {
@@ -102,18 +108,20 @@ describe("TRUST-3 Item 2: getClientIp proxy security, default unknown, NaN handl
     expect(getClientIp(req)).toBe("203.0.113.5");
   });
 
-  it("NaN or negative hops is treated as 0 and returns 'unknown'", () => {
+  it("NaN or negative hops is treated as 0 and returns 'unknown' or fingerprint", () => {
     process.env.TRUSTED_PROXY_HOPS = "not-a-number";
     const req1 = new Request("http://localhost/api/test", {
       headers: { "x-forwarded-for": "198.51.100.1" },
     });
-    expect(getClientIp(req1)).toBe("unknown");
+    expect(getClientIp(req1, { fallbackToFingerprint: false })).toBe("unknown");
+    expect(getClientIp(req1)).toMatch(/^fp_/);
 
     process.env.TRUSTED_PROXY_HOPS = "-5";
     const req2 = new Request("http://localhost/api/test", {
       headers: { "x-forwarded-for": "198.51.100.1" },
     });
-    expect(getClientIp(req2)).toBe("unknown");
+    expect(getClientIp(req2, { fallbackToFingerprint: false })).toBe("unknown");
+    expect(getClientIp(req2)).toMatch(/^fp_/);
   });
 
   it("rate limit keys never contain 'undefined'", async () => {

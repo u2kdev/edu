@@ -1,7 +1,7 @@
 import { db } from "./db";
-import { getClientIp } from "./ip";
+import { getClientIp, getClientFingerprint } from "./ip";
 
-export { getClientIp };
+export { getClientIp, getClientFingerprint };
 
 const MAX_ATTEMPTS = 10;
 const WINDOW_MS = 15 * 60 * 1000; // 15 minutes
@@ -11,6 +11,89 @@ export class RateLimiterDatabaseError extends Error {
     super(message);
     this.name = "RateLimiterDatabaseError";
   }
+}
+
+interface BoundedEntry {
+  count: number;
+  expiresAt: number;
+}
+
+/**
+ * In-memory bounded rate limiter with max entries cap and LRU/TTL eviction.
+ * Guarantees constant O(1) memory ceiling and defense-in-depth against heap exhaustion.
+ */
+export class BoundedMemoryRateLimiter {
+  private store = new Map<string, BoundedEntry>();
+  private readonly maxEntries: number;
+
+  constructor(maxEntries: number = 10000) {
+    this.maxEntries = maxEntries;
+  }
+
+  public check(key: string, maxAttempts: number, windowMs: number, consume: boolean = true): boolean {
+    const now = Date.now();
+    const entry = this.store.get(key);
+
+    if (!entry || entry.expiresAt <= now) {
+      if (consume) {
+        if (this.store.size >= this.maxEntries) {
+          this.evictOldest();
+        }
+        this.store.set(key, { count: 1, expiresAt: now + windowMs });
+      }
+      return true;
+    }
+
+    if (entry.count >= maxAttempts) {
+      return false;
+    }
+
+    if (consume) {
+      entry.count++;
+      // Touch key to refresh LRU position in Map insertion order
+      this.store.delete(key);
+      this.store.set(key, entry);
+    }
+
+    return true;
+  }
+
+  private evictOldest(): void {
+    const now = Date.now();
+    // Sweep expired first
+    for (const [key, entry] of this.store.entries()) {
+      if (entry.expiresAt <= now) {
+        this.store.delete(key);
+        return;
+      }
+    }
+    // Fall back to least recently used (first key in insertion order)
+    const oldestKey = this.store.keys().next().value;
+    if (oldestKey !== undefined) {
+      this.store.delete(oldestKey);
+    }
+  }
+
+  public size(): number {
+    return this.store.size;
+  }
+
+  public clear(): void {
+    this.store.clear();
+  }
+}
+
+/**
+ * Generates an isolated rate-limiting key for the client request:
+ * - If IP is resolvable: returns `${prefix}:${ip}` or `${ip}`
+ * - If IP is unresolvable ("unknown"): returns `${prefix}:unknown_${getClientFingerprint(req)}` or `unknown_${getClientFingerprint(req)}`
+ *
+ * Guarantees that one client with an unresolvable IP cannot lock out other clients.
+ */
+export function getClientRateLimitKey(req: Request, prefix?: string): string {
+  const ip = getClientIp(req);
+  const keyPart = ip === "unknown" ? `unknown_${getClientFingerprint(req)}` : ip;
+  return prefix ? `${prefix}:${keyPart}` : keyPart;
 }
 
 /**

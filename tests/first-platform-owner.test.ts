@@ -3,39 +3,43 @@ import { db } from "../src/lib/db";
 import { comparePassword } from "../src/lib/auth";
 import { GET, POST } from "../src/app/api/platform/first-owner/route";
 
-const mockRequest = (url: string, method: "GET" | "POST", body?: unknown, ip: string = "127.0.0.1") =>
+const TEST_SETUP_TOKEN = "super-secret-setup-token-min-16-chars";
+
+const mockRequest = (
+  url: string,
+  method: "GET" | "POST",
+  body?: unknown,
+  ip: string = "127.0.0.1",
+  token: string = TEST_SETUP_TOKEN
+) =>
   new Request(`http://localhost${url}`, {
     method,
     headers: {
       "Content-Type": "application/json",
       "x-forwarded-for": ip,
+      ...(token ? { "x-setup-token": token } : {}),
     },
     body: body ? JSON.stringify(body) : undefined,
   });
 
 describe("LAUNCH-1 Item 5: First platform owner setup", () => {
+  const originalEnv = { ...process.env };
   let createdUserIds: string[] = [];
 
   beforeEach(async () => {
+    process.env.SETUP_TOKEN = TEST_SETUP_TOKEN;
+    (process.env as Record<string, string | undefined>).NODE_ENV = "test";
+
     // Remove superadmins to test initial platform state
     const superadmins = await db.platformUser.findMany({
       where: { platformRole: "SUPERADMIN" },
       select: { id: true },
     });
     createdUserIds = superadmins.map((u) => u.id);
-    await db.userSession.deleteMany({
-      where: { userId: { in: createdUserIds } },
-    });
-    await db.auditLog.deleteMany({
-      where: { actorUserId: { in: createdUserIds } },
-    });
-    await db.platformUser.deleteMany({
-      where: { id: { in: createdUserIds } },
-    });
-  });
-
-  afterEach(async () => {
     if (createdUserIds.length > 0) {
+      await db.learningCenter.deleteMany({
+        where: { ownerId: { in: createdUserIds } },
+      });
       await db.userSession.deleteMany({
         where: { userId: { in: createdUserIds } },
       });
@@ -48,8 +52,27 @@ describe("LAUNCH-1 Item 5: First platform owner setup", () => {
     }
   });
 
-  it("GET returns canInitialize: true when no superadmin exists, false once created", async () => {
-    const resBefore = await GET();
+  afterEach(async () => {
+    process.env = { ...originalEnv };
+    if (createdUserIds.length > 0) {
+      await db.learningCenter.deleteMany({
+        where: { ownerId: { in: createdUserIds } },
+      });
+      await db.userSession.deleteMany({
+        where: { userId: { in: createdUserIds } },
+      });
+      await db.auditLog.deleteMany({
+        where: { actorUserId: { in: createdUserIds } },
+      });
+      await db.platformUser.deleteMany({
+        where: { id: { in: createdUserIds } },
+      });
+    }
+  });
+
+  it("GET returns canInitialize: true when no superadmin exists, 404 once created", async () => {
+    const reqBefore = mockRequest("/api/platform/first-owner", "GET");
+    const resBefore = await GET(reqBefore);
     const dataBefore = await resBefore.json();
     expect(resBefore.status).toBe(200);
     expect(dataBefore.canInitialize).toBe(true);
@@ -66,10 +89,9 @@ describe("LAUNCH-1 Item 5: First platform owner setup", () => {
     const createdBody = await resCreate.json();
     createdUserIds.push(createdBody.user.id);
 
-    const resAfter = await GET();
-    const dataAfter = await resAfter.json();
-    expect(resAfter.status).toBe(200);
-    expect(dataAfter.canInitialize).toBe(false);
+    const reqAfter = mockRequest("/api/platform/first-owner", "GET");
+    const resAfter = await GET(reqAfter);
+    expect(resAfter.status).toBe(404);
   });
 
   it("POST creates first superadmin, hashes password, and never stores or logs plaintext password", async () => {
@@ -119,7 +141,7 @@ describe("LAUNCH-1 Item 5: First platform owner setup", () => {
     consoleSpy.mockRestore();
   });
 
-  it("POST returns 403 Forbidden once a superadmin already exists", async () => {
+  it("POST returns 404 Not Found once a superadmin already exists", async () => {
     const res1 = await POST(
       mockRequest("/api/platform/first-owner", "POST", {
         email: `first-${Date.now()}@platform.uz`,
@@ -131,7 +153,7 @@ describe("LAUNCH-1 Item 5: First platform owner setup", () => {
     const body1 = await res1.json();
     createdUserIds.push(body1.user.id);
 
-    // Second attempt must fail with 403 Forbidden
+    // Second attempt must fail with 404 Not Found
     const res2 = await POST(
       mockRequest("/api/platform/first-owner", "POST", {
         email: `second-${Date.now()}@platform.uz`,
@@ -139,9 +161,9 @@ describe("LAUNCH-1 Item 5: First platform owner setup", () => {
         fullName: "Intruder SuperAdmin",
       }, "10.1.1.4")
     );
-    expect(res2.status).toBe(403);
+    expect(res2.status).toBe(404);
     const body2 = await res2.json();
-    expect(body2.error).toMatch(/уже инициализирована|Platform already initialized/i);
+    expect(body2.error).toBe("Not Found");
   });
 
   it("POST rejects weak passwords with 400 Bad Request", async () => {

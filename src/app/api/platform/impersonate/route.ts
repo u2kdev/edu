@@ -2,9 +2,13 @@ import { NextResponse } from "next/server";
 // Reason: Exception: Platform routes manage global models.
 // eslint-disable-next-line no-restricted-imports
 import { db } from "@/lib/db";
-import { getAuthSession, createSessionToken } from "@/lib/auth";
+import { getAuthSession, createSessionToken, signJWT } from "@/lib/auth";
+import { hasPermission } from "@/lib/permissions";
 import { getClientIp } from "@/lib/ip";
 import { logAuditEvent } from "@/lib/tenant";
+import { cookies } from "next/headers";
+
+import { IMPERSONATION_MAX_AGE_SECONDS, ORIGINAL_SESSION_COOKIE } from "@/lib/impersonation";
 
 // POST /api/platform/impersonate - Platform support / Superadmin impersonates a user with mandatory audit log
 export async function POST(req: Request) {
@@ -14,12 +18,36 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
-    const allowedRoles = ["SUPERADMIN", "DEVELOPER", "PLATFORM_ADMIN", "FULL_ACCESS", "PLATFORM_SUPPORT"];
-    if (!allowedRoles.includes(session.user.platformRole)) {
+    if (!hasPermission("platform.impersonation", session.user.platformRole)) {
       return NextResponse.json(
-        { error: "Forbidden: Only platform owners/developers can impersonate users" },
+        { error: "Forbidden: You do not have permission to impersonate users" },
         { status: 403 }
       );
+    }
+
+    let currentOriginalCookie: string | undefined;
+    let currentAuthToken: string | undefined;
+    try {
+      const cookieStore = cookies();
+      currentOriginalCookie = cookieStore.get(ORIGINAL_SESSION_COOKIE)?.value;
+      currentAuthToken = cookieStore.get("auth_token")?.value;
+    } catch {
+      // Outside Next.js request scope
+    }
+
+    if (req) {
+      const cookieHeader = req.headers.get("cookie") || "";
+      if (!currentOriginalCookie) {
+        const matchOrig = cookieHeader.match(new RegExp(`${ORIGINAL_SESSION_COOKIE}=([^;]+)`));
+        if (matchOrig) currentOriginalCookie = decodeURIComponent(matchOrig[1].trim());
+      }
+      if (!currentAuthToken) {
+        const matchAuth = cookieHeader.match(/auth_token=([^;]+)/);
+        if (matchAuth) currentAuthToken = decodeURIComponent(matchAuth[1].trim());
+      }
+      if (!currentAuthToken) {
+        currentAuthToken = req.headers.get("authorization")?.replace(/^Bearer\s+/i, "");
+      }
     }
 
     const { targetUserId, targetCenterId, reason } = await req.json();
@@ -53,10 +81,11 @@ export async function POST(req: Request) {
         targetEmail: targetUser.email,
         targetRole: activeMem?.role || "NONE",
         reason: reason || "No reason provided",
+        durationMinutes: 60,
       },
     });
 
-    // Start an impersonation session for the target user (persisted, revocable, with jti)
+    // Start an impersonation session for the target user (bounded to 60 minutes)
     const token = await createSessionToken(
       {
         userId: targetUser.id,
@@ -67,10 +96,25 @@ export async function POST(req: Request) {
         impersonatorUserId: session.user.id,
       },
       {
-        maxAgeSeconds: 1 * 24 * 60 * 60, // 1 day for impersonation session
+        maxAgeSeconds: IMPERSONATION_MAX_AGE_SECONDS,
         ipAddress: getClientIp(req),
         userAgent: req.headers.get("user-agent") || undefined,
       }
+    );
+
+    // Keep or save the original superadmin session token in a separate httpOnly cookie
+    // If not already in an impersonation session, save current token.
+    const originalTokenToPreserve = currentOriginalCookie || currentAuthToken;
+    const originalWrapper = signJWT(
+      {
+        userId: session.user.id,
+        email: session.user.email,
+        platformRole: session.user.platformRole,
+        originalToken: originalTokenToPreserve || "",
+        impersonatedUserId: targetUser.id,
+        startedAt: Date.now(),
+      },
+      "60m"
     );
 
     const response = NextResponse.json({
@@ -81,13 +125,24 @@ export async function POST(req: Request) {
         fullName: targetUser.fullName,
       },
       activeCenterId: activeMem?.centerId,
+      maxAgeSeconds: IMPERSONATION_MAX_AGE_SECONDS,
     });
 
+    // Set target user's auth_token cookie
     response.cookies.set("auth_token", token, {
       httpOnly: true,
       secure: process.env.NODE_ENV === "production",
       sameSite: "lax",
-      maxAge: 1 * 24 * 60 * 60, // 1 day for impersonation session
+      maxAge: IMPERSONATION_MAX_AGE_SECONDS,
+      path: "/",
+    });
+
+    // Set original superadmin session cookie
+    response.cookies.set(ORIGINAL_SESSION_COOKIE, originalWrapper, {
+      httpOnly: true,
+      secure: process.env.NODE_ENV === "production",
+      sameSite: "lax",
+      maxAge: IMPERSONATION_MAX_AGE_SECONDS,
       path: "/",
     });
 

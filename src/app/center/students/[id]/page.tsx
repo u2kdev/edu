@@ -1,20 +1,11 @@
 import { requireTenantPageAccess } from "@/lib/tenant";
 import { getAuthSession } from "@/lib/auth";
 import { redirect } from "next/navigation";
-import Link from "next/link";
-import {
-  ArrowLeft,
-  User,
-  Users,
-  GraduationCap,
-  ClipboardCheck,
-  CreditCard,
-  History,
-  Mail,
-  Phone,
-  Calendar,
-} from "lucide-react";
-import { t } from "@/i18n";
+// Reason: Exception: Server page checks session models and shared rules.
+// eslint-disable-next-line no-restricted-imports
+import { db } from "@/lib/db";
+import { canManageUserAccount } from "@/lib/tenant-user-guard";
+import { StudentProfileClient } from "@/components/students/StudentProfileClient";
 
 export default async function StudentProfilePage({
   params,
@@ -35,9 +26,12 @@ export default async function StudentProfilePage({
   // Find student in this center
   const student = await tenantDb.centerMembership.findFirst({
     where: {
-      id: studentMembershipId,
       centerId: tenantCtx.center.id,
       role: "STUDENT",
+      OR: [
+        { id: studentMembershipId },
+        { userId: studentMembershipId },
+      ],
     },
     include: {
       user: true,
@@ -60,7 +54,7 @@ export default async function StudentProfilePage({
           parent: {
             include: {
               user: {
-                select: { fullName: true, phone: true, email: true },
+                select: { id: true, fullName: true, phone: true, email: true },
               },
             },
           },
@@ -79,14 +73,14 @@ export default async function StudentProfilePage({
 
   // Security role checks:
   if (currentRole === "STUDENT") {
-    if (tenantCtx.membership?.id !== studentMembershipId && !tenantCtx.isPlatformStaff) {
+    if (tenantCtx.membership?.id !== student.id && !tenantCtx.isPlatformStaff) {
       redirect("/center");
     }
   } else if (currentRole === "PARENT") {
     const parentLink = await tenantDb.parentLink.findFirst({
       where: {
         parentMembershipId: tenantCtx.membership?.id,
-        studentMembershipId: studentMembershipId,
+        studentMembershipId: student.id,
         status: "CONFIRMED",
       },
     });
@@ -96,7 +90,7 @@ export default async function StudentProfilePage({
   } else if (currentRole === "TEACHER") {
     const teacherEnrolled = await tenantDb.enrollment.findFirst({
       where: {
-        studentMembershipId: studentMembershipId,
+        studentMembershipId: student.id,
         group: { teacherMembershipId: tenantCtx.membership?.id },
       },
     });
@@ -113,7 +107,7 @@ export default async function StudentProfilePage({
 
   // Load attendances
   const attendances = await tenantDb.attendance.findMany({
-    where: { studentMembershipId },
+    where: { studentMembershipId: student.id },
     orderBy: { markedAt: "desc" },
     take: 30,
     include: {
@@ -123,7 +117,7 @@ export default async function StudentProfilePage({
 
   // Load grades
   const grades = await tenantDb.grade.findMany({
-    where: { studentMembershipId },
+    where: { studentMembershipId: student.id },
     orderBy: { createdAt: "desc" },
     take: 30,
     include: {
@@ -132,329 +126,147 @@ export default async function StudentProfilePage({
     },
   });
 
-  // Load audit logs (enrollment / transfer / drop history)
+  // Load audit logs
   const auditLogs = await tenantDb.auditLog.findMany({
     where: {
       centerId: tenantCtx.center.id,
-      resource: "Student",
-      resourceId: studentMembershipId,
+      OR: [
+        { resourceId: student.id },
+        { resourceId: student.user.id },
+        { actorUserId: student.user.id },
+      ],
     },
     orderBy: { createdAt: "desc" },
     take: 20,
+    select: {
+      id: true,
+      action: true,
+      createdAt: true,
+      detailsJson: true,
+    },
   });
 
+  // Load active parent invite code if any
+  const parentInvite = await tenantDb.inviteCode.findFirst({
+    where: {
+      centerId: tenantCtx.center.id,
+      studentMembershipId: student.id,
+      targetRole: "PARENT",
+      isRevoked: false,
+    },
+    orderBy: { createdAt: "desc" },
+    select: {
+      code: true,
+      expiresAt: true,
+      usesCount: true,
+    },
+  });
+
+  // Manageability / shared rule
+  const manageability = await canManageUserAccount(tenantCtx.center.id, student.user.id);
+
+  // Active sessions
+  const activeSessions = await db.userSession.findMany({
+    where: {
+      userId: student.user.id,
+      expiresAt: { gt: new Date() },
+    },
+    select: {
+      id: true,
+      createdAt: true,
+      expiresAt: true,
+      ipAddress: true,
+      userAgent: true,
+    },
+    orderBy: { createdAt: "desc" },
+    take: 10,
+  });
+
+  const isSyntheticEmail = student.user.email.endsWith("@noemail.local");
+
   return (
-    <div className="space-y-6">
-      {/* Back button */}
-      <div>
-        <Link
-          href="/center/students"
-          className="inline-flex items-center gap-2 text-xs font-semibold text-slate-400 hover:text-white transition-colors"
-        >
-          <ArrowLeft className="w-4 h-4" />
-          <span>{t(locale, "common.back")}</span>
-        </Link>
-      </div>
-
-      {/* Header Profile Card */}
-      <div className="glass-panel p-6 rounded-3xl border border-slate-800 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
-        <div className="flex items-center gap-4">
-          <div className="w-14 h-14 rounded-2xl bg-brand-500/10 border border-brand-500/30 flex items-center justify-center text-brand-400">
-            <User className="w-7 h-7" />
-          </div>
-          <div>
-            <h1 className="text-2xl font-bold text-white tracking-tight">
-              {student.user.fullName}
-            </h1>
-            <div className="flex flex-wrap items-center gap-4 text-xs text-slate-400 mt-1 font-mono">
-              <span className="flex items-center gap-1.5">
-                <Mail className="w-3.5 h-3.5 text-slate-500" />
-                {student.user.email}
-              </span>
-              {student.user.phone && (
-                <span className="flex items-center gap-1.5">
-                  <Phone className="w-3.5 h-3.5 text-slate-500" />
-                  {student.user.phone}
-                </span>
-              )}
-              <span className="flex items-center gap-1.5">
-                <Calendar className="w-3.5 h-3.5 text-slate-500" />
-                {new Date(student.joinedAt).toLocaleDateString()}
-              </span>
-            </div>
-          </div>
-        </div>
-
-        <div className="px-3 py-1 bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 rounded-full text-xs font-semibold">
-          {student.status === "ACTIVE"
-            ? t(locale, "students.statusActive")
-            : t(locale, "students.statusArchived")}
-        </div>
-      </div>
-
-      {/* 2-Column Grid */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        {/* Groups & Enrolled Courses */}
-        <div className="glass-panel p-6 rounded-2xl border border-slate-800 space-y-4">
-          <h2 className="text-sm font-bold text-white uppercase tracking-wider flex items-center gap-2">
-            <Users className="w-4 h-4 text-brand-400" />
-            <span>{t(locale, "students.groups")}</span>
-          </h2>
-          {student.enrollments.length === 0 ? (
-            <p className="text-xs text-slate-500 italic">
-              {t(locale, "students.noGroups")}
-            </p>
-          ) : (
-            <div className="space-y-2.5">
-              {student.enrollments.map((en) => (
-                <div
-                  key={en.id}
-                  className="p-3 rounded-xl bg-slate-900/60 border border-slate-800/80 flex items-center justify-between text-xs"
-                >
-                  <div>
-                    <h3 className="font-semibold text-white">{en.group.name}</h3>
-                    <p className="text-[11px] text-brand-400">
-                      {en.group.course.title}
-                    </p>
-                    {en.group.teacher && (
-                      <p className="text-[11px] text-slate-400 mt-0.5">
-                        {t(locale, "students.teacherLabel", {
-                          name: en.group.teacher.user.fullName,
-                        })}
-                      </p>
-                    )}
-                  </div>
-                  <span
-                    className={`px-2 py-0.5 rounded text-[10px] font-semibold ${
-                      en.status === "ACTIVE"
-                        ? "bg-emerald-500/10 text-emerald-400 border border-emerald-500/20"
-                        : "bg-rose-500/10 text-rose-400 border border-rose-500/20"
-                    }`}
-                  >
-                    {en.status}
-                  </span>
-                </div>
-              ))}
-            </div>
-          )}
-        </div>
-
-        {/* Parents Linked */}
-        <div className="glass-panel p-6 rounded-2xl border border-slate-800 space-y-4">
-          <h2 className="text-sm font-bold text-white uppercase tracking-wider flex items-center gap-2">
-            <User className="w-4 h-4 text-brand-400" />
-            <span>{t(locale, "students.parents")}</span>
-          </h2>
-          {student.parentLinksAsStudent.length === 0 ? (
-            <p className="text-xs text-slate-500 italic">
-              {t(locale, "students.noParents")}
-            </p>
-          ) : (
-            <div className="space-y-2.5">
-              {student.parentLinksAsStudent.map((link) => (
-                <div
-                  key={link.id}
-                  className="p-3 rounded-xl bg-slate-900/60 border border-slate-800/80 flex items-center justify-between text-xs"
-                >
-                  <div>
-                    <h3 className="font-semibold text-white">
-                      {link.parent.user.fullName}
-                    </h3>
-                    <p className="text-[11px] text-slate-400 font-mono">
-                      {link.parent.user.email}
-                    </p>
-                    {link.parent.user.phone && (
-                      <p className="text-[11px] text-slate-500 font-mono">
-                        {link.parent.user.phone}
-                      </p>
-                    )}
-                  </div>
-                  <span className="px-2 py-0.5 bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 rounded text-[10px] font-semibold">
-                    {t(locale, "common.yes")}
-                  </span>
-                </div>
-              ))}
-            </div>
-          )}
-        </div>
-
-        {/* Attendance Summary */}
-        <div className="glass-panel p-6 rounded-2xl border border-slate-800 space-y-4">
-          <h2 className="text-sm font-bold text-white uppercase tracking-wider flex items-center gap-2">
-            <ClipboardCheck className="w-4 h-4 text-emerald-400" />
-            <span>{t(locale, "students.attendanceSummary")}</span>
-          </h2>
-          {attendances.length === 0 ? (
-            <p className="text-xs text-slate-500 italic">
-              {t(locale, "common.noData")}
-            </p>
-          ) : (
-            <div className="max-h-60 overflow-y-auto space-y-2 pr-1">
-              {attendances.map((att) => (
-                <div
-                  key={att.id}
-                  className="p-2.5 rounded-xl bg-slate-900/40 border border-slate-800 flex items-center justify-between text-xs"
-                >
-                  <div>
-                    <h3 className="font-semibold text-white">{att.lesson.title}</h3>
-                    <p className="text-[10px] text-slate-500">
-                      {new Date(att.markedAt).toLocaleDateString()}
-                    </p>
-                  </div>
-                  <span
-                    className={`px-2 py-0.5 rounded text-[10px] font-semibold ${
-                      att.status === "PRESENT"
-                        ? "bg-emerald-500/10 text-emerald-400"
-                        : att.status === "LATE"
-                        ? "bg-amber-500/10 text-amber-400"
-                        : "bg-rose-500/10 text-rose-400"
-                    }`}
-                  >
-                    {att.status}
-                  </span>
-                </div>
-              ))}
-            </div>
-          )}
-        </div>
-
-        {/* Grades Summary */}
-        <div className="glass-panel p-6 rounded-2xl border border-slate-800 space-y-4">
-          <h2 className="text-sm font-bold text-white uppercase tracking-wider flex items-center gap-2">
-            <GraduationCap className="w-4 h-4 text-brand-400" />
-            <span>{t(locale, "students.gradesSummary")}</span>
-          </h2>
-          {grades.length === 0 ? (
-            <p className="text-xs text-slate-500 italic">
-              {t(locale, "common.noData")}
-            </p>
-          ) : (
-            <div className="max-h-60 overflow-y-auto space-y-2 pr-1">
-              {grades.map((g) => (
-                <div
-                  key={g.id}
-                  className="p-2.5 rounded-xl bg-slate-900/40 border border-slate-800 flex items-center justify-between text-xs"
-                >
-                  <div>
-                    <h3 className="font-semibold text-white">
-                      {g.lesson?.title || t(locale, "students.lessonFallback")}
-                    </h3>
-                    <p className="text-[10px] text-slate-500">
-                      {g.teacher?.user.fullName} &bull;{" "}
-                      {new Date(g.createdAt).toLocaleDateString()}
-                    </p>
-                  </div>
-                  <div className="text-right">
-                    <span className="font-bold text-emerald-400 text-sm">
-                      {g.value} / {g.maxValue}
-                    </span>
-                  </div>
-                </div>
-              ))}
-            </div>
-          )}
-        </div>
-
-        {/* Payments (Read Only) */}
-        <div className="glass-panel p-6 rounded-2xl border border-slate-800 space-y-4">
-          <h2 className="text-sm font-bold text-white uppercase tracking-wider flex items-center gap-2">
-            <CreditCard className="w-4 h-4 text-brand-400" />
-            <span>{t(locale, "students.payments")}</span>
-          </h2>
-          {student.payments.length === 0 ? (
-            <p className="text-xs text-slate-500 italic">
-              {t(locale, "students.noPayments")}
-            </p>
-          ) : (
-            <div className="max-h-60 overflow-y-auto space-y-2 pr-1">
-              {student.payments.map((p) => (
-                <div
-                  key={p.id}
-                  className="p-2.5 rounded-xl bg-slate-900/40 border border-slate-800 flex items-center justify-between text-xs"
-                >
-                  <div>
-                    <h3 className="font-semibold text-white">
-                      {p.amount.toLocaleString()} {p.currency}
-                    </h3>
-                    <p className="text-[10px] text-slate-500">
-                      {p.paymentMethod} &bull;{" "}
-                      {new Date(p.createdAt).toLocaleDateString()}
-                    </p>
-                  </div>
-                  <span
-                    className={`px-2 py-0.5 rounded text-[10px] font-semibold ${
-                      p.status === "PAID"
-                        ? "bg-emerald-500/10 text-emerald-400"
-                        : "bg-amber-500/10 text-amber-400"
-                    }`}
-                  >
-                    {p.status}
-                  </span>
-                </div>
-              ))}
-            </div>
-          )}
-        </div>
-
-        {/* Enrollment and Transfer History (Audit Logs) */}
-        <div className="glass-panel p-6 rounded-2xl border border-slate-800 space-y-4">
-          <h2 className="text-sm font-bold text-white uppercase tracking-wider flex items-center gap-2">
-            <History className="w-4 h-4 text-brand-400" />
-            <span>{t(locale, "students.enrollmentHistory")}</span>
-          </h2>
-          {auditLogs.length === 0 ? (
-            <p className="text-xs text-slate-500 italic">
-              {t(locale, "students.noHistory")}
-            </p>
-          ) : (
-            <div className="max-h-60 overflow-y-auto space-y-2 pr-1">
-              {auditLogs.map((log) => {
-                let parsedDetails = null;
-                try {
-                  parsedDetails = log.detailsJson ? JSON.parse(log.detailsJson) : null;
-                } catch {
-                  // ignore
-                }
-
-                return (
-                  <div
-                    key={log.id}
-                    className="p-2.5 rounded-xl bg-slate-900/40 border border-slate-800 text-xs space-y-1"
-                  >
-                    <div className="flex items-center justify-between">
-                      <span className="font-bold text-white font-mono text-[11px]">
-                        {log.action}
-                      </span>
-                      <span className="text-[10px] text-slate-500">
-                        {new Date(log.createdAt).toLocaleString()}
-                      </span>
-                    </div>
-                    {parsedDetails && (
-                      <div className="text-[11px] text-slate-400">
-                        {parsedDetails.fromGroupName && parsedDetails.toGroupName && (
-                          <p>
-                            {t(locale, "students.transferHistory", {
-                              from: parsedDetails.fromGroupName,
-                              to: parsedDetails.toGroupName,
-                            })}
-                          </p>
-                        )}
-                        {parsedDetails.reason && (
-                          <p className="italic text-slate-500">
-                            {t(locale, "students.reasonLabel", {
-                              reason: parsedDetails.reason,
-                            })}
-                          </p>
-                        )}
-                      </div>
-                    )}
-                  </div>
-                );
-              })}
-            </div>
-          )}
-        </div>
-      </div>
-    </div>
+    <StudentProfileClient
+      membership={{
+        id: student.id,
+        role: student.role,
+        status: student.status,
+        joinedAt: student.joinedAt.toISOString(),
+      }}
+      user={{
+        id: student.user.id,
+        fullName: student.user.fullName,
+        email: isSyntheticEmail ? null : student.user.email,
+        phone: student.user.phone,
+        username: student.user.username,
+        preferredLanguage: student.user.preferredLanguage,
+        lastLoginAt: student.user.lastLoginAt ? student.user.lastLoginAt.toISOString() : null,
+      }}
+      enrollments={student.enrollments.map((e) => ({
+        id: e.id,
+        groupName: e.group.name,
+        courseTitle: e.group.course?.title || "Курс",
+        teacherName: e.group.teacher?.user?.fullName || "Преподаватель",
+      }))}
+      parents={student.parentLinksAsStudent.map((p) => ({
+        linkId: p.id,
+        parentId: p.parent.id,
+        fullName: p.parent.user.fullName,
+        phone: p.parent.user.phone,
+        email: p.parent.user.email.endsWith("@noemail.local") ? null : p.parent.user.email,
+        relationship: p.relationship,
+        status: p.status,
+      }))}
+      parentInviteCode={
+        parentInvite
+          ? {
+              code: parentInvite.code,
+              expiresAt: parentInvite.expiresAt ? parentInvite.expiresAt.toISOString() : null,
+              usesCount: parentInvite.usesCount,
+            }
+          : null
+      }
+      attendances={attendances.map((a) => ({
+        id: a.id,
+        status: a.status,
+        markedAt: a.markedAt.toISOString(),
+        lessonTitle: a.lesson.title,
+      }))}
+      grades={grades.map((g) => ({
+        id: g.id,
+        value: g.value,
+        weight: 1,
+        lessonTitle: g.lesson?.title || "Урок",
+        teacherName: g.teacher?.user?.fullName || "Преподаватель",
+        createdAt: g.createdAt.toISOString(),
+      }))}
+      payments={student.payments.map((p) => ({
+        id: p.id,
+        amount: p.amount,
+        currency: p.currency,
+        method: p.paymentMethod,
+        createdAt: p.createdAt.toISOString(),
+      }))}
+      activeSessions={activeSessions.map((s) => ({
+        id: s.id,
+        createdAt: s.createdAt.toISOString(),
+        expiresAt: s.expiresAt.toISOString(),
+        ipAddress: s.ipAddress,
+        userAgent: s.userAgent,
+      }))}
+      auditLogs={auditLogs.map((a) => ({
+        id: a.id,
+        action: a.action,
+        createdAt: a.createdAt.toISOString(),
+        actorRole: null,
+        details: a.detailsJson ? JSON.parse(a.detailsJson) : null,
+      }))}
+      manageability={{
+        canManage: manageability.canManage,
+        isShared: manageability.isShared,
+        reason: manageability.reason,
+      }}
+      actorRole={currentRole}
+      locale={locale}
+    />
   );
 }

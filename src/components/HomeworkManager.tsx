@@ -30,6 +30,7 @@ export default function HomeworkManager({
     setFilterStatus,
     isStudent,
     isTeacher,
+    isParent,
     submittingHwId,
     handleOpenSubmit,
     closeSubmit,
@@ -39,6 +40,12 @@ export default function HomeworkManager({
     setLinkUrl,
     linkTitle,
     setLinkTitle,
+    attachments,
+    isLockedAccepted,
+    uploadingFile,
+    uploadError,
+    handleUploadFiles,
+    handleRemoveAttachment,
     isSubmitting,
     submitSuccess,
     submitError,
@@ -59,14 +66,12 @@ export default function HomeworkManager({
 
   return (
     <div className="space-y-6">
-      {/* Filters */}
       <HomeworkToolbar
         locale={locale}
         filterStatus={filterStatus}
         onFilterChange={setFilterStatus}
       />
 
-      {/* Homework List */}
       <div className="space-y-4">
         {visibleHomeworks.length === 0 ? (
           <div className="glass-panel p-8 rounded-2xl border border-slate-800 text-center">
@@ -82,6 +87,7 @@ export default function HomeworkManager({
               userMembershipId={userMembershipId}
               isStudent={isStudent}
               isTeacher={isTeacher}
+              isParent={isParent}
               onOpenSubmit={handleOpenSubmit}
               onOpenGrade={handleOpenGrade}
             />
@@ -89,7 +95,6 @@ export default function HomeworkManager({
         )}
       </div>
 
-      {/* Student Submit Modal */}
       {submittingHwId && (
         <SubmitHomeworkModal
           locale={locale}
@@ -99,6 +104,12 @@ export default function HomeworkManager({
           onLinkUrlChange={setLinkUrl}
           linkTitle={linkTitle}
           onLinkTitleChange={setLinkTitle}
+          attachments={attachments}
+          isLockedAccepted={isLockedAccepted}
+          uploadingFile={uploadingFile}
+          uploadError={uploadError}
+          onUploadFiles={handleUploadFiles}
+          onRemoveAttachment={handleRemoveAttachment}
           isSubmitting={isSubmitting}
           submitSuccess={submitSuccess}
           submitError={submitError}
@@ -107,7 +118,6 @@ export default function HomeworkManager({
         />
       )}
 
-      {/* Teacher Grade Modal */}
       {gradingSubmission && (
         <GradeHomeworkModal
           locale={locale}

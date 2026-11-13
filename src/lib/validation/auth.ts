@@ -1,18 +1,31 @@
 import { z } from "zod";
 
-export const loginSchema = z.object({
-  email: z.string().email("auth.email.invalid"),
-  password: z.string().min(6, "auth.password.min_6"),
-  rememberMe: z.boolean().optional().default(false),
-});
+export const loginSchema = z
+  .object({
+    email: z.string().optional(),
+    login: z.string().optional(),
+    password: z.string().min(1, "auth.password.required"),
+    rememberMe: z.boolean().optional().default(false),
+    twoFactorCode: z.string().optional(),
+  })
+  .refine((data) => !!(data.login || data.email), {
+    message: "auth.login.required",
+    path: ["login"],
+  });
 
-export const mobileLoginSchema = z.object({
-  email: z.string().email("auth.email.invalid"),
-  password: z.string().min(6, "auth.password.min_6"),
-  deviceName: z.string().optional(),
-  deviceId: z.string().optional(),
-  platform: z.enum(["ios", "android", "web"]).optional(),
-});
+export const mobileLoginSchema = z
+  .object({
+    email: z.string().optional(),
+    login: z.string().optional(),
+    password: z.string().min(1, "auth.password.required"),
+    deviceName: z.string().optional(),
+    deviceId: z.string().optional(),
+    platform: z.enum(["ios", "android", "web"]).optional(),
+  })
+  .refine((data) => !!(data.login || data.email), {
+    message: "auth.login.required",
+    path: ["login"],
+  });
 
 export const mobileRefreshTokenSchema = z.object({
   refreshToken: z.string().min(10, "auth.token.required"),

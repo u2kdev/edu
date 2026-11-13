@@ -29,6 +29,12 @@ model PlatformUser {
   emailConfirmToken   String?      @unique
   emailConfirmExpires DateTime?
   emailVerified       DateTime?
+  username            String?      @unique
+  mustChangePassword  Boolean      @default(false)
+  lastLoginAt         DateTime?
+  deletedAt           DateTime?
+  deletedReason       String?
+  notificationPrefsJson String?
 
   updatedAt DateTime @updatedAt
 
@@ -43,9 +49,13 @@ model PlatformUser {
   devicePushTokens    DevicePushToken[]
   platformPaymentsRecorded PlatformPayment[]    @relation("PlatformPaymentRecorder")
   platformExpensesCreated  PlatformExpense[]    @relation("PlatformExpenseCreator")
+  platformAnnouncementsCreated PlatformAnnouncement[] @relation("PlatformAnnouncementCreator")
+  assignedTickets              SupportTicket[]        @relation("TicketAssignee")
+  announcementsRead            PlatformAnnouncementRead[]
 
   @@index([email])
   @@index([phone])
+  @@index([deletedAt])
 }
 
 // ----------------------------------------------------
@@ -58,9 +68,16 @@ model LearningCenter {
   id               String       @id @default(uuid())
   slug             String       @unique
   name             String
+  organizationKind OrganizationKind @default(LEARNING_CENTER)
   centerType       CenterType   @default(HYBRID)
   status           CenterStatus @default(TRIAL)
   suspensionReason String?
+  cancelledAt      DateTime?
+  cancelledReason  String?
+  address          String?
+  inn              String?
+  legalName        String?
+  contactPerson    String?
   logoUrl          String?
   phone            String?
   email            String?
@@ -68,6 +85,9 @@ model LearningCenter {
   defaultLanguage  Language     @default(ru) // ru, uz-Latn, uz-Cyrl (DB values via @map)
   timeZone         String       @default("Asia/Tashkent")
   gradingScale     GradingScale @default(PERCENT_100) // PERCENT_100, POINTS_5, PASS_FAIL
+  smsEnabled       Boolean      @default(false)
+  smsDailyLimit    Int          @default(100)
+  defaultNotificationPrefsJson String?
   ownerId          String
   createdAt        DateTime     @default(now())
   updatedAt        DateTime     @updatedAt
@@ -104,6 +124,8 @@ model LearningCenter {
   financePeriods     FinancePeriod[]
   teacherSalaryRates TeacherSalaryRate[]
   platformPayments   PlatformPayment[]
+  materials          Material[]
+  substitutionRequests SubstitutionRequest[]
 
   @@index([slug])
   @@index([ownerId])
@@ -221,6 +243,7 @@ model CenterMembership {
   gradedSubmissions    HomeworkSubmission[]  @relation("GraderSubmissions")
   parentLinksAsParent  ParentLink[]          @relation("ParentLinks")
   parentLinksAsStudent ParentLink[]          @relation("StudentLinks")
+  parentInviteCodes    InviteCode[]          @relation("StudentParentInvites")
   payments             CenterPayment[]       @relation("StudentPayments")
   testAttempts         TestAttempt[]         @relation("StudentTestAttempts")
   performanceSnapshots PerformanceSnapshot[] @relation("StudentSnapshots")
@@ -234,6 +257,10 @@ model CenterMembership {
   studentFinanceTransactions FinanceTransaction[] @relation("StudentFinanceTransactions")
   closedFinancePeriods FinancePeriod[]       @relation("PeriodCloser")
   teacherSalaryRates   TeacherSalaryRate[]   @relation("TeacherSalaryRates")
+  substitutionRequestsRequested SubstitutionRequest[] @relation("SubstitutionRequester")
+  substitutionRequestsProposed  SubstitutionRequest[] @relation("SubstitutionProposed")
+  substitutionRequestsAssigned  SubstitutionRequest[] @relation("SubstitutionSubstitute")
+  substitutionRequestsResolved  SubstitutionRequest[] @relation("SubstitutionResolver")
 
   @@unique([userId, centerId, role])
   @@index([userId])
@@ -251,6 +278,7 @@ model InviteCode {
   targetRole            MembershipRole @default(STUDENT)
   courseId              String?
   groupId               String?
+  studentMembershipId   String?
   maxUses               Int?
   usesCount             Int            @default(0)
   expiresAt             DateTime?
@@ -259,14 +287,16 @@ model InviteCode {
   createdAt             DateTime       @default(now())
   updatedAt             DateTime       @updatedAt
 
-  center         LearningCenter   @relation(fields: [centerId], references: [id], onDelete: Cascade)
-  creator        CenterMembership @relation("InviteCreator", fields: [createdByMembershipId], references: [id], onDelete: Restrict)
-  course         Course?          @relation(fields: [courseId], references: [id], onDelete: SetNull)
-  group          Group?           @relation(fields: [groupId], references: [id], onDelete: SetNull)
+  center         LearningCenter    @relation(fields: [centerId], references: [id], onDelete: Cascade)
+  creator        CenterMembership  @relation("InviteCreator", fields: [createdByMembershipId], references: [id], onDelete: Restrict)
+  course         Course?           @relation(fields: [courseId], references: [id], onDelete: SetNull)
+  group          Group?            @relation(fields: [groupId], references: [id], onDelete: SetNull)
+  student        CenterMembership? @relation("StudentParentInvites", fields: [studentMembershipId], references: [id], onDelete: SetNull)
   pendingInvites PendingInvite[]
 
   @@index([code])
   @@index([centerId])
+  @@index([studentMembershipId])
 }
 
 // Статусы ParentLink: PENDING, CONFIRMED, REJECTED
@@ -274,6 +304,7 @@ model ParentLink {
   id                  String              @id @default(uuid())
   parentMembershipId  String
   studentMembershipId String
+  relationship        String?             // MOTHER, FATHER, GUARDIAN, OTHER
   status              ParentLinkStatus    @default(PENDING)
   initiatedBy         ParentLinkInitiator @default(ADMIN)
   inviteCodeUsed      String?
@@ -301,6 +332,7 @@ model Course {
   priceMonthly          Float    @default(0)
   isPublished           Boolean  @default(false)
   createdByMembershipId String
+  deletedAt             DateTime?
   createdAt             DateTime @default(now())
   updatedAt             DateTime @updatedAt
 
@@ -309,6 +341,7 @@ model Course {
   creator CenterMembership @relation("CourseCreator", fields: [createdByMembershipId], references: [id], onDelete: Restrict)
   modules CourseModule[]
   groups  Group[]
+  materials Material[]
   invites InviteCode[]
   financeTransactions FinanceTransaction[]
 
@@ -363,6 +396,7 @@ model Lesson {
   materials         Material[]
   grades            Grade[]
   salaryTransactions FinanceTransaction[] @relation("LessonSalaryTransactions")
+  substitutionRequests SubstitutionRequest[]
   centerId          String
   center            LearningCenter    @relation(fields: [centerId], references: [id], onDelete: Cascade)
 
@@ -432,6 +466,7 @@ model Group {
   performanceSnapshots PerformanceSnapshot[]
   scheduleSlots        ScheduleSlot[]
   grades               Grade[]
+  materials            Material[]
   announcements        Announcement[]
   financeTransactions  FinanceTransaction[]
   teacherSalaryRates   TeacherSalaryRate[]
@@ -487,6 +522,33 @@ model Attendance {
   @@unique([lessonId, studentMembershipId])
   @@index([lessonId])
   @@index([studentMembershipId])
+}
+
+model SubstitutionRequest {
+  id                            String             @id @default(uuid())
+  centerId                      String
+  lessonId                      String
+  requesterMembershipId         String
+  proposedSubstituteMembershipId String?
+  substituteTeacherMembershipId String?
+  status                        SubstitutionStatus @default(REQUESTED)
+  reason                        String
+  resolvedByMembershipId        String?
+  resolverComment               String?
+  createdAt                     DateTime           @default(now())
+  updatedAt                     DateTime           @updatedAt
+
+  center             LearningCenter    @relation(fields: [centerId], references: [id], onDelete: Cascade)
+  lesson             Lesson            @relation(fields: [lessonId], references: [id], onDelete: Cascade)
+  requester          CenterMembership  @relation("SubstitutionRequester", fields: [requesterMembershipId], references: [id], onDelete: Restrict)
+  proposedSubstitute CenterMembership? @relation("SubstitutionProposed", fields: [proposedSubstituteMembershipId], references: [id], onDelete: SetNull)
+  substituteTeacher  CenterMembership? @relation("SubstitutionSubstitute", fields: [substituteTeacherMembershipId], references: [id], onDelete: SetNull)
+  resolvedBy         CenterMembership? @relation("SubstitutionResolver", fields: [resolvedByMembershipId], references: [id], onDelete: SetNull)
+
+  @@index([centerId])
+  @@index([lessonId])
+  @@index([requesterMembershipId])
+  @@index([status])
 }
 
 model Homework {
@@ -640,6 +702,57 @@ model Announcement {
 }
 
 // ----------------------------------------------------
+// 12a. Объявления Платформы (PlatformAnnouncements)
+// ----------------------------------------------------
+
+model PlatformAnnouncement {
+  id          String    @id @default(uuid())
+  title       String
+  body        String
+  audience    String    @default("ALL_CENTERS") // ALL_CENTERS | ROLES | CENTERS
+  targetRoles String?   // JSON array of roles: ["DIRECTOR","TEACHER"]
+  centerIds   String?   // JSON array of center IDs
+  publishedAt DateTime  @default(now())
+  expiresAt   DateTime?
+  createdBy   String
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  author PlatformUser               @relation("PlatformAnnouncementCreator", fields: [createdBy], references: [id], onDelete: Restrict)
+  reads  PlatformAnnouncementRead[]
+
+  @@index([publishedAt])
+  @@index([expiresAt])
+  @@index([createdBy])
+}
+
+model PlatformAnnouncementRead {
+  id             String   @id @default(uuid())
+  announcementId String
+  userId         String
+  readAt         DateTime @default(now())
+
+  announcement PlatformAnnouncement @relation(fields: [announcementId], references: [id], onDelete: Cascade)
+  user         PlatformUser         @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([announcementId, userId])
+  @@index([announcementId])
+  @@index([userId])
+}
+
+model PlatformSetting {
+  id          String   @id @default(uuid())
+  key         String   @unique
+  value       String   // JSON or string value
+  description String?
+  updatedBy   String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@index([key])
+}
+
+// ----------------------------------------------------
 // 13. Поддержка и Аудит
 // ----------------------------------------------------
 
@@ -647,6 +760,7 @@ model SupportTicket {
   id            String         @id @default(uuid())
   centerId      String?
   creatorUserId String
+  assignedToId  String?
   subject       String
   status        TicketStatus   @default(OPEN)
   priority      TicketPriority @default(MEDIUM)
@@ -654,12 +768,14 @@ model SupportTicket {
   createdAt     DateTime       @default(now())
   updatedAt     DateTime       @updatedAt
 
-  center   LearningCenter? @relation(fields: [centerId], references: [id], onDelete: Cascade)
-  creator  PlatformUser    @relation("TicketCreator", fields: [creatorUserId], references: [id], onDelete: Cascade)
-  messages TicketMessage[]
+  center     LearningCenter? @relation(fields: [centerId], references: [id], onDelete: Cascade)
+  creator    PlatformUser    @relation("TicketCreator", fields: [creatorUserId], references: [id], onDelete: Cascade)
+  assignedTo PlatformUser?   @relation("TicketAssignee", fields: [assignedToId], references: [id], onDelete: SetNull)
+  messages   TicketMessage[]
 
   @@index([creatorUserId])
   @@index([centerId])
+  @@index([assignedToId])
 }
 
 model TicketMessage {
@@ -762,8 +878,10 @@ model PasswordResetToken {
 
 model Material {
   id              String       @id @default(uuid())
-  lessonId        String?
   centerId        String
+  courseId        String?
+  groupId         String?
+  lessonId        String?
   title           String
   materialType    MaterialType @default(LECTURE)
   contentText     String?
@@ -771,17 +889,24 @@ model Material {
   externalUrl     String?
   durationMinutes Int?
   pagesRange      String?
+  fileSizeBytes   Int?
   orderIndex      Int          @default(0)
   isPrivate       Boolean      @default(true) // Private by default — access control
+  deletedAt       DateTime?
   createdAt       DateTime     @default(now())
   updatedAt       DateTime     @updatedAt
 
+  center    LearningCenter     @relation(fields: [centerId], references: [id], onDelete: Cascade)
+  course    Course?            @relation(fields: [courseId], references: [id], onDelete: SetNull)
+  group     Group?             @relation(fields: [groupId], references: [id], onDelete: SetNull)
   lesson    Lesson?            @relation(fields: [lessonId], references: [id], onDelete: SetNull)
   test      Test?
   homeworks HomeworkMaterial[]
 
-  @@index([lessonId])
   @@index([centerId])
+  @@index([courseId])
+  @@index([groupId])
+  @@index([lessonId])
 }
 
 // ----------------------------------------------------
@@ -919,6 +1044,7 @@ model Notification {
   titleKey   String
   bodyKey    String
   bodyParams String?
+  dedupeKey  String?
   channel    NotificationChannel @default(IN_APP) // IN_APP, EMAIL, SMS, PUSH
   isRead     Boolean             @default(false)
   sentAt     DateTime?
@@ -930,6 +1056,7 @@ model Notification {
   @@index([userId])
   @@index([centerId])
   @@index([isRead])
+  @@index([dedupeKey])
 }
 
 // ----------------------------------------------------
@@ -1257,6 +1384,13 @@ enum CenterStatus {
   CANCELLED
 }
 
+enum OrganizationKind {
+  LEARNING_CENTER
+  SCHOOL
+  KINDERGARTEN
+  OTHER
+}
+
 enum SubscriptionStatus {
   TRIAL
   ACTIVE
@@ -1299,6 +1433,13 @@ enum LessonStatus {
   ACTIVE
   CANCELLED
   RESCHEDULED
+}
+
+enum SubstitutionStatus {
+  REQUESTED
+  APPROVED
+  REJECTED
+  CANCELLED
 }
 
 enum ScheduleSlotStatus {

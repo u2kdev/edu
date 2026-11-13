@@ -12,6 +12,10 @@ export interface GroupStudent {
     phone?: string | null;
     email: string;
   };
+  attendanceRate?: number | null;
+  isAtRisk?: boolean;
+  parentPhone?: string | null;
+  parentName?: string | null;
 }
 
 export interface GroupEnrollment {
@@ -36,6 +40,7 @@ export interface GroupItem {
     title: string;
   };
   teacher?: GroupTeacher | null;
+  assistant?: GroupTeacher | null;
   enrollments: GroupEnrollment[];
 }
 
@@ -45,6 +50,13 @@ export interface CourseOption {
 }
 
 export interface TeacherOption {
+  id: string;
+  user: {
+    fullName: string;
+  };
+}
+
+export interface AssistantOption {
   id: string;
   user: {
     fullName: string;

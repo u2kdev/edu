@@ -972,3 +972,115 @@ export async function disburseTeacherSalaries(input: DisburseTeacherSalariesInpu
     transactions: createdTransactions,
   };
 }
+
+export interface StudentDebtSummary {
+  totalDebt: number;
+  debtorsCount: number;
+  totalStudents: number;
+}
+
+export async function calculateStudentDebts(centerId: string): Promise<{
+  debts: Array<{
+    studentId: string;
+    fullName: string;
+    phone: string | null;
+    email: string;
+    monthlyTuition: number;
+    totalDue: number;
+    totalPaid: number;
+    balance: number;
+    debtAmount: number;
+    status: "DEBT" | "PAID" | "OVERPAID";
+  }>;
+  summary: StudentDebtSummary;
+}> {
+  const tenantDb = getTenantDb(centerId);
+  const students = await tenantDb.centerMembership.findMany({
+    where: {
+      centerId,
+      role: "STUDENT",
+      status: "ACTIVE",
+    },
+    include: {
+      user: {
+        select: {
+          id: true,
+          fullName: true,
+          phone: true,
+          email: true,
+        },
+      },
+      enrollments: {
+        where: { status: "ACTIVE" },
+        include: {
+          group: {
+            include: {
+              course: {
+                select: { id: true, title: true, priceMonthly: true },
+              },
+            },
+          },
+        },
+      },
+      payments: {
+        where: {
+          status: { in: ["PAID", "PARTIALLY_PAID"] },
+        },
+        select: {
+          amount: true,
+        },
+      },
+    },
+  });
+
+  const now = new Date();
+
+  const debts = students.map((s) => {
+    const monthlyTuition = s.enrollments.reduce(
+      (sum, e) => sum + (e.group.course?.priceMonthly || 0),
+      0
+    );
+
+    const joinedDate = new Date(s.joinedAt);
+    const monthsEnrolled = Math.max(
+      1,
+      (now.getFullYear() - joinedDate.getFullYear()) * 12 +
+        (now.getMonth() - joinedDate.getMonth()) +
+        1
+    );
+
+    const totalDue = monthlyTuition * monthsEnrolled;
+    const totalPaid = s.payments.reduce((sum, p) => sum + Math.round(p.amount), 0);
+    const balance = totalPaid - totalDue;
+    const debtAmount = balance < 0 ? Math.abs(balance) : 0;
+
+    let status: "DEBT" | "PAID" | "OVERPAID" = "PAID";
+    if (balance < 0) status = "DEBT";
+    else if (balance > 0) status = "OVERPAID";
+
+    return {
+      studentId: s.id,
+      fullName: s.user.fullName,
+      phone: s.user.phone,
+      email: s.user.email,
+      monthlyTuition,
+      totalDue,
+      totalPaid,
+      balance,
+      debtAmount,
+      status,
+    };
+  });
+
+  const debtItems = debts.filter((d) => d.status === "DEBT");
+  const totalDebt = debtItems.reduce((sum, d) => sum + d.debtAmount, 0);
+
+  return {
+    debts,
+    summary: {
+      totalDebt,
+      debtorsCount: debtItems.length,
+      totalStudents: students.length,
+    },
+  };
+}

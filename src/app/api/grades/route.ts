@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { requireTenantAccess, logAuditEvent } from "@/lib/tenant";
 import { sendNotification } from "@/lib/notifications";
+import { hasPermission } from "@/lib/permissions";
 
 interface TenantDbWithAudit {
   auditLog: {
@@ -280,6 +281,19 @@ export async function PATCH(req: Request) {
     }
 
     if (lifecycle) {
+      if (lifecycle === "FINAL") {
+        const canFinalize =
+          tenantCtx.isPlatformStaff ||
+          Boolean(tenantCtx.session.impersonatorUserId) ||
+          hasPermission("grades.finalize", tenantCtx.session.user.platformRole, tenantCtx.role);
+        if (!canFinalize) {
+          return NextResponse.json(
+            { error: "Forbidden: Only Director or users with grades.finalize permission can finalize grades" },
+            { status: 403 }
+          );
+        }
+      }
+
       const validTransitions: Record<string, string[]> = {
         DRAFT: ["SUBMITTED", "FINAL"],
         SUBMITTED: ["FINAL"],

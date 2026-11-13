@@ -32,13 +32,18 @@ export async function GET(req: Request) {
         orderBy: { createdAt: "desc" },
       });
     } else {
+      const isCenterAdminOrDirector =
+        session.activeCenterRole === "DIRECTOR" ||
+        session.activeCenterRole === "CENTER_ADMIN" ||
+        session.activeCenterRole === "CENTER_SUPPORT";
+
       tickets = await db.supportTicket.findMany({
-        where: {
-          OR: [
-            { creatorUserId: session.user.id },
-            ...(session.activeCenterId ? [{ centerId: session.activeCenterId }] : []),
-          ],
-        },
+        where: isCenterAdminOrDirector
+          ? { centerId: session.activeCenterId }
+          : {
+              creatorUserId: session.user.id,
+              ...(session.activeCenterId ? { centerId: session.activeCenterId } : {}),
+            },
         include: {
           creator: { select: { fullName: true, email: true } },
           messages: { orderBy: { createdAt: "asc" } },

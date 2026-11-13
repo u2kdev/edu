@@ -1,11 +1,12 @@
 "use client";
 
-import { Clock, RotateCcw, Send, User } from "lucide-react";
+import { Clock, Download, RotateCcw, Send, User } from "lucide-react";
 import { t } from "@/i18n";
 import {
   STATUS_BADGES,
   findMySubmission,
   formatDueDate,
+  parseSubmissionFiles,
   studentStatus,
   type HomeworkItem,
   type HomeworkSubmission,
@@ -17,6 +18,7 @@ interface HomeworkListItemProps {
   userMembershipId?: string;
   isStudent: boolean;
   isTeacher: boolean;
+  isParent?: boolean;
   onOpenSubmit: (hw: HomeworkItem) => void;
   onOpenGrade: (hwId: string, sub: HomeworkSubmission) => void;
 }
@@ -27,12 +29,14 @@ export function HomeworkListItem({
   userMembershipId,
   isStudent,
   isTeacher,
+  isParent = false,
   onOpenSubmit,
   onOpenGrade,
 }: HomeworkListItemProps) {
   const mySubmission = findMySubmission(hw, userMembershipId);
   const myStatus = studentStatus(hw, userMembershipId);
   const badgeCfg = STATUS_BADGES[myStatus] || STATUS_BADGES.NOT_SUBMITTED;
+  const myFiles = mySubmission ? parseSubmissionFiles(mySubmission.filesJson) : [];
 
   return (
     <div className="glass-panel p-4 sm:p-6 rounded-2xl border border-slate-800 space-y-4 hover:border-slate-700 transition-all">
@@ -42,12 +46,8 @@ export function HomeworkListItem({
           <span className="text-xs font-semibold text-brand-400 uppercase tracking-wider">
             {hw.lessonTitle}
           </span>
-          <h3 className="text-base sm:text-lg font-bold text-white mt-0.5">
-            {hw.title}
-          </h3>
-          {hw.description && (
-            <p className="text-sm text-slate-400 mt-1">{hw.description}</p>
-          )}
+          <h3 className="text-base sm:text-lg font-bold text-white mt-0.5">{hw.title}</h3>
+          {hw.description && <p className="text-sm text-slate-400 mt-1">{hw.description}</p>}
         </div>
 
         <div className="flex flex-wrap items-center gap-2 shrink-0">
@@ -68,42 +68,60 @@ export function HomeworkListItem({
 
       {/* Student Action Bar */}
       {isStudent && (
-        <div className="pt-3 border-t border-slate-800 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-          <div className="text-xs text-slate-400">
-            {mySubmission?.grade !== null && mySubmission?.grade !== undefined ? (
-              <span className="font-bold text-emerald-400 mr-2">
-                {t(locale, "performance.title")}: {mySubmission.grade}/100
-              </span>
-            ) : null}
-            {mySubmission?.feedback && (
-              <span className="italic text-slate-400">
-                &quot;{mySubmission.feedback}&quot;
-              </span>
-            )}
+        <div className="pt-3 border-t border-slate-800 space-y-2">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+            <div className="text-xs text-slate-400">
+              {mySubmission?.grade !== null && mySubmission?.grade !== undefined ? (
+                <span className="font-bold text-emerald-400 mr-2">
+                  {t(locale, "performance.title")}: {mySubmission.grade}/100
+                </span>
+              ) : null}
+              {mySubmission?.feedback && (
+                <span className="italic text-slate-400">&quot;{mySubmission.feedback}&quot;</span>
+              )}
+            </div>
+
+            <button
+              type="button"
+              onClick={() => onOpenSubmit(hw)}
+              className="px-4 py-2 rounded-xl text-xs font-semibold bg-brand-500 hover:bg-brand-600 text-white transition-colors flex items-center justify-center gap-1.5"
+            >
+              {mySubmission ? (
+                <>
+                  <RotateCcw className="w-3.5 h-3.5" />
+                  <span>{t(locale, "homework.submitHomework")}</span>
+                </>
+              ) : (
+                <>
+                  <Send className="w-3.5 h-3.5" />
+                  <span>{t(locale, "homework.submitHomework")}</span>
+                </>
+              )}
+            </button>
           </div>
 
-          <button
-            type="button"
-            onClick={() => onOpenSubmit(hw)}
-            className="px-4 py-2 rounded-xl text-xs font-semibold bg-brand-500 hover:bg-brand-600 text-white transition-colors flex items-center justify-center gap-1.5"
-          >
-            {mySubmission ? (
-              <>
-                <RotateCcw className="w-3.5 h-3.5" />
-                <span>{t(locale, "homework.submitHomework")}</span>
-              </>
-            ) : (
-              <>
-                <Send className="w-3.5 h-3.5" />
-                <span>{t(locale, "homework.submitHomework")}</span>
-              </>
-            )}
-          </button>
+          {myFiles.length > 0 && (
+            <div className="flex flex-wrap gap-2">
+              {myFiles.map((f, i) => (
+                <a
+                  key={i}
+                  href={f.fileUrl}
+                  download={f.fileName}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-slate-900 border border-slate-800 text-xs text-brand-400 hover:underline"
+                >
+                  <Download className="w-3 h-3" />
+                  <span>{f.fileName}</span>
+                </a>
+              ))}
+            </div>
+          )}
         </div>
       )}
 
-      {/* Teacher Submissions View */}
-      {isTeacher && hw.submissions.length > 0 && (
+      {/* Teacher / Assistant / Admin Submissions View OR Parent Read-Only Child View */}
+      {(isTeacher || isParent) && hw.submissions.length > 0 && (
         <div className="pt-3 border-t border-slate-800 space-y-2">
           <h4 className="text-xs font-semibold text-slate-400 uppercase tracking-wider">
             {t(locale, "homework.submitted")}: {hw.submissions.length}
@@ -111,33 +129,56 @@ export function HomeworkListItem({
           <div className="divide-y divide-slate-800/80">
             {hw.submissions.map((sub) => {
               const subBadge = STATUS_BADGES[sub.status] || STATUS_BADGES.SUBMITTED;
+              const subFiles = parseSubmissionFiles(sub.filesJson);
               return (
                 <div
                   key={sub.id}
                   className="py-2.5 flex flex-col sm:flex-row sm:items-center justify-between gap-2 text-xs"
                 >
-                  <div className="flex items-center gap-2">
-                    <User className="w-3.5 h-3.5 text-slate-500" />
-                    <span className="font-medium text-white">
-                      {sub.studentName}
-                    </span>
-                    <span className={`px-2 py-0.5 rounded-full text-2xs font-semibold border ${subBadge.color}`}>
-                      {t(locale, subBadge.labelKey)}
-                    </span>
-                    {sub.grade !== null && (
-                      <span className="font-bold text-brand-400">
-                        {sub.grade}/100
+                  <div className="space-y-1">
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <User className="w-3.5 h-3.5 text-slate-500" />
+                      <span className="font-medium text-white">{sub.studentName}</span>
+                      <span
+                        className={`px-2 py-0.5 rounded-full text-2xs font-semibold border ${subBadge.color}`}
+                      >
+                        {t(locale, subBadge.labelKey)}
                       </span>
+                      {sub.grade !== null && (
+                        <span className="font-bold text-brand-400">{sub.grade}/100</span>
+                      )}
+                    </div>
+                    {isParent && sub.feedback && (
+                      <p className="text-slate-400 italic">&quot;{sub.feedback}&quot;</p>
+                    )}
+                    {subFiles.length > 0 && (
+                      <div className="flex flex-wrap gap-2">
+                        {subFiles.map((f, i) => (
+                          <a
+                            key={i}
+                            href={f.fileUrl}
+                            download={f.fileName}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="inline-flex items-center gap-1 text-brand-400 hover:underline"
+                          >
+                            <Download className="w-3 h-3" />
+                            <span>{f.fileName}</span>
+                          </a>
+                        ))}
+                      </div>
                     )}
                   </div>
 
-                  <button
-                    type="button"
-                    onClick={() => onOpenGrade(hw.id, sub)}
-                    className="px-3 py-1 rounded-lg text-xs font-medium border border-slate-700 bg-slate-800 hover:bg-slate-700 text-slate-200 transition-colors self-start sm:self-auto"
-                  >
-                    {t(locale, "homework.gradeHomework")}
-                  </button>
+                  {isTeacher && (
+                    <button
+                      type="button"
+                      onClick={() => onOpenGrade(hw.id, sub)}
+                      className="px-3 py-1 rounded-lg text-xs font-medium border border-slate-700 bg-slate-800 hover:bg-slate-700 text-slate-200 transition-colors self-start sm:self-auto"
+                    >
+                      {t(locale, "homework.gradeHomework")}
+                    </button>
+                  )}
                 </div>
               );
             })}

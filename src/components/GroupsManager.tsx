@@ -1,7 +1,7 @@
 "use client";
 
 import { t } from "@/i18n";
-import type { CourseOption, GroupItem, TeacherOption } from "./groups/groups-utils";
+import type { AssistantOption, CourseOption, GroupItem, TeacherOption } from "./groups/groups-utils";
 import { useGroups } from "./groups/use-groups";
 import { GroupsToolbar } from "./groups/GroupsToolbar";
 import { GroupCard } from "./groups/GroupCard";
@@ -17,6 +17,7 @@ export type {
   GroupStudent,
   GroupTeacher,
   TeacherOption,
+  AssistantOption,
   TransferTarget,
 } from "./groups/groups-utils";
 
@@ -24,6 +25,7 @@ export interface GroupsManagerProps {
   initialGroups: GroupItem[];
   courses: CourseOption[];
   teachers: TeacherOption[];
+  assistants?: AssistantOption[];
   role?: string;
   locale?: string;
 }
@@ -46,6 +48,7 @@ export default function GroupsManager({
   initialGroups,
   courses,
   teachers,
+  assistants = [],
   role,
   locale = "ru",
 }: GroupsManagerProps) {
@@ -61,6 +64,8 @@ export default function GroupsManager({
     setName,
     teacherMembershipId,
     setTeacherMembershipId,
+    assistantMembershipId,
+    setAssistantMembershipId,
     maxStudents,
     setMaxStudents,
     handleCreateGroup,
@@ -71,6 +76,8 @@ export default function GroupsManager({
     setEditName,
     editTeacherId,
     setEditTeacherId,
+    editAssistantId,
+    setEditAssistantId,
     editMaxStudents,
     setEditMaxStudents,
     handleEditGroup,
@@ -93,6 +100,7 @@ export default function GroupsManager({
     initialGroups,
     courses,
     teachers,
+    assistants,
     role,
     locale,
     messages: LEGACY_MESSAGES,
@@ -128,6 +136,7 @@ export default function GroupsManager({
           locale={locale}
           courses={courses}
           teachers={teachers}
+          assistants={assistants}
           namePlaceholder={LEGACY_PLACEHOLDERS.groupName}
           courseId={courseId}
           onCourseIdChange={setCourseId}
@@ -135,6 +144,8 @@ export default function GroupsManager({
           onNameChange={setName}
           teacherMembershipId={teacherMembershipId}
           onTeacherMembershipIdChange={setTeacherMembershipId}
+          assistantMembershipId={assistantMembershipId}
+          onAssistantMembershipIdChange={setAssistantMembershipId}
           maxStudents={maxStudents}
           onMaxStudentsChange={setMaxStudents}
           loading={loading}
@@ -148,10 +159,13 @@ export default function GroupsManager({
         <EditGroupModal
           locale={locale}
           teachers={teachers}
+          assistants={assistants}
           name={editName}
           onNameChange={setEditName}
           teacherMembershipId={editTeacherId}
           onTeacherMembershipIdChange={setEditTeacherId}
+          assistantMembershipId={editAssistantId}
+          onAssistantMembershipIdChange={setEditAssistantId}
           maxStudents={editMaxStudents}
           onMaxStudentsChange={setEditMaxStudents}
           loading={loading}

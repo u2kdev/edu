@@ -115,25 +115,38 @@ afterEach(() => {
 
 describe("setup page", () => {
   const load = async () => import("@/app/setup/page");
+  const origToken = process.env.SETUP_TOKEN;
+
+  beforeEach(() => {
+    process.env.SETUP_TOKEN = "valid-secret-setup-token-16-chars";
+  });
+
+  afterEach(() => {
+    if (origToken !== undefined) {
+      process.env.SETUP_TOKEN = origToken;
+    } else {
+      delete process.env.SETUP_TOKEN;
+    }
+  });
 
   it("keeps the route dynamic", async () => {
     const mod = await load();
     expect(mod.dynamic).toBe("force-dynamic");
   });
 
-  it("redirects to /login once a SUPERADMIN already exists", async () => {
+  it("triggers notFound (NEXT_NOT_FOUND) once a SUPERADMIN already exists", async () => {
     dbMock.platformUser.count.mockResolvedValue(1);
     const { default: Page } = await load();
-    await expect(Page()).rejects.toThrow("NEXT_REDIRECT:/login");
+    await expect(Page({ searchParams: { token: "valid-secret-setup-token-16-chars" } })).rejects.toThrow("NEXT_NOT_FOUND");
     expect(dbMock.platformUser.count).toHaveBeenCalledWith({
       where: { platformRole: "SUPERADMIN" },
     });
   });
 
-  it("renders the bootstrap form on a fresh platform", async () => {
+  it("renders the bootstrap form on a fresh platform with valid setup token", async () => {
     dbMock.platformUser.count.mockResolvedValue(0);
     const { default: Page } = await load();
-    const element = await Page();
+    const element = await Page({ searchParams: { token: "valid-secret-setup-token-16-chars" } });
     const text = flatText(element);
 
     expect(text).toContain("Инициализация платформы");

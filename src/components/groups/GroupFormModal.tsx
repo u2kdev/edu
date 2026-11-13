@@ -2,12 +2,13 @@
 
 import type { FormEvent } from "react";
 import { t } from "@/i18n";
-import type { CourseOption, TeacherOption } from "./groups-utils";
+import type { CourseOption, TeacherOption, AssistantOption } from "./groups-utils";
 
 interface CreateGroupModalProps {
   locale: string;
   courses: CourseOption[];
   teachers: TeacherOption[];
+  assistants?: AssistantOption[];
   namePlaceholder: string;
   courseId: string;
   onCourseIdChange: (value: string) => void;
@@ -15,6 +16,8 @@ interface CreateGroupModalProps {
   onNameChange: (value: string) => void;
   teacherMembershipId: string;
   onTeacherMembershipIdChange: (value: string) => void;
+  assistantMembershipId?: string;
+  onAssistantMembershipIdChange?: (value: string) => void;
   maxStudents: string;
   onMaxStudentsChange: (value: string) => void;
   loading: boolean;
@@ -26,6 +29,7 @@ export function CreateGroupModal({
   locale,
   courses,
   teachers,
+  assistants = [],
   namePlaceholder,
   courseId,
   onCourseIdChange,
@@ -33,6 +37,8 @@ export function CreateGroupModal({
   onNameChange,
   teacherMembershipId,
   onTeacherMembershipIdChange,
+  assistantMembershipId = "",
+  onAssistantMembershipIdChange,
   maxStudents,
   onMaxStudentsChange,
   loading,
@@ -96,6 +102,26 @@ export function CreateGroupModal({
             </select>
           </div>
 
+          {assistants.length > 0 && onAssistantMembershipIdChange && (
+            <div>
+              <label className="block text-xs font-semibold text-slate-300 uppercase tracking-wider mb-2">
+                {locale === "uz-Latn" ? "Yordamchi o'qituvchi" : "Ассистент преподавателя"}
+              </label>
+              <select
+                value={assistantMembershipId}
+                onChange={(e) => onAssistantMembershipIdChange(e.target.value)}
+                className="w-full px-4 py-3 bg-slate-900 border border-slate-700 rounded-xl text-white text-sm focus:outline-none focus:border-brand-500"
+              >
+                <option value="">{locale === "uz-Latn" ? "Yordamchisiz" : "Без ассистента"}</option>
+                {assistants.map((a) => (
+                  <option key={a.id} value={a.id}>
+                    {a.user.fullName}
+                  </option>
+                ))}
+              </select>
+            </div>
+          )}
+
           <div>
             <label className="block text-xs font-semibold text-slate-300 uppercase tracking-wider mb-2">
               {t(locale, "groups.maxStudents")}
@@ -136,10 +162,13 @@ export function CreateGroupModal({
 interface EditGroupModalProps {
   locale: string;
   teachers: TeacherOption[];
+  assistants?: AssistantOption[];
   name: string;
   onNameChange: (value: string) => void;
   teacherMembershipId: string;
   onTeacherMembershipIdChange: (value: string) => void;
+  assistantMembershipId?: string;
+  onAssistantMembershipIdChange?: (value: string) => void;
   maxStudents: string;
   onMaxStudentsChange: (value: string) => void;
   loading: boolean;
@@ -150,10 +179,13 @@ interface EditGroupModalProps {
 export function EditGroupModal({
   locale,
   teachers,
+  assistants = [],
   name,
   onNameChange,
   teacherMembershipId,
   onTeacherMembershipIdChange,
+  assistantMembershipId = "",
+  onAssistantMembershipIdChange,
   maxStudents,
   onMaxStudentsChange,
   loading,
@@ -197,6 +229,26 @@ export function EditGroupModal({
               ))}
             </select>
           </div>
+
+          {onAssistantMembershipIdChange && (
+            <div>
+              <label className="block text-xs font-semibold text-slate-300 uppercase tracking-wider mb-2">
+                {locale === "uz-Latn" ? "Yordamchi o'qituvchi" : "Ассистент преподавателя"}
+              </label>
+              <select
+                value={assistantMembershipId}
+                onChange={(e) => onAssistantMembershipIdChange(e.target.value)}
+                className="w-full px-4 py-3 bg-slate-900 border border-slate-700 rounded-xl text-white text-sm focus:outline-none focus:border-brand-500"
+              >
+                <option value="">{locale === "uz-Latn" ? "Yordamchisiz" : "Без ассистента"}</option>
+                {assistants.map((a) => (
+                  <option key={a.id} value={a.id}>
+                    {a.user.fullName}
+                  </option>
+                ))}
+              </select>
+            </div>
+          )}
 
           <div>
             <label className="block text-xs font-semibold text-slate-300 uppercase tracking-wider mb-2">

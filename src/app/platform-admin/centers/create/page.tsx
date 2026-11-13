@@ -4,10 +4,11 @@ import React, { useState } from "react";
 import { useRouter } from "next/navigation";
 import { z } from "zod";
 import Link from "next/link";
-import { ArrowLeft, Building2, CheckCircle2 } from "lucide-react";
+import { ArrowLeft, Building2, CheckCircle2, Copy, Check, AlertTriangle } from "lucide-react";
 
 const schemaStep1 = z.object({
   name: z.string().min(2, "Название должно содержать не менее 2 символов"),
+  organizationKind: z.enum(["LEARNING_CENTER", "SCHOOL", "KINDERGARTEN", "OTHER"]).default("LEARNING_CENTER"),
   slug: z
     .string()
     .min(2, "Slug должен содержать не менее 2 символов")
@@ -15,6 +16,10 @@ const schemaStep1 = z.object({
   phone: z.string().min(5, "Укажите контактный номер телефона"),
   email: z.string().email("Некорректный email адрес"),
   timeZone: z.string().min(1, "Укажите часовой пояс"),
+  legalName: z.string().optional(),
+  inn: z.string().optional(),
+  contactPerson: z.string().optional(),
+  address: z.string().optional(),
 });
 
 const schemaStep2 = z.object({
@@ -33,10 +38,15 @@ export default function CreateCenterPage() {
   const [step, setStep] = useState(1);
   const [formData, setFormData] = useState({
     name: "",
+    organizationKind: "LEARNING_CENTER",
     slug: "",
     phone: "",
     email: "",
     timeZone: "Asia/Tashkent",
+    legalName: "",
+    inn: "",
+    contactPerson: "",
+    address: "",
     status: "TRIAL",
     trialEndsAt: "",
     directorEmail: "",
@@ -46,6 +56,13 @@ export default function CreateCenterPage() {
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [submitError, setSubmitError] = useState<string | null>(null);
+  const [createdInfo, setCreatedInfo] = useState<{
+    centerId: string;
+    name: string;
+    directorEmail: string;
+    resetUrl?: string;
+  } | null>(null);
+  const [copied, setCopied] = useState(false);
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {
     setFormData({ ...formData, [e.target.name]: e.target.value });
@@ -87,7 +104,14 @@ export default function CreateCenterPage() {
       }
       const data = await res.json();
       const newId = data.center?.id || data.data?.id;
-      if (newId) {
+      if (data.resetUrl) {
+        setCreatedInfo({
+          centerId: newId,
+          name: formData.name,
+          directorEmail: formData.directorEmail,
+          resetUrl: data.resetUrl,
+        });
+      } else if (newId) {
         router.push(`/platform-admin/centers/${newId}`);
       } else {
         router.push("/platform-admin/centers");
@@ -97,6 +121,66 @@ export default function CreateCenterPage() {
       setIsSubmitting(false);
     }
   };
+
+  if (createdInfo) {
+    return (
+      <div className="max-w-2xl mx-auto space-y-6">
+        <div className="bg-white p-6 sm:p-8 rounded-2xl border border-slate-200 shadow-sm text-center space-y-6">
+          <div className="w-12 h-12 bg-emerald-50 border border-emerald-200 text-emerald-600 rounded-2xl flex items-center justify-center mx-auto">
+            <CheckCircle2 className="w-6 h-6" />
+          </div>
+          <div>
+            <h2 className="text-xl font-bold text-slate-900">Учебный центр успешно создан!</h2>
+            <p className="text-sm text-slate-500 mt-1">
+              Организация <strong>{createdInfo.name}</strong> зарегистрирована в системе.
+            </p>
+          </div>
+
+          {createdInfo.resetUrl && (
+            <div className="p-4 bg-amber-50 border border-amber-200 rounded-xl text-left space-y-3">
+              <div className="flex items-center gap-2 text-amber-800 text-xs font-semibold">
+                <AlertTriangle className="w-4 h-4 text-amber-600 shrink-0" />
+                <span>Ссылка для первичного входа директора (показывается один раз!)</span>
+              </div>
+              <div className="flex items-center gap-2">
+                <input
+                  type="text"
+                  readOnly
+                  value={createdInfo.resetUrl}
+                  className="flex-1 p-2 bg-white border border-amber-300 rounded-lg text-xs font-mono text-slate-800 select-all"
+                />
+                <button
+                  type="button"
+                  onClick={() => {
+                    navigator.clipboard.writeText(createdInfo.resetUrl || "");
+                    setCopied(true);
+                    setTimeout(() => setCopied(false), 3000);
+                  }}
+                  className="px-3 py-2 bg-amber-600 hover:bg-amber-700 text-white rounded-lg text-xs font-semibold flex items-center gap-1.5 transition-colors cursor-pointer shrink-0"
+                >
+                  {copied ? <Check className="w-3.5 h-3.5" /> : <Copy className="w-3.5 h-3.5" />}
+                  <span>{copied ? "Скопировано!" : "Копировать"}</span>
+                </button>
+              </div>
+              <p className="text-[11px] text-amber-700 leading-relaxed">
+                Скопируйте эту ссылку и передайте директору ({createdInfo.directorEmail}). Ссылка действует 72 часа для установки собственного пароля.
+              </p>
+            </div>
+          )}
+
+          <div className="pt-2">
+            <button
+              type="button"
+              onClick={() => router.push(`/platform-admin/centers/${createdInfo.centerId}`)}
+              className="w-full py-3 bg-blue-600 hover:bg-blue-700 text-white rounded-xl text-sm font-semibold shadow-sm transition-all"
+            >
+              Перейти в карточку центра
+            </button>
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="max-w-3xl mx-auto space-y-6">
@@ -148,6 +232,35 @@ export default function CreateCenterPage() {
         {step === 1 && (
           <div className="space-y-4">
             <h2 className="text-lg font-bold text-slate-900">Шаг 1: Основные реквизиты центра</h2>
+
+            <div>
+              <label className="block text-xs font-semibold text-slate-700 uppercase mb-2">Тип организации</label>
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5">
+                {[
+                  { value: "LEARNING_CENTER", label: "Учебный центр" },
+                  { value: "SCHOOL", label: "Школа" },
+                  { value: "KINDERGARTEN", label: "Детский сад" },
+                  { value: "OTHER", label: "Другое" },
+                ].map((kind) => {
+                  const selected = formData.organizationKind === kind.value;
+                  return (
+                    <button
+                      key={kind.value}
+                      type="button"
+                      onClick={() => setFormData({ ...formData, organizationKind: kind.value })}
+                      className={`p-3 rounded-xl border text-xs font-semibold text-center transition-all ${
+                        selected
+                          ? "bg-blue-50 border-blue-500 text-blue-700 shadow-sm"
+                          : "bg-white border-slate-200 text-slate-600 hover:bg-slate-50"
+                      }`}
+                    >
+                      {kind.label}
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+
             <div>
               <label className="block text-xs font-semibold text-slate-700 uppercase mb-1">Название центра</label>
               <input
@@ -174,30 +287,87 @@ export default function CreateCenterPage() {
               />
               {errors.slug && <p className="text-rose-600 text-xs mt-1">{errors.slug}</p>}
             </div>
-            <div>
-              <label className="block text-xs font-semibold text-slate-700 uppercase mb-1">Телефон организации</label>
-              <input
-                type="text"
-                name="phone"
-                value={formData.phone}
-                onChange={handleChange}
-                placeholder="+998 90 123 45 67"
-                className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm text-slate-900"
-              />
-              {errors.phone && <p className="text-rose-600 text-xs mt-1">{errors.phone}</p>}
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              <div>
+                <label className="block text-xs font-semibold text-slate-700 uppercase mb-1">Телефон организации</label>
+                <input
+                  type="text"
+                  name="phone"
+                  value={formData.phone}
+                  onChange={handleChange}
+                  placeholder="+998 90 123 45 67"
+                  className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm text-slate-900"
+                />
+                {errors.phone && <p className="text-rose-600 text-xs mt-1">{errors.phone}</p>}
+              </div>
+              <div>
+                <label className="block text-xs font-semibold text-slate-700 uppercase mb-1">Email организации</label>
+                <input
+                  type="email"
+                  name="email"
+                  value={formData.email}
+                  onChange={handleChange}
+                  placeholder="info@center.uz"
+                  className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm text-slate-900"
+                />
+                {errors.email && <p className="text-rose-600 text-xs mt-1">{errors.email}</p>}
+              </div>
             </div>
-            <div>
-              <label className="block text-xs font-semibold text-slate-700 uppercase mb-1">Email организации</label>
-              <input
-                type="email"
-                name="email"
-                value={formData.email}
-                onChange={handleChange}
-                placeholder="info@center.uz"
-                className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm text-slate-900"
-              />
-              {errors.email && <p className="text-rose-600 text-xs mt-1">{errors.email}</p>}
+
+            <div className="pt-2 border-t border-slate-100 space-y-4">
+              <span className="text-xs font-bold text-slate-500 uppercase tracking-wider block">
+                Юридические реквизиты (необязательно)
+              </span>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-xs font-semibold text-slate-700 uppercase mb-1">Юр. наименование</label>
+                  <input
+                    type="text"
+                    name="legalName"
+                    value={formData.legalName}
+                    onChange={handleChange}
+                    placeholder="OOO 'AL-BERUNIY EDUCATION'"
+                    className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm text-slate-900"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-semibold text-slate-700 uppercase mb-1">ИНН</label>
+                  <input
+                    type="text"
+                    name="inn"
+                    value={formData.inn}
+                    onChange={handleChange}
+                    placeholder="123456789"
+                    className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm text-slate-900"
+                  />
+                </div>
+              </div>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-xs font-semibold text-slate-700 uppercase mb-1">Контактное лицо</label>
+                  <input
+                    type="text"
+                    name="contactPerson"
+                    value={formData.contactPerson}
+                    onChange={handleChange}
+                    placeholder="Иван Иванов"
+                    className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm text-slate-900"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-semibold text-slate-700 uppercase mb-1">Фактический адрес</label>
+                  <input
+                    type="text"
+                    name="address"
+                    value={formData.address}
+                    onChange={handleChange}
+                    placeholder="г. Ташкент, ул. Навои, 10"
+                    className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm text-slate-900"
+                  />
+                </div>
+              </div>
             </div>
+
             <div>
               <label className="block text-xs font-semibold text-slate-700 uppercase mb-1">Часовой пояс</label>
               <select

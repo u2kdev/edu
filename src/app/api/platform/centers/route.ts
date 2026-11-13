@@ -6,20 +6,22 @@ import { renderEmailTemplate, sendEmailWithOutbox } from "@/lib/email";
 import { hasPermission } from "@/lib/permissions";
 import { checkRateLimit, getClientIp } from "@/lib/rate-limit";
 import { z } from "zod";
-import { CenterStatus } from "@prisma/client";
+import { CenterStatus, OrganizationKind } from "@prisma/client";
 import crypto from "crypto";
 
 const getQuerySchema = z.object({
   page: z.coerce.number().min(1).default(1),
   pageSize: z.coerce.number().min(1).max(100).default(10),
+  limit: z.coerce.number().min(1).max(100).optional(),
   q: z.string().optional(),
   status: z.nativeEnum(CenterStatus).optional(),
+  organizationKind: z.nativeEnum(OrganizationKind).optional(),
   sortBy: z.enum(["createdAt", "name"]).default("createdAt"),
 });
 
 export async function GET(req: Request) {
   try {
-    const session = await getAuthSession();
+    const session = await getAuthSession(req);
     if (!session || !hasPermission("platform.centers.read", session.user.platformRole)) {
       return NextResponse.json({ error: "Forbidden" }, { status: 403 });
     }
@@ -31,25 +33,29 @@ export async function GET(req: Request) {
       return NextResponse.json({ error: "Invalid query parameters" }, { status: 400 });
     }
 
-    const { page, pageSize, q, status, sortBy } = parsedParams.data;
+    const { page, pageSize, limit, q, status, organizationKind, sortBy } = parsedParams.data;
+    const effectivePageSize = limit || pageSize;
 
     const where: Record<string, unknown> = {};
     if (q) {
       where.OR = [
-        { name: { contains: q } },
-        { slug: { contains: q } },
-        { owner: { email: { contains: q } } },
+        { name: { contains: q, mode: "insensitive" } },
+        { slug: { contains: q, mode: "insensitive" } },
+        { owner: { email: { contains: q, mode: "insensitive" } } },
       ];
     }
     if (status) {
       where.status = status;
     }
+    if (organizationKind) {
+      where.organizationKind = organizationKind;
+    }
 
     const [items, total] = await Promise.all([
       db.learningCenter.findMany({
         where,
-        skip: (page - 1) * pageSize,
-        take: pageSize,
+        skip: (page - 1) * effectivePageSize,
+        take: effectivePageSize,
         orderBy: { [sortBy]: "desc" },
         include: {
           owner: { select: { id: true, email: true, fullName: true } }
@@ -58,7 +64,7 @@ export async function GET(req: Request) {
       db.learningCenter.count({ where }),
     ]);
 
-    return NextResponse.json({ items, total });
+    return NextResponse.json({ items, centers: items, total });
   } catch (err: unknown) {
     const message = err instanceof Error ? err.message : "Internal Error";
     return NextResponse.json({ error: message }, { status: 500 });
@@ -68,12 +74,17 @@ export async function GET(req: Request) {
 const postBodySchema = z.object({
   name: z.string().min(2),
   slug: z.string().min(2).regex(/^[a-z0-9-]+$/),
+  organizationKind: z.nativeEnum(OrganizationKind).default(OrganizationKind.LEARNING_CENTER),
   contacts: z.object({
     phone: z.string().optional(),
     email: z.string().email().optional(),
   }).optional(),
+  address: z.string().optional(),
+  inn: z.string().optional(),
+  legalName: z.string().optional(),
+  contactPerson: z.string().optional(),
   timeZone: z.string().default("Asia/Tashkent"),
-  status: z.nativeEnum(CenterStatus).default("TRIAL"),
+  status: z.nativeEnum(CenterStatus).default(CenterStatus.TRIAL),
   trialEndsAt: z.string().optional(),
   directorEmail: z.string().email(),
   directorFullName: z.string().min(2),
@@ -84,7 +95,7 @@ const RESERVED_SLUGS = ["admin", "api", "platform", "login", "auth", "system"];
 
 export async function POST(req: Request) {
   try {
-    const session = await getAuthSession();
+    const session = await getAuthSession(req);
     if (!session || !hasPermission("platform.centers.write", session.user.platformRole)) {
       return NextResponse.json({ error: "Forbidden" }, { status: 403 });
     }
@@ -107,12 +118,21 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: "Reserved slug" }, { status: 400 });
     }
 
-    const existingSlug = await db.learningCenter.findUnique({
-      where: { slug: data.slug.toLowerCase() },
+    const existingCenter = await db.learningCenter.findFirst({
+      where: {
+        OR: [
+          { slug: data.slug.toLowerCase() },
+          { name: { equals: data.name.trim(), mode: "insensitive" } },
+        ],
+      },
     });
 
-    if (existingSlug) {
-      return NextResponse.json({ error: "Slug already in use" }, { status: 400 });
+    if (existingCenter) {
+      const isSlug = existingCenter.slug === data.slug.toLowerCase();
+      return NextResponse.json(
+        { error: isSlug ? "Slug already in use" : "Учебный центр с таким названием уже существует" },
+        { status: 400 }
+      );
     }
 
     if (data.planId) {
@@ -149,8 +169,13 @@ export async function POST(req: Request) {
         data: {
           name: data.name,
           slug: data.slug.toLowerCase(),
+          organizationKind: data.organizationKind,
           email: data.contacts?.email,
           phone: data.contacts?.phone,
+          address: data.address,
+          inn: data.inn,
+          legalName: data.legalName,
+          contactPerson: data.contactPerson,
           timeZone: data.timeZone,
           status: data.status,
           ownerId: user.id,
@@ -226,11 +251,14 @@ export async function POST(req: Request) {
       resetEmail.html
     ).catch(() => {});
 
+    const isSuperadmin = session.user.platformRole === "SUPERADMIN";
+
     return NextResponse.json({ 
       success: true, 
       center: result.center, 
       director: { id: result.user.id, email: result.user.email, fullName: result.user.fullName },
-      membership: result.membership 
+      membership: result.membership,
+      resetUrl: isSuperadmin ? result.resetUrl : undefined,
     });
   } catch (err: unknown) {
     const message = err instanceof Error ? err.message : "Internal error";

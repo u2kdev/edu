@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { requireTenantAccess, logAuditEvent } from "@/lib/tenant";
+import { assertGroupAccess, requireCenterPermission } from "@/lib/tenant-access";
 import { sendNotification } from "@/lib/notifications";
 import { Prisma } from "@prisma/client";
 import { withKeyedLock } from "@/lib/async-lock";
@@ -90,10 +91,7 @@ export async function GET(req: Request) {
     const whereCondition: Prisma.ScheduleSlotWhereInput = { status: "ACTIVE" };
 
     if (groupId) {
-      const group = await tenantDb.group.findFirst({
-        where: { id: groupId },
-      });
-      if (!group) return NextResponse.json({ error: "Group not found" }, { status: 404 });
+      await assertGroupAccess(tenantCtx, groupId, "read");
       whereCondition.groupId = groupId;
     }
 
@@ -108,6 +106,15 @@ export async function GET(req: Request) {
     // TEACHER role: only see schedule for their groups
     if (tenantCtx.role === "TEACHER" && tenantCtx.membership) {
       whereCondition.teacherMembershipId = tenantCtx.membership.id;
+    }
+
+    // TEACHER_ASSISTANT role: only see schedule for their assigned groups
+    if (tenantCtx.role === "TEACHER_ASSISTANT" && tenantCtx.membership) {
+      const assistantGroups = await tenantDb.group.findMany({
+        where: { assistantMembershipId: tenantCtx.membership.id, centerId: tenantCtx.center.id },
+        select: { id: true },
+      });
+      whereCondition.groupId = { in: assistantGroups.map((g) => g.id) };
     }
 
     // STUDENT role: only see schedule for their enrolled groups
