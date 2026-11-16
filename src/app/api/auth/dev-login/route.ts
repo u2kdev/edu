@@ -8,7 +8,8 @@ import { v4 as uuidv4 } from "uuid";
 
 export async function POST(req: Request) {
   // Only allow in development mode or if explicitly enabled
-  if (process.env["NODE_ENV"] === "production" || process.env["DEV_LOGIN"] !== "true") {
+  const currentNodeEnv = process.env["NODE_ENV"] as string | undefined;
+  if (currentNodeEnv === "production" || process.env["DEV_LOGIN"] !== "true") {
     return NextResponse.json({ error: "Not Found" }, { status: 404 });
   }
 
@@ -62,7 +63,7 @@ export async function POST(req: Request) {
       name: "auth_token",
       value: token,
       httpOnly: true,
-      secure: String(process.env.NODE_ENV) === "production",
+      secure: process.env.NODE_ENV === "production",
       sameSite: "lax",
       maxAge: 30 * 24 * 60 * 60, // 30 days
       path: "/",

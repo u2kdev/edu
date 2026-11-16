@@ -2,6 +2,8 @@ import { requireTenantAccess, TenantAccessError } from "./tenant";
 import { hasPermission, Permission, CenterRole } from "./permissions";
 import { Prisma } from "@prisma/client";
 
+export { TenantAccessError } from "./tenant";
+
 export type TenantContext = Awaited<ReturnType<typeof requireTenantAccess>> & {
   isImpersonating?: boolean;
 };
@@ -12,18 +14,18 @@ export function isActorImpersonating(ctx: TenantContext): boolean {
 
 /**
  * Enforces that the current tenant actor has a specific CenterPermission.
- * Bypassed for platform staff and active impersonation sessions.
+ * During impersonation, RBAC is NOT bypassed: the impersonated role's permissions apply.
  */
 export function requireCenterPermission(
   ctx: TenantContext,
   permission: Permission
 ): void {
-  if (ctx.isPlatformStaff || isActorImpersonating(ctx)) {
+  if (ctx.isPlatformStaff && !isActorImpersonating(ctx)) {
     return;
   }
 
   const role = ctx.role;
-  const platformRole = ctx.session.user.platformRole;
+  const platformRole = isActorImpersonating(ctx) ? "NONE" : ctx.session.user.platformRole;
 
   if (!hasPermission(permission, platformRole, role)) {
     throw new TenantAccessError(
@@ -60,7 +62,7 @@ export async function assertGroupAccess(
   const group = await tenantDb.group.findFirst({
     where: {
       id: groupId,
-      centerId: ctx.center.id,
+      ...(ctx.center?.id ? { centerId: ctx.center.id } : {}),
     },
     select: {
       id: true,
@@ -75,10 +77,9 @@ export async function assertGroupAccess(
     throw new TenantAccessError("Group not found in this center", "GROUP_NOT_FOUND", 404);
   }
 
-  // Superadmins, Platform staff, Impersonators, Director, and Center Admin have full access
+  // Superadmins, Platform staff (when not impersonating a scoped role), Director, and Center Admin have full access
   if (
-    ctx.isPlatformStaff ||
-    ctx.isImpersonating ||
+    (ctx.isPlatformStaff && !isActorImpersonating(ctx)) ||
     ctx.role === "DIRECTOR" ||
     ctx.role === "CENTER_ADMIN"
   ) {
@@ -202,13 +203,13 @@ export async function assertGroupAccess(
 export async function getScopedGroupWhere(
   ctx: TenantContext
 ): Promise<Prisma.GroupWhereInput> {
+  const centerId = ctx.center?.id || (ctx as { centerId?: string }).centerId;
   const baseWhere: Prisma.GroupWhereInput = {
-    centerId: ctx.center.id,
+    ...(centerId ? { centerId } : {}),
   };
 
   if (
-    ctx.isPlatformStaff ||
-    ctx.isImpersonating ||
+    (ctx.isPlatformStaff && !isActorImpersonating(ctx)) ||
     ctx.role === "DIRECTOR" ||
     ctx.role === "CENTER_ADMIN" ||
     ctx.role === "ACCOUNTANT"
@@ -412,11 +413,9 @@ export async function getActorAcademicScope(
   ctx: TenantContext
 ): Promise<ActorAcademicScope> {
   if (
-    ctx.isPlatformStaff ||
-    isActorImpersonating(ctx) ||
+    (ctx.isPlatformStaff && !isActorImpersonating(ctx)) ||
     ctx.role === "DIRECTOR" ||
-    ctx.role === "CENTER_ADMIN" ||
-    ctx.role === "ACCOUNTANT"
+    ctx.role === "CENTER_ADMIN"
   ) {
     return {
       isUnrestricted: true,

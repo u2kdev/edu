@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
-import { requireTenantAccess } from "@/lib/tenant";
+import { requireTenantAccess, TenantAccessError } from "@/lib/tenant";
 import { hasPermission } from "@/lib/permissions";
 import type { CenterRole } from "@/lib/permissions";
 
@@ -19,17 +19,46 @@ export async function POST(req: Request) {
     const { center, role: actorRole, session } = tenantCtx;
     const tenantDb = tenantCtx.getTenantDb();
 
-    const canManage =
-      tenantCtx.isPlatformStaff ||
-      hasPermission("courses.manage", session.user.platformRole, actorRole as CenterRole) ||
-      actorRole === "TEACHER";
-
-    if (!canManage) {
-      return NextResponse.json({ error: "Forbidden: No permission" }, { status: 403 });
-    }
-
     const body = await req.json();
     const { items } = reorderSchema.parse(body);
+
+    const hasGlobalManage =
+      tenantCtx.isPlatformStaff ||
+      hasPermission("courses.manage", session.user.platformRole, actorRole as CenterRole);
+
+    if (!hasGlobalManage) {
+      if (
+        (actorRole === "TEACHER" || actorRole === "TEACHER_ASSISTANT") &&
+        tenantCtx.membership?.id
+      ) {
+        const itemIds = items.map((i) => i.id);
+        const modules = await tenantDb.courseModule.findMany({
+          where: { id: { in: itemIds }, centerId: center.id },
+          select: { courseId: true },
+        });
+        const courseIds = Array.from(new Set(modules.map((m) => m.courseId)));
+        const assignedGroups = await tenantDb.group.findMany({
+          where: {
+            centerId: center.id,
+            courseId: { in: courseIds },
+            ...(actorRole === "TEACHER"
+              ? { teacherMembershipId: tenantCtx.membership.id }
+              : { assistantMembershipId: tenantCtx.membership.id }),
+          },
+          select: { courseId: true },
+        });
+        const assignedCourseIds = new Set(assignedGroups.map((g) => g.courseId));
+        const allAssigned = courseIds.length > 0 && courseIds.every((cid) => assignedCourseIds.has(cid));
+        if (!allAssigned) {
+          return NextResponse.json(
+            { error: "Forbidden: You are not assigned to all reordered courses" },
+            { status: 403 }
+          );
+        }
+      } else {
+        return NextResponse.json({ error: "Forbidden: No permission" }, { status: 403 });
+      }
+    }
 
     for (const item of items) {
       await tenantDb.courseModule.updateMany({
@@ -40,6 +69,9 @@ export async function POST(req: Request) {
 
     return NextResponse.json({ success: true, updatedCount: items.length });
   } catch (err: unknown) {
+    if (err instanceof TenantAccessError) {
+      return NextResponse.json({ error: err.message, code: err.code }, { status: err.status });
+    }
     if (err instanceof z.ZodError) {
       return NextResponse.json({ error: err.issues[0]?.message || "Validation error" }, { status: 400 });
     }

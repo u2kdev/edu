@@ -1,4 +1,8 @@
-import { getTenantDb } from "./db-tenant";
+import {
+  calculateCenterStudentBalances,
+  type GroupPeriodPriceDTO,
+  type UnifiedChargeDTO,
+} from "./billing";
 
 export interface StudentReceiptDTO {
   id: string;
@@ -8,12 +12,17 @@ export interface StudentReceiptDTO {
   groupName: string | null;
   courseTitle: string | null;
   amount: number;
+  refundedAmount: number;
   originalAmount: number | null;
   discountPercent: number | null;
+  discountReason?: string | null;
   promoCodeUsed: string | null;
   currency: string;
   status: string;
   paymentMethod: string | null;
+  periodMonths?: number | null;
+  periodStart?: string | null;
+  periodEnd?: string | null;
   paidAt: string | null;
   createdAt: string;
   center: {
@@ -36,279 +45,140 @@ export interface StudentBalanceSummaryDTO {
   pendingInvoicesAmount: number;
   debtAmount: number;
   overpaidAmount: number;
-  status: "DEBT" | "PAID" | "OVERPAID" | "NO_CHARGES";
+  status: "DEBT" | "PAID" | "OVERPAID" | "NO_CHARGES" | "FROZEN";
+  earliestPaidUntil: string | null;
   nextPayment: {
     amount: number;
     dueDate: string;
     isOverdue: boolean;
     description: string;
     paymentId?: string;
+    chargeId?: string;
   } | null;
   enrollments: Array<{
     enrollmentId: string;
     groupId: string;
     groupName: string;
     courseTitle: string;
+    status: string;
     priceMonthly: number;
+    pricing: GroupPeriodPriceDTO[];
     enrolledAt: string;
+    paidUntil: string | null;
+    frozenAt: string | null;
+    frozenUntil: string | null;
+    daysRemaining: number | null;
+    isOverdue: boolean;
     monthsEnrolled: number;
     accruedAmount: number;
+    openChargesAmount: number;
   }>;
+  openCharges: UnifiedChargeDTO[];
   payments: StudentReceiptDTO[];
 }
 
+/**
+ * Unified student balance computation delegating to src/lib/billing.ts.
+ */
 export async function calculateStudentBalances(params: {
   centerId: string;
-  studentMembershipIds: string[];
+  studentMembershipIds?: string[];
 }): Promise<StudentBalanceSummaryDTO[]> {
   const { centerId, studentMembershipIds } = params;
-  if (studentMembershipIds.length === 0) {
+  if (studentMembershipIds && studentMembershipIds.length === 0) {
     return [];
   }
 
-  const tenantDb = getTenantDb(centerId);
-  const now = new Date();
+  const balances = await calculateCenterStudentBalances({
+    centerId,
+    studentMembershipIds,
+  });
 
-  const [centerInfo, students, financeTransactions] = await Promise.all([
-    tenantDb.learningCenter.findFirst({
-      where: { id: centerId },
-      select: {
-        name: true,
-        legalName: true,
-        inn: true,
-        address: true,
-        phone: true,
-      },
-    }),
-    tenantDb.centerMembership.findMany({
-      where: {
-        centerId,
-        id: { in: studentMembershipIds },
-        role: "STUDENT",
-      },
-      include: {
-        user: {
-          select: {
-            id: true,
-            fullName: true,
-            email: true,
-            phone: true,
-          },
-        },
-        enrollments: {
-          where: { status: "ACTIVE" },
-          include: {
-            group: {
-              include: {
-                course: {
-                  select: {
-                    id: true,
-                    title: true,
-                    priceMonthly: true,
-                  },
-                },
-              },
-            },
-          },
-        },
-        payments: {
-          include: {
-            group: {
-              include: {
-                course: {
-                  select: {
-                    title: true,
-                  },
-                },
-              },
-            },
-          },
-          orderBy: { createdAt: "desc" },
-        },
-      },
-    }),
-    tenantDb.financeTransaction.findMany({
-      where: {
-        centerId,
-        studentMembershipId: { in: studentMembershipIds },
-        type: "INCOME",
-        centerPaymentId: null,
-      },
-      include: {
-        group: { select: { name: true } },
-        course: { select: { title: true } },
-      },
-      orderBy: { date: "desc" },
-    }),
-  ]);
-
-  const centerMeta = {
-    name: centerInfo?.name || "Учебный центр",
-    legalName: centerInfo?.legalName || null,
-    inn: centerInfo?.inn || null,
-    address: centerInfo?.address || null,
-    phone: centerInfo?.phone || null,
-  };
-
-  return students.map((student) => {
-    let monthlyTuition = 0;
-    let courseAccrued = 0;
-
-    const enrollmentItems = student.enrollments.map((en) => {
-      const priceMonthly = en.group?.course?.priceMonthly || 0;
-      monthlyTuition += priceMonthly;
-
-      const enrolledDate = new Date(en.enrolledAt);
-      const monthsDiff =
-        (now.getFullYear() - enrolledDate.getFullYear()) * 12 +
-        (now.getMonth() - enrolledDate.getMonth()) +
-        1;
-      const monthsEnrolled = Math.max(1, monthsDiff);
-      const accruedAmount = priceMonthly * monthsEnrolled;
-      courseAccrued += accruedAmount;
-
-      return {
-        enrollmentId: en.id,
-        groupId: en.groupId,
-        groupName: en.group?.name || "—",
-        courseTitle: en.group?.course?.title || "—",
-        priceMonthly,
-        enrolledAt: en.enrolledAt.toISOString(),
-        monthsEnrolled,
-        accruedAmount,
-      };
-    });
-
-    const paidCenterPayments = student.payments
-      .filter((p) => p.status === "PAID" || p.status === "PARTIALLY_PAID")
-      .reduce((sum, p) => sum + p.amount, 0);
-
-    const pendingCenterPayments = student.payments.filter(
-      (p) => p.status === "PENDING"
-    );
-    const pendingInvoicesAmount = pendingCenterPayments.reduce(
-      (sum, p) => sum + p.amount,
+  return balances.map((b) => {
+    const pendingInvoicesAmount = b.openCharges.reduce(
+      (sum, c) => sum + c.remainingAmount,
       0
     );
+    const overpaidAmount = b.balance > 0 ? b.balance : 0;
 
-    const studentStandaloneTxs = financeTransactions.filter(
-      (tx) => tx.studentMembershipId === student.id
-    );
-    const standalonePaid = studentStandaloneTxs.reduce(
-      (sum, tx) => sum + (tx.isReversal ? -tx.amount : tx.amount),
-      0
-    );
-
-    const totalPaid = Math.max(0, paidCenterPayments + standalonePaid);
-    const totalAccrued = Math.max(
-      courseAccrued,
-      totalPaid + pendingInvoicesAmount
-    );
-
-    const rawDiff = totalAccrued - totalPaid;
-    const debtAmount = rawDiff > 0 ? rawDiff : 0;
-    const overpaidAmount = rawDiff < 0 ? Math.abs(rawDiff) : 0;
-
-    let status: "DEBT" | "PAID" | "OVERPAID" | "NO_CHARGES" = "PAID";
-    if (totalAccrued === 0 && totalPaid === 0) {
-      status = "NO_CHARGES";
-    } else if (debtAmount > 0) {
-      status = "DEBT";
-    } else if (overpaidAmount > 0) {
-      status = "OVERPAID";
+    let mappedStatus: StudentBalanceSummaryDTO["status"] = b.status;
+    if (b.totalAccrued === 0 && b.totalPaid === 0 && b.openCharges.length === 0 && b.status !== "FROZEN") {
+      mappedStatus = "NO_CHARGES";
     }
 
-    // Determine nextPayment
     let nextPayment: StudentBalanceSummaryDTO["nextPayment"] = null;
-    if (pendingCenterPayments.length > 0) {
-      const earliestPending =
-        pendingCenterPayments[pendingCenterPayments.length - 1];
+    if (b.openCharges.length > 0) {
+      const firstCharge = b.openCharges[0];
       nextPayment = {
-        amount: earliestPending.amount,
-        dueDate: earliestPending.createdAt.toISOString(),
-        isOverdue: debtAmount > 0,
-        description: earliestPending.group?.name
-          ? `Оплата за группу ${earliestPending.group.name}`
-          : "Ожидающий счёт на оплату",
-        paymentId: earliestPending.id,
+        amount: firstCharge.remainingAmount,
+        dueDate: firstCharge.dueDate,
+        isOverdue: new Date(firstCharge.dueDate).getTime() < Date.now(),
+        description: `Счёт №${firstCharge.invoiceNumber} — ${firstCharge.groupName}`,
+        chargeId: firstCharge.id,
       };
-    } else if (debtAmount > 0) {
+    } else if (b.debtAmount > 0 && b.enrollments.length > 0) {
+      const targetEn = b.enrollments.find((e) => e.isOverdue) ?? b.enrollments[0];
       nextPayment = {
-        amount: debtAmount,
-        dueDate: now.toISOString(),
+        amount: b.debtAmount,
+        dueDate: targetEn.paidUntil ?? new Date().toISOString(),
         isOverdue: true,
-        description: "Текущая задолженность за обучение",
+        description: `Продление обучения — ${targetEn.groupName}`,
       };
-    } else if (monthlyTuition > 0) {
-      const nextMonthFirst = new Date(
-        Date.UTC(now.getUTCFullYear(), now.getUTCMonth() + 1, 1)
-      );
-      nextPayment = {
-        amount: monthlyTuition,
-        dueDate: nextMonthFirst.toISOString(),
-        isOverdue: false,
-        description: "Плановый ежемесячный платёж",
-      };
+    } else if (b.enrollments.length > 0 && b.earliestPaidUntil) {
+      const targetEn = b.enrollments[0];
+      const oneMonthPrice =
+        targetEn.pricing.find((p) => p.periodMonths === 1)?.price ?? targetEn.priceMonthly;
+      if (oneMonthPrice > 0) {
+        nextPayment = {
+          amount: oneMonthPrice,
+          dueDate: b.earliestPaidUntil,
+          isOverdue: false,
+          description: `Следующий период — ${targetEn.groupName}`,
+        };
+      }
     }
 
-    const paymentReceipts: StudentReceiptDTO[] = [
-      ...student.payments.map((p) => ({
-        id: p.id,
-        receiptNumber: `INV-${p.id.slice(0, 8).toUpperCase()}`,
-        studentMembershipId: student.id,
-        studentName: student.user.fullName,
-        groupName: p.group?.name || enrollmentItems[0]?.groupName || null,
-        courseTitle:
-          p.group?.course?.title || enrollmentItems[0]?.courseTitle || null,
-        amount: p.amount,
-        originalAmount: p.originalAmount,
-        discountPercent: p.discountAmount || null,
-        promoCodeUsed: p.note || null,
-        currency: p.currency,
-        status: p.status,
-        paymentMethod: p.paymentMethod,
-        paidAt: p.paidAt ? p.paidAt.toISOString() : null,
-        createdAt: p.createdAt.toISOString(),
-        center: centerMeta,
-      })),
-      ...studentStandaloneTxs
-        .filter((tx) => !tx.isReversal)
-        .map((tx) => ({
-          id: tx.id,
-          receiptNumber: `TX-${tx.id.slice(0, 8).toUpperCase()}`,
-          studentMembershipId: student.id,
-          studentName: student.user.fullName,
-          groupName: tx.group?.name || enrollmentItems[0]?.groupName || null,
-          courseTitle:
-            tx.course?.title || enrollmentItems[0]?.courseTitle || null,
-          amount: tx.amount,
-          originalAmount: tx.amount,
-          discountPercent: null,
-          promoCodeUsed: null,
-          currency: tx.currency,
-          status: "PAID",
-          paymentMethod: "CASH",
-          paidAt: tx.date.toISOString(),
-          createdAt: tx.createdAt.toISOString(),
-          center: centerMeta,
-        })),
-    ];
+    const receipts: StudentReceiptDTO[] = b.receipts.map((r) => ({
+      id: r.id,
+      receiptNumber: r.receiptNumber,
+      studentMembershipId: b.studentMembershipId,
+      studentName: r.studentName,
+      groupName: r.groupName,
+      courseTitle: null,
+      amount: r.amount,
+      refundedAmount: r.refundedAmount,
+      originalAmount: r.originalAmount,
+      discountPercent: r.discountAmount || null,
+      discountReason: r.discountReason,
+      promoCodeUsed: null,
+      currency: r.currency,
+      status: r.status,
+      paymentMethod: r.paymentMethod,
+      periodMonths: r.periodMonths,
+      periodStart: r.periodStart,
+      periodEnd: r.periodEnd,
+      paidAt: r.paidAt,
+      createdAt: r.createdAt,
+      center: r.center,
+    }));
 
     return {
-      studentMembershipId: student.id,
-      fullName: student.user.fullName,
-      email: student.user.email,
-      phone: student.user.phone,
-      monthlyTuition,
-      totalAccrued,
-      totalPaid,
+      studentMembershipId: b.studentMembershipId,
+      fullName: b.fullName,
+      email: b.email,
+      phone: b.phone,
+      monthlyTuition: b.monthlyTuition,
+      totalAccrued: b.totalAccrued,
+      totalPaid: b.totalPaid,
       pendingInvoicesAmount,
-      debtAmount,
+      debtAmount: b.debtAmount,
       overpaidAmount,
-      status,
+      status: mappedStatus,
+      earliestPaidUntil: b.earliestPaidUntil,
       nextPayment,
-      enrollments: enrollmentItems,
-      payments: paymentReceipts,
+      enrollments: b.enrollments,
+      openCharges: b.openCharges,
+      payments: receipts,
     };
   });
 }

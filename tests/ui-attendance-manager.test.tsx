@@ -141,9 +141,8 @@ const statusButton = (row: HTMLElement, label: string) =>
 const noteInput = (row: HTMLElement) =>
   row.querySelector("input") as HTMLInputElement;
 
-// Every *active* status button paints itself `text-white`; the inactive variant
-// of the same status only carries a coloured border/text (e.g. `text-red-400`).
-const isActive = (btn: HTMLButtonElement) => btn.className.includes("text-white");
+// Active status toggle buttons expose aria-pressed="true".
+const isActive = (btn: HTMLButtonElement) => btn.getAttribute("aria-pressed") === "true";
 
 const saveButton = () =>
   screen.getByRole("button", { name: /Сохранить отметки/ }) as HTMLButtonElement;

@@ -1,6 +1,8 @@
 import { requireTenantPageAccess } from "@/lib/tenant";
 import { getAuthSession } from "@/lib/auth";
 import { redirect } from "next/navigation";
+import { getActorAcademicScope } from "@/lib/tenant-access";
+import type { Prisma } from "@prisma/client";
 import CourseManager from "@/components/CourseManager";
 
 export default async function CenterCoursesPage() {
@@ -12,8 +14,13 @@ export default async function CenterCoursesPage() {
   const centerId = session.activeCenterId;
   if (!centerId) redirect("/center");
 
+  const academicScope = await getActorAcademicScope(tenantCtx);
+  const whereCondition: Prisma.CourseWhereInput = academicScope.isUnrestricted
+    ? { centerId }
+    : { centerId, deletedAt: null, id: { in: academicScope.courseIds } };
+
   const courses = await tenantCtx.getTenantDb().course.findMany({
-    where: { centerId },
+    where: whereCondition,
     include: {
       modules: {
         include: { lessons: true },

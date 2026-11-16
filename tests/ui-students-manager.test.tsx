@@ -1,6 +1,19 @@
 // @vitest-environment jsdom
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import { render, screen, fireEvent, waitFor, cleanup } from "@testing-library/react";
+
+vi.mock("next/navigation", () => ({
+  useRouter: () => ({
+    push: vi.fn(),
+    replace: vi.fn(),
+    refresh: vi.fn(),
+    back: vi.fn(),
+    prefetch: vi.fn(),
+  }),
+  usePathname: () => "/center/students",
+  useSearchParams: () => new URLSearchParams(),
+}));
+
 import StudentsManager from "@/components/StudentsManager";
 import { installFetchMock, jsonResponse, brokenResponse, sentBody } from "./helpers/ui";
 
@@ -106,7 +119,7 @@ describe("StudentsManager (UI)", () => {
     );
 
     // Title and server-side total count.
-    expect(await screen.findByText("Студенты")).toBeTruthy();
+    expect(await screen.findByText("Ученики")).toBeTruthy();
     expect(screen.getByText("Всего учеников: 42")).toBeTruthy();
 
     // Both responsive views render in jsdom (CSS classes are ignored).
@@ -133,7 +146,7 @@ describe("StudentsManager (UI)", () => {
     expect(links.some((a) => a.getAttribute("href") === "/center/students/s-1")).toBe(true);
 
     // Management actions visible for a DIRECTOR.
-    expect(screen.getByRole("button", { name: /Добавить студента/ })).toBeTruthy();
+    expect(screen.getByRole("button", { name: /Добавить ученика/ })).toBeTruthy();
     expect(screen.getByRole("button", { name: /Импорт из CSV/ })).toBeTruthy();
   });
 
@@ -147,7 +160,7 @@ describe("StudentsManager (UI)", () => {
 
     render(<StudentsManager initialGroups={groups} role="DIRECTOR" locale="ru" />);
 
-    expect(screen.getByText("Загрузка студентов...")).toBeTruthy();
+    expect(screen.getByText("Загрузка учеников...")).toBeTruthy();
   });
 
   it("hides the management actions for roles that cannot manage students", async () => {
@@ -155,8 +168,8 @@ describe("StudentsManager (UI)", () => {
 
     render(<StudentsManager initialGroups={groups} role="TEACHER" locale="ru" />);
 
-    await screen.findByText("Студенты");
-    expect(screen.queryByRole("button", { name: /Добавить студента/ })).toBeNull();
+    await screen.findByText("Ученики");
+    expect(screen.queryByRole("button", { name: /Добавить ученика/ })).toBeNull();
     expect(screen.queryByRole("button", { name: /Импорт из CSV/ })).toBeNull();
   });
 
@@ -165,7 +178,7 @@ describe("StudentsManager (UI)", () => {
 
     render(<StudentsManager initialGroups={groups} role="CENTER_ADMIN" locale="ru" />);
 
-    expect(await screen.findByText("Студенты не найдены")).toBeTruthy();
+    expect(await screen.findByText("Ученики не найдены")).toBeTruthy();
   });
 
   it("renders the filtered empty state once a filter is applied", async () => {
@@ -175,7 +188,7 @@ describe("StudentsManager (UI)", () => {
 
     render(<StudentsManager initialGroups={groups} role="DIRECTOR" locale="ru" />);
 
-    await screen.findByText("Студенты не найдены");
+    await screen.findByText("Ученики не найдены");
     fireEvent.change(screen.getByPlaceholderText("Поиск по имени или email..."), {
       target: { value: "несуществует" },
     });
@@ -202,7 +215,7 @@ describe("StudentsManager (UI)", () => {
 
     expect(await screen.findByText("Сервер недоступен")).toBeTruthy();
 
-    fireEvent.click(screen.getByRole("button", { name: "Повторить попытку" }));
+    fireEvent.click(screen.getByRole("button", { name: "Повторить" }));
 
     await screen.findAllByText("Алишер Каримов");
     expect(screen.queryByText("Сервер недоступен")).toBeNull();
@@ -213,7 +226,7 @@ describe("StudentsManager (UI)", () => {
 
     render(<StudentsManager initialGroups={groups} role="DIRECTOR" locale="ru" />);
 
-    expect(await screen.findByText("Ошибка при загрузке студентов")).toBeTruthy();
+    expect(await screen.findByText("Ошибка при загрузке учеников")).toBeTruthy();
   });
 
   it("reports a malformed payload through the error state", async () => {
@@ -230,7 +243,7 @@ describe("StudentsManager (UI)", () => {
     ]);
 
     render(<StudentsManager initialGroups={groups} role="DIRECTOR" locale="ru" />);
-    await screen.findByText("Студенты не найдены");
+    await screen.findByText("Ученики не найдены");
 
     const lastUrl = () => decodeURIComponent(calls[calls.length - 1].url);
     expect(lastUrl()).toContain("page=1");
@@ -262,44 +275,39 @@ describe("StudentsManager (UI)", () => {
     installFetchMock([getRoute(studentsResponse(students, { totalPages: 3, totalCount: 45 }))]);
 
     render(<StudentsManager initialGroups={groups} role="DIRECTOR" locale="ru" />);
-    expect(await screen.findByText("Страница 1 из 3")).toBeTruthy();
+    expect(await screen.findByText("1 / 3")).toBeTruthy();
 
-    // The whole content (pagination included) unmounts while a page request is
-    // loading, so the buttons must be re-queried after every navigation.
-    const paginationButtons = () =>
-      screen
-        .getAllByRole("button")
-        .filter((b) => b.className.includes("disabled:opacity-40")) as HTMLButtonElement[];
+    const prevBtn = () => screen.getByRole("button", { name: /Назад/ }) as HTMLButtonElement;
+    const nextBtn = () => screen.getByRole("button", { name: /Далее/ }) as HTMLButtonElement;
 
-    await waitFor(() => expect(paginationButtons()).toHaveLength(2));
-    expect(paginationButtons()[0].disabled).toBe(true);
-    expect(paginationButtons()[1].disabled).toBe(false);
-
-    fireEvent.click(paginationButtons()[1]);
-    expect(await screen.findByText("Страница 2 из 3")).toBeTruthy();
     await waitFor(() => {
-      expect(paginationButtons()).toHaveLength(2);
-      expect(paginationButtons()[0].disabled).toBe(false);
+      expect(prevBtn().disabled).toBe(true);
+      expect(nextBtn().disabled).toBe(false);
     });
 
-    fireEvent.click(paginationButtons()[1]);
-    expect(await screen.findByText("Страница 3 из 3")).toBeTruthy();
+    fireEvent.click(nextBtn());
+    expect(await screen.findByText("2 / 3")).toBeTruthy();
     await waitFor(() => {
-      expect(paginationButtons()).toHaveLength(2);
-      expect(paginationButtons()[1].disabled).toBe(true);
+      expect(prevBtn().disabled).toBe(false);
     });
 
-    fireEvent.click(paginationButtons()[0]);
-    expect(await screen.findByText("Страница 2 из 3")).toBeTruthy();
+    fireEvent.click(nextBtn());
+    expect(await screen.findByText("3 / 3")).toBeTruthy();
+    await waitFor(() => {
+      expect(nextBtn().disabled).toBe(true);
+    });
+
+    fireEvent.click(prevBtn());
+    expect(await screen.findByText("2 / 3")).toBeTruthy();
   });
 
   it("closes the add-student modal without any request when cancelled", async () => {
     const { calls } = installFetchMock([getRoute(studentsResponse())]);
 
     render(<StudentsManager initialGroups={groups} role="DIRECTOR" locale="ru" />);
-    await screen.findByText("Студенты");
+    await screen.findByText("Ученики");
 
-    fireEvent.click(screen.getByRole("button", { name: /Добавить студента/ }));
+    fireEvent.click(screen.getByRole("button", { name: /Добавить ученика/ }));
     expect(screen.getByPlaceholderText("Алишер Навоий")).toBeTruthy();
 
     fireEvent.click(screen.getByRole("button", { name: "Отмена" }));
@@ -315,9 +323,9 @@ describe("StudentsManager (UI)", () => {
     ]);
 
     render(<StudentsManager initialGroups={groups} role="DIRECTOR" locale="ru" />);
-    await screen.findByText("Студенты");
+    await screen.findByText("Ученики");
 
-    fireEvent.click(screen.getByRole("button", { name: /Добавить студента/ }));
+    fireEvent.click(screen.getByRole("button", { name: /Добавить ученика/ }));
     fireEvent.change(screen.getByPlaceholderText("Алишер Навоий"), {
       target: { value: "Тест Тестов" },
     });
@@ -327,14 +335,14 @@ describe("StudentsManager (UI)", () => {
     fireEvent.submit(screen.getByPlaceholderText("Алишер Навоий").closest("form")!);
 
     expect(await screen.findByText("INV-123")).toBeTruthy();
-    expect(screen.getByText("Студент успешно создан! Одноразовый инвайт-код:")).toBeTruthy();
+    expect(screen.getByText("Ученик создан. Одноразовый инвайт-код:")).toBeTruthy();
 
-    // Success also triggers a refetch.
     await waitFor(() =>
       expect(calls.filter((c) => (c.init?.method ?? "GET") === "GET").length).toBeGreaterThan(1),
     );
 
-    fireEvent.click(screen.getByRole("button", { name: "Закрыть" }));
+    const closeButtons = screen.getAllByRole("button", { name: "Закрыть" });
+    fireEvent.click(closeButtons[closeButtons.length - 1]);
     await waitFor(() => expect(screen.queryByText("INV-123")).toBeNull());
   });
 
@@ -344,12 +352,12 @@ describe("StudentsManager (UI)", () => {
       { match: "/api/students", method: "POST", reply: jsonResponse({ id: "new" }, 201) },
     ]);
 
-    const { container } = render(
+    render(
       <StudentsManager initialGroups={groups} role="CENTER_ADMIN" locale="ru" />,
     );
-    await screen.findByText("Студенты");
+    await screen.findByText("Ученики");
 
-    fireEvent.click(screen.getByRole("button", { name: /Добавить студента/ }));
+    fireEvent.click(screen.getByRole("button", { name: /Добавить ученика/ }));
     fireEvent.change(screen.getByPlaceholderText("Алишер Навоий"), {
       target: { value: "Иван Иванов" },
     });
@@ -359,10 +367,9 @@ describe("StudentsManager (UI)", () => {
     fireEvent.change(screen.getByPlaceholderText("+998901234567"), {
       target: { value: "+998901234567" },
     });
-    // 3 header selects + the modal select (last one).
-    const selects = container.querySelectorAll("select");
+    // 3 header selects + the modal select inside the Dialog portal (last one).
+    const selects = document.querySelectorAll("select");
     fireEvent.change(selects[3], { target: { value: "g-1" } });
-    // Uncheck "create with invite code" so the modal closes on success.
     fireEvent.click(screen.getByLabelText("Создать с инвайт-кодом"));
 
     fireEvent.submit(screen.getByPlaceholderText("Алишер Навоий").closest("form")!);
@@ -383,16 +390,16 @@ describe("StudentsManager (UI)", () => {
     );
   });
 
-  it("surfaces an add-student validation error via alert and keeps the modal open", async () => {
+  it("surfaces an add-student validation error via inline alert and keeps the modal open", async () => {
     installFetchMock([
       getRoute(studentsResponse()),
       { match: "/api/students", method: "POST", reply: jsonResponse({ error: "Email уже занят" }, 400) },
     ]);
 
     render(<StudentsManager initialGroups={groups} role="DIRECTOR" locale="ru" />);
-    await screen.findByText("Студенты");
+    await screen.findByText("Ученики");
 
-    fireEvent.click(screen.getByRole("button", { name: /Добавить студента/ }));
+    fireEvent.click(screen.getByRole("button", { name: /Добавить ученика/ }));
     fireEvent.change(screen.getByPlaceholderText("Алишер Навоий"), {
       target: { value: "Дубликат" },
     });
@@ -401,17 +408,18 @@ describe("StudentsManager (UI)", () => {
     });
     fireEvent.submit(screen.getByPlaceholderText("Алишер Навоий").closest("form")!);
 
-    await waitFor(() => expect(window.alert).toHaveBeenCalledWith("Email уже занят"));
+    expect(await screen.findByText("Email уже занят")).toBeTruthy();
+    expect(window.alert).not.toHaveBeenCalled();
     expect(screen.getByPlaceholderText("Алишер Навоий")).toBeTruthy();
   });
 
-  it("reports an add-student network failure with a generic alert", async () => {
+  it("reports an add-student network failure with an inline alert", async () => {
     installFetchMock([getRoute(studentsResponse())]);
 
     render(<StudentsManager initialGroups={groups} role="DIRECTOR" locale="ru" />);
-    await screen.findByText("Студенты");
+    await screen.findByText("Ученики");
 
-    fireEvent.click(screen.getByRole("button", { name: /Добавить студента/ }));
+    fireEvent.click(screen.getByRole("button", { name: /Добавить ученика/ }));
     fireEvent.change(screen.getByPlaceholderText("Алишер Навоий"), {
       target: { value: "Без сети" },
     });
@@ -420,7 +428,8 @@ describe("StudentsManager (UI)", () => {
     });
     fireEvent.submit(screen.getByPlaceholderText("Алишер Навоий").closest("form")!);
 
-    await waitFor(() => expect(window.alert).toHaveBeenCalledWith("Ошибка сети"));
+    expect(await screen.findByText("Ошибка сети")).toBeTruthy();
+    expect(window.alert).not.toHaveBeenCalled();
   });
 
   it("previews and executes a CSV import, sending the right mode and rendering both reports", async () => {
@@ -446,7 +455,7 @@ describe("StudentsManager (UI)", () => {
     ]);
 
     render(<StudentsManager initialGroups={groups} role="DIRECTOR" locale="ru" />);
-    await screen.findByText("Студенты");
+    await screen.findByText("Ученики");
 
     fireEvent.click(screen.getByRole("button", { name: /Импорт из CSV/ }));
 
@@ -477,7 +486,6 @@ describe("StudentsManager (UI)", () => {
     const executeCall = calls.filter((c) => c.url.includes("import-csv"))[1];
     expect(sentBody(executeCall)).toEqual({ csvContent: csv, mode: "execute" });
 
-    // After execution the preview block and action buttons disappear.
     expect(screen.queryByRole("button", { name: "Отправить" })).toBeNull();
   });
 
@@ -498,7 +506,7 @@ describe("StudentsManager (UI)", () => {
     ]);
 
     render(<StudentsManager initialGroups={groups} role="DIRECTOR" locale="ru" />);
-    await screen.findByText("Студенты");
+    await screen.findByText("Ученики");
 
     fireEvent.click(screen.getByRole("button", { name: /Импорт из CSV/ }));
     fireEvent.change(screen.getByPlaceholderText(/ФИО, Email, Телефон, ID группы/), {
@@ -511,14 +519,14 @@ describe("StudentsManager (UI)", () => {
     expect(executeBtn.disabled).toBe(true);
   });
 
-  it("reports a CSV preview API error via alert", async () => {
+  it("reports a CSV preview API error via inline alert", async () => {
     installFetchMock([
       { match: "/api/students/import-csv", method: "POST", reply: jsonResponse({ error: "CSV битый" }, 400) },
       getRoute(studentsResponse()),
     ]);
 
     render(<StudentsManager initialGroups={groups} role="DIRECTOR" locale="ru" />);
-    await screen.findByText("Студенты");
+    await screen.findByText("Ученики");
 
     fireEvent.click(screen.getByRole("button", { name: /Импорт из CSV/ }));
     fireEvent.change(screen.getByPlaceholderText(/ФИО, Email, Телефон, ID группы/), {
@@ -526,10 +534,11 @@ describe("StudentsManager (UI)", () => {
     });
     fireEvent.click(screen.getByRole("button", { name: "Предпросмотр CSV" }));
 
-    await waitFor(() => expect(window.alert).toHaveBeenCalledWith("CSV битый"));
+    expect(await screen.findByText("CSV битый")).toBeTruthy();
+    expect(window.alert).not.toHaveBeenCalled();
   });
 
-  it("reports a CSV execute API error via alert", async () => {
+  it("reports a CSV execute API error via inline alert", async () => {
     let csvCall = 0;
     installFetchMock([
       {
@@ -552,7 +561,7 @@ describe("StudentsManager (UI)", () => {
     ]);
 
     render(<StudentsManager initialGroups={groups} role="DIRECTOR" locale="ru" />);
-    await screen.findByText("Студенты");
+    await screen.findByText("Ученики");
 
     fireEvent.click(screen.getByRole("button", { name: /Импорт из CSV/ }));
     fireEvent.change(screen.getByPlaceholderText(/ФИО, Email, Телефон, ID группы/), {
@@ -562,14 +571,15 @@ describe("StudentsManager (UI)", () => {
     await screen.findByText("Корректных строк: 1");
 
     fireEvent.click(screen.getByRole("button", { name: "Отправить" }));
-    await waitFor(() => expect(window.alert).toHaveBeenCalledWith("Импорт упал"));
+    expect(await screen.findByText("Импорт упал")).toBeTruthy();
+    expect(window.alert).not.toHaveBeenCalled();
   });
 
-  it("reports a CSV network failure with a generic alert", async () => {
+  it("reports a CSV network failure with an inline alert", async () => {
     installFetchMock([getRoute(studentsResponse())]);
 
     render(<StudentsManager initialGroups={groups} role="DIRECTOR" locale="ru" />);
-    await screen.findByText("Студенты");
+    await screen.findByText("Ученики");
 
     fireEvent.click(screen.getByRole("button", { name: /Импорт из CSV/ }));
     fireEvent.change(screen.getByPlaceholderText(/ФИО, Email, Телефон, ID группы/), {
@@ -577,19 +587,21 @@ describe("StudentsManager (UI)", () => {
     });
     fireEvent.click(screen.getByRole("button", { name: "Предпросмотр CSV" }));
 
-    await waitFor(() => expect(window.alert).toHaveBeenCalledWith("Ошибка сети"));
+    expect(await screen.findByText("Ошибка сети")).toBeTruthy();
+    expect(window.alert).not.toHaveBeenCalled();
   });
 
   it("closes the CSV modal from its close button", async () => {
     installFetchMock([getRoute(studentsResponse())]);
 
     render(<StudentsManager initialGroups={groups} role="DIRECTOR" locale="ru" />);
-    await screen.findByText("Студенты");
+    await screen.findByText("Ученики");
 
     fireEvent.click(screen.getByRole("button", { name: /Импорт из CSV/ }));
     expect(screen.getByPlaceholderText(/ФИО, Email, Телефон, ID группы/)).toBeTruthy();
 
-    fireEvent.click(screen.getByRole("button", { name: "Закрыть" }));
+    const closeButtons = screen.getAllByRole("button", { name: "Закрыть" });
+    fireEvent.click(closeButtons[closeButtons.length - 1]);
     expect(screen.queryByPlaceholderText(/ФИО, Email, Телефон, ID группы/)).toBeNull();
   });
 });

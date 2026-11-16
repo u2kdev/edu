@@ -4,12 +4,7 @@ import { NextResponse } from "next/server";
 import { db } from "@/lib/db";
 import { requirePlatformPermission, handlePlatformError } from "@/lib/platformAuth";
 import type { Prisma } from "@prisma/client";
-
-function escapeCsv(val: unknown): string {
-  if (val === null || val === undefined) return '""';
-  const str = String(val).replace(/"/g, '""');
-  return `"${str}"`;
-}
+import { generateCsv } from "@/lib/csv";
 
 export async function GET(req: Request) {
   try {
@@ -75,20 +70,19 @@ export async function GET(req: Request) {
     ];
 
     const rows = logs.map((l) => [
-      escapeCsv(l.createdAt.toISOString()),
-      escapeCsv(l.action),
-      escapeCsv(l.actor?.fullName || "—"),
-      escapeCsv(l.actor?.email || "—"),
-      escapeCsv(l.actor?.platformRole || "—"),
-      escapeCsv(l.center?.name || "Платформа"),
-      escapeCsv(l.resource),
-      escapeCsv(l.resourceId || "—"),
-      escapeCsv(l.ipAddress || "—"),
-      escapeCsv(l.detailsJson || "—"),
+      l.createdAt.toISOString(),
+      l.action,
+      l.actor?.fullName || "—",
+      l.actor?.email || "—",
+      l.actor?.platformRole || "—",
+      l.center?.name || "Платформа",
+      l.resource,
+      l.resourceId || "—",
+      l.ipAddress || "—",
+      l.detailsJson || "—",
     ]);
 
-    const csvContent =
-      "\uFEFF" + [headers.join(","), ...rows.map((r) => r.join(","))].join("\r\n");
+    const csvContent = generateCsv(headers, rows);
 
     return new NextResponse(csvContent, {
       status: 200,

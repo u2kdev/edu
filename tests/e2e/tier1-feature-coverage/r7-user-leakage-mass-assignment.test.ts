@@ -302,7 +302,6 @@ describe("Tier 1 Feature Coverage: R7 User DTO Serialization & Mass Assignment P
     // Attempt dynamic load of serializeUser if implemented
     let serializeUser: ((u: unknown) => unknown) | null = null;
     try {
-      // @ts-expect-error - user-dto will be created in implementation milestone
       const mod = await import("@/lib/user-dto");
       if (typeof mod.serializeUser === "function") {
         serializeUser = mod.serializeUser;

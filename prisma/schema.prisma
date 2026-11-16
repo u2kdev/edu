@@ -23,8 +23,11 @@ model PlatformUser {
   platformRole        PlatformRole @default(NONE)
   preferredLanguage   Language     @default(ru) // ru, uz-Latn, uz-Cyrl (DB values via @map)
   isActive            Boolean      @default(true)
-  twoFactorEnabled    Boolean      @default(false)
-  twoFactorSecret     String? // TOTP secret (encrypted)
+  twoFactorEnabled       Boolean      @default(false)
+  twoFactorSecret        String? // TOTP secret (encrypted)
+  twoFactorPendingSecret String?
+  twoFactorBackupCodes   String? // JSON array of hashed single-use backup codes
+  twoFactorLastStep      Int?
   createdAt           DateTime     @default(now())
   emailConfirmToken   String?      @unique
   emailConfirmExpires DateTime?
@@ -52,6 +55,11 @@ model PlatformUser {
   platformAnnouncementsCreated PlatformAnnouncement[] @relation("PlatformAnnouncementCreator")
   assignedTickets              SupportTicket[]        @relation("TicketAssignee")
   announcementsRead            PlatformAnnouncementRead[]
+  notificationDeliveries       NotificationDelivery[]
+  telegramAccount              TelegramAccount?
+  telegramLinkTokens           TelegramLinkToken[]
+  createdBroadcasts            Broadcast[]            @relation("BroadcastCreator")
+  broadcastRecipients          BroadcastRecipient[]
 
   @@index([email])
   @@index([phone])
@@ -86,8 +94,17 @@ model LearningCenter {
   timeZone         String       @default("Asia/Tashkent")
   gradingScale     GradingScale @default(PERCENT_100) // PERCENT_100, POINTS_5, PASS_FAIL
   smsEnabled       Boolean      @default(false)
+  emailEnabled     Boolean      @default(true)
   smsDailyLimit    Int          @default(100)
+  paymentReminderEnabled Boolean @default(true)
+  paymentReminderDaysJson String?
+  quietHoursStart  Int          @default(21)
+  quietHoursEnd    Int          @default(8)
+  reminderTemplateRu String?
+  reminderTemplateUz String?
   defaultNotificationPrefsJson String?
+  allowAdminDiscount Boolean    @default(true)
+  partialPaymentExtendsPeriod Boolean @default(false)
   ownerId          String
   createdAt        DateTime     @default(now())
   updatedAt        DateTime     @updatedAt
@@ -126,6 +143,21 @@ model LearningCenter {
   platformPayments   PlatformPayment[]
   materials          Material[]
   substitutionRequests SubstitutionRequest[]
+  groupPricingPlans  GroupPricingPlan[]
+  enrollmentFreezes  EnrollmentFreeze[]
+  promoCodes         PromoCode[]
+  promoCodeRedemptions PromoCodeRedemption[]
+  invoiceCounters    InvoiceCounter[]
+  charges            Charge[]
+  chargePaymentAllocations ChargePaymentAllocation[]
+  merchantConfigs    CenterMerchantConfig[]
+  paymentIntents     PaymentIntent[]
+  paymentWebhookEvents PaymentWebhookEvent[]
+  notificationDeliveries NotificationDelivery[]
+  paymentReminderLogs PaymentReminderLog[]
+  broadcasts         Broadcast[]
+  broadcastRecipients BroadcastRecipient[]
+  communicationTemplates CommunicationTemplate[]
 
   @@index([slug])
   @@index([ownerId])
@@ -167,6 +199,7 @@ model Subscription {
   platformPayments PlatformPayment[]
 
   @@index([centerId])
+  @@index([status, currentPeriodEndsAt])
 }
 
 // ----------------------------------------------------
@@ -261,6 +294,11 @@ model CenterMembership {
   substitutionRequestsProposed  SubstitutionRequest[] @relation("SubstitutionProposed")
   substitutionRequestsAssigned  SubstitutionRequest[] @relation("SubstitutionSubstitute")
   substitutionRequestsResolved  SubstitutionRequest[] @relation("SubstitutionResolver")
+  enrollmentFreezesAsStudent    EnrollmentFreeze[]    @relation("StudentEnrollmentFreezes")
+  promoCodeRedemptions          PromoCodeRedemption[] @relation("StudentPromoRedemptions")
+  charges                       Charge[]              @relation("StudentCharges")
+  paymentIntents                PaymentIntent[]       @relation("StudentPaymentIntents")
+  paymentReminderLogs           PaymentReminderLog[]
 
   @@unique([userId, centerId, role])
   @@index([userId])
@@ -344,6 +382,7 @@ model Course {
   materials Material[]
   invites InviteCode[]
   financeTransactions FinanceTransaction[]
+  promoCodes          PromoCode[]
 
   @@index([centerId])
   @@index([subjectId])
@@ -470,6 +509,12 @@ model Group {
   announcements        Announcement[]
   financeTransactions  FinanceTransaction[]
   teacherSalaryRates   TeacherSalaryRate[]
+  pricingPlans         GroupPricingPlan[]
+  enrollmentFreezes    EnrollmentFreeze[]
+  promoCodes           PromoCode[]
+  charges              Charge[]
+  paymentIntents       PaymentIntent[]
+  broadcasts           Broadcast[]
 
   @@index([courseId])
   @@index([teacherMembershipId])
@@ -477,7 +522,7 @@ model Group {
   @@index([assistantMembershipId])
 }
 
-// Статусы Enrollment: ACTIVE, WAITLIST, COMPLETED, DROPPED
+// Статусы Enrollment: ACTIVE, WAITLIST, COMPLETED, DROPPED, FROZEN
 model Enrollment {
   id                  String           @id @default(uuid())
   centerId            String
@@ -485,15 +530,22 @@ model Enrollment {
   groupId             String
   status              EnrollmentStatus @default(ACTIVE)
   enrolledAt          DateTime         @default(now())
+  paidUntil           DateTime?
+  frozenAt            DateTime?
+  frozenUntil         DateTime?
   createdAt           DateTime         @default(now())
   updatedAt           DateTime         @updatedAt
 
   student CenterMembership @relation("StudentEnrollments", fields: [studentMembershipId], references: [id], onDelete: Cascade)
   group   Group            @relation(fields: [groupId], references: [id], onDelete: Cascade)
   center  LearningCenter   @relation(fields: [centerId], references: [id], onDelete: Cascade)
+  freezes EnrollmentFreeze[]
+  charges Charge[]
+  paymentIntents PaymentIntent[]
 
   @@unique([studentMembershipId, groupId])
   @@index([centerId])
+  @@index([centerId, paidUntil])
   @@index([groupId])
   @@index([studentMembershipId])
 }
@@ -653,6 +705,19 @@ model CenterPayment {
   amount              Float
   originalAmount      Float?
   discountAmount      Float               @default(0)
+  discountReason      String?
+  promoCodeId         String?
+  periodMonths        Int?
+  periodStart         DateTime?
+  periodEnd           DateTime?
+  refundedAmount      Int                 @default(0)
+  manualRefundStatus  ManualRefundStatus  @default(NONE)
+  manualRefundNote    String?
+  manualRefundCompletedAt   DateTime?
+  manualRefundCompletedById String?
+  receiptNumber       String?
+  receiptVerifyHash   String?             @unique
+  paymentIntentId     String?             @unique
   currency            Currency            @default(UZS)
   status              CenterPaymentStatus @default(PENDING) // PENDING, PAID, PARTIALLY_PAID, FAILED, REFUNDED
   paymentMethod       PaymentMethod       @default(CASH)
@@ -668,9 +733,16 @@ model CenterPayment {
   center  LearningCenter   @relation(fields: [centerId], references: [id], onDelete: Cascade)
   student CenterMembership @relation("StudentPayments", fields: [studentMembershipId], references: [id], onDelete: Restrict)
   group   Group?           @relation(fields: [groupId], references: [id], onDelete: SetNull)
+  promoCode PromoCode?     @relation(fields: [promoCodeId], references: [id], onDelete: SetNull)
+  paymentIntent PaymentIntent? @relation(fields: [paymentIntentId], references: [id], onDelete: SetNull)
   financeTransactions FinanceTransaction[] @relation("PaymentFinanceTransactions")
+  refundFinanceTransactions FinanceTransaction[] @relation("PaymentRefundTransactions")
+  chargeAllocations ChargePaymentAllocation[]
+  promoRedemptions PromoCodeRedemption[]
 
   @@index([centerId])
+  @@index([centerId, receiptNumber])
+  @@index([centerId, manualRefundStatus])
   @@index([studentMembershipId])
   @@index([status])
 }
@@ -1170,6 +1242,7 @@ model Account {
   center            LearningCenter       @relation(fields: [centerId], references: [id], onDelete: Cascade)
   transactions      FinanceTransaction[] @relation("AccountTransactions")
   incomingTransfers FinanceTransaction[] @relation("TargetAccountTransfers")
+  merchantConfigs   CenterMerchantConfig[]
 
   @@unique([centerId, name])
   @@index([centerId])
@@ -1231,6 +1304,7 @@ model FinanceTransaction {
   courseId            String?
   branchId            String?
   centerPaymentId     String?
+  refundPaymentId     String?
   lessonId            String?
   transferGroupId     String?
   transferDirection   String? // OUT or IN
@@ -1249,6 +1323,7 @@ model FinanceTransaction {
   course        Course?             @relation(fields: [courseId], references: [id], onDelete: SetNull)
   branch        Branch?             @relation(fields: [branchId], references: [id], onDelete: SetNull)
   centerPayment CenterPayment?      @relation("PaymentFinanceTransactions", fields: [centerPaymentId], references: [id], onDelete: Restrict)
+  refundPayment CenterPayment?      @relation("PaymentRefundTransactions", fields: [refundPaymentId], references: [id], onDelete: Restrict)
   lesson        Lesson?             @relation("LessonSalaryTransactions", fields: [lessonId], references: [id], onDelete: Restrict)
   reversalOf    FinanceTransaction? @relation("TransactionReversal", fields: [reversalOfId], references: [id], onDelete: Restrict)
   reversedBy    FinanceTransaction? @relation("TransactionReversal")
@@ -1265,6 +1340,7 @@ model FinanceTransaction {
   @@index([courseId])
   @@index([branchId])
   @@index([centerPaymentId])
+  @@index([refundPaymentId])
   @@index([lessonId])
   @@index([transferGroupId])
 }
@@ -1373,6 +1449,32 @@ enum NotificationChannel {
   EMAIL
   SMS
   PUSH
+  TELEGRAM
+}
+
+enum DeliveryStatus {
+  PENDING
+  SENT
+  FAILED
+  DEFERRED
+  SKIPPED
+}
+
+enum BroadcastAudience {
+  ALL
+  DEBTORS
+  OVERDUE
+  GROUP
+  ROLE
+}
+
+enum BroadcastStatus {
+  DRAFT
+  SCHEDULED
+  SENDING
+  COMPLETED
+  FAILED
+  CANCELLED
 }
 
 enum CenterStatus {
@@ -1489,6 +1591,46 @@ enum EnrollmentStatus {
   WAITLIST
   COMPLETED
   DROPPED
+  FROZEN
+}
+
+enum ChargeStatus {
+  PENDING
+  PARTIAL
+  PAID
+  CANCELLED
+  REFUNDED
+}
+
+enum PromoDiscountType {
+  PERCENT
+  FIXED
+}
+
+enum FreezeStatus {
+  ACTIVE
+  COMPLETED
+  CANCELLED
+}
+
+enum PaymentProvider {
+  CLICK
+}
+
+enum PaymentIntentStatus {
+  CREATED
+  PREPARED
+  CONFIRMED
+  CANCELLED
+  EXPIRED
+  FAILED
+}
+
+enum WebhookProcessStatus {
+  PROCESSED
+  FAILED
+  REJECTED
+  DUPLICATE
 }
 
 enum NotificationType {
@@ -1498,6 +1640,7 @@ enum NotificationType {
   SCHEDULE_CANCELLED
   PAYMENT_DUE
   PAYMENT_OVERDUE
+  PAYMENT_CONFIRMED
   GRADE_POSTED
   SUBSCRIPTION_EXPIRING
   STAFF_ADDED
@@ -1507,6 +1650,7 @@ enum NotificationType {
   LESSON_CANCELLED
   LESSON_SUBSTITUTED
   ANNOUNCEMENT
+  BROADCAST
 }
 
 enum ActivityType {
@@ -1527,6 +1671,12 @@ enum PaymentMethod {
   CASH
   ONLINE
   BANK_TRANSFER
+}
+
+enum ManualRefundStatus {
+  NONE
+  PENDING_MANUAL
+  COMPLETED
 }
 
 enum ParentLinkInitiator {
@@ -1664,4 +1814,418 @@ model PlatformExpense {
   @@index([date])
   @@index([createdBy])
 }
+
+// ----------------------------------------------------
+// 23. Единое Биллинг-Ядро и Click-Мерчант (P1a + P1b)
+// ----------------------------------------------------
+
+model GroupPricingPlan {
+  id           String   @id @default(uuid())
+  centerId     String
+  groupId      String
+  periodMonths Int      // 1, 2, or 3
+  price        Int      // Integer UZS >= 0
+  isActive     Boolean  @default(true)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  center LearningCenter @relation(fields: [centerId], references: [id], onDelete: Cascade)
+  group  Group          @relation(fields: [groupId], references: [id], onDelete: Cascade)
+
+  @@unique([groupId, periodMonths])
+  @@index([centerId, groupId])
+}
+
+model EnrollmentFreeze {
+  id                  String       @id @default(uuid())
+  centerId            String
+  enrollmentId        String
+  studentMembershipId String
+  groupId             String
+  startDate           DateTime
+  plannedEndDate      DateTime
+  actualEndDate       DateTime?
+  creditedDays        Int          @default(0)
+  reason              String
+  status              FreezeStatus @default(ACTIVE)
+  createdByUserId     String
+  unfrozenByUserId    String?
+  createdAt           DateTime     @default(now())
+  updatedAt           DateTime     @updatedAt
+
+  center     LearningCenter   @relation(fields: [centerId], references: [id], onDelete: Cascade)
+  enrollment Enrollment       @relation(fields: [enrollmentId], references: [id], onDelete: Cascade)
+  student    CenterMembership @relation("StudentEnrollmentFreezes", fields: [studentMembershipId], references: [id], onDelete: Restrict)
+  group      Group            @relation(fields: [groupId], references: [id], onDelete: Cascade)
+
+  @@index([centerId, enrollmentId, status])
+  @@index([studentMembershipId])
+}
+
+model PromoCode {
+  id                 String            @id @default(uuid())
+  centerId           String
+  code               String
+  description        String?
+  discountType       PromoDiscountType
+  value              Int               // Percentage (1..100) or fixed UZS > 0
+  validFrom          DateTime?
+  validUntil         DateTime?
+  maxUses            Int?
+  usesCount          Int               @default(0)
+  applicableCourseId String?
+  applicableGroupId  String?
+  isActive           Boolean           @default(true)
+  createdByUserId    String
+  createdAt          DateTime          @default(now())
+  updatedAt          DateTime          @updatedAt
+
+  center           LearningCenter        @relation(fields: [centerId], references: [id], onDelete: Cascade)
+  applicableCourse Course?               @relation(fields: [applicableCourseId], references: [id], onDelete: SetNull)
+  applicableGroup  Group?                @relation(fields: [applicableGroupId], references: [id], onDelete: SetNull)
+  charges          Charge[]
+  payments         CenterPayment[]
+  redemptions      PromoCodeRedemption[]
+  paymentIntents   PaymentIntent[]
+
+  @@unique([centerId, code])
+  @@index([centerId, isActive])
+}
+
+model PromoCodeRedemption {
+  id                  String   @id @default(uuid())
+  centerId            String
+  promoCodeId         String
+  studentMembershipId String
+  chargeId            String?
+  paymentId           String?
+  discountAmount      Int      // Integer UZS >= 0
+  createdAt           DateTime @default(now())
+
+  center    LearningCenter   @relation(fields: [centerId], references: [id], onDelete: Cascade)
+  promoCode PromoCode        @relation(fields: [promoCodeId], references: [id], onDelete: Restrict)
+  student   CenterMembership @relation("StudentPromoRedemptions", fields: [studentMembershipId], references: [id], onDelete: Restrict)
+  charge    Charge?          @relation(fields: [chargeId], references: [id], onDelete: SetNull)
+  payment   CenterPayment?   @relation(fields: [paymentId], references: [id], onDelete: SetNull)
+
+  @@unique([promoCodeId, paymentId])
+  @@index([centerId, promoCodeId])
+  @@index([chargeId])
+}
+
+model InvoiceCounter {
+  id        String   @id @default(uuid())
+  centerId  String
+  yearMonth String   // YYYYMM in Asia/Tashkent
+  lastSeq   Int      @default(0)
+  updatedAt DateTime @updatedAt
+
+  center LearningCenter @relation(fields: [centerId], references: [id], onDelete: Cascade)
+
+  @@unique([centerId, yearMonth])
+}
+
+model Charge {
+  id                  String       @id @default(uuid())
+  centerId            String
+  enrollmentId        String
+  studentMembershipId String
+  groupId             String
+  invoiceNumber       String
+  periodMonths        Int          // 1, 2, or 3
+  periodStart         DateTime
+  periodEnd           DateTime
+  originalAmount      Int          // Integer UZS >= 0
+  discountAmount      Int          @default(0)
+  discountReason      String?
+  amount              Int          // Integer UZS >= 0 (after discount)
+  paidAmount          Int          @default(0)
+  status              ChargeStatus @default(PENDING)
+  promoCodeId         String?
+  dueDate             DateTime
+  paidAt              DateTime?
+  cancelledAt         DateTime?
+  cancelReason        String?
+  createdByUserId     String?
+  createdAt           DateTime     @default(now())
+  updatedAt           DateTime     @updatedAt
+
+  center          LearningCenter            @relation(fields: [centerId], references: [id], onDelete: Cascade)
+  enrollment      Enrollment                @relation(fields: [enrollmentId], references: [id], onDelete: Cascade)
+  student         CenterMembership          @relation("StudentCharges", fields: [studentMembershipId], references: [id], onDelete: Restrict)
+  group           Group                     @relation(fields: [groupId], references: [id], onDelete: Cascade)
+  promoCode       PromoCode?                @relation(fields: [promoCodeId], references: [id], onDelete: SetNull)
+  allocations     ChargePaymentAllocation[]
+  promoRedemptions PromoCodeRedemption[]
+  paymentIntents  PaymentIntent[]
+  paymentReminderLogs PaymentReminderLog[]
+
+  @@unique([centerId, invoiceNumber])
+  @@index([centerId, status, dueDate])
+  @@index([enrollmentId, status])
+  @@index([studentMembershipId])
+  // Partial unique index "Charge_active_enrollment_period_uq" on ("enrollmentId", "periodStart")
+  // WHERE "status" <> 'CANCELLED' is managed via SQL migration 20261116010000_p1_fix_manual_refund_and_charge_uniq.
+}
+
+model ChargePaymentAllocation {
+  id        String   @id @default(uuid())
+  centerId  String
+  chargeId  String
+  paymentId String
+  amount    Int      // Integer UZS > 0
+  createdAt DateTime @default(now())
+
+  center  LearningCenter @relation(fields: [centerId], references: [id], onDelete: Cascade)
+  charge  Charge         @relation(fields: [chargeId], references: [id], onDelete: Cascade)
+  payment CenterPayment  @relation(fields: [paymentId], references: [id], onDelete: Cascade)
+
+  @@unique([chargeId, paymentId])
+  @@index([centerId, chargeId])
+  @@index([paymentId])
+}
+
+model CenterMerchantConfig {
+  id                 String          @id @default(uuid())
+  centerId           String
+  provider           PaymentProvider @default(CLICK)
+  serviceId          String
+  merchantId         String
+  merchantUserId     String?
+  encryptedSecretKey String
+  targetAccountId    String?
+  isVerified         Boolean         @default(false)
+  verifiedAt         DateTime?
+  verifiedByUserId   String?
+  isActive           Boolean         @default(true)
+  createdAt          DateTime        @default(now())
+  updatedAt          DateTime        @updatedAt
+
+  center        LearningCenter @relation(fields: [centerId], references: [id], onDelete: Cascade)
+  targetAccount Account?       @relation(fields: [targetAccountId], references: [id], onDelete: SetNull)
+
+  @@unique([centerId, provider])
+  @@unique([provider, serviceId])
+}
+
+model PaymentIntent {
+  id                  String              @id @default(uuid())
+  centerId            String
+  provider            PaymentProvider     @default(CLICK)
+  merchantTransId     String              @unique
+  studentMembershipId String
+  enrollmentId        String?
+  groupId             String?
+  chargeId            String?
+  periodMonths        Int                 @default(1)
+  promoCodeId         String?
+  originalAmount      Int
+  discountAmount      Int                 @default(0)
+  amount              Int                 // Final payable amount in integer UZS > 0
+  currency            Currency            @default(UZS)
+  status              PaymentIntentStatus @default(CREATED)
+  clickTransId        String?
+  clickPaydocId       String?
+  preparedAt          DateTime?
+  confirmedAt         DateTime?
+  expiresAt           DateTime
+  createdByUserId     String
+  errorCode           Int?
+  errorNote           String?
+  createdAt           DateTime            @default(now())
+  updatedAt           DateTime            @updatedAt
+
+  center        LearningCenter        @relation(fields: [centerId], references: [id], onDelete: Cascade)
+  student       CenterMembership      @relation("StudentPaymentIntents", fields: [studentMembershipId], references: [id], onDelete: Restrict)
+  enrollment    Enrollment?           @relation(fields: [enrollmentId], references: [id], onDelete: SetNull)
+  group         Group?                @relation(fields: [groupId], references: [id], onDelete: SetNull)
+  charge        Charge?               @relation(fields: [chargeId], references: [id], onDelete: SetNull)
+  promoCode     PromoCode?            @relation(fields: [promoCodeId], references: [id], onDelete: SetNull)
+  centerPayment CenterPayment?
+  webhookEvents PaymentWebhookEvent[]
+
+  @@index([centerId, status, createdAt])
+  @@index([studentMembershipId])
+  @@index([expiresAt])
+}
+
+model PaymentWebhookEvent {
+  id                  String               @id @default(uuid())
+  centerId            String?
+  provider            PaymentProvider      @default(CLICK)
+  paymentIntentId     String?
+  serviceId           String?
+  clickTransId        String?
+  merchantTransId     String?
+  action              Int?
+  amount              Int?
+  signatureValid      Boolean              @default(false)
+  status              WebhookProcessStatus
+  errorCode           Int?
+  errorNote           String?
+  ipAddress           String?
+  payloadRedactedJson String?
+  processedAt         DateTime             @default(now())
+  createdAt           DateTime             @default(now())
+
+  center        LearningCenter? @relation(fields: [centerId], references: [id], onDelete: Cascade)
+  paymentIntent PaymentIntent?  @relation(fields: [paymentIntentId], references: [id], onDelete: SetNull)
+
+  @@index([centerId, createdAt])
+  @@index([clickTransId, action])
+  @@index([paymentIntentId])
+}
+
+model NotificationDelivery {
+  id                String              @id @default(uuid())
+  userId            String?
+  centerId          String?
+  channel           NotificationChannel
+  type              NotificationType    @default(GENERAL)
+  eventKey          String?
+  recipient         String?
+  subject           String?
+  payloadJson       String?
+  status            DeliveryStatus      @default(PENDING)
+  providerMessageId String?
+  errorMessage      String?
+  deferredUntil     DateTime?
+  sentAt            DateTime?
+  createdAt         DateTime            @default(now())
+  updatedAt         DateTime            @updatedAt
+
+  user   PlatformUser?   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  center LearningCenter? @relation(fields: [centerId], references: [id], onDelete: Cascade)
+
+  @@index([centerId, createdAt])
+  @@index([userId, createdAt])
+  @@index([status, deferredUntil])
+  @@index([eventKey])
+}
+
+model TelegramAccount {
+  id            String    @id @default(uuid())
+  userId        String    @unique
+  telegramId    String    @unique
+  chatId        String    @unique
+  username      String?
+  firstName     String?
+  languageCode  String?
+  isActive      Boolean   @default(true)
+  isBlocked     Boolean   @default(false)
+  linkedAt      DateTime  @default(now())
+  lastInboundAt DateTime?
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  user PlatformUser @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([chatId])
+}
+
+model TelegramLinkToken {
+  id        String    @id @default(uuid())
+  userId    String
+  tokenHash String    @unique
+  expiresAt DateTime
+  usedAt    DateTime?
+  createdAt DateTime  @default(now())
+
+  user PlatformUser @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([expiresAt])
+}
+
+model PaymentReminderLog {
+  id                  String              @id @default(uuid())
+  centerId            String
+  studentMembershipId String
+  chargeId            String?
+  offsetDays          Int
+  dueDateKey          String // YYYY-MM-DD in Asia/Tashkent
+  channel             NotificationChannel
+  idempotencyKey      String              @unique
+  deliveryId          String?
+  createdAt           DateTime            @default(now())
+
+  center  LearningCenter   @relation(fields: [centerId], references: [id], onDelete: Cascade)
+  student CenterMembership @relation(fields: [studentMembershipId], references: [id], onDelete: Cascade)
+  charge  Charge?          @relation(fields: [chargeId], references: [id], onDelete: SetNull)
+
+  @@index([centerId, dueDateKey])
+  @@index([studentMembershipId])
+}
+
+model CommunicationTemplate {
+  id        String   @id @default(uuid())
+  centerId  String
+  key       String
+  locale    Language @default(ru)
+  title     String
+  body      String
+  isActive  Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  center LearningCenter @relation(fields: [centerId], references: [id], onDelete: Cascade)
+
+  @@unique([centerId, key, locale])
+  @@index([centerId])
+}
+
+model Broadcast {
+  id              String              @id @default(uuid())
+  centerId        String
+  createdByUserId String
+  title           String
+  bodyRu          String
+  bodyUz          String?
+  channel         NotificationChannel
+  audience        BroadcastAudience
+  targetGroupId   String?
+  targetRole      MembershipRole?
+  status          BroadcastStatus     @default(DRAFT)
+  scheduledAt     DateTime?
+  startedAt       DateTime?
+  completedAt     DateTime?
+  totalRecipients Int                 @default(0)
+  sentCount       Int                 @default(0)
+  failedCount     Int                 @default(0)
+  estimatedCost   Int                 @default(0)
+  createdAt       DateTime            @default(now())
+  updatedAt       DateTime            @updatedAt
+
+  center     LearningCenter       @relation(fields: [centerId], references: [id], onDelete: Cascade)
+  createdBy  PlatformUser         @relation("BroadcastCreator", fields: [createdByUserId], references: [id], onDelete: Restrict)
+  group      Group?               @relation(fields: [targetGroupId], references: [id], onDelete: SetNull)
+  recipients BroadcastRecipient[]
+
+  @@index([centerId, createdAt])
+  @@index([status, scheduledAt])
+}
+
+model BroadcastRecipient {
+  id           String              @id @default(uuid())
+  centerId     String
+  broadcastId  String
+  userId       String
+  channel      NotificationChannel
+  locale       Language            @default(ru)
+  status       DeliveryStatus      @default(PENDING)
+  deliveryId   String?
+  errorMessage String?
+  sentAt       DateTime?
+  createdAt    DateTime            @default(now())
+  updatedAt    DateTime            @updatedAt
+
+  center    LearningCenter @relation(fields: [centerId], references: [id], onDelete: Cascade)
+  broadcast Broadcast      @relation(fields: [broadcastId], references: [id], onDelete: Cascade)
+  user      PlatformUser   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([broadcastId, userId, channel])
+  @@index([centerId, broadcastId])
+  @@index([status])
+}
+
 

@@ -4,33 +4,57 @@ import React, { useState, useEffect, useCallback } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import {
+  Archive,
   Building2,
-  ArrowLeft,
-  Mail,
-  Phone,
-  Clock,
-  Shield,
-  Users,
-  AlertTriangle,
-  CheckCircle2,
-  Lock,
-  Unlock,
-  History,
-  Copy,
   Check,
+  Copy,
   CreditCard,
-  Calendar,
+  Download,
+  ExternalLink,
+  History,
+  KeyRound,
   Printer,
   Receipt,
-  Download,
-  Archive,
   RotateCcw,
+  Shield,
+  ShieldAlert,
   Trash2,
-  LifeBuoy,
-  KeyRound,
-  ExternalLink,
+  Users,
 } from "lucide-react";
 import ImpersonateButton from "@/components/ImpersonateButton";
+import {
+  Alert,
+  AlertDescription,
+  Badge,
+  type BadgeVariant,
+  Button,
+  Card,
+  CardContent,
+  CardHeader,
+  CardTitle,
+  ConfirmDialog,
+  DataTable,
+  type DataTableColumn,
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+  EmptyState,
+  EntityDetailHeader,
+  FormActions,
+  FormField,
+  Input,
+  Skeleton,
+  StatCard,
+  Tabs,
+  TabsContent,
+  TabsList,
+  TabsTrigger,
+  Textarea,
+} from "@/components/ui";
+import { t } from "@/i18n";
 
 interface CenterDetails {
   id: string;
@@ -119,6 +143,14 @@ interface CenterDetails {
   }>;
 }
 
+const CENTER_STATUS_VARIANTS: Record<string, BadgeVariant> = {
+  ACTIVE: "success",
+  TRIAL: "info",
+  PAUSED: "warning",
+  BLOCKED: "destructive",
+  CANCELLED: "neutral",
+};
+
 export default function PlatformCenterDetailsPage({ params }: { params: { id: string } }) {
   const router = useRouter();
   const { id } = params;
@@ -130,7 +162,6 @@ export default function PlatformCenterDetailsPage({ params }: { params: { id: st
     "overview" | "users" | "billing" | "tickets" | "history" | "edit" | "director" | "suspend"
   >("overview");
 
-  // Forms state
   const [editForm, setEditForm] = useState({
     name: "",
     phone: "",
@@ -146,23 +177,27 @@ export default function PlatformCenterDetailsPage({ params }: { params: { id: st
   const [directorResetUrl, setDirectorResetUrl] = useState<string | null>(null);
   const [copiedDirectorUrl, setCopiedDirectorUrl] = useState(false);
   const [suspendForm, setSuspendForm] = useState({ action: "pause", reason: "" });
-  const [actionMessage, setActionMessage] = useState<{ type: "success" | "error"; text: string } | null>(null);
+  const [actionMessage, setActionMessage] = useState<{ type: "success" | "error"; text: string } | null>(
+    null
+  );
 
-  // Lifecycle modals
   const [archiveModalOpen, setArchiveModalOpen] = useState(false);
-  const [archiveReason, setArchiveReason] = useState("");
   const [deleteModalOpen, setDeleteModalOpen] = useState(false);
   const [deleteConfirmName, setDeleteConfirmName] = useState("");
   const [deleteReason, setDeleteReason] = useState("");
   const [userResetModal, setUserResetModal] = useState<{ url: string; userName: string } | null>(null);
   const [userResetCopied, setUserResetCopied] = useState(false);
 
-  // Billing state
-  const [plans, setPlans] = useState<Array<{ id: string; name: string; maxStudents: number; maxTeachers: number; priceMonthly: number }>>([]);
+  const [plans, setPlans] = useState<
+    Array<{ id: string; name: string; maxStudents: number; maxTeachers: number; priceMonthly: number }>
+  >([]);
   const [selectedPlanId, setSelectedPlanId] = useState("");
   const [extendMonths, setExtendMonths] = useState(1);
   const [changingPlan, setChangingPlan] = useState(false);
   const [extendingSub, setExtendingSub] = useState(false);
+  const [forcePlanConfirm, setForcePlanConfirm] = useState<{ subId: string; message: string } | null>(
+    null
+  );
 
   useEffect(() => {
     if (activeTab === "billing") {
@@ -257,11 +292,7 @@ export default function PlatformCenterDetailsPage({ params }: { params: { id: st
       });
       if (!res.ok) throw new Error("Не удалось сменить директора");
       const json = await res.json();
-      if (json.resetUrl) {
-        setDirectorResetUrl(json.resetUrl);
-      } else {
-        setDirectorResetUrl(null);
-      }
+      setDirectorResetUrl(json.resetUrl || null);
       showMessage("success", "Новый директор успешно назначен");
       setDirectorEmail("");
       fetchCenter();
@@ -291,8 +322,8 @@ export default function PlatformCenterDetailsPage({ params }: { params: { id: st
     }
   };
 
-  const handleArchive = async () => {
-    if (archiveReason.trim().length < 5) {
+  const handleArchive = async (reason?: string) => {
+    if (!reason || reason.trim().length < 5) {
       showMessage("error", "Причина архивации должна быть не менее 5 символов");
       return;
     }
@@ -300,13 +331,12 @@ export default function PlatformCenterDetailsPage({ params }: { params: { id: st
       const res = await fetch(`/api/platform/centers/${id}`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ action: "ARCHIVE", reason: archiveReason.trim() }),
+        body: JSON.stringify({ action: "ARCHIVE", reason: reason.trim() }),
       });
       const json = await res.json();
       if (!res.ok) throw new Error(json.error || "Не удалось архивировать центр");
-      showMessage("success", "Организация успешно перемещена в архив");
+      showMessage("success", "Организация перемещена в архив");
       setArchiveModalOpen(false);
-      setArchiveReason("");
       fetchCenter();
     } catch (err: unknown) {
       showMessage("error", err instanceof Error ? err.message : "Ошибка архивации");
@@ -322,7 +352,7 @@ export default function PlatformCenterDetailsPage({ params }: { params: { id: st
       });
       const json = await res.json();
       if (!res.ok) throw new Error(json.error || "Не удалось восстановить центр");
-      showMessage("success", "Организация успешно восстановлена из архива");
+      showMessage("success", "Организация восстановлена из архива");
       fetchCenter();
     } catch (err: unknown) {
       showMessage("error", err instanceof Error ? err.message : "Ошибка восстановления");
@@ -379,7 +409,7 @@ export default function PlatformCenterDetailsPage({ params }: { params: { id: st
       if (!res.ok || !json.success) {
         showMessage("error", json.error || "Ошибка продления");
       } else {
-        showMessage("success", "Подписка успешно продлена");
+        showMessage("success", "Подписка продлена");
         fetchCenter();
       }
     } catch {
@@ -400,15 +430,13 @@ export default function PlatformCenterDetailsPage({ params }: { params: { id: st
       });
       const json = await res.json();
       if (!res.ok || !json.success) {
-        if (json.requiresOverride) {
-          if (confirm(`${json.error}\n\nВы уверены, что хотите принудительно перевести центр на этот тариф?`)) {
-            handleChangePlan(subId, true);
-            return;
-          }
+        if (json.requiresOverride && !force) {
+          setForcePlanConfirm({ subId, message: json.error || "Превышен лимит нового тарифа" });
+          return;
         }
         showMessage("error", json.error || "Ошибка смены тарифа");
       } else {
-        showMessage("success", "Тарифный план успешно обновлен");
+        showMessage("success", "Тарифный план обновлен");
         fetchCenter();
       }
     } catch {
@@ -439,17 +467,19 @@ export default function PlatformCenterDetailsPage({ params }: { params: { id: st
 
   if (loading) {
     return (
-      <div className="bg-white rounded-2xl border border-slate-200 p-12 text-center text-slate-500 shadow-sm animate-pulse">
-        Загрузка карточки центра...
+      <div className="space-y-4">
+        <p className="text-sm text-muted-foreground">Загрузка карточки центра...</p>
+        <Skeleton className="h-14 w-96" />
+        <Skeleton className="h-64 w-full rounded-lg" />
       </div>
     );
   }
 
   if (error || !data) {
     return (
-      <div className="bg-rose-50 border border-rose-200 text-rose-800 p-6 rounded-2xl text-center shadow-sm">
-        {error || "Центр не найден"}
-      </div>
+      <Alert variant="destructive">
+        <AlertDescription>{error || "Центр не найден"}</AlertDescription>
+      </Alert>
     );
   }
 
@@ -461,236 +491,378 @@ export default function PlatformCenterDetailsPage({ params }: { params: { id: st
     : 0;
   const canDelete = isArchived && daysSinceCancelled >= 30;
 
+  type MembershipRow = NonNullable<CenterDetails["memberships"]>[number];
+  const membershipColumns: DataTableColumn<MembershipRow>[] = [
+    {
+      id: "user",
+      header: "ФИО / Email",
+      isMobilePrimary: true,
+      cell: (m) => (
+        <div>
+          <div className="font-medium text-foreground">{m.user.fullName}</div>
+          <div className="text-xs text-muted-foreground">{m.user.email}</div>
+        </div>
+      ),
+    },
+    {
+      id: "phone",
+      header: "Телефон",
+      cell: (m) => (
+        <span className="text-xs text-muted-foreground tabular-nums">{m.user.phone || "—"}</span>
+      ),
+    },
+    {
+      id: "role",
+      header: "Роль",
+      cell: (m) => <Badge variant="neutral">{m.role}</Badge>,
+    },
+    {
+      id: "status",
+      header: "Статус",
+      cell: (m) => (
+        <Badge variant={m.status === "ACTIVE" ? "success" : "neutral"}>{m.status}</Badge>
+      ),
+    },
+    {
+      id: "createdAt",
+      header: "Добавлен",
+      hideOnMobile: true,
+      cell: (m) => (
+        <span className="text-xs text-muted-foreground tabular-nums">
+          {new Date(m.createdAt).toLocaleDateString()}
+        </span>
+      ),
+    },
+    {
+      id: "actions",
+      header: "Действия",
+      align: "right",
+      hideable: false,
+      cell: (m) => (
+        <div className="inline-flex items-center justify-end gap-2">
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            onClick={() => handleUserResetPassword(m.user.id, m.user.fullName)}
+          >
+            <KeyRound className="h-3.5 w-3.5" aria-hidden="true" />
+            <span>Сбросить пароль</span>
+          </Button>
+          <Button asChild variant="outline" size="sm">
+            <Link href={`/platform-admin/users?q=${encodeURIComponent(m.user.email)}`}>
+              <ExternalLink className="h-3.5 w-3.5" aria-hidden="true" />
+              <span>Профиль</span>
+            </Link>
+          </Button>
+        </div>
+      ),
+    },
+  ];
+
+  type TicketRow = NonNullable<CenterDetails["tickets"]>[number];
+  const ticketColumns: DataTableColumn<TicketRow>[] = [
+    {
+      id: "subject",
+      header: "Номер / Тема",
+      isMobilePrimary: true,
+      cell: (tk) => (
+        <div>
+          <div className="font-medium text-foreground">{tk.subject}</div>
+          <div className="font-mono text-xs text-muted-foreground">
+            {tk.ticketNumber || tk.id.slice(0, 8)}
+          </div>
+        </div>
+      ),
+    },
+    {
+      id: "priority",
+      header: "Приоритет",
+      cell: (tk) => (
+        <Badge
+          variant={
+            tk.priority === "URGENT"
+              ? "destructive"
+              : tk.priority === "HIGH"
+              ? "warning"
+              : "neutral"
+          }
+        >
+          {tk.priority}
+        </Badge>
+      ),
+    },
+    {
+      id: "status",
+      header: "Статус",
+      cell: (tk) => (
+        <Badge
+          variant={
+            tk.status === "OPEN" ? "info" : tk.status === "IN_PROGRESS" ? "warning" : "success"
+          }
+        >
+          {tk.status}
+        </Badge>
+      ),
+    },
+    {
+      id: "creator",
+      header: "Создатель",
+      cell: (tk) => (
+        <span className="text-xs text-muted-foreground">{tk.creator?.fullName || "—"}</span>
+      ),
+    },
+    {
+      id: "createdAt",
+      header: "Дата",
+      hideOnMobile: true,
+      cell: (tk) => (
+        <span className="text-xs text-muted-foreground tabular-nums">
+          {new Date(tk.createdAt).toLocaleDateString()}
+        </span>
+      ),
+    },
+    {
+      id: "actions",
+      header: "Действие",
+      align: "right",
+      hideable: false,
+      cell: (tk) => (
+        <Button asChild variant="outline" size="sm">
+          <Link href={`/platform-admin/support/${tk.id}`}>Открыть тикет</Link>
+        </Button>
+      ),
+    },
+  ];
+
+  type PaymentRow = NonNullable<CenterDetails["platformPayments"]>[number];
+  const paymentColumns: DataTableColumn<PaymentRow>[] = [
+    {
+      id: "invoice",
+      header: "Номер счёта",
+      isMobilePrimary: true,
+      cell: (p) => (
+        <span className="font-mono font-semibold text-foreground">
+          {p.invoiceNumber || `INV-${p.id.slice(0, 8)}`}
+        </span>
+      ),
+    },
+    {
+      id: "paidAt",
+      header: "Дата",
+      cell: (p) => (
+        <span className="text-xs text-muted-foreground tabular-nums">
+          {p.paidAt ? new Date(p.paidAt).toLocaleDateString() : "—"}
+        </span>
+      ),
+    },
+    {
+      id: "method",
+      header: "Способ",
+      cell: (p) => <span className="text-xs text-muted-foreground">{p.paymentMethod}</span>,
+    },
+    {
+      id: "amount",
+      header: "Сумма (UZS)",
+      align: "right",
+      cell: (p) => (
+        <span className="font-semibold text-foreground tabular-nums">
+          {p.amount.toLocaleString()} UZS
+        </span>
+      ),
+    },
+    {
+      id: "status",
+      header: "Статус",
+      align: "center",
+      cell: (p) => (
+        <Badge variant={p.status === "PAID" ? "success" : "neutral"}>{p.status}</Badge>
+      ),
+    },
+    {
+      id: "invoiceLink",
+      header: "Квитанция",
+      align: "right",
+      hideable: false,
+      cell: (p) => (
+        <Button asChild variant="ghost" size="sm">
+          <Link href={`/platform-admin/finance/payments/${p.id}/invoice`}>
+            <Printer className="h-3.5 w-3.5" aria-hidden="true" />
+            <span>Чек</span>
+          </Link>
+        </Button>
+      ),
+    },
+  ];
+
+  const menuActions = [
+    {
+      id: "export-json",
+      label: "Экспорт JSON",
+      icon: <Download className="h-3.5 w-3.5" aria-hidden="true" />,
+      href: `/api/platform/centers/${data.id}/export`,
+    },
+    ...(!isArchived
+      ? [
+          {
+            id: "archive",
+            label: "В архив",
+            icon: <Archive className="h-3.5 w-3.5" aria-hidden="true" />,
+            separatorBefore: true,
+            onSelect: () => setArchiveModalOpen(true),
+          },
+        ]
+      : [
+          {
+            id: "restore",
+            label: "Восстановить",
+            icon: <RotateCcw className="h-3.5 w-3.5" aria-hidden="true" />,
+            separatorBefore: true,
+            onSelect: handleRestore,
+          },
+          {
+            id: "delete",
+            label: "Удалить центр",
+            icon: <Trash2 className="h-3.5 w-3.5" aria-hidden="true" />,
+            destructive: true,
+            onSelect: () => {
+              if (!canDelete) {
+                showMessage(
+                  "error",
+                  `Удаление центра возможно только через 30 дней после архивации. Прошло ${daysSinceCancelled} дн. (осталось ${Math.max(0, 30 - daysSinceCancelled)} дн.).`
+                );
+                return;
+              }
+              setDeleteModalOpen(true);
+            },
+          },
+        ]),
+  ];
+
+  const tabsList: Array<{ id: typeof activeTab; label: string }> = [
+    { id: "overview", label: "Обзор и параметры" },
+    { id: "users", label: `Пользователи (${data.memberships?.length || 0})` },
+    { id: "billing", label: "Биллинг" },
+    { id: "tickets", label: `Тикеты (${data.tickets?.length || 0})` },
+    { id: "history", label: `История (${data.auditLogs?.length || 0})` },
+    { id: "edit", label: "Редактировать" },
+    { id: "director", label: "Директор" },
+    { id: "suspend", label: "Управление доступом" },
+  ];
+
   return (
     <div className="space-y-6">
-      {/* Top Bar with Back Link & Actions */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-        <div className="flex items-center gap-3">
-          <Link
-            href="/platform-admin/centers"
-            className="p-2 bg-white hover:bg-slate-50 border border-slate-200 rounded-xl text-slate-600 hover:text-slate-900 transition-colors shadow-sm"
-          >
-            <ArrowLeft className="w-5 h-5" />
-          </Link>
-          <div>
-            <div className="flex items-center gap-2">
-              <h1 className="text-2xl font-bold text-slate-900">{data.name}</h1>
-              <span
-                className={`px-2.5 py-0.5 text-xs font-semibold rounded-full border ${
-                  isArchived
-                    ? "bg-slate-100 text-slate-700 border-slate-300"
-                    : data.status === "ACTIVE"
-                    ? "bg-emerald-50 text-emerald-700 border-emerald-200"
-                    : data.status === "TRIAL"
-                    ? "bg-blue-50 text-blue-700 border-blue-200"
-                    : "bg-amber-50 text-amber-700 border-amber-200"
-                }`}
-              >
-                {isArchived ? "В АРХИВЕ (CANCELLED)" : data.status}
-              </span>
-            </div>
-            <p className="text-xs text-slate-500 font-mono mt-0.5">Slug: {data.slug}</p>
-          </div>
-        </div>
-
-        <div className="flex flex-wrap items-center gap-2">
-          <a
-            href={`/api/platform/centers/${data.id}/export`}
-            download
-            className="inline-flex items-center gap-1.5 px-3 py-2 bg-white border border-slate-200 text-slate-700 hover:bg-slate-50 rounded-xl text-xs font-semibold shadow-sm transition-colors"
-          >
-            <Download className="w-3.5 h-3.5 text-slate-500" />
-            <span>Экспорт JSON</span>
-          </a>
-
-          {!isArchived ? (
-            <button
-              type="button"
-              onClick={() => setArchiveModalOpen(true)}
-              className="inline-flex items-center gap-1.5 px-3 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl text-xs font-semibold transition-colors"
-            >
-              <Archive className="w-3.5 h-3.5" />
-              <span>В архив</span>
-            </button>
-          ) : (
-            <>
-              <button
-                type="button"
-                onClick={handleRestore}
-                className="inline-flex items-center gap-1.5 px-3 py-2 bg-emerald-50 hover:bg-emerald-100 text-emerald-700 border border-emerald-200 rounded-xl text-xs font-semibold transition-colors"
-              >
-                <RotateCcw className="w-3.5 h-3.5" />
-                <span>Восстановить</span>
-              </button>
-              <button
-                type="button"
-                onClick={() => {
-                  if (!canDelete) {
-                    alert(
-                      `Удаление центра возможно только через 30 дней после архивации. С момента архивации прошло ${daysSinceCancelled} дн. (осталось ${Math.max(
-                        0,
-                        30 - daysSinceCancelled
-                      )} дн.).`
-                    );
-                    return;
-                  }
-                  setDeleteModalOpen(true);
-                }}
-                className={`inline-flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-semibold transition-colors ${
-                  canDelete
-                    ? "bg-rose-600 hover:bg-rose-700 text-white"
-                    : "bg-slate-100 text-slate-400 cursor-not-allowed"
-                }`}
-              >
-                <Trash2 className="w-3.5 h-3.5" />
-                <span>Удалить центр</span>
-              </button>
-            </>
-          )}
-
-          {effectiveDirector?.id && (
+      <EntityDetailHeader
+        backHref="/platform-admin/centers"
+        title={data.name}
+        subtitle={`Slug: ${data.slug}`}
+        statusLabel={isArchived ? "В АРХИВЕ (CANCELLED)" : data.status}
+        statusVariant={CENTER_STATUS_VARIANTS[data.status] || "neutral"}
+        primaryAction={
+          effectiveDirector?.id ? (
             <ImpersonateButton targetUserId={effectiveDirector.id} targetCenterId={data.id} />
-          )}
-        </div>
-      </div>
+          ) : undefined
+        }
+        menuActions={menuActions}
+      />
 
-      {/* Archive Warning Banner */}
       {isArchived && (
-        <div className="p-4 rounded-2xl bg-amber-50 border border-amber-200 text-amber-900 text-xs space-y-1">
-          <div className="font-bold flex items-center gap-2">
-            <AlertTriangle className="w-4 h-4 text-amber-600" />
-            <span>Организация находится в архиве с {cancelledDate?.toLocaleDateString() || "—"}</span>
-          </div>
-          <p>
-            Причина архивации: <span className="font-medium">{data.cancelledReason || "Не указана"}</span>. Доступ для
-            пользователей заблокирован.
-          </p>
-        </div>
+        <Alert variant="warning">
+          <AlertDescription className="space-y-1 text-xs">
+            <div className="font-semibold">
+              Организация находится в архиве с {cancelledDate?.toLocaleDateString() || "—"}
+            </div>
+            <p>
+              Причина архивации:{" "}
+              <span className="font-medium">{data.cancelledReason || "Не указана"}</span>. Доступ
+              для пользователей закрыт.
+            </p>
+          </AlertDescription>
+        </Alert>
       )}
 
       {actionMessage && (
-        <div
-          className={`p-4 rounded-xl text-sm font-medium border ${
-            actionMessage.type === "success"
-              ? "bg-emerald-50 text-emerald-800 border-emerald-200"
-              : "bg-rose-50 text-rose-800 border-rose-200"
-          }`}
-        >
-          {actionMessage.text}
-        </div>
+        <Alert variant={actionMessage.type === "success" ? "success" : "destructive"}>
+          <AlertDescription>{actionMessage.text}</AlertDescription>
+        </Alert>
       )}
 
-      {/* Tabs Bar */}
-      <div className="flex gap-2 border-b border-slate-200 pb-2 overflow-x-auto">
-        {[
-          { id: "overview", label: "Обзор и параметры" },
-          { id: "users", label: `Пользователи (${data.memberships?.length || 0})` },
-          { id: "billing", label: "Биллинг" },
-          { id: "tickets", label: `Тикеты (${data.tickets?.length || 0})` },
-          { id: "history", label: `История (${data.auditLogs?.length || 0})` },
-          { id: "edit", label: "Редактировать" },
-          { id: "director", label: "Директор" },
-          { id: "suspend", label: "Управление доступом" },
-        ].map((tab) => (
-          <button
-            key={tab.id}
-            type="button"
-            onClick={() => setActiveTab(tab.id as typeof activeTab)}
-            className={`px-3.5 py-2 text-xs font-semibold rounded-xl transition-all cursor-pointer whitespace-nowrap ${
-              activeTab === tab.id
-                ? "bg-blue-600 text-white shadow-sm"
-                : "text-slate-600 hover:text-slate-900 hover:bg-white"
-            }`}
-          >
-            {tab.label}
-          </button>
-        ))}
-      </div>
+      <Tabs value={activeTab} onValueChange={(v) => setActiveTab(v as typeof activeTab)}>
+        <TabsList className="w-full justify-start overflow-x-auto">
+          {tabsList.map((tab) => (
+            <TabsTrigger
+              key={tab.id}
+              value={tab.id}
+              onClick={() => setActiveTab(tab.id)}
+            >
+              {tab.label}
+            </TabsTrigger>
+          ))}
+        </TabsList>
 
-      {/* Tab: Overview (Metrics & Requisites) */}
+      <TabsContent value={activeTab} className="space-y-6">
       {activeTab === "overview" && (
         <div className="space-y-6">
-          {/* Key Metrics Row */}
-          <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
-            <div className="bg-white p-4 rounded-2xl border border-slate-200 shadow-sm">
-              <span className="text-xs text-slate-500 font-medium block">Активные студенты</span>
-              <span className="text-2xl font-bold text-slate-900 mt-1 block">
-                {data.metrics?.activeStudents ?? 0}
-              </span>
-            </div>
-            <div className="bg-white p-4 rounded-2xl border border-slate-200 shadow-sm">
-              <span className="text-xs text-slate-500 font-medium block">Активные учителя</span>
-              <span className="text-2xl font-bold text-slate-900 mt-1 block">
-                {data.metrics?.activeTeachers ?? 0}
-              </span>
-            </div>
-            <div className="bg-white p-4 rounded-2xl border border-slate-200 shadow-sm">
-              <span className="text-xs text-slate-500 font-medium block">Курсов создано</span>
-              <span className="text-2xl font-bold text-slate-900 mt-1 block">
-                {data.metrics?.activeCoursesCount ?? 0}
-              </span>
-            </div>
-            <div className="bg-white p-4 rounded-2xl border border-slate-200 shadow-sm">
-              <span className="text-xs text-slate-500 font-medium block">Посл. активность</span>
-              <span className="text-xs font-semibold text-slate-800 mt-2 block truncate">
-                {data.metrics?.lastActivityAt
-                  ? new Date(data.metrics.lastActivityAt).toLocaleDateString() +
-                    " " +
-                    new Date(data.metrics.lastActivityAt).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })
-                  : "—"}
-              </span>
-            </div>
+          <div className="grid grid-cols-2 gap-4 sm:grid-cols-4">
+            <StatCard label="Активные ученики" value={data.metrics?.activeStudents ?? 0} />
+            <StatCard label="Активные учителя" value={data.metrics?.activeTeachers ?? 0} />
+            <StatCard label="Курсов создано" value={data.metrics?.activeCoursesCount ?? 0} />
+            <StatCard
+              label="Посл. активность"
+              value={
+                data.metrics?.lastActivityAt
+                  ? `${new Date(data.metrics.lastActivityAt).toLocaleDateString()} ${new Date(
+                      data.metrics.lastActivityAt
+                    ).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}`
+                  : "—"
+              }
+            />
           </div>
 
-          {/* Student Limits Progress Bar */}
           {data.metrics?.limits && data.metrics.limits.maxStudents > 0 && (
-            <div className="bg-white p-5 rounded-2xl border border-slate-200 shadow-sm space-y-2">
-              <div className="flex items-center justify-between text-xs font-medium">
-                <span className="text-slate-600">
-                  Лимит активных студентов:{" "}
-                  <strong>
-                    {data.metrics.limits.currentStudents} из {data.metrics.limits.maxStudents}
-                  </strong>
-                </span>
-                <span
-                  className={`font-bold ${
-                    data.metrics.limits.percentUsed >= 100
-                      ? "text-rose-600"
-                      : data.metrics.limits.percentUsed >= 80
-                      ? "text-amber-600"
-                      : "text-emerald-600"
-                  }`}
-                >
-                  {data.metrics.limits.percentUsed}%
-                </span>
-              </div>
-              <div className="w-full bg-slate-100 rounded-full h-2.5 overflow-hidden">
-                <div
-                  className={`h-2.5 rounded-full transition-all duration-500 ${
-                    data.metrics.limits.percentUsed >= 100
-                      ? "bg-rose-500"
-                      : data.metrics.limits.percentUsed >= 80
-                      ? "bg-amber-500"
-                      : "bg-emerald-500"
-                  }`}
-                  style={{ width: `${Math.min(100, data.metrics.limits.percentUsed)}%` }}
+            <Card>
+              <CardContent className="space-y-2 p-5">
+                <div className="flex items-center justify-between text-xs font-medium">
+                  <span className="text-muted-foreground">
+                    Лимит активных учеников:{" "}
+                    <strong className="text-foreground tabular-nums">
+                      {data.metrics.limits.currentStudents} из {data.metrics.limits.maxStudents}
+                    </strong>
+                  </span>
+                  <span
+                    className={`font-semibold tabular-nums ${
+                      data.metrics.limits.percentUsed >= 100
+                        ? "text-destructive"
+                        : data.metrics.limits.percentUsed >= 80
+                        ? "text-warning"
+                        : "text-success"
+                    }`}
+                  >
+                    {data.metrics.limits.percentUsed}%
+                  </span>
+                </div>
+                <progress
+                  value={Math.min(100, data.metrics.limits.percentUsed)}
+                  max={100}
+                  className="h-2 w-full overflow-hidden rounded-full accent-primary"
                 />
-              </div>
-            </div>
+              </CardContent>
+            </Card>
           )}
 
-          <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-            <div className="lg:col-span-2 space-y-6">
-              {/* General & Legal Info Card */}
-              <div className="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm space-y-4">
-                <h3 className="text-base font-bold text-slate-900 border-b border-slate-100 pb-3 flex items-center gap-2">
-                  <Building2 className="w-5 h-5 text-blue-600" />
-                  Реквизиты организации
-                </h3>
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 text-sm">
+          <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
+            <div className="space-y-6 lg:col-span-2">
+              <Card>
+                <CardHeader className="border-b border-border pb-3">
+                  <CardTitle className="flex items-center gap-2 text-base font-semibold">
+                    <Building2 className="h-4 w-4 text-primary" aria-hidden="true" />
+                    <span>Реквизиты организации</span>
+                  </CardTitle>
+                </CardHeader>
+                <CardContent className="grid grid-cols-1 gap-4 pt-4 text-sm sm:grid-cols-2">
                   <div>
-                    <span className="text-xs text-slate-500 block">Тип организации</span>
-                    <span className="font-semibold text-slate-900">
+                    <span className="block text-xs text-muted-foreground">Тип организации</span>
+                    <span className="font-medium text-foreground">
                       {data.organizationKind === "SCHOOL"
                         ? "Школа"
                         : data.organizationKind === "KINDERGARTEN"
@@ -701,565 +873,442 @@ export default function PlatformCenterDetailsPage({ params }: { params: { id: st
                     </span>
                   </div>
                   <div>
-                    <span className="text-xs text-slate-500 block">Юридическое наименование</span>
-                    <span className="font-medium text-slate-900">{data.legalName || "—"}</span>
+                    <span className="block text-xs text-muted-foreground">
+                      Юридическое наименование
+                    </span>
+                    <span className="font-medium text-foreground">{data.legalName || "—"}</span>
                   </div>
                   <div>
-                    <span className="text-xs text-slate-500 block">ИНН</span>
-                    <span className="font-medium text-slate-900">{data.inn || "—"}</span>
+                    <span className="block text-xs text-muted-foreground">ИНН</span>
+                    <span className="font-medium text-foreground tabular-nums">
+                      {data.inn || "—"}
+                    </span>
                   </div>
                   <div>
-                    <span className="text-xs text-slate-500 block">Контактное лицо</span>
-                    <span className="font-medium text-slate-900">{data.contactPerson || "—"}</span>
+                    <span className="block text-xs text-muted-foreground">Контактное лицо</span>
+                    <span className="font-medium text-foreground">{data.contactPerson || "—"}</span>
                   </div>
                   <div className="sm:col-span-2">
-                    <span className="text-xs text-slate-500 block">Фактический адрес</span>
-                    <span className="font-medium text-slate-900">{data.address || "—"}</span>
+                    <span className="block text-xs text-muted-foreground">Фактический адрес</span>
+                    <span className="font-medium text-foreground">{data.address || "—"}</span>
                   </div>
                   <div>
-                    <span className="text-xs text-slate-500 block">Email</span>
-                    <span className="font-medium text-slate-900">{data.email || "—"}</span>
+                    <span className="block text-xs text-muted-foreground">Email</span>
+                    <span className="font-medium text-foreground">{data.email || "—"}</span>
                   </div>
                   <div>
-                    <span className="text-xs text-slate-500 block">Телефон</span>
-                    <span className="font-medium text-slate-900">{data.phone || "—"}</span>
+                    <span className="block text-xs text-muted-foreground">Телефон</span>
+                    <span className="font-medium text-foreground tabular-nums">
+                      {data.phone || "—"}
+                    </span>
                   </div>
                   <div>
-                    <span className="text-xs text-slate-500 block">Часовой пояс</span>
-                    <span className="font-medium text-slate-900">{data.timeZone || "Asia/Tashkent"}</span>
+                    <span className="block text-xs text-muted-foreground">Часовой пояс</span>
+                    <span className="font-medium text-foreground">
+                      {data.timeZone || "Asia/Tashkent"}
+                    </span>
                   </div>
                   <div>
-                    <span className="text-xs text-slate-500 block">Дата регистрации</span>
-                    <span className="font-medium text-slate-900">
+                    <span className="block text-xs text-muted-foreground">Дата регистрации</span>
+                    <span className="font-medium text-foreground tabular-nums">
                       {new Date(data.createdAt).toLocaleDateString()}
                     </span>
                   </div>
-                </div>
-              </div>
+                </CardContent>
+              </Card>
 
-              {/* Audit Logs */}
-              <div className="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm space-y-4">
-                <h3 className="text-base font-bold text-slate-900 border-b border-slate-100 pb-3 flex items-center gap-2">
-                  <History className="w-5 h-5 text-slate-600" />
-                  Журнал действий центра (последние записи)
-                </h3>
-                {data.auditLogs && data.auditLogs.length > 0 ? (
-                  <div className="space-y-3">
-                    {data.auditLogs.map((log, idx) => (
-                      <div
-                        key={idx}
-                        className="p-3 rounded-xl bg-slate-50 border border-slate-100 text-xs text-slate-700"
-                      >
-                        <div className="flex items-center justify-between font-semibold text-slate-900">
-                          <span>{log.action}</span>
-                          <span className="text-slate-400 font-normal">
-                            {new Date(log.createdAt).toLocaleString()}
-                          </span>
+              <Card>
+                <CardHeader className="border-b border-border pb-3">
+                  <CardTitle className="flex items-center gap-2 text-base font-semibold">
+                    <History className="h-4 w-4 text-muted-foreground" aria-hidden="true" />
+                    <span>Журнал действий центра (последние записи)</span>
+                  </CardTitle>
+                </CardHeader>
+                <CardContent className="pt-4">
+                  {data.auditLogs && data.auditLogs.length > 0 ? (
+                    <div className="space-y-3">
+                      {data.auditLogs.map((log, idx) => (
+                        <div
+                          key={idx}
+                          className="rounded-lg border border-border bg-muted/40 p-3 text-xs"
+                        >
+                          <div className="flex items-center justify-between font-medium text-foreground">
+                            <span>{log.action}</span>
+                            <span className="font-normal text-muted-foreground tabular-nums">
+                              {new Date(log.createdAt).toLocaleString()}
+                            </span>
+                          </div>
+                          {log.details && <p className="mt-1 text-muted-foreground">{log.details}</p>}
                         </div>
-                        {log.details && <p className="mt-1 text-slate-600">{log.details}</p>}
-                      </div>
-                    ))}
-                  </div>
-                ) : (
-                  <p className="text-xs text-slate-500">Записей в аудит-логе пока нет.</p>
-                )}
-              </div>
+                      ))}
+                    </div>
+                  ) : (
+                    <p className="text-xs text-muted-foreground">Записей в аудит-логе пока нет.</p>
+                  )}
+                </CardContent>
+              </Card>
             </div>
 
-            {/* Right Column: Director & Quick summary */}
             <div className="space-y-6">
-              <div className="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm space-y-4">
-                <h3 className="text-base font-bold text-slate-900 border-b border-slate-100 pb-3 flex items-center gap-2">
-                  <Shield className="w-5 h-5 text-indigo-600" />
-                  Директор центра
-                </h3>
-                <div className="space-y-2 text-sm">
+              <Card>
+                <CardHeader className="border-b border-border pb-3">
+                  <CardTitle className="flex items-center gap-2 text-base font-semibold">
+                    <Shield className="h-4 w-4 text-primary" aria-hidden="true" />
+                    <span>Директор центра</span>
+                  </CardTitle>
+                </CardHeader>
+                <CardContent className="space-y-2.5 pt-4 text-sm">
                   <div>
-                    <span className="text-xs text-slate-500 block">ФИО</span>
-                    <span className="font-semibold text-slate-900">
+                    <span className="block text-xs text-muted-foreground">ФИО</span>
+                    <span className="font-medium text-foreground">
                       {effectiveDirector?.fullName || "Не назначен"}
                     </span>
                   </div>
                   <div>
-                    <span className="text-xs text-slate-500 block">Email</span>
-                    <span className="font-medium text-slate-900">
+                    <span className="block text-xs text-muted-foreground">Email</span>
+                    <span className="font-medium text-foreground">
                       {effectiveDirector?.email || "—"}
                     </span>
                   </div>
                   <div>
-                    <span className="text-xs text-slate-500 block">Телефон</span>
-                    <span className="font-medium text-slate-900">
+                    <span className="block text-xs text-muted-foreground">Телефон</span>
+                    <span className="font-medium text-foreground tabular-nums">
                       {effectiveDirector?.phone || "—"}
                     </span>
                   </div>
-                </div>
-              </div>
+                </CardContent>
+              </Card>
 
-              <div className="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm space-y-4">
-                <h3 className="text-base font-bold text-slate-900 border-b border-slate-100 pb-3 flex items-center gap-2">
-                  <Users className="w-5 h-5 text-emerald-600" />
-                  Распределение ролей
-                </h3>
-                <div className="space-y-2 text-sm">
-                  <div className="flex justify-between py-1 border-b border-slate-100">
-                    <span className="text-slate-500">Студентов</span>
-                    <span className="font-bold text-slate-900">
+              <Card>
+                <CardHeader className="border-b border-border pb-3">
+                  <CardTitle className="flex items-center gap-2 text-base font-semibold">
+                    <Users className="h-4 w-4 text-success" aria-hidden="true" />
+                    <span>Распределение ролей</span>
+                  </CardTitle>
+                </CardHeader>
+                <CardContent className="space-y-2 pt-4 text-sm">
+                  <div className="flex justify-between border-b border-border py-1.5">
+                    <span className="text-muted-foreground">Учеников</span>
+                    <span className="font-semibold text-foreground tabular-nums">
                       {data.metrics?.usersByRole?.STUDENT || 0}
                     </span>
                   </div>
-                  <div className="flex justify-between py-1 border-b border-slate-100">
-                    <span className="text-slate-500">Преподавателей</span>
-                    <span className="font-bold text-slate-900">
+                  <div className="flex justify-between border-b border-border py-1.5">
+                    <span className="text-muted-foreground">Преподавателей</span>
+                    <span className="font-semibold text-foreground tabular-nums">
                       {data.metrics?.usersByRole?.TEACHER || 0}
                     </span>
                   </div>
-                  <div className="flex justify-between py-1">
-                    <span className="text-slate-500">Администраторов</span>
-                    <span className="font-bold text-slate-900">
+                  <div className="flex justify-between py-1.5">
+                    <span className="text-muted-foreground">Администраторов</span>
+                    <span className="font-semibold text-foreground tabular-nums">
                       {data.metrics?.usersByRole?.CENTER_ADMIN || 0}
                     </span>
                   </div>
-                </div>
-              </div>
+                </CardContent>
+              </Card>
             </div>
           </div>
         </div>
       )}
 
-      {/* Tab: Center Users */}
       {activeTab === "users" && (
-        <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
-          <div className="p-5 border-b border-slate-100 flex items-center justify-between">
-            <h3 className="text-base font-bold text-slate-900">
+        <div className="space-y-3">
+          <div className="flex items-center justify-between">
+            <h3 className="font-display text-base font-semibold text-foreground">
               Пользователи центра ({data.memberships?.length || 0})
             </h3>
-            <span className="text-xs text-slate-500">
-              Члены организации, привязанные через memberships
+            <span className="text-xs text-muted-foreground">
+              Участники, привязанные через членства центра
             </span>
           </div>
-
-          {data.memberships && data.memberships.length > 0 ? (
-            <div className="overflow-x-auto">
-              <table className="w-full text-sm">
-                <thead>
-                  <tr className="bg-slate-50/80 text-xs font-semibold text-slate-500 uppercase tracking-wider border-b border-slate-200/70">
-                    <th className="text-left px-6 py-3.5">ФИО / Email</th>
-                    <th className="text-left px-6 py-3.5">Телефон</th>
-                    <th className="text-left px-6 py-3.5">Роль</th>
-                    <th className="text-left px-6 py-3.5">Статус</th>
-                    <th className="text-left px-6 py-3.5">Добавлен</th>
-                    <th className="text-right px-6 py-3.5">Действия</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-slate-100">
-                  {data.memberships.map((m) => (
-                    <tr key={m.id} className="hover:bg-slate-50/70 transition-colors">
-                      <td className="px-6 py-3.5">
-                        <div className="font-semibold text-slate-900">{m.user.fullName}</div>
-                        <div className="text-xs text-slate-500">{m.user.email}</div>
-                      </td>
-                      <td className="px-6 py-3.5 text-xs text-slate-600">
-                        {m.user.phone || "—"}
-                      </td>
-                      <td className="px-6 py-3.5">
-                        <span className="px-2 py-0.5 rounded text-xs font-semibold bg-slate-100 text-slate-800">
-                          {m.role}
-                        </span>
-                      </td>
-                      <td className="px-6 py-3.5">
-                        <span
-                          className={`px-2 py-0.5 rounded text-xs font-semibold ${
-                            m.status === "ACTIVE"
-                              ? "bg-emerald-50 text-emerald-700"
-                              : "bg-slate-100 text-slate-600"
-                          }`}
-                        >
-                          {m.status}
-                        </span>
-                      </td>
-                      <td className="px-6 py-3.5 text-xs text-slate-500">
-                        {new Date(m.createdAt).toLocaleDateString()}
-                      </td>
-                      <td className="px-6 py-3.5 text-right">
-                        <div className="inline-flex items-center gap-2 justify-end">
-                          <button
-                            type="button"
-                            onClick={() => handleUserResetPassword(m.user.id, m.user.fullName)}
-                            className="inline-flex items-center gap-1 px-2.5 py-1 text-xs font-medium text-slate-700 bg-slate-100 hover:bg-slate-200 rounded-lg transition-colors cursor-pointer"
-                          >
-                            <KeyRound className="w-3 h-3 text-slate-500" />
-                            <span>Сбросить пароль</span>
-                          </button>
-                          <Link
-                            href={`/platform-admin/users?q=${encodeURIComponent(m.user.email)}`}
-                            className="inline-flex items-center gap-1 px-2.5 py-1 text-xs font-medium text-indigo-700 bg-indigo-50 hover:bg-indigo-100 rounded-lg transition-colors"
-                          >
-                            <ExternalLink className="w-3 h-3" />
-                            <span>Профиль</span>
-                          </Link>
-                        </div>
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          ) : (
-            <div className="p-8 text-center text-slate-400 text-xs">
-              В данном центре пока нет зарегистрированных участников.
-            </div>
-          )}
+          <DataTable
+            data={data.memberships || []}
+            columns={membershipColumns}
+            getRowId={(m) => m.id}
+            showColumnToggle={false}
+            showDensityToggle={false}
+            emptyTitle="Нет участников"
+            emptyDescription="В данном центре пока нет зарегистрированных участников."
+          />
         </div>
       )}
 
-      {/* Tab: Support Tickets */}
       {activeTab === "tickets" && (
-        <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
-          <div className="p-5 border-b border-slate-100 flex items-center justify-between">
-            <h3 className="text-base font-bold text-slate-900">
+        <div className="space-y-3">
+          <div className="flex items-center justify-between">
+            <h3 className="font-display text-base font-semibold text-foreground">
               Тикеты технической поддержки ({data.tickets?.length || 0})
             </h3>
-            <span className="text-xs text-slate-500">
-              Обращения сотрудников данного центра
-            </span>
+            <span className="text-xs text-muted-foreground">Обращения сотрудников центра</span>
           </div>
-
-          {data.tickets && data.tickets.length > 0 ? (
-            <div className="overflow-x-auto">
-              <table className="w-full text-sm">
-                <thead>
-                  <tr className="bg-slate-50/80 text-xs font-semibold text-slate-500 uppercase tracking-wider border-b border-slate-200/70">
-                    <th className="text-left px-6 py-3.5">Номер / Тема</th>
-                    <th className="text-left px-6 py-3.5">Приоритет</th>
-                    <th className="text-left px-6 py-3.5">Статус</th>
-                    <th className="text-left px-6 py-3.5">Создатель</th>
-                    <th className="text-left px-6 py-3.5">Дата</th>
-                    <th className="text-right px-6 py-3.5">Действие</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-slate-100">
-                  {data.tickets.map((t) => (
-                    <tr key={t.id} className="hover:bg-slate-50/70 transition-colors">
-                      <td className="px-6 py-3.5">
-                        <div className="font-semibold text-slate-900">{t.subject}</div>
-                        <div className="text-xs font-mono text-slate-400">
-                          {t.ticketNumber || t.id.slice(0, 8)}
-                        </div>
-                      </td>
-                      <td className="px-6 py-3.5">
-                        <span
-                          className={`px-2 py-0.5 rounded text-xs font-semibold ${
-                            t.priority === "URGENT"
-                              ? "bg-rose-50 text-rose-700"
-                              : t.priority === "HIGH"
-                              ? "bg-amber-50 text-amber-700"
-                              : "bg-slate-100 text-slate-700"
-                          }`}
-                        >
-                          {t.priority}
-                        </span>
-                      </td>
-                      <td className="px-6 py-3.5">
-                        <span
-                          className={`px-2 py-0.5 rounded text-xs font-semibold ${
-                            t.status === "OPEN"
-                              ? "bg-blue-50 text-blue-700"
-                              : t.status === "IN_PROGRESS"
-                              ? "bg-purple-50 text-purple-700"
-                              : "bg-emerald-50 text-emerald-700"
-                          }`}
-                        >
-                          {t.status}
-                        </span>
-                      </td>
-                      <td className="px-6 py-3.5 text-xs text-slate-600">
-                        {t.creator?.fullName || "—"}
-                      </td>
-                      <td className="px-6 py-3.5 text-xs text-slate-500">
-                        {new Date(t.createdAt).toLocaleDateString()}
-                      </td>
-                      <td className="px-6 py-3.5 text-right">
-                        <Link
-                          href={`/platform-admin/support/${t.id}`}
-                          className="px-3 py-1.5 text-xs font-medium text-blue-600 hover:text-blue-700 bg-blue-50 hover:bg-blue-100 rounded-lg transition-colors inline-block"
-                        >
-                          Открыть тикет &rarr;
-                        </Link>
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          ) : (
-            <div className="p-8 text-center text-slate-400 text-xs">
-              Тикетов от этого центра пока не поступало.
-            </div>
-          )}
+          <DataTable
+            data={data.tickets || []}
+            columns={ticketColumns}
+            getRowId={(tk) => tk.id}
+            showColumnToggle={false}
+            showDensityToggle={false}
+            emptyTitle="Тикетов нет"
+            emptyDescription="Тикетов от этого центра пока не поступало."
+          />
         </div>
       )}
 
-      {/* Tab: History / AuditLog */}
       {activeTab === "history" && (
-        <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
-          <div className="p-5 border-b border-slate-100 flex items-center justify-between">
-            <h3 className="text-base font-bold text-slate-900">
+        <Card>
+          <CardHeader className="border-b border-border pb-3">
+            <CardTitle className="text-base font-semibold">
               Журнал событий аудита ({data.auditLogs?.length || 0})
-            </h3>
-            <span className="text-xs text-slate-500">
-              История изменений и критических операций центра
-            </span>
-          </div>
-
-          {data.auditLogs && data.auditLogs.length > 0 ? (
-            <div className="divide-y divide-slate-100">
-              {data.auditLogs.map((log, idx) => (
-                <div key={idx} className="p-4 hover:bg-slate-50/60 transition-colors text-xs text-slate-700">
-                  <div className="flex items-center justify-between font-semibold text-slate-900 mb-1">
-                    <span className="text-indigo-600 font-mono">{log.action}</span>
-                    <span className="text-slate-400 font-normal">
-                      {new Date(log.createdAt).toLocaleString()}
-                    </span>
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="pt-4">
+            {data.auditLogs && data.auditLogs.length > 0 ? (
+              <div className="divide-y divide-border">
+                {data.auditLogs.map((log, idx) => (
+                  <div key={idx} className="py-3 text-xs">
+                    <div className="flex items-center justify-between font-medium text-foreground">
+                      <span className="font-mono text-primary">{log.action}</span>
+                      <span className="text-muted-foreground tabular-nums">
+                        {new Date(log.createdAt).toLocaleString()}
+                      </span>
+                    </div>
+                    {log.details && (
+                      <p className="mt-1 rounded-md border border-border bg-muted/40 p-2 font-mono text-xs text-muted-foreground">
+                        {log.details}
+                      </p>
+                    )}
                   </div>
-                  <div className="flex items-center gap-4 text-slate-500 text-[11px] mb-1">
-                    <span>Автор: <strong className="text-slate-700">{log.actor?.fullName || log.actor?.email || "Система"}</strong></span>
-                    {log.ipAddress && <span>IP: <strong className="text-slate-700 font-mono">{log.ipAddress}</strong></span>}
-                  </div>
-                  {log.details && (
-                    <p className="mt-1 text-slate-600 bg-slate-50 p-2 rounded-lg font-mono text-[11px]">
-                      {log.details}
-                    </p>
-                  )}
-                </div>
-              ))}
-            </div>
-          ) : (
-            <div className="p-8 text-center text-slate-400 text-xs">
-              Записей аудита для этого центра пока нет.
-            </div>
-          )}
-        </div>
-      )}
-
-      {/* Tab: Edit */}
-      {activeTab === "edit" && (
-        <div className="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm max-w-2xl">
-          <h3 className="text-base font-bold text-slate-900 mb-4">Редактирование параметров центра</h3>
-          <form onSubmit={handleEditSubmit} className="space-y-4">
-            <div>
-              <label className="block text-xs font-semibold text-slate-700 uppercase mb-1">Тип организации</label>
-              <select
-                value={editForm.organizationKind}
-                onChange={(e) => setEditForm({ ...editForm, organizationKind: e.target.value })}
-                className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm text-slate-900"
-              >
-                <option value="LEARNING_CENTER">Учебный центр</option>
-                <option value="SCHOOL">Школа</option>
-                <option value="KINDERGARTEN">Детский сад</option>
-                <option value="OTHER">Другое</option>
-              </select>
-            </div>
-            <div>
-              <label className="block text-xs font-semibold text-slate-700 uppercase mb-1">Название центра</label>
-              <input
-                type="text"
-                value={editForm.name}
-                onChange={(e) => setEditForm({ ...editForm, name: e.target.value })}
-                className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm text-slate-900"
-                required
-              />
-            </div>
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-              <div>
-                <label className="block text-xs font-semibold text-slate-700 uppercase mb-1">Юр. наименование</label>
-                <input
-                  type="text"
-                  value={editForm.legalName}
-                  onChange={(e) => setEditForm({ ...editForm, legalName: e.target.value })}
-                  placeholder="OOO..."
-                  className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm text-slate-900"
-                />
+                ))}
               </div>
-              <div>
-                <label className="block text-xs font-semibold text-slate-700 uppercase mb-1">ИНН</label>
-                <input
-                  type="text"
-                  value={editForm.inn}
-                  onChange={(e) => setEditForm({ ...editForm, inn: e.target.value })}
-                  placeholder="123456789"
-                  className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm text-slate-900"
-                />
-              </div>
-            </div>
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-              <div>
-                <label className="block text-xs font-semibold text-slate-700 uppercase mb-1">Контактное лицо</label>
-                <input
-                  type="text"
-                  value={editForm.contactPerson}
-                  onChange={(e) => setEditForm({ ...editForm, contactPerson: e.target.value })}
-                  className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm text-slate-900"
-                />
-              </div>
-              <div>
-                <label className="block text-xs font-semibold text-slate-700 uppercase mb-1">Фактический адрес</label>
-                <input
-                  type="text"
-                  value={editForm.address}
-                  onChange={(e) => setEditForm({ ...editForm, address: e.target.value })}
-                  className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm text-slate-900"
-                />
-              </div>
-            </div>
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-              <div>
-                <label className="block text-xs font-semibold text-slate-700 uppercase mb-1">Email</label>
-                <input
-                  type="email"
-                  value={editForm.email}
-                  onChange={(e) => setEditForm({ ...editForm, email: e.target.value })}
-                  className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm text-slate-900"
-                />
-              </div>
-              <div>
-                <label className="block text-xs font-semibold text-slate-700 uppercase mb-1">Телефон</label>
-                <input
-                  type="text"
-                  value={editForm.phone}
-                  onChange={(e) => setEditForm({ ...editForm, phone: e.target.value })}
-                  className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm text-slate-900"
-                />
-              </div>
-            </div>
-            <div>
-              <label className="block text-xs font-semibold text-slate-700 uppercase mb-1">Часовой пояс</label>
-              <input
-                type="text"
-                value={editForm.timeZone}
-                onChange={(e) => setEditForm({ ...editForm, timeZone: e.target.value })}
-                className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm text-slate-900"
-              />
-            </div>
-            <button
-              type="submit"
-              className="px-5 py-2.5 bg-blue-600 hover:bg-blue-700 active:scale-[0.98] text-white text-sm font-semibold rounded-xl shadow-sm transition-all"
-            >
-              Сохранить изменения
-            </button>
-          </form>
-        </div>
-      )}
-
-      {/* Tab: Director */}
-      {activeTab === "director" && (
-        <div className="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm max-w-xl">
-          <h3 className="text-base font-bold text-slate-900 mb-2">Назначение нового директора</h3>
-          <p className="text-xs text-slate-500 mb-4">
-            Пользователь с указанным email получит роль DIRECTOR в этом центре.
-          </p>
-          <form onSubmit={handleDirectorSubmit} className="space-y-4">
-            <div>
-              <label className="block text-xs font-semibold text-slate-700 uppercase mb-1">
-                Email пользователя
-              </label>
-              <input
-                type="email"
-                value={directorEmail}
-                onChange={(e) => setDirectorEmail(e.target.value)}
-                placeholder="director@example.com"
-                className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm text-slate-900"
-                required
-              />
-            </div>
-            <button
-              type="submit"
-              className="px-5 py-2.5 bg-blue-600 hover:bg-blue-700 active:scale-[0.98] text-white text-sm font-semibold rounded-xl shadow-sm transition-all"
-            >
-              Назначить директором
-            </button>
-          </form>
-
-          {directorResetUrl && (
-            <div className="mt-4 p-4 bg-amber-50 border border-amber-200 rounded-xl space-y-2 text-left">
-              <div className="flex items-center gap-2 text-amber-800 text-xs font-semibold">
-                <AlertTriangle className="w-4 h-4 text-amber-600 shrink-0" />
-                <span>Ссылка для первичного входа директора (показывается один раз!)</span>
-              </div>
-              <div className="flex items-center gap-2">
-                <input
-                  type="text"
-                  readOnly
-                  value={directorResetUrl}
-                  className="flex-1 p-2 bg-white border border-amber-300 rounded-lg text-xs font-mono text-slate-800 select-all"
-                />
-                <button
-                  type="button"
-                  onClick={() => {
-                    navigator.clipboard.writeText(directorResetUrl);
-                    setCopiedDirectorUrl(true);
-                    setTimeout(() => setCopiedDirectorUrl(false), 3000);
-                  }}
-                  className="px-3 py-2 bg-amber-600 hover:bg-amber-700 text-white rounded-lg text-xs font-semibold flex items-center gap-1.5 transition-colors cursor-pointer shrink-0"
-                >
-                  {copiedDirectorUrl ? <Check className="w-3.5 h-3.5" /> : <Copy className="w-3.5 h-3.5" />}
-                  <span>{copiedDirectorUrl ? "Скопировано!" : "Копировать"}</span>
-                </button>
-              </div>
-              <p className="text-[11px] text-amber-700">
-                Передайте эту ссылку новому директору. Ссылка действительна 72 часа для установки собственного пароля.
+            ) : (
+              <p className="py-6 text-center text-xs text-muted-foreground">
+                Записей аудита для этого центра пока нет.
               </p>
-            </div>
-          )}
-        </div>
+            )}
+          </CardContent>
+        </Card>
       )}
 
-      {/* Tab: Suspend / Status */}
+      {activeTab === "edit" && (
+        <Card className="max-w-2xl">
+          <CardHeader className="border-b border-border pb-3">
+            <CardTitle className="text-base font-semibold">Редактирование параметров центра</CardTitle>
+          </CardHeader>
+          <CardContent className="pt-4">
+            <form onSubmit={handleEditSubmit} className="space-y-4">
+              <FormField label="Тип организации" htmlFor="c-edit-kind">
+                <select
+                  id="c-edit-kind"
+                  value={editForm.organizationKind}
+                  onChange={(e) => setEditForm({ ...editForm, organizationKind: e.target.value })}
+                  className="h-9 w-full rounded-md border border-input bg-background px-3 text-sm text-foreground"
+                >
+                  <option value="LEARNING_CENTER">Учебный центр</option>
+                  <option value="SCHOOL">Школа</option>
+                  <option value="KINDERGARTEN">Детский сад</option>
+                  <option value="OTHER">Другое</option>
+                </select>
+              </FormField>
+
+              <FormField label="Название центра" htmlFor="c-edit-name" required>
+                <Input
+                  id="c-edit-name"
+                  type="text"
+                  value={editForm.name}
+                  onChange={(e) => setEditForm({ ...editForm, name: e.target.value })}
+                  required
+                />
+              </FormField>
+
+              <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+                <FormField label="Юр. наименование" htmlFor="c-edit-legal">
+                  <Input
+                    id="c-edit-legal"
+                    type="text"
+                    value={editForm.legalName}
+                    onChange={(e) => setEditForm({ ...editForm, legalName: e.target.value })}
+                    placeholder="OOO..."
+                  />
+                </FormField>
+                <FormField label="ИНН" htmlFor="c-edit-inn">
+                  <Input
+                    id="c-edit-inn"
+                    type="text"
+                    value={editForm.inn}
+                    onChange={(e) => setEditForm({ ...editForm, inn: e.target.value })}
+                    placeholder="123456789"
+                  />
+                </FormField>
+              </div>
+
+              <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+                <FormField label="Контактное лицо" htmlFor="c-edit-contact">
+                  <Input
+                    id="c-edit-contact"
+                    type="text"
+                    value={editForm.contactPerson}
+                    onChange={(e) => setEditForm({ ...editForm, contactPerson: e.target.value })}
+                  />
+                </FormField>
+                <FormField label="Фактический адрес" htmlFor="c-edit-address">
+                  <Input
+                    id="c-edit-address"
+                    type="text"
+                    value={editForm.address}
+                    onChange={(e) => setEditForm({ ...editForm, address: e.target.value })}
+                  />
+                </FormField>
+              </div>
+
+              <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+                <FormField label="Email" htmlFor="c-edit-email">
+                  <Input
+                    id="c-edit-email"
+                    type="email"
+                    value={editForm.email}
+                    onChange={(e) => setEditForm({ ...editForm, email: e.target.value })}
+                  />
+                </FormField>
+                <FormField label="Телефон" htmlFor="c-edit-phone">
+                  <Input
+                    id="c-edit-phone"
+                    type="text"
+                    value={editForm.phone}
+                    onChange={(e) => setEditForm({ ...editForm, phone: e.target.value })}
+                  />
+                </FormField>
+              </div>
+
+              <FormField label="Часовой пояс" htmlFor="c-edit-tz">
+                <Input
+                  id="c-edit-tz"
+                  type="text"
+                  value={editForm.timeZone}
+                  onChange={(e) => setEditForm({ ...editForm, timeZone: e.target.value })}
+                />
+              </FormField>
+
+              <FormActions>
+                <Button type="submit" variant="primary">
+                  Сохранить изменения
+                </Button>
+              </FormActions>
+            </form>
+          </CardContent>
+        </Card>
+      )}
+
+      {activeTab === "director" && (
+        <Card className="max-w-xl">
+          <CardHeader className="border-b border-border pb-3">
+            <CardTitle className="text-base font-semibold">Назначение нового директора</CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-4 pt-4">
+            <p className="text-xs text-muted-foreground">
+              Пользователь с указанным email получит роль DIRECTOR в этом центре.
+            </p>
+            <form onSubmit={handleDirectorSubmit} className="space-y-4">
+              <FormField label="Email пользователя" htmlFor="c-dir-email" required>
+                <Input
+                  id="c-dir-email"
+                  type="email"
+                  value={directorEmail}
+                  onChange={(e) => setDirectorEmail(e.target.value)}
+                  placeholder="director@example.com"
+                  required
+                />
+              </FormField>
+              <FormActions>
+                <Button type="submit" variant="primary">
+                  Назначить директором
+                </Button>
+              </FormActions>
+            </form>
+
+            {directorResetUrl && (
+              <Alert variant="warning">
+                <AlertDescription className="space-y-2 text-xs">
+                  <div className="flex items-center gap-1.5 font-semibold">
+                    <ShieldAlert className="h-4 w-4 shrink-0" aria-hidden="true" />
+                    <span>{t("ru", "ui4.oneTimeSecretWarn")}</span>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <Input
+                      type="text"
+                      readOnly
+                      value={directorResetUrl}
+                      className="flex-1 font-mono text-xs select-all"
+                    />
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      onClick={() => {
+                        navigator.clipboard.writeText(directorResetUrl);
+                        setCopiedDirectorUrl(true);
+                        setTimeout(() => setCopiedDirectorUrl(false), 3000);
+                      }}
+                    >
+                      {copiedDirectorUrl ? <Check className="h-3.5 w-3.5 text-success" /> : <Copy className="h-3.5 w-3.5" />}
+                      <span>{copiedDirectorUrl ? t("ru", "ui4.copied") : t("ru", "ui4.copyCredentials")}</span>
+                    </Button>
+                  </div>
+                  <p className="text-muted-foreground">
+                    Передайте ссылку новому директору. Ссылка действует 72 часа для установки пароля.
+                  </p>
+                </AlertDescription>
+              </Alert>
+            )}
+          </CardContent>
+        </Card>
+      )}
+
       {activeTab === "suspend" && (
-        <div className="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm max-w-xl">
-          <h3 className="text-base font-bold text-slate-900 mb-2">Управление статусом центра</h3>
-          <p className="text-xs text-slate-500 mb-4">
-            Изменение статуса моментально влияет на доступ сотрудников и студентов.
-          </p>
-          <form onSubmit={handleSuspendSubmit} className="space-y-4">
-            <div>
-              <label className="block text-xs font-semibold text-slate-700 uppercase mb-1">
-                Выберите действие
-              </label>
-              <select
-                value={suspendForm.action}
-                onChange={(e) => setSuspendForm({ ...suspendForm, action: e.target.value })}
-                className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm text-slate-900"
-              >
-                <option value="pause">Приостановить (PAUSED)</option>
-                <option value="block">Заблокировать (BLOCKED)</option>
-                <option value="resume">Возобновить доступ (ACTIVE)</option>
-              </select>
-            </div>
-            <div>
-              <label className="block text-xs font-semibold text-slate-700 uppercase mb-1">
-                Причина (для аудита, от 5 символов)
-              </label>
-              <textarea
-                value={suspendForm.reason}
-                onChange={(e) => setSuspendForm({ ...suspendForm, reason: e.target.value })}
-                placeholder="Укажите подробную причину изменения статуса..."
-                className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm text-slate-900 h-24"
-                required
-                minLength={5}
-                maxLength={500}
-              />
-            </div>
-            <button
-              type="submit"
-              className="px-5 py-2.5 bg-rose-600 hover:bg-rose-700 active:scale-[0.98] text-white text-sm font-semibold rounded-xl shadow-sm transition-all"
-            >
-              Применить изменение статуса
-            </button>
-          </form>
-        </div>
+        <Card className="max-w-xl">
+          <CardHeader className="border-b border-border pb-3">
+            <CardTitle className="text-base font-semibold">Управление статусом центра</CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-4 pt-4">
+            <p className="text-xs text-muted-foreground">
+              Изменение статуса моментально влияет на доступ сотрудников и учеников.
+            </p>
+            <form onSubmit={handleSuspendSubmit} className="space-y-4">
+              <FormField label="Выберите действие" htmlFor="c-suspend-action">
+                <select
+                  id="c-suspend-action"
+                  value={suspendForm.action}
+                  onChange={(e) => setSuspendForm({ ...suspendForm, action: e.target.value })}
+                  className="h-9 w-full rounded-md border border-input bg-background px-3 text-sm text-foreground"
+                >
+                  <option value="pause">Приостановить (PAUSED)</option>
+                  <option value="block">Заблокировать (BLOCKED)</option>
+                  <option value="resume">Возобновить доступ (ACTIVE)</option>
+                </select>
+              </FormField>
+
+              <FormField label="Причина (для аудита, от 5 символов)" htmlFor="c-suspend-reason" required>
+                <Textarea
+                  id="c-suspend-reason"
+                  value={suspendForm.reason}
+                  onChange={(e) => setSuspendForm({ ...suspendForm, reason: e.target.value })}
+                  placeholder="Укажите подробную причину изменения статуса..."
+                  rows={4}
+                  required
+                  minLength={5}
+                  maxLength={500}
+                />
+              </FormField>
+
+              <FormActions>
+                <Button type="submit" variant="destructive">
+                  Применить изменение статуса
+                </Button>
+              </FormActions>
+            </form>
+          </CardContent>
+        </Card>
       )}
 
-      {/* Tab: Billing */}
       {activeTab === "billing" && (
         <div className="space-y-6">
           {data.subscriptions && data.subscriptions.length > 0 ? (
@@ -1267,356 +1316,314 @@ export default function PlatformCenterDetailsPage({ params }: { params: { id: st
               const currentSub = data.subscriptions[0];
               const isPastDue = new Date(currentSub.currentPeriodEndsAt) < new Date();
               return (
-                <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-                  {/* Subscription card */}
-                  <div className="lg:col-span-2 bg-white p-6 rounded-2xl border border-slate-200 shadow-sm space-y-4">
-                    <div className="flex items-center justify-between border-b pb-3">
-                      <div className="flex items-center gap-2">
-                        <CreditCard className="w-5 h-5 text-indigo-600" />
-                        <h3 className="text-base font-bold text-slate-900">Текущая подписка</h3>
-                      </div>
-                      <span
-                        className={`px-3 py-1 text-xs font-bold rounded-full ${
+                <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
+                  <Card className="lg:col-span-2">
+                    <CardHeader className="flex flex-row items-center justify-between border-b border-border pb-3">
+                      <CardTitle className="flex items-center gap-2 text-base font-semibold">
+                        <CreditCard className="h-4 w-4 text-primary" aria-hidden="true" />
+                        <span>Текущая подписка</span>
+                      </CardTitle>
+                      <Badge
+                        variant={
                           currentSub.status === "ACTIVE"
-                            ? "bg-emerald-50 text-emerald-700 border border-emerald-200"
+                            ? "success"
                             : currentSub.status === "PAST_DUE"
-                            ? "bg-rose-50 text-rose-700 border border-rose-200"
-                            : "bg-blue-50 text-blue-700 border border-blue-200"
-                        }`}
+                            ? "destructive"
+                            : "info"
+                        }
                       >
                         {currentSub.status}
-                      </span>
-                    </div>
+                      </Badge>
+                    </CardHeader>
+                    <CardContent className="space-y-4 pt-4">
+                      <div className="grid grid-cols-2 gap-4 text-sm sm:grid-cols-3">
+                        <div>
+                          <div className="text-xs text-muted-foreground">Тарифный план</div>
+                          <div className="font-semibold text-foreground">{currentSub.plan.name}</div>
+                          <div className="text-xs text-muted-foreground tabular-nums">
+                            {currentSub.plan.priceMonthly.toLocaleString()} UZS/мес
+                          </div>
+                        </div>
+                        <div>
+                          <div className="text-xs text-muted-foreground">Период действия</div>
+                          <div className={`font-semibold tabular-nums ${isPastDue ? "text-destructive" : "text-foreground"}`}>
+                            до {new Date(currentSub.currentPeriodEndsAt).toLocaleDateString()}
+                          </div>
+                          <div className="text-xs text-muted-foreground tabular-nums">
+                            с {new Date(currentSub.currentPeriodStartsAt).toLocaleDateString()}
+                          </div>
+                        </div>
+                        <div>
+                          <div className="text-xs text-muted-foreground">Автопродление</div>
+                          <Button
+                            type="button"
+                            variant={currentSub.autoRenew ? "outline" : "outline"}
+                            size="sm"
+                            onClick={() => handleToggleAutoRenew(currentSub.id, currentSub.autoRenew)}
+                            className="mt-1"
+                          >
+                            {currentSub.autoRenew ? "Включено" : "Отключено"}
+                          </Button>
+                        </div>
+                      </div>
 
-                    <div className="grid grid-cols-2 sm:grid-cols-3 gap-4 text-sm">
-                      <div>
-                        <div className="text-xs text-slate-400">Тарифный план</div>
-                        <div className="text-base font-bold text-slate-900">{currentSub.plan.name}</div>
-                        <div className="text-xs text-slate-500">
-                          {currentSub.plan.priceMonthly.toLocaleString()} UZS/мес
+                      <div className="grid grid-cols-3 gap-2 border-t border-border pt-3 text-xs text-muted-foreground">
+                        <div>
+                          Лимит учеников: <strong className="text-foreground">{currentSub.plan.maxStudents}</strong>
+                        </div>
+                        <div>
+                          Лимит учителей: <strong className="text-foreground">{currentSub.plan.maxTeachers}</strong>
+                        </div>
+                        <div>
+                          Лимит филиалов: <strong className="text-foreground">{currentSub.plan.maxBranches}</strong>
                         </div>
                       </div>
-                      <div>
-                        <div className="text-xs text-slate-400">Период действия</div>
-                        <div className={`font-semibold ${isPastDue ? "text-rose-600" : "text-slate-900"}`}>
-                          до {new Date(currentSub.currentPeriodEndsAt).toLocaleDateString()}
-                        </div>
-                        <div className="text-xs text-slate-400">
-                          с {new Date(currentSub.currentPeriodStartsAt).toLocaleDateString()}
-                        </div>
-                      </div>
-                      <div>
-                        <div className="text-xs text-slate-400">Автопродление</div>
-                        <button
-                          type="button"
-                          onClick={() => handleToggleAutoRenew(currentSub.id, currentSub.autoRenew)}
-                          className={`mt-1 px-3 py-1 text-xs font-semibold rounded-lg border transition-all ${
-                            currentSub.autoRenew
-                              ? "bg-emerald-50 text-emerald-700 border-emerald-200 hover:bg-emerald-100"
-                              : "bg-slate-50 text-slate-600 border-slate-200 hover:bg-slate-100"
-                          }`}
+
+                      <div className="flex flex-wrap items-center gap-3 border-t border-border pt-4">
+                        <span className="text-xs font-medium text-foreground">Продлить на:</span>
+                        <select
+                          aria-label="Срок продления"
+                          value={extendMonths}
+                          onChange={(e) => setExtendMonths(parseInt(e.target.value, 10))}
+                          className="h-8 rounded-md border border-input bg-background px-2.5 text-xs text-foreground"
                         >
-                          {currentSub.autoRenew ? "Включено" : "Отключено"}
-                        </button>
+                          <option value={1}>1 месяц</option>
+                          <option value={3}>3 месяца</option>
+                          <option value={6}>6 месяцев</option>
+                          <option value={12}>12 месяцев</option>
+                        </select>
+                        <Button
+                          type="button"
+                          variant="primary"
+                          size="sm"
+                          onClick={() => handleExtendSubscription(currentSub.id)}
+                          disabled={extendingSub}
+                        >
+                          {extendingSub ? "Продление..." : "Продлить подписку"}
+                        </Button>
+                        <Button asChild variant="outline" size="sm" className="ml-auto">
+                          <Link href={`/platform-admin/finance/payments?centerId=${data.id}&planId=${currentSub.plan.id}`}>
+                            <Receipt className="h-3.5 w-3.5" aria-hidden="true" />
+                            <span>Записать платёж</span>
+                          </Link>
+                        </Button>
                       </div>
-                    </div>
+                    </CardContent>
+                  </Card>
 
-                    {/* Limits Info */}
-                    <div className="pt-2 border-t text-xs text-slate-600 grid grid-cols-3 gap-2">
-                      <div>Лимит студентов: <strong>{currentSub.plan.maxStudents}</strong></div>
-                      <div>Лимит учителей: <strong>{currentSub.plan.maxTeachers}</strong></div>
-                      <div>Лимит филиалов: <strong>{currentSub.plan.maxBranches}</strong></div>
-                    </div>
-
-                    {/* Quick Extend Bar */}
-                    <div className="pt-4 border-t flex flex-wrap items-center gap-3">
-                      <span className="text-xs font-semibold text-slate-700">Продлить на:</span>
-                      <select
-                        value={extendMonths}
-                        onChange={(e) => setExtendMonths(parseInt(e.target.value, 10))}
-                        className="py-1 px-2.5 bg-slate-50 border border-slate-200 rounded-lg text-xs"
-                      >
-                        <option value={1}>1 месяц</option>
-                        <option value={3}>3 месяца</option>
-                        <option value={6}>6 месяцев</option>
-                        <option value={12}>12 месяцев</option>
-                      </select>
-                      <button
+                  <Card>
+                    <CardHeader className="border-b border-border pb-3">
+                      <CardTitle className="text-base font-semibold">Смена тарифа</CardTitle>
+                    </CardHeader>
+                    <CardContent className="space-y-4 pt-4">
+                      <p className="text-xs text-muted-foreground">
+                        При смене тарифа проверяются лимиты активных учеников и учителей.
+                      </p>
+                      <FormField label="Новый тариф" htmlFor="c-new-plan">
+                        <select
+                          id="c-new-plan"
+                          value={selectedPlanId}
+                          onChange={(e) => setSelectedPlanId(e.target.value)}
+                          className="h-9 w-full rounded-md border border-input bg-background px-3 text-sm text-foreground"
+                        >
+                          <option value="">Выберите тариф...</option>
+                          {plans.map((p) => (
+                            <option key={p.id} value={p.id}>
+                              {p.name} ({p.priceMonthly.toLocaleString()} UZS)
+                            </option>
+                          ))}
+                        </select>
+                      </FormField>
+                      <Button
                         type="button"
-                        onClick={() => handleExtendSubscription(currentSub.id)}
-                        disabled={extendingSub}
-                        className="px-3 py-1 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg text-xs font-semibold transition-all disabled:opacity-50"
+                        variant="primary"
+                        className="w-full"
+                        onClick={() => handleChangePlan(currentSub.id)}
+                        disabled={changingPlan || !selectedPlanId}
                       >
-                        {extendingSub ? "Продление..." : "Продлить подписку"}
-                      </button>
-                      <Link
-                        href={`/platform-admin/finance/payments?centerId=${data.id}&planId=${currentSub.plan.id}`}
-                        className="ml-auto inline-flex items-center gap-1.5 px-3 py-1 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 border border-indigo-200 rounded-lg text-xs font-semibold transition-all"
-                      >
-                        <Receipt className="w-3.5 h-3.5" />
-                        Записать платёж
-                      </Link>
-                    </div>
-                  </div>
-
-                  {/* Plan change card */}
-                  <div className="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm space-y-4">
-                    <h3 className="text-base font-bold text-slate-900 border-b pb-3">Смена тарифа</h3>
-                    <p className="text-xs text-slate-500">
-                      При смене тарифа проверяются лимиты активных студентов и учителей.
-                    </p>
-                    <div>
-                      <label className="block text-xs font-semibold text-slate-700 uppercase mb-1">
-                        Новый тариф
-                      </label>
-                      <select
-                        value={selectedPlanId}
-                        onChange={(e) => setSelectedPlanId(e.target.value)}
-                        className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm"
-                      >
-                        <option value="">Выберите тариф...</option>
-                        {plans.map((p) => (
-                          <option key={p.id} value={p.id}>
-                            {p.name} ({p.priceMonthly.toLocaleString()} UZS)
-                          </option>
-                        ))}
-                      </select>
-                    </div>
-                    <button
-                      type="button"
-                      onClick={() => handleChangePlan(currentSub.id)}
-                      disabled={changingPlan || !selectedPlanId}
-                      className="w-full py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl text-xs font-semibold transition-all disabled:opacity-50"
-                    >
-                      {changingPlan ? "Применение..." : "Перевести на новый тариф"}
-                    </button>
-                  </div>
+                        {changingPlan ? "Применение..." : "Перевести на новый тариф"}
+                      </Button>
+                    </CardContent>
+                  </Card>
                 </div>
               );
             })()
           ) : (
-            <div className="bg-white p-8 rounded-2xl border border-slate-200 text-center space-y-3">
-              <CreditCard className="w-10 h-10 text-slate-300 mx-auto" />
-              <h3 className="text-base font-bold text-slate-900">Подписка не оформлена</h3>
-              <p className="text-xs text-slate-500">У данного центра отсутствует активная подписка.</p>
-              <Link
-                href={`/platform-admin/finance/payments?centerId=${data.id}`}
-                className="inline-flex items-center gap-2 px-4 py-2 bg-indigo-600 text-white rounded-xl text-xs font-semibold"
-              >
-                Оформить подписку и записать платёж
-              </Link>
-            </div>
+            <EmptyState
+              icon={<CreditCard className="h-5 w-5" aria-hidden="true" />}
+              title="Подписка не оформлена"
+              description="У данного центра отсутствует активная подписка."
+              action={
+                <Button asChild variant="primary" size="sm">
+                  <Link href={`/platform-admin/finance/payments?centerId=${data.id}`}>
+                    Оформить подписку и записать платёж
+                  </Link>
+                </Button>
+              }
+            />
           )}
 
-          {/* Payment History for this Center */}
-          <div className="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm space-y-4">
-            <div className="flex items-center justify-between">
-              <h3 className="text-base font-bold text-slate-900">История платежей центра</h3>
+          <Card>
+            <CardHeader className="flex flex-row items-center justify-between pb-3">
+              <CardTitle className="text-base font-semibold">История платежей центра</CardTitle>
               <Link
                 href={`/platform-admin/finance/payments?centerId=${data.id}`}
-                className="text-xs font-semibold text-indigo-600 hover:underline"
+                className="text-xs font-medium text-primary hover:underline"
               >
-                Все платежи центра &rarr;
+                Все платежи центра
               </Link>
-            </div>
-
-            {data.platformPayments && data.platformPayments.length > 0 ? (
-              <div className="overflow-x-auto">
-                <table className="w-full text-sm">
-                  <thead>
-                    <tr className="border-b text-xs font-semibold text-slate-500 uppercase">
-                      <th className="text-left pb-2">Номер счёта</th>
-                      <th className="text-left pb-2">Дата</th>
-                      <th className="text-left pb-2">Способ</th>
-                      <th className="text-right pb-2">Сумма (UZS)</th>
-                      <th className="text-center pb-2">Статус</th>
-                      <th className="text-right pb-2">Квитанция</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-slate-100">
-                    {data.platformPayments.map((p) => (
-                      <tr key={p.id} className="hover:bg-slate-50">
-                        <td className="py-2.5 font-mono font-bold text-slate-900">
-                          {p.invoiceNumber || `INV-${p.id.slice(0, 8)}`}
-                        </td>
-                        <td className="py-2.5 text-xs text-slate-500">
-                          {p.paidAt ? new Date(p.paidAt).toLocaleDateString() : "—"}
-                        </td>
-                        <td className="py-2.5 text-xs text-slate-600">{p.paymentMethod}</td>
-                        <td className="py-2.5 text-right font-bold text-slate-900">
-                          {p.amount.toLocaleString()} UZS
-                        </td>
-                        <td className="py-2.5 text-center">
-                          <span
-                            className={`px-2 py-0.5 rounded-full text-xs font-semibold ${
-                              p.status === "PAID"
-                                ? "bg-emerald-50 text-emerald-700"
-                                : "bg-slate-100 text-slate-600"
-                            }`}
-                          >
-                            {p.status}
-                          </span>
-                        </td>
-                        <td className="py-2.5 text-right">
-                          <Link
-                            href={`/platform-admin/finance/payments/${p.id}/invoice`}
-                            className="inline-flex items-center gap-1 text-xs text-indigo-600 hover:underline"
-                          >
-                            <Printer className="w-3.5 h-3.5" />
-                            Чек
-                          </Link>
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            ) : (
-              <div className="text-xs text-slate-400 py-4">Платежи ещё не регистрировались.</div>
-            )}
-          </div>
-        </div>
-      )}
-
-      {/* MODAL: Archive Center */}
-      {archiveModalOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/50 backdrop-blur-sm p-4">
-          <div className="bg-white rounded-2xl max-w-md w-full p-6 shadow-xl space-y-4">
-            <h3 className="text-lg font-bold text-slate-900">Архивировать учебный центр</h3>
-            <p className="text-xs text-slate-600 leading-relaxed">
-              Центр будет переведён в статус <strong>CANCELLED</strong>. Доступ для пользователей центра будет закрыт,
-              но данные сохранятся в режиме «только чтение».
-            </p>
-            <div>
-              <label className="block text-xs font-semibold text-slate-700 uppercase mb-1">
-                Причина архивации (минимум 5 символов)
-              </label>
-              <textarea
-                value={archiveReason}
-                onChange={(e) => setArchiveReason(e.target.value)}
-                placeholder="Укажите причину архивации..."
-                className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs h-24"
+            </CardHeader>
+            <CardContent className="pt-0">
+              <DataTable
+                data={data.platformPayments || []}
+                columns={paymentColumns}
+                getRowId={(p) => p.id}
+                showColumnToggle={false}
+                showDensityToggle={false}
+                emptyTitle="Платежей пока нет"
+                emptyDescription="Платежи для данного центра ещё не регистрировались."
               />
-            </div>
-            <div className="flex items-center justify-end gap-2 pt-2">
-              <button
-                type="button"
-                onClick={() => setArchiveModalOpen(false)}
-                className="px-4 py-2 text-xs font-medium text-slate-600 hover:bg-slate-100 rounded-xl transition"
-              >
-                Отмена
-              </button>
-              <button
-                type="button"
-                onClick={handleArchive}
-                disabled={archiveReason.trim().length < 5}
-                className="px-4 py-2 text-xs font-semibold bg-slate-900 hover:bg-slate-800 disabled:opacity-40 text-white rounded-xl transition"
-              >
-                Архивировать
-              </button>
-            </div>
-          </div>
+            </CardContent>
+          </Card>
         </div>
       )}
+      </TabsContent>
+      </Tabs>
 
-      {/* MODAL: Delete Center Permanently */}
-      {deleteModalOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/50 backdrop-blur-sm p-4">
-          <div className="bg-white rounded-2xl max-w-md w-full p-6 shadow-xl space-y-4 border border-rose-200">
-            <div className="flex items-center gap-2 text-rose-600">
-              <AlertTriangle className="w-5 h-5" />
-              <h3 className="text-lg font-bold text-slate-900">Полное удаление центра</h3>
+      <ConfirmDialog
+        open={archiveModalOpen}
+        onOpenChange={setArchiveModalOpen}
+        title="Архивировать учебный центр"
+        description="Центр будет переведён в статус CANCELLED. Доступ для пользователей закроется, данные сохранятся в режиме «только чтение»."
+        variant="destructive"
+        reasonLabel="Причина архивации (минимум 5 символов)"
+        reasonPlaceholder="Укажите причину архивации..."
+        reasonRequired
+        reasonMinLength={5}
+        reasonMultiline
+        confirmLabel="Архивировать"
+        onConfirm={handleArchive}
+      />
+
+      <ConfirmDialog
+        open={Boolean(forcePlanConfirm)}
+        onOpenChange={(next) => !next && setForcePlanConfirm(null)}
+        title="Подтвердите принудительную смену тарифа"
+        description={
+          forcePlanConfirm
+            ? `${forcePlanConfirm.message}. Перевести центр на этот тариф принудительно?`
+            : undefined
+        }
+        variant="destructive"
+        confirmLabel="Перевести"
+        onConfirm={() => {
+          if (!forcePlanConfirm) return;
+          const targetId = forcePlanConfirm.subId;
+          setForcePlanConfirm(null);
+          return handleChangePlan(targetId, true);
+        }}
+      />
+
+      <Dialog open={deleteModalOpen} onOpenChange={setDeleteModalOpen}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle className="text-destructive">Полное удаление центра</DialogTitle>
+            <DialogDescription>
+              Это действие необратимо. Центр и все связанные данные будут удалены навсегда. Перед
+              удалением выгрузите резервную копию через «Экспорт JSON».
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="space-y-4">
+            <div className="rounded-md border border-border bg-muted/40 p-3 text-xs">
+              <span className="block text-muted-foreground">Точное название центра:</span>
+              <span className="font-mono font-semibold text-foreground">{data.name}</span>
             </div>
-            <p className="text-xs text-slate-600 leading-relaxed">
-              Это действие необратимо. Центр, все связанные курсы, уроки и платежи будут безвозвратно удалены. Перед
-              удалением обязательно выгрузите резервную копию через кнопку «Экспорт JSON».
-            </p>
-            <div className="p-3 rounded-xl bg-slate-50 border border-slate-200 text-xs">
-              <span className="text-slate-500 block mb-1">Для подтверждения введите точное имя центра:</span>
-              <span className="font-bold text-slate-900 font-mono">{data.name}</span>
-            </div>
-            <div>
-              <input
+
+            <FormField label="Подтверждение названия" htmlFor="del-center-name" required>
+              <Input
+                id="del-center-name"
                 type="text"
                 value={deleteConfirmName}
                 onChange={(e) => setDeleteConfirmName(e.target.value)}
                 placeholder="Введите точное имя центра"
-                className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-medium"
               />
-            </div>
-            <div>
-              <label className="block text-xs font-semibold text-slate-700 uppercase mb-1">
-                Обязательная причина удаления (от 5 символов)
-              </label>
-              <textarea
+            </FormField>
+
+            <FormField label="Обязательная причина удаления (от 5 символов)" htmlFor="del-center-reason" required>
+              <Textarea
+                id="del-center-reason"
                 value={deleteReason}
                 onChange={(e) => setDeleteReason(e.target.value)}
                 placeholder="Причина удаления..."
-                className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs h-20"
+                rows={3}
               />
-            </div>
-            <div className="flex items-center justify-end gap-2 pt-2">
-              <button
-                type="button"
-                onClick={() => setDeleteModalOpen(false)}
-                className="px-4 py-2 text-xs font-medium text-slate-600 hover:bg-slate-100 rounded-xl transition"
-              >
+            </FormField>
+
+            <DialogFooter>
+              <Button type="button" variant="outline" onClick={() => setDeleteModalOpen(false)}>
                 Отмена
-              </button>
-              <button
+              </Button>
+              <Button
                 type="button"
+                variant="destructive"
                 onClick={handleDeleteCenter}
                 disabled={deleteConfirmName !== data.name || deleteReason.trim().length < 5}
-                className="px-4 py-2 text-xs font-semibold bg-rose-600 hover:bg-rose-700 disabled:opacity-40 text-white rounded-xl transition"
               >
                 Удалить навсегда
-              </button>
-            </div>
+              </Button>
+            </DialogFooter>
           </div>
-        </div>
-      )}
+        </DialogContent>
+      </Dialog>
 
-      {/* MODAL: User Reset Password Link */}
-      {userResetModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/50 backdrop-blur-sm p-4">
-          <div className="bg-white rounded-2xl max-w-md w-full p-6 shadow-xl space-y-4">
-            <h3 className="text-lg font-bold text-slate-900">Ссылка для сброса пароля</h3>
-            <p className="text-xs text-slate-600 leading-relaxed">
-              Ссылка для пользователя <strong>{userResetModal.userName}</strong> успешно создана. Передайте её
-              пользователю (действует 72 часа):
-            </p>
-            <div className="flex items-center gap-2">
-              <input
-                type="text"
-                readOnly
-                value={userResetModal.url}
-                className="flex-1 p-2 bg-slate-50 border border-slate-200 rounded-lg text-xs font-mono text-slate-800 select-all"
-              />
-              <button
-                type="button"
-                onClick={() => {
-                  navigator.clipboard.writeText(userResetModal.url);
-                  setUserResetCopied(true);
-                  setTimeout(() => setUserResetCopied(false), 3000);
-                }}
-                className="px-3 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg text-xs font-semibold flex items-center gap-1.5 transition-colors cursor-pointer shrink-0"
-              >
-                {userResetCopied ? <Check className="w-3.5 h-3.5" /> : <Copy className="w-3.5 h-3.5" />}
-                <span>{userResetCopied ? "Скопировано!" : "Копировать"}</span>
-              </button>
+      <Dialog open={Boolean(userResetModal)} onOpenChange={(next) => !next && setUserResetModal(null)}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle>Ссылка для сброса пароля</DialogTitle>
+            <DialogDescription>
+              Ссылка для пользователя <strong>{userResetModal?.userName}</strong> создана и действует
+              72 часа.
+            </DialogDescription>
+          </DialogHeader>
+
+          {userResetModal && (
+            <div className="space-y-4">
+              <Alert variant="warning">
+                <AlertDescription className="text-xs">
+                  {t("ru", "ui4.oneTimeSecretWarn")}
+                </AlertDescription>
+              </Alert>
+              <div className="flex items-center gap-2">
+                <Input
+                  type="text"
+                  readOnly
+                  value={userResetModal.url}
+                  className="flex-1 font-mono text-xs select-all"
+                />
+                <Button
+                  type="button"
+                  variant="primary"
+                  size="sm"
+                  onClick={() => {
+                    navigator.clipboard.writeText(userResetModal.url);
+                    setUserResetCopied(true);
+                    setTimeout(() => setUserResetCopied(false), 3000);
+                  }}
+                >
+                  {userResetCopied ? <Check className="h-3.5 w-3.5" /> : <Copy className="h-3.5 w-3.5" />}
+                  <span>{userResetCopied ? t("ru", "ui4.copied") : t("ru", "ui4.copyCredentials")}</span>
+                </Button>
+              </div>
+              <DialogFooter>
+                <Button type="button" variant="outline" onClick={() => setUserResetModal(null)}>
+                  Закрыть
+                </Button>
+              </DialogFooter>
             </div>
-            <div className="flex justify-end pt-2">
-              <button
-                type="button"
-                onClick={() => setUserResetModal(null)}
-                className="px-4 py-2 text-xs font-medium text-slate-700 bg-slate-100 hover:bg-slate-200 rounded-xl transition"
-              >
-                Закрыть
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
+          )}
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

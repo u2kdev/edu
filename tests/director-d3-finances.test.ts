@@ -80,16 +80,16 @@ describe("Stage D3: Director & Accountant Finances, Ledger, Debts & Salaries", (
     dirBUserId = userDirB.id;
 
     // 2. Plan & Centers
-    const plan = (await db.subscriptionPlan.findFirst()) || (await db.subscriptionPlan.create({
+    const plan = await db.subscriptionPlan.create({
       data: {
-        name: "Standard Plan D3",
+        name: `Standard Plan D3 ${ts}`,
         priceMonthly: 500000,
         maxStudents: 500,
         maxTeachers: 20,
         maxCourses: 50,
         maxStorage: 2048,
       },
-    }));
+    });
 
     const centerA = await db.learningCenter.create({
       data: {

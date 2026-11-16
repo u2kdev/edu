@@ -3,6 +3,7 @@ import { requireTenantPageAccess } from "@/lib/tenant";
 import { getAuthSession } from "@/lib/auth";
 import { hasPermission } from "@/lib/permissions";
 import type { CenterRole } from "@/lib/permissions";
+import { getActorAcademicScope } from "@/lib/tenant-access";
 import CourseBuilder, { type CourseData } from "@/components/courses/CourseBuilder";
 
 export default async function CenterCoursePage({
@@ -47,6 +48,13 @@ export default async function CenterCoursePage({
 
   if (!course) {
     notFound();
+  }
+
+  const academicScope = await getActorAcademicScope(tenantCtx);
+  if (!academicScope.isUnrestricted) {
+    if (!academicScope.courseIds.includes(course.id)) {
+      notFound();
+    }
   }
 
   const role = session.activeCenterRole as CenterRole;

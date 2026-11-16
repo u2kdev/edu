@@ -1,94 +1,71 @@
 "use client";
 
 import Link from "next/link";
-import { Clock } from "lucide-react";
+import { Mail, Phone } from "lucide-react";
 import { t } from "@/i18n";
-import {
-  activeEnrollments,
-  studentStatusBadgeTone,
-  studentStatusLabel,
-  type StudentItem,
-} from "./students-utils";
+import { Badge, Card } from "@/components/ui";
+import { activeEnrollments, type StudentItem } from "./students-utils";
 
-interface StudentCardProps {
+export interface StudentCardProps {
   student: StudentItem;
   locale: string;
 }
 
 export function StudentCard({ student, locale }: StudentCardProps) {
-  const enrollments = activeEnrollments(student);
+  const activeGroups = activeEnrollments(student);
+  const isActive = student.status === "ACTIVE";
 
   return (
-    <div className="glass-panel p-4 rounded-xl border border-slate-800 space-y-3">
-      <div className="flex items-start justify-between">
-        <div>
-          <Link
-            href={`/center/students/${student.id}`}
-            className="font-bold text-white hover:text-brand-400 text-sm block"
-          >
-            {student.user.fullName}
-          </Link>
-          <p className="text-xs text-slate-400 font-mono mt-0.5">
-            {student.user.email}
-          </p>
-          {student.user.phone && (
-            <p className="text-xs text-slate-500 font-mono">
-              {student.user.phone}
-            </p>
-          )}
-          <div className="mt-1">
-            {student.user.lastLoginAt ? (
-              <span className="text-[10px] text-slate-400 font-mono">
-                Вход: {new Date(student.user.lastLoginAt).toLocaleDateString()}
-              </span>
-            ) : (
-              <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full bg-amber-500/10 text-amber-400 border border-amber-500/20 text-[9px] font-semibold">
-                <Clock className="w-2.5 h-2.5" />
-                Ни разу не входил
-              </span>
-            )}
+    <Card className="p-3.5 space-y-2.5">
+      <div className="flex items-start justify-between gap-2">
+        <div className="flex items-center gap-2.5 min-w-0">
+          <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-primary/10 text-xs font-semibold text-primary">
+            {student.user.fullName.charAt(0).toUpperCase()}
+          </div>
+          <div className="min-w-0">
+            <Link
+              href={`/center/students/${student.id}`}
+              className="block truncate font-medium text-foreground hover:text-primary transition-colors"
+            >
+              {student.user.fullName}
+            </Link>
+            <div className="mt-0.5 flex flex-wrap items-center gap-x-2.5 gap-y-0.5 text-xs text-muted-foreground">
+              {student.user.email && !student.user.email.endsWith("@noemail.local") && (
+                <span className="inline-flex items-center gap-1 truncate">
+                  <Mail className="h-3 w-3 shrink-0" aria-hidden="true" />
+                  <span className="truncate">{student.user.email}</span>
+                </span>
+              )}
+              {student.user.phone && (
+                <span className="inline-flex items-center gap-1 tabular-nums">
+                  <Phone className="h-3 w-3 shrink-0" aria-hidden="true" />
+                  {student.user.phone}
+                </span>
+              )}
+            </div>
           </div>
         </div>
-        <span
-          className={`px-2 py-0.5 text-[10px] font-semibold rounded-full ${studentStatusBadgeTone(
-            student.status
-          )}`}
-        >
-          {studentStatusLabel(locale, student.status)}
-        </span>
+        <Badge variant={isActive ? "success" : "neutral"}>
+          {isActive ? t(locale, "students.statusActive") : t(locale, "students.statusArchived")}
+        </Badge>
       </div>
 
-      {/* Groups badges */}
-      <div className="text-xs text-slate-300">
-        <span className="text-slate-500 font-semibold mr-1.5">
-          {t(locale, "students.groups")}:
-        </span>
-        {enrollments.length > 0 ? (
-          <div className="inline-flex flex-wrap gap-1 mt-1">
-            {enrollments.map((en) => (
-              <span
-                key={en.id}
-                className="px-2 py-0.5 bg-brand-500/10 border border-brand-500/20 text-brand-300 rounded text-[11px]"
-              >
-                {en.group.name}
-              </span>
-            ))}
-          </div>
-        ) : (
-          <span className="text-slate-500 italic">
-            {t(locale, "students.noGroups")}
-          </span>
-        )}
-      </div>
+      {activeGroups.length > 0 && (
+        <div className="flex flex-wrap gap-1.5 pt-1 border-t border-border">
+          {activeGroups.map((enr) => (
+            <Badge key={enr.id} variant="primary">
+              {enr.group.name}
+            </Badge>
+          ))}
+        </div>
+      )}
 
-      <div className="pt-2 border-t border-slate-800/80 flex justify-end">
-        <Link
-          href={`/center/students/${student.id}`}
-          className="text-xs text-brand-400 hover:text-brand-300 font-semibold"
-        >
-          {t(locale, "students.viewProfile")} &rarr;
-        </Link>
-      </div>
-    </div>
+      {student.parentLinksAsStudent && student.parentLinksAsStudent.length > 0 && (
+        <div className="text-xs text-muted-foreground pt-1 border-t border-border">
+          <span className="font-medium text-foreground">{t(locale, "students.parents")}:</span>{" "}
+          {student.parentLinksAsStudent.map((pl) => pl.parent.user.fullName).join(", ")}
+        </div>
+      )}
+    </Card>
   );
 }

@@ -150,7 +150,7 @@ export async function POST(req: Request) {
           passwordHash: tempPasswordHash,
           preferredLanguage: center.defaultLanguage || "ru",
           mustChangePassword: true,
-          emailVerified: cleanEmail ? null : new Date(),
+          emailVerified: new Date(),
         },
       });
       isNewUser = true;

@@ -9,8 +9,51 @@ import type { CenterType } from "@prisma/client";
 
 const CENTER_TYPES: CenterType[] = ["OFFLINE", "ONLINE", "HYBRID"];
 
+function isSelfServiceOnboardingDisabled(): boolean {
+  return process.env.NODE_ENV === "production";
+}
+
+function onboardingDisabledResponse() {
+  return NextResponse.json(
+    { error: "Self-service center onboarding is disabled in production" },
+    { status: 403 }
+  );
+}
+
+export async function GET() {
+  if (isSelfServiceOnboardingDisabled()) {
+    return onboardingDisabledResponse();
+  }
+  return NextResponse.json({ error: "Method not allowed" }, { status: 405 });
+}
+
+export async function PUT() {
+  if (isSelfServiceOnboardingDisabled()) {
+    return onboardingDisabledResponse();
+  }
+  return NextResponse.json({ error: "Method not allowed" }, { status: 405 });
+}
+
+export async function PATCH() {
+  if (isSelfServiceOnboardingDisabled()) {
+    return onboardingDisabledResponse();
+  }
+  return NextResponse.json({ error: "Method not allowed" }, { status: 405 });
+}
+
+export async function DELETE() {
+  if (isSelfServiceOnboardingDisabled()) {
+    return onboardingDisabledResponse();
+  }
+  return NextResponse.json({ error: "Method not allowed" }, { status: 405 });
+}
+
 export async function POST(req: Request) {
   try {
+    if (isSelfServiceOnboardingDisabled()) {
+      return onboardingDisabledResponse();
+    }
+
     const session = await getAuthSession();
     if (!session) {
       return NextResponse.json({ error: "Авторизуйтесь для создания центра" }, { status: 401 });

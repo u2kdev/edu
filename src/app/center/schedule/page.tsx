@@ -3,6 +3,7 @@ import { getAuthSession } from "@/lib/auth";
 import { redirect } from "next/navigation";
 import { Prisma } from "@prisma/client";
 import ScheduleManager, { ScheduleSlotItem, UpcomingLessonItem } from "@/components/ScheduleManager";
+import { getSelectedParentChildIds } from "@/lib/parent-child";
 
 export default async function CenterSchedulePage() {
   const tenantCtx = await requireTenantPageAccess();
@@ -42,9 +43,12 @@ export default async function CenterSchedulePage() {
       where: { parentMembershipId: currentMembership.id, status: "CONFIRMED" },
       select: { studentMembershipId: true },
     });
+    const selectedChildIds = getSelectedParentChildIds(
+      childLinks.map((l) => l.studentMembershipId)
+    );
     const childEnrollments = await tenantCtx.getTenantDb().enrollment.findMany({
       where: {
-        studentMembershipId: { in: childLinks.map((l) => l.studentMembershipId) },
+        studentMembershipId: { in: selectedChildIds },
         status: "ACTIVE",
       },
       select: { groupId: true },

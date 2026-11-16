@@ -3,6 +3,7 @@ import { requireTenantAccess, logAuditEvent, TenantAccessError } from "@/lib/ten
 import { hasPermission } from "@/lib/permissions";
 import {
   assertMaterialAccess,
+  assertGroupAccess,
   getActorAcademicScope,
   isActorImpersonating,
 } from "@/lib/tenant-access";
@@ -61,6 +62,33 @@ export async function GET(
               : ["00000000-0000-0000-0000-000000000000"],
         },
       };
+    } else if (role === "TEACHER" || role === "TEACHER_ASSISTANT") {
+      if (!hasPermission("materials.manage", session.user.platformRole, role)) {
+        const assignedGroups = await tenantDb.group.findMany({
+          where: {
+            centerId: center.id,
+            ...(role === "TEACHER"
+              ? { teacherMembershipId: membership?.id }
+              : { assistantMembershipId: membership?.id }),
+          },
+          select: {
+            enrollments: {
+              where: { status: "ACTIVE" },
+              select: { studentMembershipId: true },
+            },
+          },
+        });
+        const studentIds = Array.from(
+          new Set(
+            assignedGroups.flatMap((g) => g.enrollments.map((e) => e.studentMembershipId))
+          )
+        );
+        attemptsWhere = {
+          studentMembershipId: {
+            in: studentIds.length > 0 ? studentIds : ["00000000-0000-0000-0000-000000000000"],
+          },
+        };
+      }
     }
 
     const test = await tenantDb.test.findFirst({
@@ -303,7 +331,7 @@ export async function DELETE(
 ) {
   try {
     const tenantCtx = await requireTenantAccess(req);
-    const { center, role, session, getTenantDb } = tenantCtx;
+    const { center, role, session, membership, getTenantDb } = tenantCtx;
     const { id } = context.params;
 
     if (isActorImpersonating(tenantCtx)) {
@@ -313,13 +341,7 @@ export async function DELETE(
       );
     }
 
-    const canDelete =
-      hasPermission("materials.manage", session.user.platformRole, role) ||
-      role === "TEACHER";
-
-    if (!canDelete) {
-      return NextResponse.json({ error: "Недостаточно прав" }, { status: 403 });
-    }
+    const hasGlobalManage = hasPermission("materials.manage", session.user.platformRole, role);
 
     const tenantDb = getTenantDb();
     const existing = await tenantDb.test.findFirst({
@@ -329,6 +351,40 @@ export async function DELETE(
 
     if (!existing) {
       return NextResponse.json({ error: "Тест не найден" }, { status: 404 });
+    }
+
+    if (!hasGlobalManage) {
+      if (
+        (role === "TEACHER" || role === "TEACHER_ASSISTANT") &&
+        membership?.id
+      ) {
+        if (existing.material.groupId) {
+          await assertGroupAccess(tenantCtx, existing.material.groupId, "write");
+        } else if (existing.material.courseId) {
+          const group = await tenantDb.group.findFirst({
+            where: {
+              centerId: center.id,
+              courseId: existing.material.courseId,
+              ...(role === "TEACHER"
+                ? { teacherMembershipId: membership.id }
+                : { assistantMembershipId: membership.id }),
+            },
+          });
+          if (!group) {
+            return NextResponse.json(
+              { error: "Forbidden: You are not assigned to this course" },
+              { status: 403 }
+            );
+          }
+        } else {
+          return NextResponse.json(
+            { error: "Forbidden: Only center administrators can delete center-wide tests" },
+            { status: 403 }
+          );
+        }
+      } else {
+        return NextResponse.json({ error: "Недостаточно прав" }, { status: 403 });
+      }
     }
 
     await tenantDb.material.delete({

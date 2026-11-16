@@ -1,38 +1,37 @@
-import { describe, it, expect } from 'vitest';
-import * as fs from 'fs';
-import * as path from 'path';
+import { describe, it, expect } from "vitest";
+import * as fs from "fs";
+import * as path from "path";
 
-describe('Platform Sidebar & Layout (e-darischi light theme)', () => {
+describe("Platform Sidebar & AppShell Architecture", () => {
   const rootDir = process.cwd();
-  const sidebarPath = path.join(rootDir, 'src', 'components', 'platform', 'PlatformSidebar.tsx');
-  const platformAdminLayoutPath = path.join(rootDir, 'src', 'app', 'platform-admin', 'layout.tsx');
+  const navigationConfigPath = path.join(rootDir, "src", "config", "navigation.ts");
+  const appShellPath = path.join(rootDir, "src", "components", "shell", "AppShell.tsx");
+  const platformAdminLayoutPath = path.join(rootDir, "src", "app", "platform-admin", "layout.tsx");
 
-  it('PlatformSidebar component exists and contains e-darischi brand and required navigation items', () => {
-    expect(fs.existsSync(sidebarPath), 'PlatformSidebar.tsx must exist').toBe(true);
-    const content = fs.readFileSync(sidebarPath, 'utf8');
+  it("navigation config defines platform routes and AppShell provides accessible navigation", () => {
+    expect(fs.existsSync(navigationConfigPath)).toBe(true);
+    expect(fs.existsSync(appShellPath)).toBe(true);
 
-    // Brand check
-    expect(content).toContain('e-darischi');
+    const navContent = fs.readFileSync(navigationConfigPath, "utf8");
+    expect(navContent).toContain("/platform-admin");
+    expect(navContent).toContain("/platform-admin/centers");
+    expect(navContent).toContain("/platform-admin/plans");
+    expect(navContent).toContain("/platform-admin/subscriptions");
+    expect(navContent).toContain("/platform-admin/support");
+    expect(navContent).toContain("/platform-admin/audit");
 
-    // Required routes
-    expect(content).toContain('/platform-admin');
-    expect(content).toContain('/platform-admin/centers');
-    expect(content).toContain('/platform-admin/plans');
-    expect(content).toContain('/platform-admin/subscriptions');
-    expect(content).toContain('/platform-admin/support');
-    expect(content).toContain('/platform-admin/audit');
-
-    // Mobile drawer accessibility & touch target
-    expect(content).toMatch(/aria-label/i);
-    expect(content).toMatch(/mobile|drawer|isOpen|menu/i);
+    const shellContent = fs.readFileSync(appShellPath, "utf8");
+    expect(shellContent).toContain("common.brandName");
+    expect(shellContent).toMatch(/aria-label/i);
+    expect(shellContent).toContain("Sheet");
   });
 
-  it('platform-admin layout uses light theme background and renders PlatformSidebar', () => {
+  it("platform-admin layout wraps PanelThemeProvider and unified AppShell", () => {
     expect(fs.existsSync(platformAdminLayoutPath)).toBe(true);
-    const content = fs.readFileSync(platformAdminLayoutPath, 'utf8');
+    const content = fs.readFileSync(platformAdminLayoutPath, "utf8");
 
-    // Light background
-    expect(content).toMatch(/bg-slate-50|bg-slate-100|bg-white/);
-    expect(content).toContain('PlatformSidebar');
+    expect(content).toContain("PanelThemeProvider");
+    expect(content).toContain("AppShell");
+    expect(content).toContain('scope="platform"');
   });
 });

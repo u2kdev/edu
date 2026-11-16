@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { requireTenantAccess, logAuditEvent } from "@/lib/tenant";
+import { requireTenantAccess, logAuditEvent, TenantAccessError } from "@/lib/tenant";
 import { hasPermission } from "@/lib/permissions";
 import type { CenterRole } from "@/lib/permissions";
 
@@ -45,6 +45,9 @@ export async function DELETE(
 
     return NextResponse.json({ success: true, message: "Праздник удален" });
   } catch (err: unknown) {
+    if (err instanceof TenantAccessError) {
+      return NextResponse.json({ error: err.message, code: err.code }, { status: err.status });
+    }
     console.error("DELETE /api/tenant/holidays/[id] error:", err);
     return NextResponse.json({ error: "Не удалось удалить праздник" }, { status: 500 });
   }

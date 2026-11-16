@@ -1,18 +1,9 @@
 import { NextResponse } from "next/server";
 import { requireTenantAccess } from "@/lib/tenant";
+import { canAssignCenterRole } from "@/lib/permissions";
 import type { MembershipRole } from "@prisma/client";
 
 import { generateSecureInviteCode } from "@/lib/invites";
-
-const VALID_TARGET_ROLES: MembershipRole[] = [
-  "DIRECTOR",
-  "CENTER_ADMIN",
-  "TEACHER",
-  "TEACHER_ASSISTANT",
-  "CENTER_SUPPORT",
-  "STUDENT",
-  "PARENT",
-];
 
 export async function POST(req: Request) {
   try {
@@ -30,9 +21,21 @@ export async function POST(req: Request) {
 
     const { targetRole, courseId, groupId, maxUses, customCode } = await req.json();
 
-    const resolvedTargetRole: MembershipRole = VALID_TARGET_ROLES.includes(targetRole)
-      ? targetRole
-      : "STUDENT";
+    const requestedRole: string = targetRole ? String(targetRole) : "STUDENT";
+    if (
+      !canAssignCenterRole(
+        tenantCtx.session.user.platformRole,
+        tenantCtx.role,
+        requestedRole
+      )
+    ) {
+      return NextResponse.json(
+        { error: "Forbidden: Cannot generate invite for this role" },
+        { status: 403 }
+      );
+    }
+
+    const resolvedTargetRole = requestedRole as MembershipRole;
 
     const code = customCode
       ? customCode.toUpperCase().trim()

@@ -4,6 +4,8 @@ import { redirect } from "next/navigation";
 import { t } from "@/i18n";
 import { Prisma } from "@prisma/client";
 import HomeworkManager, { HomeworkItem } from "@/components/HomeworkManager";
+import { PageHeader } from "@/components/ui/page-header";
+import { getSelectedParentChildIds } from "@/lib/parent-child";
 
 export default async function CenterHomeworkPage() {
   const tenantCtx = await requireTenantPageAccess();
@@ -58,7 +60,9 @@ export default async function CenterHomeworkPage() {
       where: { parentMembershipId: currentMembership.id, status: "CONFIRMED" },
       select: { studentMembershipId: true },
     });
-    const childIds = childLinks.map((l) => l.studentMembershipId);
+    const childIds = getSelectedParentChildIds(
+      childLinks.map((l) => l.studentMembershipId)
+    );
     allowedSubmissionStudentIds = childIds;
     const enrollments =
       childIds.length > 0
@@ -129,10 +133,10 @@ export default async function CenterHomeworkPage() {
 
   return (
     <div className="space-y-6">
-      <div>
-        <h2 className="text-xl font-bold text-white">{t(locale, "homework.title")}</h2>
-        <p className="text-sm text-slate-400 mt-0.5">{t(locale, "homework.createHomework")}</p>
-      </div>
+      <PageHeader
+        title={t(locale, "homework.title")}
+        description={t(locale, "homework.createHomework")}
+      />
 
       <HomeworkManager
         homeworks={homeworks}

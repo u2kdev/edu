@@ -3,37 +3,71 @@
 import { useState } from "react";
 import Link from "next/link";
 import {
-  ArrowLeft,
-  User,
+  Archive,
+  Award,
+  BarChart3,
+  Calendar,
+  Check,
+  ClipboardCheck,
+  Clock,
+  Copy,
+  CreditCard,
+  Download,
+  FileSpreadsheet,
   GraduationCap,
-  Key,
-  Users,
+  Heart,
   History,
+  Key,
+  Laptop,
+  Lock,
   Mail,
   Phone,
-  Calendar,
-  Lock,
-  Unlock,
-  Archive,
-  Send,
-  AlertTriangle,
-  CheckCircle,
-  Clock,
-  Laptop,
-  Heart,
-  QrCode,
-  Check,
-  Copy,
   Plus,
-  CreditCard,
-  ClipboardCheck,
-  Award,
-  FileSpreadsheet,
   Printer,
-  Download,
+  QrCode,
+  Send,
+  Unlock,
+  User,
+  Users,
 } from "lucide-react";
 import { t } from "@/i18n";
+import {
+  Alert,
+  AlertDescription,
+  Badge,
+  type BadgeVariant,
+  Button,
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+  ConfirmDialog,
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+  EntityDetailHeader,
+  type EntityActionItem,
+  FormActions,
+  FormField,
+  Input,
+  StatCard,
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+  Tabs,
+  TabsContent,
+  TabsList,
+  TabsTrigger,
+} from "@/components/ui";
 import { CredentialsModal, type CredentialsData } from "@/components/CredentialsModal";
+import { StudentPerformanceView } from "@/components/students/StudentPerformanceView";
+import type { StudentPerformanceDTO } from "@/lib/dashboard-analytics";
 
 interface SessionItem {
   id: string;
@@ -49,6 +83,8 @@ interface AuditLogItem {
   createdAt: string;
   actorRole: string | null;
   details: Record<string, unknown> | null;
+  summary?: string;
+  reason?: string;
 }
 
 interface ParentItem {
@@ -71,6 +107,8 @@ interface AttendanceItem {
 interface GradeItem {
   id: string;
   value: number;
+  maxValue?: number;
+  scoreText?: string;
   weight: number;
   lessonTitle: string;
   teacherName: string;
@@ -86,6 +124,7 @@ interface PaymentItem {
 }
 
 interface StudentProfileClientProps {
+  student?: unknown;
   membership: {
     id: string;
     role: string;
@@ -106,6 +145,10 @@ interface StudentProfileClientProps {
     groupName: string;
     courseTitle: string;
     teacherName: string;
+    status?: string;
+    paidUntil?: string | null;
+    frozenAt?: string | null;
+    frozenUntil?: string | null;
   }>;
   parents: ParentItem[];
   parentInviteCode?: {
@@ -123,9 +166,20 @@ interface StudentProfileClientProps {
     isShared: boolean;
     reason?: string;
   };
+  statusLabel?: string;
+  backLabel?: string;
+  noGroups?: string;
+  noParents?: string;
+  noPayments?: string;
+  noHistory?: string;
+  confirmedLabel?: string;
   actorRole: string;
   locale: string;
+  performanceData?: StudentPerformanceDTO | null;
 }
+
+const selectClassName =
+  "flex h-9 w-full rounded-md border border-input bg-card px-3 py-1.5 text-sm text-foreground transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-1 focus-visible:ring-offset-background";
 
 export function StudentProfileClient({
   membership: initialMembership,
@@ -141,17 +195,33 @@ export function StudentProfileClient({
   manageability,
   actorRole,
   locale,
+  performanceData,
 }: StudentProfileClientProps) {
   const [activeTab, setActiveTab] = useState<
-    "profile" | "access" | "groups" | "parents" | "attendance" | "grades" | "payments" | "history" | "transcript"
+    | "profile"
+    | "access"
+    | "groups"
+    | "parents"
+    | "attendance"
+    | "grades"
+    | "performance"
+    | "payments"
+    | "history"
+    | "transcript"
   >("profile");
 
   const [membership, setMembership] = useState(initialMembership);
   const [user, setUser] = useState(initialUser);
   const [parents, setParents] = useState(initialParents);
   const [parentCode, setParentCode] = useState(initialCode);
+  const [enrollmentList, setEnrollmentList] = useState(enrollments);
+  const [freezeTargetId, setFreezeTargetId] = useState<string | null>(null);
+  const [freezeUntilDate, setFreezeUntilDate] = useState("");
+  const [freezeReason, setFreezeReason] = useState("");
+  const [freezeLoading, setFreezeLoading] = useState(false);
 
-  // Profile Edit
+  const canFreezeBilling = ["DIRECTOR", "CENTER_ADMIN", "ACCOUNTANT"].includes(actorRole);
+
   const [fullName, setFullName] = useState(user.fullName);
   const [phone, setPhone] = useState(user.phone || "");
   const [email, setEmail] = useState(user.email || "");
@@ -160,30 +230,100 @@ export function StudentProfileClient({
   const [profileSuccess, setProfileSuccess] = useState(false);
   const [profileError, setProfileError] = useState<string | null>(null);
 
-  // Access Actions
   const [actionLoading, setActionLoading] = useState(false);
   const [credentialsModalOpen, setCredentialsModalOpen] = useState(false);
   const [newCredentials, setNewCredentials] = useState<CredentialsData | null>(null);
   const [actionNotice, setActionNotice] = useState<{ type: "success" | "error"; text: string } | null>(null);
 
-  // Reason Modal for Block / Archive
+  const [confirmResetOpen, setConfirmResetOpen] = useState(false);
+  const [confirmRevokeCodeOpen, setConfirmRevokeCodeOpen] = useState(false);
   const [reasonModalOpen, setReasonModalOpen] = useState<"BLOCK" | "UNBLOCK" | "ARCHIVE" | null>(null);
-  const [reasonText, setReasonText] = useState("");
 
-  // Add Parent Modal
   const [addParentOpen, setAddParentOpen] = useState(false);
   const [parentName, setParentName] = useState("");
   const [parentPhone, setParentPhone] = useState("");
   const [parentEmail, setParentEmail] = useState("");
   const [relationship, setRelationship] = useState("MOTHER");
+  const [parentFormError, setParentFormError] = useState<string | null>(null);
   const [parentModalCredentials, setParentModalCredentials] = useState<CredentialsData | null>(null);
 
-  // Copy code feedback
   const [codeCopied, setCodeCopied] = useState(false);
 
-  const canManage = actorRole === "DIRECTOR" || actorRole === "CENTER_ADMIN";
+  const handleFreezeSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!freezeTargetId || !freezeUntilDate) return;
+    setFreezeLoading(true);
+    setActionNotice(null);
+    try {
+      const res = await fetch(`/api/enrollments/${freezeTargetId}/freeze`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          frozenUntil: new Date(`${freezeUntilDate}T23:59:59+05:00`).toISOString(),
+          reason: freezeReason.trim() || "Заморозка абонемента",
+        }),
+      });
+      const data = await res.json();
+      if (res.ok) {
+        setEnrollmentList((prev) =>
+          prev.map((item) =>
+            item.id === freezeTargetId
+              ? {
+                  ...item,
+                  status: "FROZEN",
+                  frozenUntil: data.frozenUntil || freezeUntilDate,
+                  paidUntil: data.paidUntil ?? item.paidUntil,
+                }
+              : item
+          )
+        );
+        setFreezeTargetId(null);
+        setFreezeUntilDate("");
+        setFreezeReason("");
+        setActionNotice({ type: "success", text: "Абонемент заморожен" });
+      } else {
+        setActionNotice({ type: "error", text: data.error || "Ошибка заморозки" });
+      }
+    } catch {
+      setActionNotice({ type: "error", text: "Ошибка сети" });
+    } finally {
+      setFreezeLoading(false);
+    }
+  };
 
-  // Save student profile
+  const handleUnfreeze = async (enrollmentId: string) => {
+    setFreezeLoading(true);
+    setActionNotice(null);
+    try {
+      const res = await fetch(`/api/enrollments/${enrollmentId}/freeze`, {
+        method: "DELETE",
+      });
+      const data = await res.json();
+      if (res.ok) {
+        setEnrollmentList((prev) =>
+          prev.map((item) =>
+            item.id === enrollmentId
+              ? {
+                  ...item,
+                  status: "ACTIVE",
+                  frozenAt: null,
+                  frozenUntil: null,
+                  paidUntil: data.paidUntil ?? item.paidUntil,
+                }
+              : item
+          )
+        );
+        setActionNotice({ type: "success", text: "Абонемент разморожен" });
+      } else {
+        setActionNotice({ type: "error", text: data.error || "Ошибка разморозки" });
+      }
+    } catch {
+      setActionNotice({ type: "error", text: "Ошибка сети" });
+    } finally {
+      setFreezeLoading(false);
+    }
+  };
+
   const handleSaveProfile = async (e: React.FormEvent) => {
     e.preventDefault();
     setSavingProfile(true);
@@ -221,12 +361,8 @@ export function StudentProfileClient({
     }
   };
 
-  // Reset Password Action
   const handleResetPassword = async () => {
-    if (!window.confirm("Сбросить пароль ученика? Все текущие сессии будут завершены.")) {
-      return;
-    }
-
+    setConfirmResetOpen(false);
     setActionLoading(true);
     setActionNotice(null);
 
@@ -247,7 +383,6 @@ export function StudentProfileClient({
     }
   };
 
-  // Send Reset Link
   const handleSendResetLink = async () => {
     setActionLoading(true);
     setActionNotice(null);
@@ -272,22 +407,18 @@ export function StudentProfileClient({
     }
   };
 
-  // Block / Unblock / Archive
-  const handleStatusAction = async () => {
-    if (!reasonModalOpen) return;
-    if (reasonText.trim().length < 5) {
-      alert("Причина обязательна (минимум 5 символов)");
-      return;
-    }
+  const handleStatusAction = async (reason?: string) => {
+    if (!reasonModalOpen || !reason || reason.trim().length < 5) return;
 
     setActionLoading(true);
     setActionNotice(null);
 
     try {
       if (reasonModalOpen === "ARCHIVE") {
-        const res = await fetch(`/api/tenant/users/${membership.id}?reason=${encodeURIComponent(reasonText)}`, {
-          method: "DELETE",
-        });
+        const res = await fetch(
+          `/api/tenant/users/${membership.id}?reason=${encodeURIComponent(reason)}`,
+          { method: "DELETE" }
+        );
         const data = await res.json();
         if (!res.ok) throw new Error(data.error || "Ошибка архивации");
 
@@ -300,7 +431,7 @@ export function StudentProfileClient({
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
             status: newStatus,
-            reason: reasonText,
+            reason,
           }),
         });
         const data = await res.json();
@@ -314,7 +445,6 @@ export function StudentProfileClient({
       }
 
       setReasonModalOpen(null);
-      setReasonText("");
     } catch (err: unknown) {
       setActionNotice({ type: "error", text: err instanceof Error ? err.message : "Неизвестная ошибка" });
     } finally {
@@ -322,9 +452,9 @@ export function StudentProfileClient({
     }
   };
 
-  // Generate / Regenerate Parent Code
   const handleGenerateParentCode = async () => {
     setActionLoading(true);
+    setActionNotice(null);
     try {
       const res = await fetch("/api/invites/parent-link", {
         method: "POST",
@@ -350,12 +480,11 @@ export function StudentProfileClient({
     }
   };
 
-  // Revoke Parent Code
   const handleRevokeParentCode = async () => {
     if (!parentCode) return;
-    if (!window.confirm("Отозвать данный код? Родители больше не смогут использовать его.")) return;
-
+    setConfirmRevokeCodeOpen(false);
     setActionLoading(true);
+    setActionNotice(null);
     try {
       const res = await fetch("/api/invites/parent-link", {
         method: "POST",
@@ -377,11 +506,11 @@ export function StudentProfileClient({
     }
   };
 
-  // Add Parent Directly
   const handleAddParent = async (e: React.FormEvent) => {
     e.preventDefault();
+    setParentFormError(null);
     if (!parentPhone && !parentEmail) {
-      alert("Укажите телефон или email родителя");
+      setParentFormError("Укажите телефон или email родителя");
       return;
     }
 
@@ -407,7 +536,6 @@ export function StudentProfileClient({
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || "Ошибка создания родителя");
 
-      // Also ensure ParentLink is established
       await fetch("/api/invites/parent-link", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -441,7 +569,7 @@ export function StudentProfileClient({
       setParentEmail("");
       setActionNotice({ type: "success", text: "Родитель успешно привязан" });
     } catch (err: unknown) {
-      alert(err instanceof Error ? err.message : "Неизвестная ошибка");
+      setParentFormError(err instanceof Error ? err.message : "Неизвестная ошибка");
     } finally {
       setActionLoading(false);
     }
@@ -453,967 +581,1016 @@ export function StudentProfileClient({
     setTimeout(() => setCodeCopied(false), 2000);
   };
 
+  const canViewPayments = performanceData
+    ? performanceData.canViewPayments
+    : actorRole !== "TEACHER" && actorRole !== "TEACHER_ASSISTANT";
+
+  const statusLabel =
+    membership.status === "ACTIVE"
+      ? "Активен"
+      : membership.status === "BLOCKED"
+      ? "Заблокирован"
+      : "В архиве";
+  const statusVariant: BadgeVariant =
+    membership.status === "ACTIVE"
+      ? "success"
+      : membership.status === "BLOCKED"
+      ? "destructive"
+      : "neutral";
+
+  const menuActions: EntityActionItem[] = [
+    ...(manageability.canManage
+      ? [
+          {
+            id: "reset-password",
+            label: "Сбросить пароль",
+            onSelect: () => setConfirmResetOpen(true),
+          },
+        ]
+      : []),
+    {
+      id: "send-reset-link",
+      label: "Отправить ссылку сброса",
+      onSelect: () => void handleSendResetLink(),
+    },
+    ...(membership.status === "ACTIVE"
+      ? [
+          {
+            id: "block",
+            label: "Заблокировать ученика",
+            destructive: true,
+            onSelect: () => setReasonModalOpen("BLOCK"),
+          },
+        ]
+      : [
+          {
+            id: "unblock",
+            label: "Разблокировать ученика",
+            onSelect: () => setReasonModalOpen("UNBLOCK"),
+          },
+        ]),
+    ...(membership.status !== "ARCHIVED"
+      ? [
+          {
+            id: "archive",
+            label: "Архивировать",
+            destructive: true,
+            onSelect: () => setReasonModalOpen("ARCHIVE"),
+          },
+        ]
+      : []),
+  ];
+
+  const attendancePct =
+    attendances.length > 0
+      ? Math.round(
+          (attendances.filter((a) => a.status === "PRESENT" || a.status === "LATE").length /
+            attendances.length) *
+            100
+        )
+      : 100;
+
+  const avgGrade =
+    grades.length > 0
+      ? (grades.reduce((sum, g) => sum + g.value, 0) / grades.length).toFixed(1)
+      : "—";
+
   return (
     <div className="space-y-6">
-      {/* Back button */}
-      <div>
-        <Link
-          href="/center/students"
-          className="inline-flex items-center gap-2 text-xs font-semibold text-slate-400 hover:text-white transition-colors"
-        >
-          <ArrowLeft className="w-4 h-4" />
-          <span>{t(locale, "common.back")}</span>
-        </Link>
-      </div>
-
-      {/* Header Profile Card */}
-      <div className="glass-panel p-6 rounded-3xl border border-slate-800 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
-        <div className="flex items-center gap-4">
-          <div className="w-14 h-14 rounded-2xl bg-brand-500/10 border border-brand-500/30 flex items-center justify-center text-brand-400">
-            <GraduationCap className="w-7 h-7" />
-          </div>
-          <div>
-            <div className="flex items-center gap-2.5">
-              <h1 className="text-2xl font-bold text-white tracking-tight">{user.fullName}</h1>
-              {manageability.isShared && (
-                <span className="px-2 py-0.5 bg-blue-500/10 border border-blue-500/30 text-blue-400 rounded-full text-[10px] font-semibold">
-                  Общий аккаунт
-                </span>
-              )}
-            </div>
-            <div className="flex flex-wrap items-center gap-4 text-xs text-slate-400 mt-1 font-mono">
-              <span className="flex items-center gap-1.5">
-                <GraduationCap className="w-3.5 h-3.5 text-brand-400" />
-                Ученик
+      <EntityDetailHeader
+        backHref="/center/students"
+        backLabel={t(locale, "common.back")}
+        icon={<GraduationCap className="h-5 w-5" />}
+        title={user.fullName}
+        statusLabel={statusLabel}
+        statusVariant={statusVariant}
+        locale={locale}
+        badges={
+          <>
+            <Badge variant="primary">Ученик</Badge>
+            {manageability.isShared && <Badge variant="info">Общий аккаунт</Badge>}
+          </>
+        }
+        meta={
+          <>
+            {user.email && (
+              <span className="inline-flex items-center gap-1">
+                <Mail className="h-3.5 w-3.5" aria-hidden="true" />
+                <span>{user.email}</span>
               </span>
-              {user.email && (
-                <span className="flex items-center gap-1.5">
-                  <Mail className="w-3.5 h-3.5 text-slate-500" />
-                  {user.email}
-                </span>
-              )}
-              {user.phone && (
-                <span className="flex items-center gap-1.5">
-                  <Phone className="w-3.5 h-3.5 text-slate-500" />
-                  {user.phone}
-                </span>
-              )}
-              <span className="flex items-center gap-1.5">
-                <Calendar className="w-3.5 h-3.5 text-slate-500" />
-                {new Date(membership.joinedAt).toLocaleDateString()}
-              </span>
-            </div>
-          </div>
-        </div>
-
-        <div className="flex items-center gap-3">
-          <div
-            className={`px-3 py-1 rounded-full text-xs font-semibold border ${
-              membership.status === "ACTIVE"
-                ? "bg-emerald-500/10 border-emerald-500/20 text-emerald-400"
-                : membership.status === "BLOCKED"
-                ? "bg-rose-500/10 border-rose-500/20 text-rose-400"
-                : "bg-slate-500/10 border-slate-500/20 text-slate-400"
-            }`}
-          >
-            {membership.status === "ACTIVE"
-              ? "Активен"
-              : membership.status === "BLOCKED"
-              ? "Заблокирован"
-              : "В архиве"}
-          </div>
-        </div>
-      </div>
-
-      {/* Tabs */}
-      <div className="flex border-b border-slate-800 gap-2 overflow-x-auto">
-        <button
-          onClick={() => setActiveTab("profile")}
-          className={`px-4 py-2.5 text-xs font-bold rounded-t-xl transition-colors border-b-2 flex items-center gap-2 whitespace-nowrap ${
-            activeTab === "profile"
-              ? "border-brand-500 text-white bg-slate-800/40"
-              : "border-transparent text-slate-400 hover:text-slate-200"
-          }`}
-        >
-          <User className="w-4 h-4" />
-          <span>Профиль</span>
-        </button>
-        <button
-          onClick={() => setActiveTab("access")}
-          className={`px-4 py-2.5 text-xs font-bold rounded-t-xl transition-colors border-b-2 flex items-center gap-2 whitespace-nowrap ${
-            activeTab === "access"
-              ? "border-brand-500 text-white bg-slate-800/40"
-              : "border-transparent text-slate-400 hover:text-slate-200"
-          }`}
-        >
-          <Key className="w-4 h-4" />
-          <span>Доступ</span>
-        </button>
-        <button
-          onClick={() => setActiveTab("groups")}
-          className={`px-4 py-2.5 text-xs font-bold rounded-t-xl transition-colors border-b-2 flex items-center gap-2 whitespace-nowrap ${
-            activeTab === "groups"
-              ? "border-brand-500 text-white bg-slate-800/40"
-              : "border-transparent text-slate-400 hover:text-slate-200"
-          }`}
-        >
-          <Users className="w-4 h-4" />
-          <span>Группы ({enrollments.length})</span>
-        </button>
-        <button
-          onClick={() => setActiveTab("parents")}
-          className={`px-4 py-2.5 text-xs font-bold rounded-t-xl transition-colors border-b-2 flex items-center gap-2 whitespace-nowrap ${
-            activeTab === "parents"
-              ? "border-brand-500 text-white bg-slate-800/40"
-              : "border-transparent text-slate-400 hover:text-slate-200"
-          }`}
-        >
-          <Heart className="w-4 h-4" />
-          <span>Родители ({parents.length})</span>
-        </button>
-        <button
-          onClick={() => setActiveTab("attendance")}
-          className={`px-4 py-2.5 text-xs font-bold rounded-t-xl transition-colors border-b-2 flex items-center gap-2 whitespace-nowrap ${
-            activeTab === "attendance"
-              ? "border-brand-500 text-white bg-slate-800/40"
-              : "border-transparent text-slate-400 hover:text-slate-200"
-          }`}
-        >
-          <ClipboardCheck className="w-4 h-4" />
-          <span>Посещаемость ({attendances.length})</span>
-        </button>
-        <button
-          onClick={() => setActiveTab("grades")}
-          className={`px-4 py-2.5 text-xs font-bold rounded-t-xl transition-colors border-b-2 flex items-center gap-2 whitespace-nowrap ${
-            activeTab === "grades"
-              ? "border-brand-500 text-white bg-slate-800/40"
-              : "border-transparent text-slate-400 hover:text-slate-200"
-          }`}
-        >
-          <Award className="w-4 h-4" />
-          <span>Оценки ({grades.length})</span>
-        </button>
-        <button
-          onClick={() => setActiveTab("payments")}
-          className={`px-4 py-2.5 text-xs font-bold rounded-t-xl transition-colors border-b-2 flex items-center gap-2 whitespace-nowrap ${
-            activeTab === "payments"
-              ? "border-brand-500 text-white bg-slate-800/40"
-              : "border-transparent text-slate-400 hover:text-slate-200"
-          }`}
-        >
-          <CreditCard className="w-4 h-4" />
-          <span>Платежи ({payments.length})</span>
-        </button>
-        <button
-          onClick={() => setActiveTab("history")}
-          className={`px-4 py-2.5 text-xs font-bold rounded-t-xl transition-colors border-b-2 flex items-center gap-2 whitespace-nowrap ${
-            activeTab === "history"
-              ? "border-brand-500 text-white bg-slate-800/40"
-              : "border-transparent text-slate-400 hover:text-slate-200"
-          }`}
-        >
-          <History className="w-4 h-4" />
-          <span>История ({auditLogs.length})</span>
-        </button>
-        <button
-          onClick={() => setActiveTab("transcript")}
-          className={`px-4 py-2.5 text-xs font-bold rounded-t-xl transition-colors border-b-2 flex items-center gap-2 whitespace-nowrap ${
-            activeTab === "transcript"
-              ? "border-brand-500 text-white bg-slate-800/40"
-              : "border-transparent text-slate-400 hover:text-slate-200"
-          }`}
-        >
-          <FileSpreadsheet className="w-4 h-4" />
-          <span>Табель успеваемости</span>
-        </button>
-      </div>
-
-      {/* Tab 1: Profile */}
-      {activeTab === "profile" && (
-        <div className="glass-panel p-6 rounded-2xl border border-slate-800 space-y-6 max-w-2xl">
-          {manageability.isShared && (
-            <div className="p-4 bg-blue-500/10 border border-blue-500/20 rounded-xl text-xs text-blue-300 flex items-start gap-3">
-              <AlertTriangle className="w-4 h-4 text-blue-400 flex-shrink-0 mt-0.5" />
-              <div>
-                <strong className="block font-semibold">Ученик состоит в нескольких центрах</strong>
-                Смена контактных данных (телефон, email, логин) возможна только самим пользователем.
-              </div>
-            </div>
-          )}
-
-          {profileSuccess && (
-            <div className="p-3 bg-emerald-500/10 border border-emerald-500/20 rounded-xl text-xs text-emerald-400 flex items-center gap-2">
-              <CheckCircle className="w-4 h-4" />
-              <span>Профиль успешно сохранен</span>
-            </div>
-          )}
-
-          {profileError && (
-            <div className="p-3 bg-rose-500/10 border border-rose-500/20 rounded-xl text-xs text-rose-400 flex items-center gap-2">
-              <AlertTriangle className="w-4 h-4" />
-              <span>{profileError}</span>
-            </div>
-          )}
-
-          <form onSubmit={handleSaveProfile} className="space-y-4">
-            <div>
-              <label className="block text-xs font-semibold text-slate-300 mb-1">ФИО ученика</label>
-              <input
-                type="text"
-                value={fullName}
-                onChange={(e) => setFullName(e.target.value)}
-                required
-                className="w-full px-3.5 py-2 bg-slate-900 border border-slate-800 rounded-xl text-xs text-white focus:outline-none focus:border-brand-500"
-              />
-            </div>
-
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-              <div>
-                <label className="block text-xs font-semibold text-slate-300 mb-1">Телефон</label>
-                <input
-                  type="text"
-                  value={phone}
-                  disabled={manageability.isShared}
-                  onChange={(e) => setPhone(e.target.value)}
-                  placeholder="+998901234567"
-                  className="w-full px-3.5 py-2 bg-slate-900 border border-slate-800 rounded-xl text-xs text-white disabled:opacity-50 focus:outline-none focus:border-brand-500"
-                />
-              </div>
-
-              <div>
-                <label className="block text-xs font-semibold text-slate-300 mb-1">Email</label>
-                <input
-                  type="email"
-                  value={email}
-                  disabled={manageability.isShared}
-                  onChange={(e) => setEmail(e.target.value)}
-                  placeholder="student@example.com"
-                  className="w-full px-3.5 py-2 bg-slate-900 border border-slate-800 rounded-xl text-xs text-white disabled:opacity-50 focus:outline-none focus:border-brand-500"
-                />
-              </div>
-            </div>
-
-            <div>
-              <label className="block text-xs font-semibold text-slate-300 mb-1">Логин / Имя пользователя</label>
-              <input
-                type="text"
-                value={username}
-                disabled={manageability.isShared}
-                onChange={(e) => setUsername(e.target.value)}
-                placeholder="username"
-                className="w-full px-3.5 py-2 bg-slate-900 border border-slate-800 rounded-xl text-xs text-white disabled:opacity-50 focus:outline-none focus:border-brand-500"
-              />
-            </div>
-
-            <div className="pt-2">
-              <button
-                type="submit"
-                disabled={savingProfile}
-                className="px-5 py-2.5 bg-brand-600 hover:bg-brand-500 text-white text-xs font-bold rounded-xl shadow-lg transition-colors disabled:opacity-50"
-              >
-                {savingProfile ? "Сохранение..." : "Сохранить изменения"}
-              </button>
-            </div>
-          </form>
-        </div>
-      )}
-
-      {/* Tab 2: Access & Security */}
-      {activeTab === "access" && (
-        <div className="space-y-6 max-w-3xl">
-          {actionNotice && (
-            <div
-              className={`p-3 rounded-xl text-xs flex items-center gap-2 border ${
-                actionNotice.type === "success"
-                  ? "bg-emerald-500/10 border-emerald-500/20 text-emerald-400"
-                  : "bg-rose-500/10 border-rose-500/20 text-rose-400"
-              }`}
-            >
-              {actionNotice.type === "success" ? <CheckCircle className="w-4 h-4" /> : <AlertTriangle className="w-4 h-4" />}
-              <span>{actionNotice.text}</span>
-            </div>
-          )}
-
-          <div className="glass-panel p-6 rounded-2xl border border-slate-800 space-y-4">
-            <h3 className="text-sm font-bold text-white uppercase tracking-wider flex items-center gap-2">
-              <Key className="w-4 h-4 text-brand-400" />
-              <span>Статус учетной записи</span>
-            </h3>
-
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 text-xs">
-              <div className="bg-slate-900/60 p-4 rounded-xl border border-slate-800/80">
-                <span className="text-slate-400 block text-[11px] uppercase tracking-wider">Последний вход</span>
-                <div className="text-sm font-bold text-white mt-1">
-                  {user.lastLoginAt ? (
-                    new Date(user.lastLoginAt).toLocaleString()
-                  ) : (
-                    <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full bg-amber-500/10 text-amber-400 border border-amber-500/20 text-xs">
-                      <Clock className="w-3 h-3" />
-                      Ни разу не входил
-                    </span>
-                  )}
-                </div>
-              </div>
-
-              <div className="bg-slate-900/60 p-4 rounded-xl border border-slate-800/80">
-                <span className="text-slate-400 block text-[11px] uppercase tracking-wider">Тип аккаунта</span>
-                <div className="text-sm font-bold text-white mt-1">
-                  {manageability.isShared ? "Общий аккаунт (несколько центров)" : "Локальный аккаунт центра"}
-                </div>
-              </div>
-            </div>
-
-            {/* Password Operations */}
-            <div className="pt-2 border-t border-slate-800 space-y-3">
-              <div className="text-xs font-semibold text-slate-300">Действия с паролем:</div>
-              <div className="flex flex-wrap gap-3">
-                {manageability.canManage ? (
-                  <button
-                    onClick={handleResetPassword}
-                    disabled={actionLoading}
-                    className="inline-flex items-center gap-2 px-4 py-2 bg-brand-600 hover:bg-brand-500 text-white text-xs font-bold rounded-xl transition-colors disabled:opacity-50"
-                  >
-                    <Key className="w-4 h-4" />
-                    <span>Сбросить пароль (показать новый)</span>
-                  </button>
-                ) : (
-                  <div className="text-xs text-amber-400/90 bg-amber-500/10 border border-amber-500/20 rounded-xl p-3 flex items-start gap-2">
-                    <AlertTriangle className="w-4 h-4 flex-shrink-0 mt-0.5" />
-                    <div>
-                      {manageability.reason}
-                      <div className="mt-1">
-                        Вы можете отправить ученику ссылку для самостоятельного сброса пароля.
-                      </div>
-                    </div>
-                  </div>
-                )}
-
-                <button
-                  onClick={handleSendResetLink}
-                  disabled={actionLoading}
-                  className="inline-flex items-center gap-2 px-4 py-2 bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-semibold rounded-xl border border-slate-700 transition-colors disabled:opacity-50"
-                >
-                  <Send className="w-4 h-4" />
-                  <span>Отправить ссылку сброса (Email/SMS)</span>
-                </button>
-              </div>
-            </div>
-
-            {/* Block / Unblock / Archive */}
-            <div className="pt-4 border-t border-slate-800 space-y-3">
-              <div className="text-xs font-semibold text-slate-300">Статус членства:</div>
-              <div className="flex flex-wrap gap-3">
-                {membership.status === "ACTIVE" ? (
-                  <button
-                    onClick={() => {
-                      setReasonModalOpen("BLOCK");
-                      setReasonText("");
-                    }}
-                    className="inline-flex items-center gap-2 px-4 py-2 bg-rose-500/10 hover:bg-rose-500/20 text-rose-400 text-xs font-bold rounded-xl border border-rose-500/30 transition-colors"
-                  >
-                    <Lock className="w-4 h-4" />
-                    <span>Заблокировать ученика</span>
-                  </button>
-                ) : (
-                  <button
-                    onClick={() => {
-                      setReasonModalOpen("UNBLOCK");
-                      setReasonText("");
-                    }}
-                    className="inline-flex items-center gap-2 px-4 py-2 bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-400 text-xs font-bold rounded-xl border border-emerald-500/30 transition-colors"
-                  >
-                    <Unlock className="w-4 h-4" />
-                    <span>Разблокировать ученика</span>
-                  </button>
-                )}
-
-                {membership.status !== "ARCHIVED" && (
-                  <button
-                    onClick={() => {
-                      setReasonModalOpen("ARCHIVE");
-                      setReasonText("");
-                    }}
-                    className="inline-flex items-center gap-2 px-4 py-2 bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-semibold rounded-xl border border-slate-700 transition-colors"
-                  >
-                    <Archive className="w-4 h-4" />
-                    <span>Архивировать</span>
-                  </button>
-                )}
-              </div>
-            </div>
-          </div>
-
-          {/* Active Sessions */}
-          <div className="glass-panel p-6 rounded-2xl border border-slate-800 space-y-4">
-            <h3 className="text-sm font-bold text-white uppercase tracking-wider flex items-center gap-2">
-              <Laptop className="w-4 h-4 text-brand-400" />
-              <span>Активные сессии ({activeSessions.length})</span>
-            </h3>
-
-            {activeSessions.length === 0 ? (
-              <p className="text-xs text-slate-400">Нет активных сессий</p>
-            ) : (
-              <div className="divide-y divide-slate-800/60">
-                {activeSessions.map((session) => (
-                  <div key={session.id} className="py-2.5 flex items-center justify-between text-xs">
-                    <div>
-                      <div className="font-mono text-slate-300">{session.ipAddress || "Неизвестный IP"}</div>
-                      <div className="text-[11px] text-slate-500 truncate max-w-sm">
-                        {session.userAgent || "Браузер"}
-                      </div>
-                    </div>
-                    <div className="text-right text-[11px] text-slate-400">
-                      <div>Создана: {new Date(session.createdAt).toLocaleDateString()}</div>
-                    </div>
-                  </div>
-                ))}
-              </div>
             )}
-          </div>
-        </div>
+            {user.phone && (
+              <span className="inline-flex items-center gap-1 tabular-nums">
+                <Phone className="h-3.5 w-3.5" aria-hidden="true" />
+                <span>{user.phone}</span>
+              </span>
+            )}
+            <span className="inline-flex items-center gap-1 tabular-nums">
+              <Calendar className="h-3.5 w-3.5" aria-hidden="true" />
+              <span>{new Date(membership.joinedAt).toLocaleDateString()}</span>
+            </span>
+          </>
+        }
+        menuActions={menuActions}
+      />
+
+      {actionNotice && (
+        <Alert variant={actionNotice.type === "success" ? "success" : "destructive"}>
+          <AlertDescription>{actionNotice.text}</AlertDescription>
+        </Alert>
       )}
 
-      {/* Tab 3: Groups */}
-      {activeTab === "groups" && (
-        <div className="glass-panel p-6 rounded-2xl border border-slate-800 space-y-4 max-w-2xl">
-          <h3 className="text-sm font-bold text-white uppercase tracking-wider flex items-center gap-2">
-            <Users className="w-4 h-4 text-brand-400" />
-            <span>Группы и курсы ученика</span>
-          </h3>
-
-          {enrollments.length === 0 ? (
-            <p className="text-xs text-slate-400">Ученик пока не записан ни в одну группу</p>
-          ) : (
-            <div className="divide-y divide-slate-800">
-              {enrollments.map((enr) => (
-                <div key={enr.id} className="py-3 flex items-center justify-between">
-                  <div>
-                    <span className="text-xs font-semibold text-white block">{enr.groupName}</span>
-                    <span className="text-[11px] text-slate-400">
-                      Курс: {enr.courseTitle} | Преподаватель: {enr.teacherName}
-                    </span>
-                  </div>
-                  <Link
-                    href={`/center/groups`}
-                    className="text-xs text-brand-400 hover:text-brand-300 font-medium"
-                  >
-                    К группе
-                  </Link>
-                </div>
-              ))}
-            </div>
+      <Tabs value={activeTab} onValueChange={(v) => setActiveTab(v as typeof activeTab)}>
+        <TabsList>
+          <TabsTrigger value="profile">
+            <User className="h-4 w-4" aria-hidden="true" />
+            <span>Профиль</span>
+          </TabsTrigger>
+          <TabsTrigger value="access">
+            <Key className="h-4 w-4" aria-hidden="true" />
+            <span>Доступ</span>
+          </TabsTrigger>
+          <TabsTrigger value="groups">
+            <Users className="h-4 w-4" aria-hidden="true" />
+            <span>Группы ({enrollments.length})</span>
+          </TabsTrigger>
+          <TabsTrigger value="parents">
+            <Heart className="h-4 w-4" aria-hidden="true" />
+            <span>Родители ({parents.length})</span>
+          </TabsTrigger>
+          <TabsTrigger value="attendance">
+            <ClipboardCheck className="h-4 w-4" aria-hidden="true" />
+            <span>Посещаемость ({attendances.length})</span>
+          </TabsTrigger>
+          <TabsTrigger value="grades">
+            <Award className="h-4 w-4" aria-hidden="true" />
+            <span>Оценки ({grades.length})</span>
+          </TabsTrigger>
+          {performanceData && (
+            <TabsTrigger value="performance">
+              <BarChart3 className="h-4 w-4" aria-hidden="true" />
+              <span>{t(locale, "ui3.performanceTitle")}</span>
+            </TabsTrigger>
           )}
-        </div>
-      )}
+          {canViewPayments && (
+            <TabsTrigger value="payments">
+              <CreditCard className="h-4 w-4" aria-hidden="true" />
+              <span>Платежи ({payments.length})</span>
+            </TabsTrigger>
+          )}
+          <TabsTrigger value="history">
+            <History className="h-4 w-4" aria-hidden="true" />
+            <span>История ({auditLogs.length})</span>
+          </TabsTrigger>
+          <TabsTrigger value="transcript">
+            <FileSpreadsheet className="h-4 w-4" aria-hidden="true" />
+            <span>Табель успеваемости</span>
+          </TabsTrigger>
+        </TabsList>
 
-      {/* Tab 4: Parents & ParentLink */}
-      {activeTab === "parents" && (
-        <div className="space-y-6 max-w-3xl">
-          {/* Parent Code Card */}
-          <div className="glass-panel p-6 rounded-2xl border border-slate-800 space-y-4">
-            <div className="flex items-center justify-between">
-              <h3 className="text-sm font-bold text-white uppercase tracking-wider flex items-center gap-2">
-                <QrCode className="w-4 h-4 text-brand-400" />
-                <span>Личный код родителя для ученика</span>
-              </h3>
-              {parentCode ? (
-                <button
-                  onClick={handleRevokeParentCode}
-                  disabled={actionLoading}
-                  className="text-xs text-rose-400 hover:text-rose-300 font-semibold"
-                >
-                  Отозвать код
-                </button>
-              ) : (
-                <button
-                  onClick={handleGenerateParentCode}
-                  disabled={actionLoading}
-                  className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-brand-600 hover:bg-brand-500 text-white text-xs font-bold rounded-xl transition-colors"
-                >
-                  <Plus className="w-3.5 h-3.5" />
-                  <span>Сгенерировать код</span>
-                </button>
+        <TabsContent value="profile">
+          <Card className="max-w-2xl">
+            <CardContent className="pt-6 space-y-5">
+              {manageability.isShared && (
+                <Alert variant="info">
+                  <AlertDescription>
+                    <strong className="block font-semibold">Ученик состоит в нескольких центрах</strong>
+                    Смена контактных данных (телефон, email, логин) возможна только самим пользователем.
+                  </AlertDescription>
+                </Alert>
               )}
-            </div>
 
-            {parentCode ? (
-              <div className="bg-slate-900/80 border border-brand-500/30 p-4 rounded-xl flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
-                <div>
-                  <span className="text-[11px] uppercase tracking-wider text-slate-400 font-semibold">
-                    Инвайт-код для привязки родителя
-                  </span>
-                  <div className="text-xl font-mono font-bold text-brand-400 tracking-wider mt-1 select-all">
-                    {parentCode.code}
+              {profileSuccess && (
+                <Alert variant="success">
+                  <AlertDescription>Профиль успешно сохранен</AlertDescription>
+                </Alert>
+              )}
+
+              {profileError && (
+                <Alert variant="destructive">
+                  <AlertDescription>{profileError}</AlertDescription>
+                </Alert>
+              )}
+
+              <form onSubmit={handleSaveProfile} className="space-y-4">
+                <FormField label="ФИО ученика" htmlFor="st-fullname" required>
+                  <Input
+                    id="st-fullname"
+                    type="text"
+                    value={fullName}
+                    onChange={(e) => setFullName(e.target.value)}
+                    required
+                  />
+                </FormField>
+
+                <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+                  <FormField label="Телефон" htmlFor="st-phone">
+                    <Input
+                      id="st-phone"
+                      type="text"
+                      value={phone}
+                      disabled={manageability.isShared}
+                      onChange={(e) => setPhone(e.target.value)}
+                      placeholder="+998901234567"
+                    />
+                  </FormField>
+
+                  <FormField label="Email" htmlFor="st-email">
+                    <Input
+                      id="st-email"
+                      type="email"
+                      value={email}
+                      disabled={manageability.isShared}
+                      onChange={(e) => setEmail(e.target.value)}
+                      placeholder="student@example.com"
+                    />
+                  </FormField>
+                </div>
+
+                <FormField label="Логин / Имя пользователя" htmlFor="st-username">
+                  <Input
+                    id="st-username"
+                    type="text"
+                    value={username}
+                    disabled={manageability.isShared}
+                    onChange={(e) => setUsername(e.target.value)}
+                    placeholder="username"
+                  />
+                </FormField>
+
+                <FormActions>
+                  <Button type="submit" variant="primary" disabled={savingProfile} loading={savingProfile}>
+                    {savingProfile ? "Сохранение..." : "Сохранить изменения"}
+                  </Button>
+                </FormActions>
+              </form>
+            </CardContent>
+          </Card>
+        </TabsContent>
+
+        <TabsContent value="access">
+          <div className="max-w-3xl space-y-6">
+            <Card>
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2 text-base">
+                  <Key className="h-4 w-4 text-primary" aria-hidden="true" />
+                  <span>Статус учётной записи</span>
+                </CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-5">
+                <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+                  <div className="rounded-lg border border-border bg-muted p-4">
+                    <span className="text-xs text-muted-foreground">Последний вход</span>
+                    <div className="mt-1 text-sm font-semibold text-foreground">
+                      {user.lastLoginAt ? (
+                        <span className="tabular-nums">{new Date(user.lastLoginAt).toLocaleString()}</span>
+                      ) : (
+                        <Badge variant="warning">
+                          <Clock className="h-3 w-3" aria-hidden="true" />
+                          <span>Ни разу не входил</span>
+                        </Badge>
+                      )}
+                    </div>
                   </div>
-                  <div className="text-[11px] text-slate-400 mt-1">
-                    Родитель вводит этот код при регистрации или в личном кабинете.
-                    {parentCode.expiresAt && ` Действителен до: ${new Date(parentCode.expiresAt).toLocaleDateString()}`}
+
+                  <div className="rounded-lg border border-border bg-muted p-4">
+                    <span className="text-xs text-muted-foreground">Тип аккаунта</span>
+                    <div className="mt-1 text-sm font-semibold text-foreground">
+                      {manageability.isShared ? "Общий аккаунт (несколько центров)" : "Локальный аккаунт центра"}
+                    </div>
                   </div>
                 </div>
 
-                <div className="flex gap-2">
-                  <button
-                    onClick={() => copyCode(parentCode.code)}
-                    className="inline-flex items-center gap-1.5 px-3 py-2 bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-semibold rounded-xl border border-slate-700"
+                <div className="space-y-3 border-t border-border pt-4">
+                  <div className="text-sm font-medium text-foreground">Действия с паролем</div>
+                  <div className="flex flex-wrap gap-3">
+                    {manageability.canManage ? (
+                      <Button
+                        type="button"
+                        variant="primary"
+                        size="sm"
+                        onClick={() => setConfirmResetOpen(true)}
+                        disabled={actionLoading}
+                      >
+                        <Key className="h-4 w-4" aria-hidden="true" />
+                        <span>Сбросить пароль (показать новый)</span>
+                      </Button>
+                    ) : (
+                      <Alert variant="warning">
+                        <AlertDescription>
+                          {manageability.reason}
+                          <div className="mt-1">
+                            Вы можете отправить ученику ссылку для самостоятельного сброса пароля.
+                          </div>
+                        </AlertDescription>
+                      </Alert>
+                    )}
+
+                    <Button
+                      type="button"
+                      variant="secondary"
+                      size="sm"
+                      onClick={handleSendResetLink}
+                      disabled={actionLoading}
+                    >
+                      <Send className="h-4 w-4" aria-hidden="true" />
+                      <span>Отправить ссылку сброса (Email/SMS)</span>
+                    </Button>
+                  </div>
+                </div>
+
+                <div className="space-y-3 border-t border-border pt-4">
+                  <div className="text-sm font-medium text-foreground">Статус членства</div>
+                  <div className="flex flex-wrap gap-3">
+                    {membership.status === "ACTIVE" ? (
+                      <Button
+                        type="button"
+                        variant="destructive"
+                        size="sm"
+                        onClick={() => setReasonModalOpen("BLOCK")}
+                      >
+                        <Lock className="h-4 w-4" aria-hidden="true" />
+                        <span>Заблокировать ученика</span>
+                      </Button>
+                    ) : (
+                      <Button
+                        type="button"
+                        variant="secondary"
+                        size="sm"
+                        onClick={() => setReasonModalOpen("UNBLOCK")}
+                      >
+                        <Unlock className="h-4 w-4" aria-hidden="true" />
+                        <span>Разблокировать ученика</span>
+                      </Button>
+                    )}
+
+                    {membership.status !== "ARCHIVED" && (
+                      <Button
+                        type="button"
+                        variant="secondary"
+                        size="sm"
+                        onClick={() => setReasonModalOpen("ARCHIVE")}
+                      >
+                        <Archive className="h-4 w-4" aria-hidden="true" />
+                        <span>Архивировать</span>
+                      </Button>
+                    )}
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+
+            <Card>
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2 text-base">
+                  <Laptop className="h-4 w-4 text-primary" aria-hidden="true" />
+                  <span>Активные сессии ({activeSessions.length})</span>
+                </CardTitle>
+              </CardHeader>
+              <CardContent>
+                {activeSessions.length === 0 ? (
+                  <p className="text-sm text-muted-foreground">Нет активных сессий</p>
+                ) : (
+                  <div className="divide-y divide-border">
+                    {activeSessions.map((session) => (
+                      <div key={session.id} className="flex items-center justify-between py-2.5 text-sm">
+                        <div className="min-w-0">
+                          <div className="font-mono text-foreground">{session.ipAddress || "Неизвестный IP"}</div>
+                          <div className="truncate max-w-sm text-xs text-muted-foreground">
+                            {session.userAgent || "Браузер"}
+                          </div>
+                        </div>
+                        <div className="text-right text-xs text-muted-foreground tabular-nums">
+                          Создана: {new Date(session.createdAt).toLocaleDateString()}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+          </div>
+        </TabsContent>
+
+        <TabsContent value="groups">
+          <Card className="max-w-2xl">
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2 text-base">
+                <Users className="h-4 w-4 text-primary" aria-hidden="true" />
+                <span>Группы и курсы ученика</span>
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              {enrollmentList.length === 0 ? (
+                <p className="text-sm text-muted-foreground">Ученик пока не записан ни в одну группу</p>
+              ) : (
+                <div className="divide-y divide-border">
+                  {enrollmentList.map((enr) => (
+                    <div key={enr.id} className="flex flex-wrap items-center justify-between gap-2 py-3">
+                      <div className="space-y-1">
+                        <div className="flex flex-wrap items-center gap-2">
+                          <span className="text-sm font-medium text-foreground">{enr.groupName}</span>
+                          {enr.status === "FROZEN" && (
+                            <Badge variant="info">
+                              Заморожен{" "}
+                              {enr.frozenUntil ? `до ${new Date(enr.frozenUntil).toLocaleDateString("ru-RU")}` : ""}
+                            </Badge>
+                          )}
+                          {enr.paidUntil && (
+                            <Badge variant="success">
+                              Оплачено до {new Date(enr.paidUntil).toLocaleDateString("ru-RU")}
+                            </Badge>
+                          )}
+                        </div>
+                        <div className="text-xs text-muted-foreground">
+                          Курс: {enr.courseTitle} | {enr.teacherName}
+                        </div>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        {canFreezeBilling && enr.status === "ACTIVE" && (
+                          <Button
+                            type="button"
+                            variant="secondary"
+                            size="sm"
+                            disabled={freezeLoading}
+                            onClick={() => {
+                              setFreezeTargetId(enr.id);
+                              setFreezeUntilDate("");
+                              setFreezeReason("");
+                            }}
+                          >
+                            Заморозить
+                          </Button>
+                        )}
+                        {canFreezeBilling && enr.status === "FROZEN" && (
+                          <Button
+                            type="button"
+                            variant="secondary"
+                            size="sm"
+                            disabled={freezeLoading}
+                            onClick={() => void handleUnfreeze(enr.id)}
+                          >
+                            Разморозить
+                          </Button>
+                        )}
+                        <Link
+                          href="/center/groups"
+                          className="text-sm font-medium text-primary hover:underline"
+                        >
+                          К группе
+                        </Link>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </CardContent>
+          </Card>
+        </TabsContent>
+
+        <TabsContent value="parents">
+          <div className="max-w-3xl space-y-6">
+            <Card>
+              <CardHeader className="flex flex-row items-center justify-between space-y-0">
+                <CardTitle className="flex items-center gap-2 text-base">
+                  <QrCode className="h-4 w-4 text-primary" aria-hidden="true" />
+                  <span>Личный код родителя для ученика</span>
+                </CardTitle>
+                {parentCode ? (
+                  <Button
+                    type="button"
+                    variant="destructive"
+                    size="sm"
+                    onClick={() => setConfirmRevokeCodeOpen(true)}
+                    disabled={actionLoading}
                   >
-                    {codeCopied ? <Check className="w-3.5 h-3.5 text-emerald-400" /> : <Copy className="w-3.5 h-3.5" />}
-                    <span>{codeCopied ? "Скопировано!" : "Копировать"}</span>
-                  </button>
-                  <button
+                    Отозвать код
+                  </Button>
+                ) : (
+                  <Button
+                    type="button"
+                    variant="primary"
+                    size="sm"
                     onClick={handleGenerateParentCode}
                     disabled={actionLoading}
-                    className="px-3 py-2 bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-semibold rounded-xl border border-slate-700"
                   >
-                    Перегенерировать
-                  </button>
-                </div>
-              </div>
-            ) : (
-              <p className="text-xs text-slate-400">
-                Код еще не сгенерирован. Вы можете создать личный код родителя для ученика или добавить родителя вручную.
-              </p>
-            )}
-          </div>
-
-          {/* Linked Parents List */}
-          <div className="glass-panel p-6 rounded-2xl border border-slate-800 space-y-4">
-            <div className="flex items-center justify-between">
-              <h3 className="text-sm font-bold text-white uppercase tracking-wider flex items-center gap-2">
-                <Heart className="w-4 h-4 text-brand-400" />
-                <span>Привязанные родители ({parents.length})</span>
-              </h3>
-              <button
-                onClick={() => setAddParentOpen(true)}
-                className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-brand-600 hover:bg-brand-500 text-white text-xs font-bold rounded-xl transition-colors"
-              >
-                <Plus className="w-3.5 h-3.5" />
-                <span>Добавить родителя</span>
-              </button>
-            </div>
-
-            {parents.length === 0 ? (
-              <p className="text-xs text-slate-400">У данного ученика пока нет привязанных родителей</p>
-            ) : (
-              <div className="divide-y divide-slate-800">
-                {parents.map((parent) => (
-                  <div key={parent.linkId} className="py-3 flex items-center justify-between">
+                    <Plus className="h-4 w-4" aria-hidden="true" />
+                    <span>Сгенерировать код</span>
+                  </Button>
+                )}
+              </CardHeader>
+              <CardContent>
+                {parentCode ? (
+                  <div className="flex flex-col items-start justify-between gap-4 rounded-lg border border-border bg-muted p-4 sm:flex-row sm:items-center">
                     <div>
-                      <div className="flex items-center gap-2">
-                        <span className="text-xs font-bold text-white">{parent.fullName}</span>
-                        <span className="px-2 py-0.5 bg-brand-500/10 text-brand-400 border border-brand-500/20 rounded-full text-[10px] font-semibold">
-                          {parent.relationship === "MOTHER"
-                            ? "Мама"
-                            : parent.relationship === "FATHER"
-                            ? "Папа"
-                            : "Опекун"}
-                        </span>
+                      <span className="text-xs font-medium text-muted-foreground">
+                        Инвайт-код для привязки родителя
+                      </span>
+                      <div className="mt-1 font-mono text-xl font-semibold tracking-wider text-primary select-all">
+                        {parentCode.code}
                       </div>
-                      <div className="text-[11px] text-slate-400 flex items-center gap-3 mt-1 font-mono">
-                        {parent.phone && <span>{parent.phone}</span>}
-                        {parent.email && <span>{parent.email}</span>}
+                      <div className="mt-1 text-xs text-muted-foreground">
+                        Родитель вводит этот код при регистрации или в личном кабинете.
+                        {parentCode.expiresAt &&
+                          ` Действителен до: ${new Date(parentCode.expiresAt).toLocaleDateString()}`}
                       </div>
                     </div>
-                    <span className="text-xs font-semibold text-emerald-400 bg-emerald-500/10 px-2.5 py-1 rounded-full border border-emerald-500/20">
-                      Подтверждено
-                    </span>
-                  </div>
-                ))}
-              </div>
-            )}
-          </div>
-        </div>
-      )}
 
-      {/* Tab 5: Attendance */}
-      {activeTab === "attendance" && (
-        <div className="glass-panel p-6 rounded-2xl border border-slate-800 space-y-4">
-          <h3 className="text-sm font-bold text-white uppercase tracking-wider flex items-center gap-2">
-            <ClipboardCheck className="w-4 h-4 text-brand-400" />
-            <span>Журнал посещаемости</span>
-          </h3>
-
-          {attendances.length === 0 ? (
-            <p className="text-xs text-slate-400">Нет записей посещаемости</p>
-          ) : (
-            <div className="divide-y divide-slate-800 text-xs">
-              {attendances.map((att) => (
-                <div key={att.id} className="py-2.5 flex items-center justify-between">
-                  <div>
-                    <span className="font-semibold text-white block">{att.lessonTitle}</span>
-                    <span className="text-[11px] text-slate-400">
-                      {new Date(att.markedAt).toLocaleDateString()}
-                    </span>
-                  </div>
-                  <span
-                    className={`px-2.5 py-1 rounded-full text-[11px] font-semibold border ${
-                      att.status === "PRESENT"
-                        ? "bg-emerald-500/10 border-emerald-500/20 text-emerald-400"
-                        : att.status === "ABSENT"
-                        ? "bg-rose-500/10 border-rose-500/20 text-rose-400"
-                        : "bg-amber-500/10 border-amber-500/20 text-amber-400"
-                    }`}
-                  >
-                    {att.status === "PRESENT" ? "Был(а)" : att.status === "ABSENT" ? "Отсутствовал(а)" : "Опоздал(а)"}
-                  </span>
-                </div>
-              ))}
-            </div>
-          )}
-        </div>
-      )}
-
-      {/* Tab 6: Grades */}
-      {activeTab === "grades" && (
-        <div className="glass-panel p-6 rounded-2xl border border-slate-800 space-y-4">
-          <h3 className="text-sm font-bold text-white uppercase tracking-wider flex items-center gap-2">
-            <Award className="w-4 h-4 text-brand-400" />
-            <span>Успеваемость и оценки</span>
-          </h3>
-
-          {grades.length === 0 ? (
-            <p className="text-xs text-slate-400">Оценок пока нет</p>
-          ) : (
-            <div className="divide-y divide-slate-800 text-xs">
-              {grades.map((grade) => (
-                <div key={grade.id} className="py-2.5 flex items-center justify-between">
-                  <div>
-                    <span className="font-semibold text-white block">{grade.lessonTitle}</span>
-                    <span className="text-[11px] text-slate-400">
-                      Преподаватель: {grade.teacherName} | {new Date(grade.createdAt).toLocaleDateString()}
-                    </span>
-                  </div>
-                  <div className="text-right">
-                    <span className="text-sm font-bold text-emerald-400">{grade.value}</span>
-                    <span className="text-[10px] text-slate-500 block">вес: {grade.weight}</span>
-                  </div>
-                </div>
-              ))}
-            </div>
-          )}
-        </div>
-      )}
-
-      {/* Tab 7: Payments */}
-      {activeTab === "payments" && (
-        <div className="glass-panel p-6 rounded-2xl border border-slate-800 space-y-4">
-          <h3 className="text-sm font-bold text-white uppercase tracking-wider flex items-center gap-2">
-            <CreditCard className="w-4 h-4 text-brand-400" />
-            <span>История оплат за обучение</span>
-          </h3>
-
-          {payments.length === 0 ? (
-            <p className="text-xs text-slate-400">Записей об оплатах нет</p>
-          ) : (
-            <div className="divide-y divide-slate-800 text-xs">
-              {payments.map((p) => (
-                <div key={p.id} className="py-2.5 flex items-center justify-between">
-                  <div>
-                    <span className="font-semibold text-white block font-mono">
-                      {p.amount.toLocaleString()} {p.currency}
-                    </span>
-                    <span className="text-[11px] text-slate-400">
-                      Способ: {p.method} | {new Date(p.createdAt).toLocaleDateString()}
-                    </span>
-                  </div>
-                  <span className="px-2.5 py-0.5 rounded-full text-[10px] font-semibold bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">
-                    Оплачено
-                  </span>
-                </div>
-              ))}
-            </div>
-          )}
-        </div>
-      )}
-
-      {/* Tab 8: History / Audit */}
-      {activeTab === "history" && (
-        <div className="glass-panel p-6 rounded-2xl border border-slate-800 space-y-4">
-          <h3 className="text-sm font-bold text-white uppercase tracking-wider flex items-center gap-2">
-            <History className="w-4 h-4 text-brand-400" />
-            <span>Журнал аудита по ученику</span>
-          </h3>
-
-          {auditLogs.length === 0 ? (
-            <p className="text-xs text-slate-400">Записей аудита пока нет</p>
-          ) : (
-            <div className="divide-y divide-slate-800 text-xs">
-              {auditLogs.map((log) => (
-                <div key={log.id} className="py-2.5 flex items-start justify-between gap-4">
-                  <div>
-                    <span className="font-mono font-bold text-brand-300">{log.action}</span>
-                    <div className="text-[11px] text-slate-400 mt-0.5">
-                      {log.details ? JSON.stringify(log.details) : "—"}
+                    <div className="flex flex-wrap gap-2">
+                      <Button
+                        type="button"
+                        variant="secondary"
+                        size="sm"
+                        onClick={() => copyCode(parentCode.code)}
+                      >
+                        {codeCopied ? <Check className="h-4 w-4 text-success" aria-hidden="true" /> : <Copy className="h-4 w-4" aria-hidden="true" />}
+                        <span>{codeCopied ? t(locale, "ui4.copied") : t(locale, "ui4.copyCredentials")}</span>
+                      </Button>
+                      <Button
+                        type="button"
+                        variant="secondary"
+                        size="sm"
+                        onClick={handleGenerateParentCode}
+                        disabled={actionLoading}
+                      >
+                        Перегенерировать
+                      </Button>
                     </div>
                   </div>
-                  <span className="text-[11px] text-slate-500 whitespace-nowrap">
-                    {new Date(log.createdAt).toLocaleString()}
-                  </span>
-                </div>
-              ))}
-            </div>
-          )}
-        </div>
-      )}
+                ) : (
+                  <p className="text-sm text-muted-foreground">
+                    Код ещё не сгенерирован. Вы можете создать личный код родителя для ученика или добавить родителя вручную.
+                  </p>
+                )}
+              </CardContent>
+            </Card>
 
-      {/* Tab 9: Transcript */}
-      {activeTab === "transcript" && (
-        <div className="glass-panel p-6 rounded-2xl border border-slate-800 space-y-6">
-          <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 border-b border-slate-800 pb-4">
-            <div>
-              <h3 className="text-base font-bold text-white flex items-center gap-2">
-                <FileSpreadsheet className="w-5 h-5 text-brand-400" />
-                <span>Табель академической успеваемости</span>
-              </h3>
-              <p className="text-xs text-slate-400 mt-0.5">
-                Сводные показатели посещаемости, оценок и тестов ученика {user.fullName}
-              </p>
-            </div>
-            <div className="flex items-center gap-2">
-              <a
-                href={`/api/tenant/students/${membership.id}/transcript?format=csv`}
-                download
-                className="flex items-center gap-1.5 px-3 py-1.5 bg-slate-800 hover:bg-slate-700 text-slate-200 rounded-xl text-xs font-semibold transition"
-              >
-                <Download className="w-3.5 h-3.5" />
-                Экспорт CSV
-              </a>
-              <button
-                onClick={() => window.print()}
-                className="flex items-center gap-1.5 px-3 py-1.5 bg-brand-600 hover:bg-brand-500 text-white rounded-xl text-xs font-semibold transition"
-              >
-                <Printer className="w-3.5 h-3.5" />
-                Печать
-              </button>
-            </div>
-          </div>
-
-          {/* Quick Metrics */}
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-            <div className="p-4 bg-slate-900/60 rounded-xl border border-slate-800">
-              <span className="text-xs text-slate-400 font-medium">Посещаемость занятий</span>
-              <div className="text-2xl font-bold text-white mt-1">
-                {attendances.length > 0
-                  ? Math.round(
-                      (attendances.filter(
-                        (a) => a.status === "PRESENT" || a.status === "LATE"
-                      ).length /
-                        attendances.length) *
-                        100
-                    )
-                  : 100}
-                %
-              </div>
-              <div className="text-[11px] text-slate-500 mt-1">
-                {attendances.filter((a) => a.status === "PRESENT" || a.status === "LATE").length} из {attendances.length} отметок
-              </div>
-            </div>
-
-            <div className="p-4 bg-slate-900/60 rounded-xl border border-slate-800">
-              <span className="text-xs text-slate-400 font-medium">Средний балл (GPA)</span>
-              <div className="text-2xl font-bold text-emerald-400 mt-1">
-                {grades.length > 0
-                  ? (
-                      grades.reduce((sum, g) => sum + g.value, 0) / grades.length
-                    ).toFixed(1)
-                  : "—"}
-              </div>
-              <div className="text-[11px] text-slate-500 mt-1">
-                На основе {grades.length} выставленных оценок
-              </div>
-            </div>
-
-            <div className="p-4 bg-slate-900/60 rounded-xl border border-slate-800">
-              <span className="text-xs text-slate-400 font-medium">Активных курсов / групп</span>
-              <div className="text-2xl font-bold text-brand-400 mt-1">
-                {enrollments.length}
-              </div>
-              <div className="text-[11px] text-slate-500 mt-1">
-                Текущие учебные потоки
-              </div>
-            </div>
-          </div>
-
-          {/* Courses & Teachers */}
-          <div>
-            <h4 className="text-xs font-bold uppercase tracking-wider text-slate-400 mb-2">
-              Учебные программы и группы
-            </h4>
-            <div className="divide-y divide-slate-800 border border-slate-800 rounded-xl overflow-hidden">
-              {enrollments.map((enr) => (
-                <div key={enr.id} className="p-3 bg-slate-950 flex items-center justify-between text-xs">
-                  <div>
-                    <span className="font-semibold text-white">{enr.courseTitle}</span>
-                    <span className="text-slate-400 ml-2">({enr.groupName})</span>
-                  </div>
-                  <div className="text-slate-400">Преподаватель: {enr.teacherName}</div>
-                </div>
-              ))}
-            </div>
-          </div>
-
-          {/* Recent Grades Table */}
-          <div>
-            <h4 className="text-xs font-bold uppercase tracking-wider text-slate-400 mb-2">
-              Журнал успеваемости
-            </h4>
-            {grades.length === 0 ? (
-              <p className="text-xs text-slate-500">Оценок пока нет</p>
-            ) : (
-              <div className="border border-slate-800 rounded-xl overflow-hidden">
-                <table className="w-full text-xs text-left">
-                  <thead className="bg-slate-900/80 text-slate-400 border-b border-slate-800">
-                    <tr>
-                      <th className="p-3">Дата</th>
-                      <th className="p-3">Урок</th>
-                      <th className="p-3">Преподаватель</th>
-                      <th className="p-3 text-right">Оценка</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-slate-800">
-                    {grades.slice(0, 15).map((g) => (
-                      <tr key={g.id} className="hover:bg-slate-900/40">
-                        <td className="p-3 text-slate-400">
-                          {new Date(g.createdAt).toLocaleDateString()}
-                        </td>
-                        <td className="p-3 text-white font-medium">{g.lessonTitle}</td>
-                        <td className="p-3 text-slate-400">{g.teacherName}</td>
-                        <td className="p-3 text-right">
-                          <span className="px-2 py-0.5 rounded font-bold bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">
-                            {g.value}
-                          </span>
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            )}
-          </div>
-        </div>
-      )}
-
-      {/* Add Parent Modal */}
-      {addParentOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm">
-          <div className="w-full max-w-md bg-slate-900 border border-slate-800 rounded-3xl p-6 space-y-4 shadow-2xl">
-            <h3 className="text-base font-bold text-white">Добавить родителя к ученику</h3>
-            <p className="text-xs text-slate-400">
-              Если аккаунт родителя уже существует в системе, он будет привязан к ученику. Иначе будет создан новый аккаунт с паролем.
-            </p>
-
-            <form onSubmit={handleAddParent} className="space-y-3">
-              <div>
-                <label className="block text-xs font-semibold text-slate-300 mb-1">ФИО родителя</label>
-                <input
-                  type="text"
-                  value={parentName}
-                  onChange={(e) => setParentName(e.target.value)}
-                  placeholder="ФИО"
-                  required
-                  className="w-full px-3.5 py-2 bg-slate-950 border border-slate-800 rounded-xl text-xs text-white focus:outline-none focus:border-brand-500"
-                />
-              </div>
-
-              <div>
-                <label className="block text-xs font-semibold text-slate-300 mb-1">Телефон родителя</label>
-                <input
-                  type="text"
-                  value={parentPhone}
-                  onChange={(e) => setParentPhone(e.target.value)}
-                  placeholder="+998901234567"
-                  className="w-full px-3.5 py-2 bg-slate-950 border border-slate-800 rounded-xl text-xs text-white focus:outline-none focus:border-brand-500"
-                />
-              </div>
-
-              <div>
-                <label className="block text-xs font-semibold text-slate-300 mb-1">Email родителя (необязательно)</label>
-                <input
-                  type="email"
-                  value={parentEmail}
-                  onChange={(e) => setParentEmail(e.target.value)}
-                  placeholder="parent@example.com"
-                  className="w-full px-3.5 py-2 bg-slate-950 border border-slate-800 rounded-xl text-xs text-white focus:outline-none focus:border-brand-500"
-                />
-              </div>
-
-              <div>
-                <label className="block text-xs font-semibold text-slate-300 mb-1">Кем приходится ученику</label>
-                <select
-                  value={relationship}
-                  onChange={(e) => setRelationship(e.target.value)}
-                  className="w-full px-3.5 py-2 bg-slate-950 border border-slate-800 rounded-xl text-xs text-white focus:outline-none focus:border-brand-500"
-                >
-                  <option value="MOTHER">Мама</option>
-                  <option value="FATHER">Папа</option>
-                  <option value="GUARDIAN">Опекун</option>
-                  <option value="OTHER">Другой родственник</option>
-                </select>
-              </div>
-
-              <div className="flex justify-end gap-3 pt-3">
-                <button
+            <Card>
+              <CardHeader className="flex flex-row items-center justify-between space-y-0">
+                <CardTitle className="flex items-center gap-2 text-base">
+                  <Heart className="h-4 w-4 text-primary" aria-hidden="true" />
+                  <span>Привязанные родители ({parents.length})</span>
+                </CardTitle>
+                <Button
                   type="button"
-                  onClick={() => setAddParentOpen(false)}
-                  className="px-4 py-2 bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-semibold rounded-xl"
+                  variant="primary"
+                  size="sm"
+                  onClick={() => {
+                    setParentFormError(null);
+                    setAddParentOpen(true);
+                  }}
                 >
-                  Отмена
-                </button>
-                <button
-                  type="submit"
-                  disabled={actionLoading}
-                  className="px-4 py-2 bg-brand-600 hover:bg-brand-500 text-white text-xs font-bold rounded-xl disabled:opacity-50"
-                >
-                  {actionLoading ? "Создание..." : "Привязать"}
-                </button>
-              </div>
-            </form>
+                  <Plus className="h-4 w-4" aria-hidden="true" />
+                  <span>Добавить родителя</span>
+                </Button>
+              </CardHeader>
+              <CardContent>
+                {parents.length === 0 ? (
+                  <p className="text-sm text-muted-foreground">У данного ученика пока нет привязанных родителей</p>
+                ) : (
+                  <div className="divide-y divide-border">
+                    {parents.map((parent) => (
+                      <div key={parent.linkId} className="flex items-center justify-between gap-3 py-3">
+                        <div>
+                          <div className="flex items-center gap-2">
+                            <span className="text-sm font-medium text-foreground">{parent.fullName}</span>
+                            <Badge variant="primary">
+                              {parent.relationship === "MOTHER"
+                                ? "Мама"
+                                : parent.relationship === "FATHER"
+                                ? "Папа"
+                                : "Опекун"}
+                            </Badge>
+                          </div>
+                          <div className="mt-1 flex flex-wrap items-center gap-3 font-mono text-xs text-muted-foreground">
+                            {parent.phone && <span>{parent.phone}</span>}
+                            {parent.email && <span>{parent.email}</span>}
+                          </div>
+                        </div>
+                        <Badge variant="success">Подтверждено</Badge>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </CardContent>
+            </Card>
           </div>
-        </div>
-      )}
+        </TabsContent>
 
-      {/* Reason Modal */}
-      {reasonModalOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm">
-          <div className="w-full max-w-md bg-slate-900 border border-slate-800 rounded-3xl p-6 space-y-4 shadow-2xl">
-            <h3 className="text-base font-bold text-white">
-              {reasonModalOpen === "BLOCK"
-                ? "Блокировка ученика"
-                : reasonModalOpen === "UNBLOCK"
-                ? "Разблокировка ученика"
-                : "Архивация ученика"}
-            </h3>
-            <p className="text-xs text-slate-400">
-              Укажите причину действия (минимум 5 символов). Она будет записана в журнал аудита.
-            </p>
+        <TabsContent value="attendance">
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2 text-base">
+                <ClipboardCheck className="h-4 w-4 text-primary" aria-hidden="true" />
+                <span>Журнал посещаемости</span>
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              {attendances.length === 0 ? (
+                <p className="text-sm text-muted-foreground">Нет записей посещаемости</p>
+              ) : (
+                <div className="divide-y divide-border text-sm">
+                  {attendances.map((att) => (
+                    <div key={att.id} className="flex items-center justify-between py-2.5">
+                      <div>
+                        <div className="font-medium text-foreground">{att.lessonTitle}</div>
+                        <div className="text-xs text-muted-foreground tabular-nums">
+                          {new Date(att.markedAt).toLocaleDateString()}
+                        </div>
+                      </div>
+                      <Badge
+                        variant={
+                          att.status === "PRESENT"
+                            ? "success"
+                            : att.status === "ABSENT"
+                            ? "destructive"
+                            : "warning"
+                        }
+                      >
+                        {att.status === "PRESENT" ? "Был(а)" : att.status === "ABSENT" ? "Отсутствовал(а)" : "Опоздал(а)"}
+                      </Badge>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </CardContent>
+          </Card>
+        </TabsContent>
 
-            <textarea
-              value={reasonText}
-              onChange={(e) => setReasonText(e.target.value)}
-              placeholder="Причина действия..."
-              rows={3}
-              className="w-full px-3.5 py-2.5 bg-slate-950 border border-slate-800 rounded-xl text-xs text-white focus:outline-none focus:border-brand-500"
+        <TabsContent value="grades">
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2 text-base">
+                <Award className="h-4 w-4 text-primary" aria-hidden="true" />
+                <span>Успеваемость и оценки</span>
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              {grades.length === 0 ? (
+                <p className="text-sm text-muted-foreground">Оценок пока нет</p>
+              ) : (
+                <div className="divide-y divide-border text-sm">
+                  {grades.map((grade) => (
+                    <div key={grade.id} className="flex items-center justify-between py-2.5">
+                      <div>
+                        <div className="font-medium text-foreground">{grade.lessonTitle}</div>
+                        <div className="text-xs text-muted-foreground">
+                          Преподаватель: {grade.teacherName} | {new Date(grade.createdAt).toLocaleDateString()}
+                        </div>
+                      </div>
+                      <div className="text-right">
+                        <span className="text-base font-semibold text-success tabular-nums">{grade.value}</span>
+                        <span className="block text-xs text-muted-foreground">вес: {grade.weight}</span>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </CardContent>
+          </Card>
+        </TabsContent>
+
+        {performanceData && (
+          <TabsContent value="performance">
+            <StudentPerformanceView
+              initialData={performanceData}
+              locale={locale}
+              showPeriodControls
+              paymentsHref="/center/payments"
             />
+          </TabsContent>
+        )}
 
-            <div className="flex justify-end gap-3 pt-2">
-              <button
-                onClick={() => setReasonModalOpen(null)}
-                className="px-4 py-2 bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-semibold rounded-xl"
-              >
+        {canViewPayments && (
+          <TabsContent value="payments">
+            <Card>
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2 text-base">
+                  <CreditCard className="h-4 w-4 text-primary" aria-hidden="true" />
+                  <span>История оплат за обучение</span>
+                </CardTitle>
+              </CardHeader>
+              <CardContent>
+                {payments.length === 0 ? (
+                  <p className="text-sm text-muted-foreground">Записей об оплатах нет</p>
+                ) : (
+                  <div className="divide-y divide-border text-sm">
+                    {payments.map((p) => (
+                      <div key={p.id} className="flex items-center justify-between py-2.5">
+                        <div>
+                          <div className="font-mono font-medium text-foreground tabular-nums">
+                            {p.amount.toLocaleString()} {p.currency}
+                          </div>
+                          <div className="text-xs text-muted-foreground">
+                            Способ: {p.method} | {new Date(p.createdAt).toLocaleDateString()}
+                          </div>
+                        </div>
+                        <Badge variant="success">Оплачено</Badge>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+          </TabsContent>
+        )}
+
+        <TabsContent value="history">
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2 text-base">
+                <History className="h-4 w-4 text-primary" aria-hidden="true" />
+                <span>Журнал аудита по ученику</span>
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              {auditLogs.length === 0 ? (
+                <p className="text-sm text-muted-foreground">Записей аудита пока нет</p>
+              ) : (
+                <div className="divide-y divide-border text-sm">
+                  {auditLogs.map((log) => (
+                    <div key={log.id} className="flex items-start justify-between gap-4 py-2.5">
+                      <div>
+                        <span className="font-mono font-medium text-primary">{log.action}</span>
+                        <div className="mt-0.5 text-xs text-muted-foreground">
+                          {log.details ? JSON.stringify(log.details) : "—"}
+                        </div>
+                      </div>
+                      <span className="whitespace-nowrap text-xs text-muted-foreground tabular-nums">
+                        {new Date(log.createdAt).toLocaleString()}
+                      </span>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </CardContent>
+          </Card>
+        </TabsContent>
+
+        <TabsContent value="transcript">
+          <Card>
+            <CardHeader className="flex flex-col gap-4 border-b border-border sm:flex-row sm:items-center sm:justify-between">
+              <div>
+                <CardTitle className="flex items-center gap-2 text-base">
+                  <FileSpreadsheet className="h-4 w-4 text-primary" aria-hidden="true" />
+                  <span>Табель академической успеваемости</span>
+                </CardTitle>
+                <CardDescription>
+                  Сводные показатели посещаемости, оценок и тестов ученика {user.fullName}
+                </CardDescription>
+              </div>
+              <div className="flex items-center gap-2">
+                <a
+                  href={`/api/tenant/students/${membership.id}/transcript?format=csv`}
+                  download
+                  className="inline-flex h-8 items-center gap-1.5 rounded-md border border-border bg-card px-3 text-[13px] font-medium text-foreground hover:bg-muted transition-colors"
+                >
+                  <Download className="h-3.5 w-3.5" aria-hidden="true" />
+                  <span>Экспорт CSV</span>
+                </a>
+                <Button type="button" variant="primary" size="sm" onClick={() => window.print()}>
+                  <Printer className="h-3.5 w-3.5" aria-hidden="true" />
+                  <span>Печать</span>
+                </Button>
+              </div>
+            </CardHeader>
+
+            <CardContent className="space-y-6 pt-6">
+              <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
+                <StatCard
+                  label="Посещаемость занятий"
+                  value={`${attendancePct}%`}
+                  hint={`${attendances.filter((a) => a.status === "PRESENT" || a.status === "LATE").length} из ${attendances.length} отметок`}
+                />
+                <StatCard
+                  label="Средний балл (GPA)"
+                  value={avgGrade}
+                  hint={`На основе ${grades.length} выставленных оценок`}
+                />
+                <StatCard
+                  label="Активных курсов / групп"
+                  value={enrollments.length}
+                  hint="Текущие учебные потоки"
+                />
+              </div>
+
+              <div className="space-y-2">
+                <h4 className="text-sm font-medium text-foreground">Учебные программы и группы</h4>
+                <div className="divide-y divide-border overflow-hidden rounded-lg border border-border">
+                  {enrollments.map((enr) => (
+                    <div key={enr.id} className="flex items-center justify-between bg-muted px-3 py-2.5 text-sm">
+                      <div>
+                        <span className="font-medium text-foreground">{enr.courseTitle}</span>
+                        <span className="ml-2 text-muted-foreground">({enr.groupName})</span>
+                      </div>
+                      <div className="text-xs text-muted-foreground">Преподаватель: {enr.teacherName}</div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              <div className="space-y-2">
+                <h4 className="text-sm font-medium text-foreground">Журнал успеваемости</h4>
+                {grades.length === 0 ? (
+                  <p className="text-sm text-muted-foreground">Оценок пока нет</p>
+                ) : (
+                  <div className="overflow-hidden rounded-lg border border-border">
+                    <Table>
+                      <TableHeader className="bg-muted">
+                        <TableRow>
+                          <TableHead>Дата</TableHead>
+                          <TableHead>Урок</TableHead>
+                          <TableHead>Преподаватель</TableHead>
+                          <TableHead className="text-right">Оценка</TableHead>
+                        </TableRow>
+                      </TableHeader>
+                      <TableBody>
+                        {grades.slice(0, 15).map((g) => (
+                          <TableRow key={g.id}>
+                            <TableCell className="text-muted-foreground tabular-nums">
+                              {new Date(g.createdAt).toLocaleDateString()}
+                            </TableCell>
+                            <TableCell className="font-medium text-foreground">{g.lessonTitle}</TableCell>
+                            <TableCell className="text-muted-foreground">{g.teacherName}</TableCell>
+                            <TableCell className="text-right">
+                              <Badge variant="success">{g.value}</Badge>
+                            </TableCell>
+                          </TableRow>
+                        ))}
+                      </TableBody>
+                    </Table>
+                  </div>
+                )}
+              </div>
+            </CardContent>
+          </Card>
+        </TabsContent>
+      </Tabs>
+
+      <Dialog open={Boolean(freezeTargetId)} onOpenChange={(next) => !next && setFreezeTargetId(null)}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle>Заморозка абонемента</DialogTitle>
+            <DialogDescription>Укажите дату окончания заморозки и причину.</DialogDescription>
+          </DialogHeader>
+          <form onSubmit={(e) => void handleFreezeSubmit(e)} className="space-y-4">
+            <FormField label="Заморозить до" htmlFor="freeze-until" required>
+              <Input
+                id="freeze-until"
+                type="date"
+                required
+                value={freezeUntilDate}
+                onChange={(e) => setFreezeUntilDate(e.target.value)}
+              />
+            </FormField>
+            <FormField label="Причина" htmlFor="freeze-reason" required>
+              <Input
+                id="freeze-reason"
+                type="text"
+                required
+                value={freezeReason}
+                onChange={(e) => setFreezeReason(e.target.value)}
+                placeholder="Причина (отпуск, болезнь...)"
+              />
+            </FormField>
+            <FormActions>
+              <Button type="button" variant="secondary" onClick={() => setFreezeTargetId(null)}>
                 Отмена
-              </button>
-              <button
-                onClick={handleStatusAction}
-                disabled={actionLoading || reasonText.trim().length < 5}
-                className="px-4 py-2 bg-brand-600 hover:bg-brand-500 text-white text-xs font-bold rounded-xl disabled:opacity-50"
-              >
-                {actionLoading ? "Выполнение..." : "Подтвердить"}
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
+              </Button>
+              <Button type="submit" variant="primary" disabled={freezeLoading} loading={freezeLoading}>
+                Подтвердить заморозку
+              </Button>
+            </FormActions>
+          </form>
+        </DialogContent>
+      </Dialog>
 
-      {/* Single-display Credentials Modals */}
+      <Dialog
+        open={addParentOpen}
+        onOpenChange={(next) => {
+          setAddParentOpen(next);
+          if (!next) setParentFormError(null);
+        }}
+      >
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle>Добавить родителя к ученику</DialogTitle>
+            <DialogDescription>
+              Если аккаунт родителя уже существует в системе, он будет привязан к ученику. Иначе будет создан новый аккаунт с паролем.
+            </DialogDescription>
+          </DialogHeader>
+
+          <form onSubmit={handleAddParent} className="space-y-4">
+            {parentFormError && (
+              <Alert variant="destructive">
+                <AlertDescription>{parentFormError}</AlertDescription>
+              </Alert>
+            )}
+
+            <FormField label="ФИО родителя" htmlFor="add-parent-name" required>
+              <Input
+                id="add-parent-name"
+                type="text"
+                value={parentName}
+                onChange={(e) => setParentName(e.target.value)}
+                placeholder="ФИО"
+                required
+              />
+            </FormField>
+
+            <FormField label="Телефон родителя" htmlFor="add-parent-phone">
+              <Input
+                id="add-parent-phone"
+                type="text"
+                value={parentPhone}
+                onChange={(e) => setParentPhone(e.target.value)}
+                placeholder="+998901234567"
+              />
+            </FormField>
+
+            <FormField label="Email родителя (необязательно)" htmlFor="add-parent-email">
+              <Input
+                id="add-parent-email"
+                type="email"
+                value={parentEmail}
+                onChange={(e) => setParentEmail(e.target.value)}
+                placeholder="parent@example.com"
+              />
+            </FormField>
+
+            <FormField label="Кем приходится ученику" htmlFor="add-parent-rel">
+              <select
+                id="add-parent-rel"
+                value={relationship}
+                onChange={(e) => setRelationship(e.target.value)}
+                className={selectClassName}
+              >
+                <option value="MOTHER">Мама</option>
+                <option value="FATHER">Папа</option>
+                <option value="GUARDIAN">Опекун</option>
+                <option value="OTHER">Другой родственник</option>
+              </select>
+            </FormField>
+
+            <FormActions>
+              <Button type="button" variant="secondary" onClick={() => setAddParentOpen(false)}>
+                Отмена
+              </Button>
+              <Button type="submit" variant="primary" disabled={actionLoading} loading={actionLoading}>
+                {actionLoading ? "Создание..." : "Привязать"}
+              </Button>
+            </FormActions>
+          </form>
+        </DialogContent>
+      </Dialog>
+
+      <ConfirmDialog
+        open={confirmResetOpen}
+        onOpenChange={setConfirmResetOpen}
+        title="Сбросить пароль ученика"
+        description="Все текущие сессии ученика будут завершены. Новый пароль будет показан один раз."
+        confirmLabel="Сбросить пароль"
+        variant="destructive"
+        loading={actionLoading}
+        locale={locale}
+        onConfirm={handleResetPassword}
+      />
+
+      <ConfirmDialog
+        open={confirmRevokeCodeOpen}
+        onOpenChange={setConfirmRevokeCodeOpen}
+        title="Отозвать код родителя"
+        description="Родители больше не смогут использовать этот инвайт-код."
+        confirmLabel="Отозвать"
+        variant="destructive"
+        loading={actionLoading}
+        locale={locale}
+        onConfirm={handleRevokeParentCode}
+      />
+
+      <ConfirmDialog
+        open={Boolean(reasonModalOpen)}
+        onOpenChange={(next) => !next && setReasonModalOpen(null)}
+        title={
+          reasonModalOpen === "BLOCK"
+            ? "Блокировка ученика"
+            : reasonModalOpen === "UNBLOCK"
+            ? "Разблокировка ученика"
+            : "Архивация ученика"
+        }
+        description="Укажите причину действия (минимум 5 символов). Она будет записана в журнал аудита."
+        reasonLabel="Причина"
+        reasonPlaceholder="Причина действия..."
+        reasonRequired
+        reasonMinLength={5}
+        reasonMultiline
+        confirmLabel="Подтвердить"
+        variant={reasonModalOpen === "UNBLOCK" ? "primary" : "destructive"}
+        loading={actionLoading}
+        locale={locale}
+        onConfirm={handleStatusAction}
+      />
+
       {newCredentials && (
         <CredentialsModal
           isOpen={credentialsModalOpen}

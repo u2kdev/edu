@@ -5,6 +5,7 @@ import { db } from "@/lib/db";
 import { getAuthSession } from "@/lib/auth";
 import { hasPermission } from "@/lib/permissions";
 import type { Prisma, PlatformRole, MembershipRole } from "@prisma/client";
+import { generateCsv } from "@/lib/csv";
 
 export async function GET(req: Request) {
   try {
@@ -109,12 +110,6 @@ export async function GET(req: Request) {
       "Последний вход",
     ];
 
-    const escapeCsv = (str: string | null | undefined) => {
-      if (!str) return '""';
-      const escaped = str.replace(/"/g, '""');
-      return `"${escaped}"`;
-    };
-
     const rows = users.map((u) => {
       let statusStr = "Активен";
       if (u.deletedAt) statusStr = "Удален";
@@ -125,21 +120,20 @@ export async function GET(req: Request) {
         .join("; ");
 
       return [
-        escapeCsv(u.id),
-        escapeCsv(u.fullName),
-        escapeCsv(u.email),
-        escapeCsv(u.phone || "-"),
-        escapeCsv(u.username || "-"),
-        escapeCsv(u.platformRole),
-        escapeCsv(membershipsStr || "-"),
-        escapeCsv(statusStr),
-        escapeCsv(u.createdAt.toISOString().slice(0, 10)),
-        escapeCsv(u.lastLoginAt ? u.lastLoginAt.toISOString().slice(0, 19).replace("T", " ") : "-"),
-      ].join(",");
+        u.id,
+        u.fullName,
+        u.email,
+        u.phone || "-",
+        u.username || "-",
+        u.platformRole,
+        membershipsStr || "-",
+        statusStr,
+        u.createdAt.toISOString().slice(0, 10),
+        u.lastLoginAt ? u.lastLoginAt.toISOString().slice(0, 19).replace("T", " ") : "-",
+      ];
     });
 
-    // UTF-8 BOM for Microsoft Excel compatibility
-    const csvContent = "\uFEFF" + [headers.join(","), ...rows].join("\r\n");
+    const csvContent = generateCsv(headers, rows);
 
     return new Response(csvContent, {
       status: 200,

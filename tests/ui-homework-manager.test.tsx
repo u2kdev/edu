@@ -228,9 +228,9 @@ const existingSubmission: HomeworkItem[] = [
   }),
 ];
 
-/** The card wrapper `glass-panel` gives every homework. */
+/** The card wrapper given to every homework item. */
 function cardOf(title: string): HTMLElement {
-  return screen.getByRole("heading", { level: 3, name: title }).closest(".glass-panel") as HTMLElement;
+  return screen.getByRole("heading", { level: 3, name: title, hidden: true }).closest("[data-hw-card]") as HTMLElement;
 }
 
 function iconCount(container: HTMLElement, cls: string): number {
@@ -245,7 +245,7 @@ function openGrade(title: string) {
   fireEvent.click(within(cardOf(title)).getByRole("button", { name: "Оценить задание" }));
 }
 
-const formOf = (container: HTMLElement) => container.querySelector("form") as HTMLFormElement;
+const formOf = (_container?: HTMLElement) => document.querySelector("form") as HTMLFormElement;
 
 describe("HomeworkManager (UI)", () => {
   beforeEach(() => {
@@ -376,7 +376,7 @@ describe("HomeworkManager (UI)", () => {
     render(<HomeworkManager homeworks={[]} userRole="STUDENT" userMembershipId="me-1" locale="ru" />);
 
     expect(screen.getByText("Нет данных")).toBeTruthy();
-    expect(screen.queryByRole("heading", { level: 3 })).toBeNull();
+    expect(document.querySelectorAll("[data-hw-card]")).toHaveLength(0);
   });
 
   it("renders the empty state in uz-Latn", () => {
@@ -405,8 +405,8 @@ describe("HomeworkManager (UI)", () => {
     expect(headingCount()).toBe(6);
 
     fireEvent.click(screen.getByRole("button", { name: "Принято" }));
-    expect(screen.getByRole("button", { name: "Принято" }).className).toContain("bg-brand-500");
-    expect(screen.getByRole("button", { name: "Все" }).className).not.toContain("bg-brand-500");
+    expect(screen.getByRole("button", { name: "Принято" }).className).toContain("bg-primary");
+    expect(screen.getByRole("button", { name: "Все" }).className).not.toContain("bg-primary");
     expect(headingCount()).toBe(1);
     expect(screen.getByRole("heading", { level: 3 }).textContent).toBe("ДЗ Принято");
 
@@ -455,7 +455,7 @@ describe("HomeworkManager (UI)", () => {
     render(<HomeworkManager homeworks={acceptedOnly} userRole="DIRECTOR" locale="ru" />);
 
     fireEvent.click(screen.getByRole("button", { name: "Просрочено" }));
-    expect(screen.queryAllByRole("heading", { level: 3 })).toHaveLength(0);
+    expect(document.querySelectorAll("[data-hw-card]")).toHaveLength(0);
     expect(screen.getByText("Нет данных")).toBeTruthy();
   });
 
@@ -486,7 +486,7 @@ describe("HomeworkManager (UI)", () => {
   it("opens the submit modal prefilled with the existing solution and closes it on cancel without a request", () => {
     const { calls } = installFetchMock([]);
 
-    const { container } = render(
+    render(
       <HomeworkManager
         homeworks={existingSubmission}
         userRole="STUDENT"
@@ -497,12 +497,12 @@ describe("HomeworkManager (UI)", () => {
 
     openSubmit("ДЗ Уже сдано");
 
-    const textarea = container.querySelector("textarea") as HTMLTextAreaElement;
+    const textarea = document.querySelector("textarea") as HTMLTextAreaElement;
     expect(textarea.value).toBe("Старый ответ");
 
     fireEvent.click(screen.getByRole("button", { name: "Отмена" }));
 
-    expect(container.querySelector("form")).toBeNull();
+    expect(document.querySelector("form")).toBeNull();
     expect(calls).toHaveLength(0);
   });
 
@@ -521,7 +521,7 @@ describe("HomeworkManager (UI)", () => {
     );
 
     fireEvent.click(within(cardOf("ДЗ Для сдачи")).getByRole("button", { name: /Сдать задание/ }));
-    fireEvent.change(container.querySelector("textarea")!, { target: { value: "Решено" } });
+    fireEvent.change(document.querySelector("textarea")!, { target: { value: "Решено" } });
     fireEvent.submit(formOf(container));
 
     expect(await screen.findByText("Задание успешно отправлено")).toBeTruthy();
@@ -559,7 +559,7 @@ describe("HomeworkManager (UI)", () => {
     );
 
     openSubmit("ДЗ Для сдачи");
-    fireEvent.change(container.querySelector("textarea")!, { target: { value: "Ссылка" } });
+    fireEvent.change(document.querySelector("textarea")!, { target: { value: "Ссылка" } });
     fireEvent.change(screen.getByPlaceholderText("Название (например, Репозиторий)"), {
       target: { value: "Репозиторий" },
     });
@@ -592,7 +592,7 @@ describe("HomeworkManager (UI)", () => {
     );
 
     openSubmit("ДЗ Для сдачи");
-    fireEvent.change(container.querySelector("textarea")!, { target: { value: "Без названия" } });
+    fireEvent.change(document.querySelector("textarea")!, { target: { value: "Без названия" } });
     fireEvent.change(screen.getByPlaceholderText("https://..."), {
       target: { value: "https://figma.com/file" },
     });
@@ -618,12 +618,12 @@ describe("HomeworkManager (UI)", () => {
     );
 
     openSubmit("ДЗ Для сдачи");
-    fireEvent.change(container.querySelector("textarea")!, { target: { value: "x" } });
+    fireEvent.change(document.querySelector("textarea")!, { target: { value: "x" } });
     fireEvent.submit(formOf(container));
 
     expect(await screen.findByText("Нельзя сдать задание")).toBeTruthy();
     expect(screen.queryByText("Задание успешно отправлено")).toBeNull();
-    expect(container.querySelector("form")).toBeTruthy();
+    expect(document.querySelector("form")).toBeTruthy();
   });
 
   it('uses the "Failed to submit" fallback when the error body has no message', async () => {
@@ -641,7 +641,7 @@ describe("HomeworkManager (UI)", () => {
     );
 
     openSubmit("ДЗ Для сдачи");
-    fireEvent.change(container.querySelector("textarea")!, { target: { value: "x" } });
+    fireEvent.change(document.querySelector("textarea")!, { target: { value: "x" } });
     fireEvent.submit(formOf(container));
 
     expect(await screen.findByText("Failed to submit")).toBeTruthy();
@@ -660,7 +660,7 @@ describe("HomeworkManager (UI)", () => {
     );
 
     openSubmit("ДЗ Для сдачи");
-    fireEvent.change(container.querySelector("textarea")!, { target: { value: "x" } });
+    fireEvent.change(document.querySelector("textarea")!, { target: { value: "x" } });
     fireEvent.submit(formOf(container));
 
     expect(await screen.findByText("Network error")).toBeTruthy();
@@ -679,13 +679,13 @@ describe("HomeworkManager (UI)", () => {
 
     expect(screen.getByText("Оценить задание — Ученик Один")).toBeTruthy();
     // No existing grade -> defaults to 100; status defaults to ACCEPTED.
-    const numberInput = container.querySelector('input[type="number"]') as HTMLInputElement;
-    const select = container.querySelector("select") as HTMLSelectElement;
+    const numberInput = document.querySelector('input[type="number"]') as HTMLInputElement;
+    const select = document.querySelector("select") as HTMLSelectElement;
     expect(numberInput.value).toBe("100");
     expect(select.value).toBe("ACCEPTED");
 
     fireEvent.change(numberInput, { target: { value: "95" } });
-    fireEvent.change(container.querySelector("textarea")!, { target: { value: "Хорошо" } });
+    fireEvent.change(document.querySelector("textarea")!, { target: { value: "Хорошо" } });
     fireEvent.submit(formOf(container));
 
     await waitFor(() =>
@@ -718,11 +718,11 @@ describe("HomeworkManager (UI)", () => {
 
     openGrade("ДЗ Оценка Доработка");
 
-    const numberInput = container.querySelector('input[type="number"]') as HTMLInputElement;
-    const select = container.querySelector("select") as HTMLSelectElement;
+    const numberInput = document.querySelector('input[type="number"]') as HTMLInputElement;
+    const select = document.querySelector("select") as HTMLSelectElement;
     expect(numberInput.value).toBe("70");
     expect(select.value).toBe("REVISION_REQUESTED");
-    expect((container.querySelector("textarea") as HTMLTextAreaElement).value).toBe("Есть замечания");
+    expect((document.querySelector("textarea") as HTMLTextAreaElement).value).toBe("Есть замечания");
 
     fireEvent.submit(formOf(container));
 
@@ -747,7 +747,7 @@ describe("HomeworkManager (UI)", () => {
     );
 
     openGrade("ДЗ Оценка");
-    fireEvent.change(container.querySelector("select")!, { target: { value: "REVISION_REQUESTED" } });
+    fireEvent.change(document.querySelector("select")!, { target: { value: "REVISION_REQUESTED" } });
     fireEvent.submit(formOf(container));
 
     await waitFor(() => expect(calls).toHaveLength(1));

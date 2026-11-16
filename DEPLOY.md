@@ -66,70 +66,82 @@ npm start
 Платформа использует cron-эндпоинты, защищенные заголовком авторизации `Authorization: Bearer <CRON_SECRET>`:
 
 - `POST /api/cron/email-outbox` — отправка писем из очереди Outbox (каждые 5 минут).
-- `POST /api/cron/cleanup` — очистка устаревших сессий и лимитов (раз в сутки).
+- `POST /api/cron/click-reconcile` — сверка зависших платежных намерений Click и истечение просроченных инвойсов (каждые 15 минут).
+- `POST /api/cron/subscriptions` — проверка сроков тарифов центров и блокировка при просрочке (раз в сутки в 03:00 UTC).
+- `POST /api/cron/payment-reminders` — ежечасные напоминания об оплате, рассылки по расписанию и досылка уведомлений после тихих часов (`0 * * * *`).
+- `POST /api/cron/cleanup` — очистка устаревших сессий и лимитов (раз в сутки в 04:00 UTC).
 
 ### Вариант A: Vercel Pro
-В `vercel.json` настроен вызов каждые 5 минут (`*/5 * * * *`). Секрет `CRON_SECRET` устанавливается в переменных окружения Vercel.
+В `vercel.json` настроены все cron-эндпоинты (`/api/cron/email-outbox`, `/api/cron/click-reconcile`, `/api/cron/payment-reminders`, `/api/cron/subscriptions`, `/api/cron/cleanup`). Секрет `CRON_SECRET` устанавливается в переменных окружения Vercel.
 
 ### Вариант B: Внешний планировщик (Vercel Hobby / Render / Dokku / VPS)
-На бесплатном тарифе Vercel Hobby разрешены только суточные cron-задачи. Для отправки очереди писем каждые 5 минут настройте внешний планировщик (например, cron-job.org, Cloudflare Worker, Upstash QStash, GitHub Actions или системный crontab):
+На бесплатном тарифе Vercel Hobby разрешены только суточные cron-задачи. Для частых задач (очередь писем, напоминания об оплате и сверка Click) настройте внешний планировщик (например, cron-job.org, Cloudflare Worker, Upstash QStash, GitHub Actions или системный crontab):
 
 ```bash
-# Пример вызова через curl каждые 5 минут:
+# Пример вызова через curl:
 */5 * * * * curl -X POST https://your-domain.com/api/cron/email-outbox -H "Authorization: Bearer $CRON_SECRET"
+*/15 * * * * curl -X POST https://your-domain.com/api/cron/click-reconcile -H "Authorization: Bearer $CRON_SECRET"
+0 * * * * curl -X POST https://your-domain.com/api/cron/payment-reminders -H "Authorization: Bearer $CRON_SECRET"
+0 3 * * * curl -X POST https://your-domain.com/api/cron/subscriptions -H "Authorization: Bearer $CRON_SECRET"
 0 4 * * * curl -X POST https://your-domain.com/api/cron/cleanup -H "Authorization: Bearer $CRON_SECRET"
 ```
 
 ---
 
-## 5. Резервное копирование базы данных (pg_dump по расписанию)
+## 5. Резервное копирование базы данных (зашифрованный pg_dump по расписанию)
 
-Для обеспечения непрерывности бизнеса и безопасности данных бэкап PostgreSQL выполняется на уровне инфраструктуры/СУБД через утилиту `pg_dump` по расписанию.
+Для обеспечения непрерывности бизнеса и безопасности данных бэкап PostgreSQL выполняется через утилиту `pg_dump` со сжатием и шифрованием по расписанию.
 
 ### Скрипт автоматического резервного копирования (`scripts/backup-db.sh`):
 
+Скрипт шифрует дамп алгоритмом **AES-256-CBC с PBKDF2 (100 000 итераций)** с использованием переменной `BACKUP_ENCRYPTION_KEY`, гарантируя нулевую утечку секретов в `ps aux`:
+
 ```bash
 #!/bin/bash
-set -e
+set -euo pipefail
 
-# Конфигурация
-BACKUP_DIR="/var/backups/postgres/edarschi"
+BACKUP_DIR="${BACKUP_DIR:-/var/backups/postgres/edarschi}"
 TIMESTAMP=$(date +"%Y%m%d_%H%M%S")
-BACKUP_FILE="${BACKUP_DIR}/edarschi_${TIMESTAMP}.sql.gz"
-RETENTION_DAYS=30
+RETENTION_DAYS="${RETENTION_DAYS:-30}"
+DB_URL="${DIRECT_URL:-${DATABASE_URL:-}}"
+BACKUP_FILE="${BACKUP_DIR}/edarschi_${TIMESTAMP}.sql.gz.enc"
+
+if [ -z "${BACKUP_ENCRYPTION_KEY:-}" ]; then
+  echo "ERROR: BACKUP_ENCRYPTION_KEY must be set!" >&2
+  exit 1
+fi
 
 mkdir -p "${BACKUP_DIR}"
+chmod 700 "${BACKUP_DIR}"
 
-# Создание сжатого дампа
-echo "[$(date)] Starting database backup..."
-pg_dump "${DIRECT_URL:-$DATABASE_URL}" --clean --if-exists --no-owner --no-privileges | gzip > "${BACKUP_FILE}"
+pg_dump "${DB_URL}" --clean --if-exists --no-owner --no-privileges \
+  | gzip -9 \
+  | openssl enc -aes-256-cbc -pbkdf2 -iter 100000 -pass env:BACKUP_ENCRYPTION_KEY -out "${BACKUP_FILE}"
 
-# Проверка целостности созданного файла
 if [ -s "${BACKUP_FILE}" ]; then
-  echo "[$(date)] Backup completed successfully: ${BACKUP_FILE} ($(du -h "${BACKUP_FILE}" | cut -f1))"
+  chmod 600 "${BACKUP_FILE}"
+  echo "Backup successful: ${BACKUP_FILE}"
 else
-  echo "[$(date)] ERROR: Backup file is empty!" >&2
+  echo "ERROR: Backup file is empty!" >&2
+  rm -f "${BACKUP_FILE}"
   exit 1
 fi
 
 # Ротация старых копий (хранение 30 дней)
-echo "[$(date)] Cleaning backups older than ${RETENTION_DAYS} days..."
-find "${BACKUP_DIR}" -name "edarschi_*.sql.gz" -type f -mtime +${RETENTION_DAYS} -delete
-
-# (Опционально) Отправка в S3 / Cloudflare R2:
-# aws s3 cp "${BACKUP_FILE}" "s3://my-edarschi-backups/daily/"
+find "${BACKUP_DIR}" -name "edarschi_*.sql.gz.enc" -type f -mtime +"${RETENTION_DAYS}" -delete
 ```
 
 ### Настройка в crontab сервера (ежедневно в 03:00 ночи):
 
 ```bash
 # Запуск ежедневно в 03:00 ночи по времени Ташкента (UTC+5)
-0 3 * * * /bin/bash /opt/edarschi/scripts/backup-db.sh >> /var/log/db_backup.log 2>&1
+0 3 * * * BACKUP_ENCRYPTION_KEY="<your-secret>" /bin/bash /opt/edarschi/scripts/backup-db.sh >> /var/log/db_backup.log 2>&1
 ```
 
 ### Восстановление из резервной копии:
 
 ```bash
-# Распаковка и накат дампа:
-gunzip -c /var/backups/postgres/edarschi/edarschi_20261111_030000.sql.gz | psql "$DIRECT_URL"
+# Расшифровка, распаковка и накат дампа:
+export BACKUP_ENCRYPTION_KEY="<your-secret>"
+openssl enc -d -aes-256-cbc -pbkdf2 -iter 100000 -pass env:BACKUP_ENCRYPTION_KEY -in /var/backups/postgres/edarschi/edarschi_20261111_030000.sql.gz.enc | gunzip | psql "$DIRECT_URL"
 ```

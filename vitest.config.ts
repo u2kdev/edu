@@ -16,9 +16,17 @@ export default defineConfig({
     alias: {
       "@": path.resolve(__dirname, "./src"),
     },
+    exclude: [
+      "**/node_modules/**",
+      "**/dist/**",
+      "**/.next/**",
+      "tests/integration/**",
+    ],
     globalSetup: "./tests/global-setup.ts",
     // Test isolation in PostgreSQL with sequential execution
     fileParallelism: false,
+    testTimeout: 30000,
+    hookTimeout: 30000,
     env: {
       DATABASE_URL: process.env.TEST_DATABASE_URL || "postgresql://postgres:admin@localhost:5432/lms_test?schema=public",
       DIRECT_URL: process.env.TEST_DATABASE_URL || "postgresql://postgres:admin@localhost:5432/lms_test?schema=public",

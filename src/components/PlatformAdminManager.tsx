@@ -2,7 +2,25 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
-import { Shield, Building2, Plus, UserPlus, AlertCircle } from "lucide-react";
+import { Building2, Plus, UserPlus } from "lucide-react";
+import {
+  Alert,
+  AlertDescription,
+  Badge,
+  type BadgeVariant,
+  Button,
+  DataTable,
+  type DataTableColumn,
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+  FormActions,
+  FormField,
+  Input,
+  StatCard,
+} from "@/components/ui";
 
 export interface PlanOption {
   id: string;
@@ -29,8 +47,6 @@ interface PlatformAdminManagerProps {
   };
 }
 
-// The API validates slugs with /^[a-z0-9-]+$/, so Cyrillic names must be
-// transliterated instead of being copied verbatim into the URL.
 const CYRILLIC_TO_LATIN: Record<string, string> = {
   а: "a", б: "b", в: "v", г: "g", д: "d", е: "e", ё: "e", ж: "zh", з: "z",
   и: "i", й: "y", к: "k", л: "l", м: "m", н: "n", о: "o", п: "p", р: "r",
@@ -51,15 +67,24 @@ function slugifyCenterName(value: string): string {
     .replace(/^-|-$/g, "");
 }
 
-export default function PlatformAdminManager({ initialCenters, plans, metrics }: PlatformAdminManagerProps) {
+const STATUS_VARIANTS: Record<string, BadgeVariant> = {
+  ACTIVE: "success",
+  TRIAL: "info",
+  PAUSED: "warning",
+  BLOCKED: "destructive",
+};
+
+export default function PlatformAdminManager({
+  initialCenters,
+  plans,
+  metrics,
+}: PlatformAdminManagerProps) {
   const router = useRouter();
-  const [centers, setCenters] = useState(initialCenters);
+  const [centers] = useState(initialCenters);
   const [showCreateModal, setShowCreateModal] = useState(false);
 
-  // Form states for Superadmin creating center & director
   const [name, setName] = useState("");
   const [slug, setSlug] = useState("");
-  // Once the admin edits the slug by hand, later name changes must not overwrite it.
   const [slugTouched, setSlugTouched] = useState(false);
   const [centerType, setCenterType] = useState("HYBRID");
   const [planId, setPlanId] = useState(plans[0]?.id || "");
@@ -68,6 +93,7 @@ export default function PlatformAdminManager({ initialCenters, plans, metrics }:
   const [directorPhone, setDirectorPhone] = useState("");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
+  const [statusError, setStatusError] = useState("");
 
   const handleNameChange = (val: string) => {
     setName(val);
@@ -129,6 +155,7 @@ export default function PlatformAdminManager({ initialCenters, plans, metrics }:
   };
 
   const handleUpdateStatus = async (centerId: string, newStatus: string) => {
+    setStatusError("");
     try {
       const res = await fetch(`/api/platform/centers/${centerId}`, {
         method: "PATCH",
@@ -139,284 +166,269 @@ export default function PlatformAdminManager({ initialCenters, plans, metrics }:
         router.refresh();
       } else {
         const data = await res.json();
-        alert(data.error);
+        setStatusError(data.error || "Ошибка изменения статуса");
       }
-    } catch (err) {
-      alert("Ошибка сети");
+    } catch {
+      setStatusError("Ошибка сети");
     }
   };
 
+  const columns: DataTableColumn<AdminCenterItem>[] = [
+    {
+      id: "center",
+      header: "Учебный центр",
+      isMobilePrimary: true,
+      cell: (c) => (
+        <div>
+          <div className="flex items-center gap-2 font-medium text-foreground">
+            <Building2 className="h-4 w-4 text-primary" aria-hidden="true" />
+            <span>{c.name}</span>
+          </div>
+          <div className="mt-0.5 font-mono text-xs text-muted-foreground">slug: {c.slug}</div>
+        </div>
+      ),
+    },
+    {
+      id: "owner",
+      header: "Владелец (директор)",
+      cell: (c) => (
+        <div>
+          <div className="font-medium text-foreground">{c.owner?.fullName}</div>
+          <div className="text-xs text-muted-foreground">{c.owner?.email}</div>
+        </div>
+      ),
+    },
+    {
+      id: "plan",
+      header: "Тариф подписки",
+      cell: (c) => {
+        const sub = c.subscriptions[0];
+        return <Badge variant="neutral">{sub?.plan?.name || "Trial"}</Badge>;
+      },
+    },
+    {
+      id: "status",
+      header: "Статус",
+      cell: (c) => (
+        <Badge variant={STATUS_VARIANTS[c.status] || "neutral"}>{c.status}</Badge>
+      ),
+    },
+    {
+      id: "actions",
+      header: "Управление статусом",
+      align: "right",
+      hideable: false,
+      cell: (c) => (
+        <div className="inline-flex flex-wrap items-center justify-end gap-1.5">
+          {c.status !== "ACTIVE" && (
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              onClick={() => handleUpdateStatus(c.id, "ACTIVE")}
+            >
+              Активировать
+            </Button>
+          )}
+          {c.status !== "PAUSED" && (
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              onClick={() => handleUpdateStatus(c.id, "PAUSED")}
+            >
+              Заморозить
+            </Button>
+          )}
+          {c.status !== "BLOCKED" && (
+            <Button
+              type="button"
+              variant="destructive"
+              size="sm"
+              onClick={() => handleUpdateStatus(c.id, "BLOCKED")}
+            >
+              Заблокировать
+            </Button>
+          )}
+        </div>
+      ),
+    },
+  ];
+
   return (
     <div className="space-y-6">
-      {/* Metrics & Create Button */}
-      <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
-        <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 w-full sm:w-auto flex-1">
-          <div className="glass-panel p-5 rounded-2xl border border-slate-800">
-            <span className="text-xs font-semibold text-slate-400 uppercase tracking-wider">Всего Центров</span>
-            <div className="text-2xl font-bold text-white mt-1">{metrics.totalCenters}</div>
-          </div>
-
-          <div className="glass-panel p-5 rounded-2xl border border-slate-800">
-            <span className="text-xs font-semibold text-slate-400 uppercase tracking-wider">Активных</span>
-            <div className="text-2xl font-bold text-emerald-400 mt-1">{metrics.activeCenters}</div>
-          </div>
-
-          <div className="glass-panel p-5 rounded-2xl border border-slate-800">
-            <span className="text-xs font-semibold text-slate-400 uppercase tracking-wider">Заморожены (Frozen)</span>
-            <div className="text-2xl font-bold text-amber-400 mt-1">{metrics.pausedCenters}</div>
-          </div>
+      <div className="flex flex-col items-start justify-between gap-4 sm:flex-row sm:items-center">
+        <div className="grid w-full flex-1 grid-cols-1 gap-4 sm:w-auto sm:grid-cols-3">
+          <StatCard label="Всего центров" value={metrics.totalCenters} />
+          <StatCard label="Активных" value={metrics.activeCenters} />
+          <StatCard label="Заморожены" value={metrics.pausedCenters} />
         </div>
 
-        <button
+        <Button
+          type="button"
+          variant="primary"
           onClick={openCreateModal}
-          className="w-full sm:w-auto px-5 py-3.5 bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-500 hover:to-indigo-500 text-white font-semibold rounded-2xl shadow-xl shadow-purple-600/30 transition-all flex items-center justify-center gap-2 shrink-0"
+          className="w-full shrink-0 sm:w-auto"
         >
-          <Plus className="w-5 h-5" />
-          <span>Создать Учебный Центр</span>
-        </button>
+          <Plus className="h-4 w-4" aria-hidden="true" />
+          <span>Создать учебный центр</span>
+        </Button>
       </div>
 
-      {/* Centers Control Table */}
-      <div className="space-y-4">
-        <h2 className="text-lg font-bold text-white">Реестр Учебных Центров (Тенантов)</h2>
+      {statusError && (
+        <Alert variant="destructive">
+          <AlertDescription>{statusError}</AlertDescription>
+        </Alert>
+      )}
 
-        <div className="glass-panel rounded-2xl border border-slate-800 overflow-hidden">
-          <table className="w-full text-left text-sm text-slate-300">
-            <thead className="bg-slate-900/80 text-xs font-semibold uppercase text-slate-400 border-b border-slate-800">
-              <tr>
-                <th className="p-4">Учебный Центр</th>
-                <th className="p-4">Владелец (Директор)</th>
-                <th className="p-4">Тариф Подписки</th>
-                <th className="p-4">Статус</th>
-                <th className="p-4 text-right">Управление Статусом</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-slate-800/80">
-              {centers.length === 0 ? (
-                <tr>
-                  <td colSpan={5} className="p-6 text-center text-slate-500">
-                    Центры еще не созданы. Нажмите «Создать Учебный Центр», чтобы добавить первый тенант.
-                  </td>
-                </tr>
-              ) : (
-                centers.map((c) => {
-                  const sub = c.subscriptions[0];
-                  return (
-                    <tr key={c.id} className="hover:bg-slate-900/40 transition-colors">
-                      <td className="p-4">
-                        <div className="font-bold text-white flex items-center gap-2">
-                          <Building2 className="w-4 h-4 text-purple-400" />
-                          <span>{c.name}</span>
-                        </div>
-                        <div className="text-xs text-slate-400 font-mono mt-0.5">slug: {c.slug}</div>
-                      </td>
-                      <td className="p-4">
-                        <div className="font-medium text-slate-200">{c.owner?.fullName}</div>
-                        <div className="text-xs text-slate-500">{c.owner?.email}</div>
-                      </td>
-                      <td className="p-4">
-                        <span className="px-2.5 py-1 rounded bg-slate-800 text-xs font-semibold text-brand-300">
-                          {sub?.plan?.name || "Trial"}
-                        </span>
-                      </td>
-                      <td className="p-4">
-                        {c.status === "ACTIVE" && (
-                          <span className="px-2.5 py-1 rounded-full bg-emerald-500/10 text-emerald-400 text-xs font-bold">
-                            ACTIVE
-                          </span>
-                        )}
-                        {c.status === "TRIAL" && (
-                          <span className="px-2.5 py-1 rounded-full bg-blue-500/10 text-blue-400 text-xs font-bold">
-                            TRIAL
-                          </span>
-                        )}
-                        {c.status === "PAUSED" && (
-                          <span className="px-2.5 py-1 rounded-full bg-amber-500/10 text-amber-400 text-xs font-bold">
-                            PAUSED
-                          </span>
-                        )}
-                        {c.status === "BLOCKED" && (
-                          <span className="px-2.5 py-1 rounded-full bg-rose-500/10 text-rose-400 text-xs font-bold">
-                            BLOCKED
-                          </span>
-                        )}
-                      </td>
-                      <td className="p-4 text-right space-x-2">
-                        {c.status !== "ACTIVE" && (
-                          <button
-                            onClick={() => handleUpdateStatus(c.id, "ACTIVE")}
-                            className="px-3 py-1 bg-emerald-600/20 hover:bg-emerald-600/30 text-emerald-300 rounded-lg text-xs font-semibold border border-emerald-500/30 transition-colors"
-                          >
-                            Активировать
-                          </button>
-                        )}
-                        {c.status !== "PAUSED" && (
-                          <button
-                            onClick={() => handleUpdateStatus(c.id, "PAUSED")}
-                            className="px-3 py-1 bg-amber-600/20 hover:bg-amber-600/30 text-amber-300 rounded-lg text-xs font-semibold border border-amber-500/30 transition-colors"
-                          >
-                            Заморозить
-                          </button>
-                        )}
-                        {c.status !== "BLOCKED" && (
-                          <button
-                            onClick={() => handleUpdateStatus(c.id, "BLOCKED")}
-                            className="px-3 py-1 bg-rose-600/20 hover:bg-rose-600/30 text-rose-300 rounded-lg text-xs font-semibold border border-rose-500/30 transition-colors"
-                          >
-                            Заблокировать
-                          </button>
-                        )}
-                      </td>
-                    </tr>
-                  );
-                })
-              )}
-            </tbody>
-          </table>
-        </div>
+      <div className="space-y-3">
+        <h2 className="font-display text-base font-semibold text-foreground">
+          Реестр учебных центров
+        </h2>
+
+        <DataTable
+          data={centers}
+          columns={columns}
+          getRowId={(c) => c.id}
+          showColumnToggle={false}
+          showDensityToggle={false}
+          emptyTitle="Центры ещё не созданы"
+          emptyDescription="Нажмите «Создать учебный центр», чтобы добавить первый центр."
+          emptyAction={
+            <Button type="button" variant="primary" size="sm" onClick={openCreateModal}>
+              <Plus className="h-4 w-4" aria-hidden="true" />
+              <span>Создать учебный центр</span>
+            </Button>
+          }
+        />
       </div>
 
-      {/* Superadmin Modal: Create LearningCenter & Assign Director */}
-      {showCreateModal && (
-        <div className="fixed inset-0 z-50 bg-black/70 backdrop-blur-sm flex items-center justify-center p-4">
-          <div className="glass-panel w-full max-w-xl p-6 rounded-3xl border border-slate-800 space-y-6 max-h-[90vh] overflow-y-auto">
-            <div>
-              <span className="text-xs font-bold text-purple-400 uppercase tracking-wider">Только Платформа</span>
-              <h3 className="text-xl font-bold text-white mt-1">Создание Учебного Центра и Аккаунта Директора</h3>
-              <p className="text-xs text-slate-400 mt-1">
-                Создайте новый тенант и назначьте его руководителя. Директору будет автоматически привязан воркспейс.
-              </p>
+      <Dialog open={showCreateModal} onOpenChange={(next) => !next && closeCreateModal()}>
+        <DialogContent className="max-w-xl max-h-[90vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle>Создание учебного центра и аккаунта директора</DialogTitle>
+            <DialogDescription>
+              Создайте новый центр и назначьте руководителя. Директору будет привязан доступ.
+            </DialogDescription>
+          </DialogHeader>
+
+          {error && (
+            <Alert variant="destructive">
+              <AlertDescription>{error}</AlertDescription>
+            </Alert>
+          )}
+
+          <form onSubmit={handleCreateCenter} className="space-y-4">
+            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+              <FormField label="Название центра" htmlFor="pam-name" required>
+                <Input
+                  id="pam-name"
+                  type="text"
+                  required
+                  value={name}
+                  onChange={(e) => handleNameChange(e.target.value)}
+                  placeholder="e.g. Школа Кодинга Квантум"
+                />
+              </FormField>
+
+              <FormField label="Slug (URL-идентификатор)" htmlFor="pam-slug" required>
+                <Input
+                  id="pam-slug"
+                  type="text"
+                  required
+                  value={slug}
+                  onChange={(e) => {
+                    setSlug(e.target.value);
+                    setSlugTouched(true);
+                  }}
+                  placeholder="e.g. quantum-coding"
+                  className="font-mono"
+                />
+              </FormField>
             </div>
 
-            {error && (
-              <div className="p-3 rounded-xl bg-rose-500/10 border border-rose-500/20 text-rose-400 text-xs flex items-center gap-2">
-                <AlertCircle className="w-4 h-4 shrink-0" />
-                <span>{error}</span>
-              </div>
-            )}
-
-            <form onSubmit={handleCreateCenter} className="space-y-4">
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                <div>
-                  <label className="block text-xs font-semibold text-slate-300 uppercase tracking-wider mb-2">Название Центра</label>
-                  <input
-                    type="text"
-                    required
-                    value={name}
-                    onChange={(e) => handleNameChange(e.target.value)}
-                    placeholder="e.g. Школа Кодинга Квантум"
-                    className="w-full px-4 py-2.5 bg-slate-900 border border-slate-700 rounded-xl text-white text-sm focus:outline-none focus:border-purple-500"
-                  />
-                </div>
-
-                <div>
-                  <label className="block text-xs font-semibold text-slate-300 uppercase tracking-wider mb-2">Slug (URL Идентификатор)</label>
-                  <input
-                    type="text"
-                    required
-                    value={slug}
-                    onChange={(e) => {
-                      setSlug(e.target.value);
-                      setSlugTouched(true);
-                    }}
-                    placeholder="e.g. quantum-coding"
-                    className="w-full px-4 py-2.5 bg-slate-900 border border-slate-700 rounded-xl text-white text-sm font-mono focus:outline-none focus:border-purple-500"
-                  />
-                </div>
-              </div>
-
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                <div>
-                  <label className="block text-xs font-semibold text-slate-300 uppercase tracking-wider mb-2">Формат Обучения</label>
-                  <select
-                    value={centerType}
-                    onChange={(e) => setCenterType(e.target.value)}
-                    className="w-full px-4 py-2.5 bg-slate-900 border border-slate-700 rounded-xl text-white text-sm focus:outline-none focus:border-purple-500"
-                  >
-                    <option value="HYBRID">Гибридный (Офлайн + Онлайн)</option>
-                    <option value="OFFLINE">Офлайн-центр</option>
-                    <option value="ONLINE">Онлайн-школа</option>
-                  </select>
-                </div>
-
-                <div>
-                  <label className="block text-xs font-semibold text-slate-300 uppercase tracking-wider mb-2">Тариф Подписки</label>
-                  <select
-                    value={planId}
-                    onChange={(e) => setPlanId(e.target.value)}
-                    className="w-full px-4 py-2.5 bg-slate-900 border border-slate-700 rounded-xl text-white text-sm focus:outline-none focus:border-purple-500"
-                  >
-                    {plans.map((p) => (
-                      <option key={p.id} value={p.id}>{p.name} ({p.priceMonthly} ₽/мес)</option>
-                    ))}
-                  </select>
-                </div>
-              </div>
-
-              <div className="pt-4 border-t border-slate-800 space-y-4">
-                <h4 className="text-xs font-bold text-purple-300 uppercase tracking-wider flex items-center gap-2">
-                  <UserPlus className="w-4 h-4 text-purple-400" />
-                  <span>Данные Будущего Директора Центра</span>
-                </h4>
-
-                <div>
-                  <label className="block text-xs font-semibold text-slate-300 uppercase tracking-wider mb-2">ФИО Директора</label>
-                  <input
-                    type="text"
-                    required
-                    value={directorFullName}
-                    onChange={(e) => setDirectorFullName(e.target.value)}
-                    placeholder="e.g. Александр Волков"
-                    className="w-full px-4 py-2.5 bg-slate-900 border border-slate-700 rounded-xl text-white text-sm focus:outline-none focus:border-purple-500"
-                  />
-                </div>
-
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                  <div>
-                    <label className="block text-xs font-semibold text-slate-300 uppercase tracking-wider mb-2">Email Директора</label>
-                    <input
-                      type="email"
-                      required
-                      value={directorEmail}
-                      onChange={(e) => setDirectorEmail(e.target.value)}
-                      placeholder="director@quantum.ru"
-                      className="w-full px-4 py-2.5 bg-slate-900 border border-slate-700 rounded-xl text-white text-sm focus:outline-none focus:border-purple-500"
-                    />
-                  </div>
-
-                  <div>
-                    <label className="block text-xs font-semibold text-slate-300 uppercase tracking-wider mb-2">Телефон</label>
-                    <input
-                      type="tel"
-                      value={directorPhone}
-                      onChange={(e) => setDirectorPhone(e.target.value)}
-                      placeholder="+7 (999) 111-22-33"
-                      className="w-full px-4 py-2.5 bg-slate-900 border border-slate-700 rounded-xl text-white text-sm focus:outline-none focus:border-purple-500"
-                    />
-                  </div>
-                </div>
-              </div>
-
-              <div className="flex justify-end gap-3 pt-4 border-t border-slate-800">
-                <button
-                  type="button"
-                  onClick={closeCreateModal}
-                  className="px-4 py-2.5 bg-slate-800 hover:bg-slate-700 text-slate-300 font-semibold rounded-xl text-sm"
+            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+              <FormField label="Формат обучения" htmlFor="pam-type">
+                <select
+                  id="pam-type"
+                  value={centerType}
+                  onChange={(e) => setCenterType(e.target.value)}
+                  className="h-9 w-full rounded-md border border-input bg-background px-3 text-sm text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
                 >
-                  Отмена
-                </button>
-                <button
-                  type="submit"
-                  disabled={loading}
-                  className="px-5 py-2.5 bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-500 hover:to-indigo-500 text-white font-semibold rounded-xl text-sm shadow-lg shadow-purple-600/30"
+                  <option value="HYBRID">Гибридный (офлайн + онлайн)</option>
+                  <option value="OFFLINE">Офлайн-центр</option>
+                  <option value="ONLINE">Онлайн-школа</option>
+                </select>
+              </FormField>
+
+              <FormField label="Тариф подписки" htmlFor="pam-plan">
+                <select
+                  id="pam-plan"
+                  value={planId}
+                  onChange={(e) => setPlanId(e.target.value)}
+                  className="h-9 w-full rounded-md border border-input bg-background px-3 text-sm text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
                 >
-                  {loading ? "Создание..." : "Создать Центр и Зарегистрировать Директора"}
-                </button>
+                  {plans.map((p) => (
+                    <option key={p.id} value={p.id}>
+                      {p.name} ({Math.round(p.priceMonthly || 0).toLocaleString("ru-RU")} UZS/мес)
+                    </option>
+                  ))}
+                </select>
+              </FormField>
+            </div>
+
+            <div className="space-y-4 border-t border-border pt-4">
+              <div className="flex items-center gap-2 text-xs font-medium text-muted-foreground">
+                <UserPlus className="h-4 w-4 text-primary" aria-hidden="true" />
+                <span>Данные директора центра</span>
               </div>
-            </form>
-          </div>
-        </div>
-      )}
+
+              <FormField label="ФИО директора" htmlFor="pam-dir-name" required>
+                <Input
+                  id="pam-dir-name"
+                  type="text"
+                  required
+                  value={directorFullName}
+                  onChange={(e) => setDirectorFullName(e.target.value)}
+                  placeholder="e.g. Александр Волков"
+                />
+              </FormField>
+
+              <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+                <FormField label="Email директора" htmlFor="pam-dir-email" required>
+                  <Input
+                    id="pam-dir-email"
+                    type="email"
+                    required
+                    value={directorEmail}
+                    onChange={(e) => setDirectorEmail(e.target.value)}
+                    placeholder="director@quantum.ru"
+                  />
+                </FormField>
+
+                <FormField label="Телефон" htmlFor="pam-dir-phone">
+                  <Input
+                    id="pam-dir-phone"
+                    type="tel"
+                    value={directorPhone}
+                    onChange={(e) => setDirectorPhone(e.target.value)}
+                    placeholder="+7 (999) 111-22-33"
+                  />
+                </FormField>
+              </div>
+            </div>
+
+            <FormActions>
+              <Button type="button" variant="outline" onClick={closeCreateModal}>
+                Отмена
+              </Button>
+              <Button type="submit" variant="primary" disabled={loading}>
+                {loading ? "Создание..." : "Создать центр и директора"}
+              </Button>
+            </FormActions>
+          </form>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

@@ -117,8 +117,8 @@ export async function GET(req: Request, { params }: { params: { id: string } }) 
       tickets: center.supportTickets,
     });
   } catch (err: unknown) {
-    const message = err instanceof Error ? err.message : "Internal Error";
-    return NextResponse.json({ error: message }, { status: 500 });
+    console.error("[GET /api/platform/centers/[id]]", err);
+    return NextResponse.json({ error: "Internal Error" }, { status: 500 });
   }
 }
 
@@ -204,8 +204,8 @@ export async function PATCH(req: Request, { params }: { params: { id: string } }
 
     return NextResponse.json({ success: true, center: updated });
   } catch (err: unknown) {
-    const message = err instanceof Error ? err.message : "Internal Error";
-    return NextResponse.json({ error: message }, { status: 500 });
+    console.error("[GET /api/platform/centers/[id]]", err);
+    return NextResponse.json({ error: "Internal Error" }, { status: 500 });
   }
 }
 
@@ -277,7 +277,7 @@ export async function DELETE(req: Request, { params }: { params: { id: string } 
 
     return NextResponse.json({ success: true, deletedId: params.id });
   } catch (err: unknown) {
-    const message = err instanceof Error ? err.message : "Internal Error";
-    return NextResponse.json({ error: message }, { status: 500 });
+    console.error("[GET /api/platform/centers/[id]]", err);
+    return NextResponse.json({ error: "Internal Error" }, { status: 500 });
   }
 }

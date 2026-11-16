@@ -4,6 +4,18 @@ import { redirect } from "next/navigation";
 import { t, formatDateLocalized } from "@/i18n";
 import { Prisma } from "@prisma/client";
 import AttendanceManager from "@/components/AttendanceManager";
+import { Badge, type BadgeVariant } from "@/components/ui/badge";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { PageHeader } from "@/components/ui/page-header";
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table";
+import { getSelectedParentChildIds } from "@/lib/parent-child";
 
 export default async function CenterAttendancePage() {
   const tenantCtx = await requireTenantPageAccess();
@@ -104,9 +116,12 @@ export default async function CenterAttendancePage() {
       where: { parentMembershipId: currentMembership.id, status: "CONFIRMED" },
       select: { studentMembershipId: true },
     });
+    const selectedChildIds = getSelectedParentChildIds(
+      childLinks.map((l) => l.studentMembershipId)
+    );
     whereCondition = {
       lesson: { module: { course: { centerId } } },
-      studentMembershipId: { in: childLinks.map((l) => l.studentMembershipId) },
+      studentMembershipId: { in: selectedChildIds },
     };
   } else if (activeRole === "TEACHER" && currentMembership) {
     whereCondition = {
@@ -142,19 +157,19 @@ export default async function CenterAttendancePage() {
     take: 50,
   });
 
-  const statusBadges: Record<string, { labelKey: string; color: string }> = {
-    PRESENT: { labelKey: "attendance.present", color: "bg-emerald-500/10 text-emerald-400 border-emerald-500/20" },
-    ABSENT: { labelKey: "attendance.absent", color: "bg-red-500/10 text-red-400 border-red-500/20" },
-    EXCUSED: { labelKey: "attendance.excused", color: "bg-blue-500/10 text-blue-400 border-blue-500/20" },
-    LATE: { labelKey: "attendance.late", color: "bg-amber-500/10 text-amber-400 border-amber-500/20" },
+  const statusBadges: Record<string, { labelKey: string; variant: BadgeVariant }> = {
+    PRESENT: { labelKey: "attendance.present", variant: "success" },
+    ABSENT: { labelKey: "attendance.absent", variant: "destructive" },
+    EXCUSED: { labelKey: "attendance.excused", variant: "info" },
+    LATE: { labelKey: "attendance.late", variant: "warning" },
   };
 
   return (
-    <div className="space-y-8">
-      <div>
-        <h2 className="text-xl font-bold text-white">{t(locale, "attendance.title")}</h2>
-        <p className="text-sm text-slate-400 mt-0.5">{t(locale, "attendance.attendanceRate")}</p>
-      </div>
+    <div className="space-y-6">
+      <PageHeader
+        title={t(locale, "attendance.title")}
+        description={t(locale, "attendance.attendanceRate")}
+      />
 
       {groups.length > 0 && (
         <AttendanceManager
@@ -167,54 +182,57 @@ export default async function CenterAttendancePage() {
       )}
 
       {/* History log */}
-      <div className="space-y-3">
-        <h3 className="text-sm font-semibold text-slate-300">
-          {t(locale, "reports.attendanceSummary") || "История отметок"}
-        </h3>
-        <div className="glass-panel rounded-2xl border border-slate-800 overflow-hidden">
-          <table className="w-full text-left text-sm text-slate-300">
-            <thead className="bg-slate-900/80 text-xs font-semibold uppercase text-slate-400 border-b border-slate-800">
-              <tr>
-                <th className="p-4">{t(locale, "nav.students")}</th>
-                <th className="p-4">{t(locale, "lessons.title")}</th>
-                <th className="p-4">{t(locale, "common.status")}</th>
-                <th className="p-4">{t(locale, "common.date")}</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-slate-800/80">
+      <Card>
+        <CardHeader className="pb-3">
+          <CardTitle className="text-sm">
+            {t(locale, "reports.attendanceSummary") || "История отметок"}
+          </CardTitle>
+        </CardHeader>
+        <CardContent className="p-0">
+          <Table wrapperClassName="border-0 rounded-none">
+            <TableHeader>
+              <TableRow>
+                <TableHead>{t(locale, "nav.students")}</TableHead>
+                <TableHead>{t(locale, "lessons.title")}</TableHead>
+                <TableHead>{t(locale, "common.status")}</TableHead>
+                <TableHead>{t(locale, "common.date")}</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
               {attendances.length === 0 ? (
-                <tr>
-                  <td colSpan={4} className="p-6 text-center text-slate-500">
+                <TableRow>
+                  <TableCell colSpan={4} className="p-6 text-center text-muted-foreground">
                     {t(locale, "common.noData")}
-                  </td>
-                </tr>
+                  </TableCell>
+                </TableRow>
               ) : (
                 attendances.map((att) => {
-                  const badge = statusBadges[att.status] || { labelKey: att.status, color: "text-slate-400" };
+                  const badge = statusBadges[att.status] || {
+                    labelKey: att.status,
+                    variant: "neutral" as BadgeVariant,
+                  };
                   return (
-                    <tr key={att.id} className="hover:bg-slate-900/40 transition-colors">
-                      <td className="p-4 font-semibold text-white">
+                    <TableRow key={att.id}>
+                      <TableCell className="font-medium text-foreground">
                         {att.student.user.fullName}
-                      </td>
-                      <td className="p-4 text-slate-300">
+                      </TableCell>
+                      <TableCell className="text-muted-foreground">
                         {att.lesson.title}
-                      </td>
-                      <td className="p-4">
-                        <span className={`px-2.5 py-1 rounded-full text-xs font-semibold border ${badge.color}`}>
-                          {t(locale, badge.labelKey)}
-                        </span>
-                      </td>
-                      <td className="p-4 text-xs text-slate-400">
+                      </TableCell>
+                      <TableCell>
+                        <Badge variant={badge.variant}>{t(locale, badge.labelKey)}</Badge>
+                      </TableCell>
+                      <TableCell className="text-xs text-muted-foreground tabular-nums">
                         {formatDateLocalized(att.markedAt, locale)}
-                      </td>
-                    </tr>
+                      </TableCell>
+                    </TableRow>
                   );
                 })
               )}
-            </tbody>
-          </table>
-        </div>
-      </div>
+            </TableBody>
+          </Table>
+        </CardContent>
+      </Card>
     </div>
   );
 }

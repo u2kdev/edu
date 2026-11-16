@@ -3,6 +3,7 @@ import { NextResponse } from "next/server";
 // eslint-disable-next-line no-restricted-imports
 import { db } from "@/lib/db";
 import { getAuthSession } from "@/lib/auth";
+import { hasPermission } from "@/lib/permissions";
 import { requirePlatformPermission, handlePlatformError } from "@/lib/platformAuth";
 import type { Prisma, TicketStatus, TicketPriority } from "@prisma/client";
 import { z } from "zod";
@@ -104,12 +105,16 @@ export async function POST(req: Request) {
     }
 
     const { subject, message, priority, centerId } = parsed.data;
+    const isPlatformStaff = hasPermission("platform.support", session.user.platformRole);
+    const resolvedCenterId = isPlatformStaff
+      ? centerId || session.activeCenterId || null
+      : session.activeCenterId || null;
 
     const ticket = await db.supportTicket.create({
       data: {
         subject,
         priority,
-        centerId: centerId || null,
+        centerId: resolvedCenterId,
         creatorUserId: session.user.id,
         status: "OPEN",
         messages: {

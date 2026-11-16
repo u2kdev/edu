@@ -95,25 +95,40 @@ export function generateTotpCode(
 export function verifyTotpCode(
   secret: string,
   code: string,
-  options?: { window?: number; timestampMs?: number; stepSeconds?: number }
+  options?: { window?: number; timestampMs?: number; stepSeconds?: number; lastStep?: number | null }
 ): boolean {
-  if (!secret || !code) return false;
+  return verifyTotpCodeWithStep(secret, code, options).valid;
+}
+
+export function verifyTotpCodeWithStep(
+  secret: string,
+  code: string,
+  options?: { window?: number; timestampMs?: number; stepSeconds?: number; lastStep?: number | null }
+): { valid: boolean; step?: number } {
+  if (!secret || !code) return { valid: false };
   const cleanCode = code.trim().replace(/\s/g, "");
-  if (!/^\d{6}$/.test(cleanCode)) return false;
+  if (!/^\d{6}$/.test(cleanCode)) return { valid: false };
 
   const window = options?.window ?? 1;
   const stepSeconds = options?.stepSeconds ?? 30;
   const now = options?.timestampMs ?? Date.now();
+  const currentStep = Math.floor(now / 1000 / stepSeconds);
 
   for (let step = -window; step <= window; step++) {
-    const t = now + step * stepSeconds * 1000;
+    const candidateStep = currentStep + step;
+    if (options?.lastStep !== undefined && options.lastStep !== null && candidateStep <= options.lastStep) {
+      // Replay attack prevention: step already used
+      continue;
+    }
+
+    const t = (candidateStep * stepSeconds) * 1000;
     const generated = generateTotpCode(secret, t, stepSeconds);
     if (crypto.timingSafeEqual(Buffer.from(cleanCode), Buffer.from(generated))) {
-      return true;
+      return { valid: true, step: candidateStep };
     }
   }
 
-  return false;
+  return { valid: false };
 }
 
 /**
@@ -130,13 +145,61 @@ export function generateTotpUri(
 }
 
 /**
- * Generates readable backup codes (e.g. 8 codes formatted as "XXXX-XXXX")
+ * Generates readable backup codes (10 codes formatted as "XXXX-XXXX")
  */
-export function generateBackupCodes(count: number = 8): string[] {
+export function generateBackupCodes(count: number = 10): string[] {
   const codes: string[] = [];
   for (let i = 0; i < count; i++) {
     const hex = crypto.randomBytes(4).toString("hex").toUpperCase();
     codes.push(`${hex.slice(0, 4)}-${hex.slice(4, 8)}`);
   }
   return codes;
+}
+
+/**
+ * Normalizes and hashes a backup code with SHA-256
+ */
+export function hashBackupCode(code: string): string {
+  const clean = code.trim().toUpperCase().replace(/[^A-Z0-9]/g, "");
+  return crypto.createHash("sha256").update(clean).digest("hex");
+}
+
+/**
+ * Verifies a candidate backup code against the JSON-stored array of SHA-256 hashes.
+ * If matched, returns valid: true and the updated array with the matched hash removed (single-use).
+ */
+export function verifyBackupCode(
+  code: string,
+  storedHashesJson: string | null
+): { valid: boolean; remainingHashes: string[] } {
+  if (!code || !storedHashesJson) {
+    return { valid: false, remainingHashes: [] };
+  }
+
+  let hashes: string[] = [];
+  try {
+    hashes = JSON.parse(storedHashesJson);
+    if (!Array.isArray(hashes)) return { valid: false, remainingHashes: [] };
+  } catch {
+    return { valid: false, remainingHashes: [] };
+  }
+
+  const candidateHash = hashBackupCode(code);
+  const candidateBuf = Buffer.from(candidateHash);
+
+  let matchIndex = -1;
+  for (let i = 0; i < hashes.length; i++) {
+    const storedBuf = Buffer.from(hashes[i]);
+    if (storedBuf.length === candidateBuf.length && crypto.timingSafeEqual(storedBuf, candidateBuf)) {
+      matchIndex = i;
+      break;
+    }
+  }
+
+  if (matchIndex === -1) {
+    return { valid: false, remainingHashes: hashes };
+  }
+
+  const remainingHashes = hashes.filter((_, idx) => idx !== matchIndex);
+  return { valid: true, remainingHashes };
 }

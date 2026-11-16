@@ -1,20 +1,26 @@
 "use client";
 
 import React, { useState, useEffect, useCallback } from "react";
-import Link from "next/link";
+import { Building2, Calendar, Edit, Eye, Plus, Trash2, Users } from "lucide-react";
 import {
-  Megaphone,
-  Plus,
-  Trash2,
-  Edit,
-  Eye,
-  Calendar,
-  Users,
-  Building2,
-  AlertCircle,
-  Search,
-  Filter,
-} from "lucide-react";
+  Alert,
+  AlertDescription,
+  Badge,
+  Button,
+  ConfirmDialog,
+  DataTable,
+  type DataTableColumn,
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  FilterBar,
+  FormActions,
+  FormField,
+  Input,
+  PageHeader,
+  Textarea,
+} from "@/components/ui";
 
 interface Announcement {
   id: string;
@@ -55,15 +61,13 @@ export default function PlatformAnnouncementsPage() {
   const [announcements, setAnnouncements] = useState<Announcement[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [actionError, setActionError] = useState<string | null>(null);
 
-  // Filters
   const [search, setSearch] = useState("");
   const [filterAudience, setFilterAudience] = useState("ALL");
 
-  // Centers list for selection
   const [availableCenters, setAvailableCenters] = useState<CenterOption[]>([]);
 
-  // Modal Create / Edit
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingItem, setEditingItem] = useState<Announcement | null>(null);
   const [formTitle, setFormTitle] = useState("");
@@ -76,9 +80,7 @@ export default function PlatformAnnouncementsPage() {
   const [saving, setSaving] = useState(false);
   const [formError, setFormError] = useState<string | null>(null);
 
-  // Delete Modal
   const [deletingItem, setDeletingItem] = useState<Announcement | null>(null);
-  const [deleteReason, setDeleteReason] = useState("");
   const [deleting, setDeleting] = useState(false);
 
   const fetchAnnouncements = useCallback(async () => {
@@ -102,7 +104,6 @@ export default function PlatformAnnouncementsPage() {
   useEffect(() => {
     fetchAnnouncements();
 
-    // Fetch centers for picker
     fetch("/api/platform/centers?limit=100")
       .then((res) => res.json())
       .then((data) => {
@@ -178,11 +179,10 @@ export default function PlatformAnnouncementsPage() {
     };
 
     try {
-      const url = "/api/platform/announcements";
       const method = editingItem ? "PATCH" : "POST";
       const body = editingItem ? { id: editingItem.id, ...payload } : payload;
 
-      const res = await fetch(url, {
+      const res = await fetch("/api/platform/announcements", {
         method,
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(body),
@@ -191,7 +191,6 @@ export default function PlatformAnnouncementsPage() {
       const resData = await res.json();
       if (!res.ok) {
         setFormError(resData.error?.[0]?.message || resData.error || "Ошибка при сохранении");
-        setSaving(false);
         return;
       }
 
@@ -204,33 +203,27 @@ export default function PlatformAnnouncementsPage() {
     }
   };
 
-  const handleDelete = async () => {
-    if (!deletingItem) return;
-    if (!deleteReason.trim() || deleteReason.trim().length < 5) {
-      alert("Укажите обязательную причину удаления (минимум 5 символов)");
-      return;
-    }
-
+  const handleDelete = async (reason?: string) => {
+    if (!deletingItem || !reason) return;
     setDeleting(true);
+    setActionError(null);
     try {
       const res = await fetch("/api/platform/announcements", {
         method: "DELETE",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ id: deletingItem.id, reason: deleteReason.trim() }),
+        body: JSON.stringify({ id: deletingItem.id, reason }),
       });
 
       if (!res.ok) {
         const d = await res.json();
-        alert(d.error || "Ошибка удаления");
-        setDeleting(false);
+        setActionError(d.error || "Ошибка удаления");
         return;
       }
 
       setDeletingItem(null);
-      setDeleteReason("");
       fetchAnnouncements();
     } catch {
-      alert("Ошибка сети при удалении");
+      setActionError("Ошибка сети при удалении");
     } finally {
       setDeleting(false);
     }
@@ -241,25 +234,9 @@ export default function PlatformAnnouncementsPage() {
     const pub = new Date(publishedAt);
     const exp = expiresAt ? new Date(expiresAt) : null;
 
-    if (pub > now) {
-      return (
-        <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-400">
-          Запланировано
-        </span>
-      );
-    }
-    if (exp && exp < now) {
-      return (
-        <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-zinc-100 text-zinc-600 dark:bg-zinc-800 dark:text-zinc-400">
-          Истекло
-        </span>
-      );
-    }
-    return (
-      <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-emerald-100 text-emerald-800 dark:bg-emerald-900/30 dark:text-emerald-400">
-        Активно
-      </span>
-    );
+    if (pub > now) return <Badge variant="info">Запланировано</Badge>;
+    if (exp && exp < now) return <Badge variant="neutral">Истекло</Badge>;
+    return <Badge variant="success">Активно</Badge>;
   };
 
   const filteredAnnouncements = announcements.filter((a) => {
@@ -271,430 +248,353 @@ export default function PlatformAnnouncementsPage() {
     return true;
   });
 
+  const columns: DataTableColumn<Announcement>[] = [
+    {
+      id: "title",
+      header: "Объявление",
+      isMobilePrimary: true,
+      cell: (item) => (
+        <div className="space-y-1 max-w-xl">
+          <div className="flex flex-wrap items-center gap-2">
+            <span className="font-semibold text-foreground">{item.title}</span>
+            {getStatusBadge(item.publishedAt, item.expiresAt)}
+          </div>
+          <p className="line-clamp-2 text-xs text-muted-foreground whitespace-pre-line">{item.body}</p>
+        </div>
+      ),
+    },
+    {
+      id: "audience",
+      header: "Аудитория",
+      cell: (item) => {
+        let parsedRoles: string[] = [];
+        let parsedCenters: string[] = [];
+        try {
+          if (item.targetRoles) parsedRoles = JSON.parse(item.targetRoles);
+        } catch {}
+        try {
+          if (item.centerIds) parsedCenters = JSON.parse(item.centerIds);
+        } catch {}
+        if (item.audience === "ALL_CENTERS") {
+          return (
+            <Badge variant="neutral">
+              <Building2 className="h-3 w-3" aria-hidden="true" />
+              <span>Все центры</span>
+            </Badge>
+          );
+        }
+        if (item.audience === "ROLES") {
+          return (
+            <Badge variant="info">
+              <Users className="h-3 w-3" aria-hidden="true" />
+              <span>Роли: {parsedRoles.join(", ") || "Все"}</span>
+            </Badge>
+          );
+        }
+        return (
+          <Badge variant="warning">
+            <Building2 className="h-3 w-3" aria-hidden="true" />
+            <span>Центров: {parsedCenters.length}</span>
+          </Badge>
+        );
+      },
+    },
+    {
+      id: "publishedAt",
+      header: "Публикация",
+      hideOnMobile: true,
+      cell: (item) => (
+        <div className="space-y-0.5 text-xs text-muted-foreground tabular-nums">
+          <div className="inline-flex items-center gap-1">
+            <Calendar className="h-3.5 w-3.5" aria-hidden="true" />
+            {new Date(item.publishedAt).toLocaleString("ru-RU")}
+          </div>
+          {item.expiresAt && (
+            <div>До: {new Date(item.expiresAt).toLocaleString("ru-RU")}</div>
+          )}
+        </div>
+      ),
+    },
+    {
+      id: "reads",
+      header: "Прочитано",
+      align: "center",
+      cell: (item) => (
+        <span className="inline-flex items-center gap-1 text-xs font-medium text-primary tabular-nums">
+          <Eye className="h-3.5 w-3.5" aria-hidden="true" />
+          {item._count?.reads ?? 0}
+        </span>
+      ),
+    },
+    {
+      id: "actions",
+      header: "Действия",
+      align: "right",
+      hideable: false,
+      cell: (item) => (
+        <div className="inline-flex items-center justify-end gap-1">
+          <Button
+            type="button"
+            variant="ghost"
+            size="icon"
+            onClick={() => openEditModal(item)}
+            aria-label="Редактировать"
+          >
+            <Edit className="h-4 w-4" aria-hidden="true" />
+          </Button>
+          <Button
+            type="button"
+            variant="ghost"
+            size="icon"
+            onClick={() => setDeletingItem(item)}
+            aria-label="Удалить"
+            className="text-destructive hover:text-destructive"
+          >
+            <Trash2 className="h-4 w-4" aria-hidden="true" />
+          </Button>
+        </div>
+      ),
+    },
+  ];
+
+  const hasFilters = Boolean(search || filterAudience !== "ALL");
+
   return (
     <div className="space-y-6">
-      {/* Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
-        <div>
-          <div className="flex items-center gap-3">
-            <div className="p-2 bg-indigo-50 dark:bg-indigo-900/20 rounded-lg text-indigo-600 dark:text-indigo-400">
-              <Megaphone className="w-6 h-6" />
-            </div>
-            <div>
-              <h1 className="text-2xl font-bold text-zinc-900 dark:text-zinc-100">
-                Объявления платформы
-              </h1>
-              <p className="text-sm text-zinc-500 dark:text-zinc-400">
-                Таргетированные рассылки и важные оповещения для центров, учителей и студентов
-              </p>
-            </div>
-          </div>
-        </div>
+      <PageHeader
+        title="Объявления платформы"
+        description="Таргетированные рассылки и оповещения для центров, преподавателей и учеников"
+        actions={
+          <Button type="button" variant="primary" size="sm" onClick={openCreateModal}>
+            <Plus className="h-4 w-4" aria-hidden="true" />
+            <span>Создать объявление</span>
+          </Button>
+        }
+      />
 
-        <button
-          onClick={openCreateModal}
-          className="inline-flex items-center justify-center gap-2 px-4 py-2.5 rounded-lg text-sm font-medium bg-indigo-600 text-white hover:bg-indigo-700 transition shadow-sm"
+      {actionError && (
+        <Alert variant="destructive">
+          <AlertDescription>{actionError}</AlertDescription>
+        </Alert>
+      )}
+
+      <FilterBar
+        search={search}
+        onSearchChange={setSearch}
+        searchPlaceholder="Поиск по заголовку или тексту..."
+        hasActiveFilters={hasFilters}
+        onReset={() => {
+          setSearch("");
+          setFilterAudience("ALL");
+        }}
+      >
+        <select
+          aria-label="Аудитория"
+          value={filterAudience}
+          onChange={(e) => setFilterAudience(e.target.value)}
+          className="h-9 rounded-md border border-input bg-background px-3 text-sm text-foreground"
         >
-          <Plus className="w-4 h-4" />
-          Создать объявление
-        </button>
-      </div>
+          <option value="ALL">Вся аудитория</option>
+          <option value="ALL_CENTERS">Все центры</option>
+          <option value="ROLES">По ролям</option>
+          <option value="CENTERS">Выбранные центры</option>
+        </select>
+      </FilterBar>
 
-      {/* Filter toolbar */}
-      <div className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl p-4 shadow-sm flex flex-col md:flex-row gap-3 items-center justify-between">
-        <div className="relative flex-1 w-full">
-          <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-zinc-400" />
-          <input
-            type="text"
-            placeholder="Поиск по заголовку или тексту..."
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-            className="w-full pl-9 pr-3 py-2 text-sm rounded-lg border border-zinc-200 dark:border-zinc-700 bg-transparent text-zinc-900 dark:text-zinc-100 placeholder-zinc-400 focus:outline-none focus:ring-2 focus:ring-indigo-500"
-          />
-        </div>
+      <DataTable
+        data={filteredAnnouncements}
+        columns={columns}
+        getRowId={(a) => a.id}
+        loading={loading}
+        error={error}
+        onRetry={fetchAnnouncements}
+        emptyTitle="Объявлений не найдено"
+        emptyDescription="Создайте первое объявление для уведомления пользователей платформы."
+        emptyAction={
+          <Button type="button" variant="primary" size="sm" onClick={openCreateModal}>
+            <Plus className="h-4 w-4" aria-hidden="true" />
+            <span>Создать объявление</span>
+          </Button>
+        }
+      />
 
-        <div className="flex items-center gap-2 w-full md:w-auto">
-          <Filter className="w-4 h-4 text-zinc-400 shrink-0" />
-          <select
-            value={filterAudience}
-            onChange={(e) => setFilterAudience(e.target.value)}
-            className="px-3 py-2 text-sm rounded-lg border border-zinc-200 dark:border-zinc-700 bg-white dark:bg-zinc-800 text-zinc-900 dark:text-zinc-100 focus:outline-none focus:ring-2 focus:ring-indigo-500"
-          >
-            <option value="ALL">Вся аудитория</option>
-            <option value="ALL_CENTERS">Все центры</option>
-            <option value="ROLES">По ролям</option>
-            <option value="CENTERS">Выбранные центры</option>
-          </select>
-        </div>
-      </div>
-
-      {/* Announcements List */}
-      {error && (
-        <div className="p-4 rounded-xl bg-red-50 dark:bg-red-900/20 text-red-700 dark:text-red-400 text-sm flex items-center gap-3">
-          <AlertCircle className="w-5 h-5 shrink-0" />
-          {error}
-        </div>
-      )}
-
-      {loading ? (
-        <div className="text-center py-12 text-zinc-500 dark:text-zinc-400">
-          Загрузка объявлений...
-        </div>
-      ) : filteredAnnouncements.length === 0 ? (
-        <div className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl p-12 text-center text-zinc-500 dark:text-zinc-400">
-          <Megaphone className="w-10 h-10 mx-auto mb-3 opacity-30 text-indigo-500" />
-          <p className="text-base font-medium">Объявлений не найдено</p>
-          <p className="text-sm mt-1">Создайте первое объявление для уведомления пользователей платформы</p>
-        </div>
-      ) : (
-        <div className="grid gap-4">
-          {filteredAnnouncements.map((item) => {
-            let parsedRoles: string[] = [];
-            try {
-              if (item.targetRoles) parsedRoles = JSON.parse(item.targetRoles);
-            } catch {
-              // ignore
-            }
-
-            let parsedCenters: string[] = [];
-            try {
-              if (item.centerIds) parsedCenters = JSON.parse(item.centerIds);
-            } catch {
-              // ignore
-            }
-
-            return (
-              <div
-                key={item.id}
-                className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl p-5 shadow-sm hover:border-zinc-300 dark:hover:border-zinc-700 transition"
-              >
-                <div className="flex flex-col md:flex-row md:items-start justify-between gap-4">
-                  <div className="space-y-2 flex-1">
-                    <div className="flex flex-wrap items-center gap-2">
-                      <h2 className="text-lg font-semibold text-zinc-900 dark:text-zinc-100">
-                        {item.title}
-                      </h2>
-                      {getStatusBadge(item.publishedAt, item.expiresAt)}
-
-                      {item.audience === "ALL_CENTERS" && (
-                        <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-xs font-medium bg-zinc-100 dark:bg-zinc-800 text-zinc-700 dark:text-zinc-300">
-                          <Building2 className="w-3 h-3" /> Все центры
-                        </span>
-                      )}
-
-                      {item.audience === "ROLES" && (
-                        <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-xs font-medium bg-purple-50 dark:bg-purple-900/30 text-purple-700 dark:text-purple-300">
-                          <Users className="w-3 h-3" /> Роли: {parsedRoles.join(", ") || "Все"}
-                        </span>
-                      )}
-
-                      {item.audience === "CENTERS" && (
-                        <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-xs font-medium bg-amber-50 dark:bg-amber-900/30 text-amber-700 dark:text-amber-300">
-                          <Building2 className="w-3 h-3" /> Центров: {parsedCenters.length}
-                        </span>
-                      )}
-                    </div>
-
-                    <p className="text-sm text-zinc-600 dark:text-zinc-300 whitespace-pre-line">
-                      {item.body}
-                    </p>
-
-                    <div className="flex flex-wrap items-center gap-4 text-xs text-zinc-500 dark:text-zinc-400 pt-2 border-t border-zinc-100 dark:border-zinc-800">
-                      <span className="inline-flex items-center gap-1">
-                        <Calendar className="w-3.5 h-3.5 text-zinc-400" />
-                        Опубликовано: {new Date(item.publishedAt).toLocaleString("ru-RU")}
-                      </span>
-
-                      {item.expiresAt && (
-                        <span>Истекает: {new Date(item.expiresAt).toLocaleString("ru-RU")}</span>
-                      )}
-
-                      <span className="inline-flex items-center gap-1 font-medium text-indigo-600 dark:text-indigo-400">
-                        <Eye className="w-3.5 h-3.5" />
-                        Прочитано: {item._count?.reads ?? 0}
-                      </span>
-
-                      {item.author && (
-                        <span>Автор: {item.author.fullName || item.author.email}</span>
-                      )}
-                    </div>
-                  </div>
-
-                  {/* Actions */}
-                  <div className="flex items-center gap-2 shrink-0 self-end md:self-start">
-                    <button
-                      onClick={() => openEditModal(item)}
-                      className="p-2 text-zinc-500 hover:text-zinc-900 dark:hover:text-zinc-100 rounded-lg hover:bg-zinc-100 dark:hover:bg-zinc-800 transition"
-                      title="Редактировать"
-                    >
-                      <Edit className="w-4 h-4" />
-                    </button>
-                    <button
-                      onClick={() => {
-                        setDeletingItem(item);
-                        setDeleteReason("");
-                      }}
-                      className="p-2 text-red-500 hover:text-red-700 rounded-lg hover:bg-red-50 dark:hover:bg-red-900/20 transition"
-                      title="Удалить"
-                    >
-                      <Trash2 className="w-4 h-4" />
-                    </button>
-                  </div>
-                </div>
-              </div>
-            );
-          })}
-        </div>
-      )}
-
-      {/* Create / Edit Modal */}
-      {isModalOpen && (
-        <div className="fixed inset-0 z-50 bg-black/50 backdrop-blur-sm flex items-center justify-center p-4">
-          <div className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-2xl max-w-xl w-full p-6 shadow-xl max-h-[90vh] overflow-y-auto">
-            <h3 className="text-lg font-bold text-zinc-900 dark:text-zinc-100 mb-4">
+      <Dialog open={isModalOpen} onOpenChange={setIsModalOpen}>
+        <DialogContent className="max-w-xl max-h-[90vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle>
               {editingItem ? "Редактировать объявление" : "Новое объявление платформы"}
-            </h3>
+            </DialogTitle>
+          </DialogHeader>
 
-            {formError && (
-              <div className="mb-4 p-3 rounded-lg bg-red-50 dark:bg-red-900/20 text-red-700 dark:text-red-400 text-sm">
-                {formError}
+          {formError && (
+            <Alert variant="destructive">
+              <AlertDescription>{formError}</AlertDescription>
+            </Alert>
+          )}
+
+          <form onSubmit={handleSave} className="space-y-4">
+            <FormField label="Заголовок" htmlFor="ann-title" required>
+              <Input
+                id="ann-title"
+                type="text"
+                required
+                value={formTitle}
+                onChange={(e) => setFormTitle(e.target.value)}
+                placeholder="Например: Обновление платформы 2.0"
+              />
+            </FormField>
+
+            <FormField label="Текст объявления" htmlFor="ann-body" required>
+              <Textarea
+                id="ann-body"
+                rows={4}
+                required
+                value={formBody}
+                onChange={(e) => setFormBody(e.target.value)}
+                placeholder="Введите текст объявления (минимум 5 символов)..."
+              />
+            </FormField>
+
+            <FormField label="Целевая аудитория">
+              <div className="grid grid-cols-3 gap-2">
+                <Button
+                  type="button"
+                  size="sm"
+                  variant={formAudience === "ALL_CENTERS" ? "primary" : "outline"}
+                  onClick={() => setFormAudience("ALL_CENTERS")}
+                >
+                  Все центры
+                </Button>
+                <Button
+                  type="button"
+                  size="sm"
+                  variant={formAudience === "ROLES" ? "primary" : "outline"}
+                  onClick={() => setFormAudience("ROLES")}
+                >
+                  По ролям
+                </Button>
+                <Button
+                  type="button"
+                  size="sm"
+                  variant={formAudience === "CENTERS" ? "primary" : "outline"}
+                  onClick={() => setFormAudience("CENTERS")}
+                >
+                  Выбранные центры
+                </Button>
+              </div>
+            </FormField>
+
+            {formAudience === "ROLES" && (
+              <div className="space-y-2 rounded-lg border border-border bg-muted/40 p-3">
+                <span className="block text-xs font-medium text-foreground">
+                  Выберите роли получателей:
+                </span>
+                <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+                  {AVAILABLE_ROLES.map((r) => {
+                    const checked = formRoles.includes(r.key);
+                    return (
+                      <label key={r.key} className="flex cursor-pointer items-center gap-2 text-xs text-foreground">
+                        <input
+                          type="checkbox"
+                          checked={checked}
+                          onChange={(e) =>
+                            setFormRoles(
+                              e.target.checked
+                                ? [...formRoles, r.key]
+                                : formRoles.filter((k) => k !== r.key)
+                            )
+                          }
+                          className="rounded border-input accent-primary"
+                        />
+                        {r.label}
+                      </label>
+                    );
+                  })}
+                </div>
               </div>
             )}
 
-            <form onSubmit={handleSave} className="space-y-4">
-              <div>
-                <label className="block text-xs font-semibold text-zinc-600 dark:text-zinc-400 mb-1">
-                  Заголовок *
-                </label>
-                <input
-                  type="text"
-                  required
-                  value={formTitle}
-                  onChange={(e) => setFormTitle(e.target.value)}
-                  placeholder="Например: Обновление платформы 2.0"
-                  className="w-full px-3 py-2 text-sm rounded-lg border border-zinc-200 dark:border-zinc-700 bg-transparent text-zinc-900 dark:text-zinc-100 focus:outline-none focus:ring-2 focus:ring-indigo-500"
+            {formAudience === "CENTERS" && (
+              <div className="space-y-2 rounded-lg border border-border bg-muted/40 p-3">
+                <span className="block text-xs font-medium text-foreground">
+                  Выберите учебные центры ({formCenterIds.length} выбрано):
+                </span>
+                <div className="max-h-36 space-y-1.5 overflow-y-auto pr-2">
+                  {availableCenters.map((c) => {
+                    const checked = formCenterIds.includes(c.id);
+                    return (
+                      <label key={c.id} className="flex cursor-pointer items-center gap-2 text-xs text-foreground">
+                        <input
+                          type="checkbox"
+                          checked={checked}
+                          onChange={(e) =>
+                            setFormCenterIds(
+                              e.target.checked
+                                ? [...formCenterIds, c.id]
+                                : formCenterIds.filter((id) => id !== c.id)
+                            )
+                          }
+                          className="rounded border-input accent-primary"
+                        />
+                        <span>{c.name}</span>
+                        <span className="text-xs text-muted-foreground">({c.slug})</span>
+                      </label>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
+
+            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+              <FormField label="Дата публикации" htmlFor="ann-pub">
+                <Input
+                  id="ann-pub"
+                  type="datetime-local"
+                  value={formPublishedAt}
+                  onChange={(e) => setFormPublishedAt(e.target.value)}
                 />
-              </div>
+              </FormField>
 
-              <div>
-                <label className="block text-xs font-semibold text-zinc-600 dark:text-zinc-400 mb-1">
-                  Текст объявления *
-                </label>
-                <textarea
-                  rows={4}
-                  required
-                  value={formBody}
-                  onChange={(e) => setFormBody(e.target.value)}
-                  placeholder="Введите текст объявления (минимум 5 символов)..."
-                  className="w-full px-3 py-2 text-sm rounded-lg border border-zinc-200 dark:border-zinc-700 bg-transparent text-zinc-900 dark:text-zinc-100 focus:outline-none focus:ring-2 focus:ring-indigo-500"
+              <FormField label="Истекает (опционально)" htmlFor="ann-exp">
+                <Input
+                  id="ann-exp"
+                  type="datetime-local"
+                  value={formExpiresAt}
+                  onChange={(e) => setFormExpiresAt(e.target.value)}
                 />
-              </div>
-
-              {/* Target Audience */}
-              <div>
-                <label className="block text-xs font-semibold text-zinc-600 dark:text-zinc-400 mb-2">
-                  Целевая аудитория
-                </label>
-                <div className="grid grid-cols-3 gap-2">
-                  <button
-                    type="button"
-                    onClick={() => setFormAudience("ALL_CENTERS")}
-                    className={`px-3 py-2 text-xs font-medium rounded-lg border text-center transition ${
-                      formAudience === "ALL_CENTERS"
-                        ? "border-indigo-600 bg-indigo-50 dark:bg-indigo-900/30 text-indigo-600 dark:text-indigo-400 font-semibold"
-                        : "border-zinc-200 dark:border-zinc-700 text-zinc-700 dark:text-zinc-300"
-                    }`}
-                  >
-                    Все центры
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setFormAudience("ROLES")}
-                    className={`px-3 py-2 text-xs font-medium rounded-lg border text-center transition ${
-                      formAudience === "ROLES"
-                        ? "border-indigo-600 bg-indigo-50 dark:bg-indigo-900/30 text-indigo-600 dark:text-indigo-400 font-semibold"
-                        : "border-zinc-200 dark:border-zinc-700 text-zinc-700 dark:text-zinc-300"
-                    }`}
-                  >
-                    По ролям
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setFormAudience("CENTERS")}
-                    className={`px-3 py-2 text-xs font-medium rounded-lg border text-center transition ${
-                      formAudience === "CENTERS"
-                        ? "border-indigo-600 bg-indigo-50 dark:bg-indigo-900/30 text-indigo-600 dark:text-indigo-400 font-semibold"
-                        : "border-zinc-200 dark:border-zinc-700 text-zinc-700 dark:text-zinc-300"
-                    }`}
-                  >
-                    Выбранные центры
-                  </button>
-                </div>
-              </div>
-
-              {/* Audience Specific: Roles */}
-              {formAudience === "ROLES" && (
-                <div className="p-3 rounded-lg border border-zinc-200 dark:border-zinc-700 bg-zinc-50 dark:bg-zinc-800/50 space-y-2">
-                  <span className="text-xs font-semibold text-zinc-700 dark:text-zinc-300 block">
-                    Выберите роли получателей:
-                  </span>
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-                    {AVAILABLE_ROLES.map((r) => {
-                      const checked = formRoles.includes(r.key);
-                      return (
-                        <label
-                          key={r.key}
-                          className="flex items-center gap-2 text-xs text-zinc-700 dark:text-zinc-300 cursor-pointer"
-                        >
-                          <input
-                            type="checkbox"
-                            checked={checked}
-                            onChange={(e) => {
-                              if (e.target.checked) {
-                                setFormRoles([...formRoles, r.key]);
-                              } else {
-                                setFormRoles(formRoles.filter((k) => k !== r.key));
-                              }
-                            }}
-                            className="rounded text-indigo-600 focus:ring-indigo-500"
-                          />
-                          {r.label}
-                        </label>
-                      );
-                    })}
-                  </div>
-                </div>
-              )}
-
-              {/* Audience Specific: Centers */}
-              {formAudience === "CENTERS" && (
-                <div className="p-3 rounded-lg border border-zinc-200 dark:border-zinc-700 bg-zinc-50 dark:bg-zinc-800/50 space-y-2">
-                  <span className="text-xs font-semibold text-zinc-700 dark:text-zinc-300 block">
-                    Выберите учебные центры ({formCenterIds.length} выбрано):
-                  </span>
-                  <div className="max-h-36 overflow-y-auto space-y-1.5 pr-2">
-                    {availableCenters.map((c) => {
-                      const checked = formCenterIds.includes(c.id);
-                      return (
-                        <label
-                          key={c.id}
-                          className="flex items-center gap-2 text-xs text-zinc-700 dark:text-zinc-300 cursor-pointer"
-                        >
-                          <input
-                            type="checkbox"
-                            checked={checked}
-                            onChange={(e) => {
-                              if (e.target.checked) {
-                                setFormCenterIds([...formCenterIds, c.id]);
-                              } else {
-                                setFormCenterIds(formCenterIds.filter((id) => id !== c.id));
-                              }
-                            }}
-                            className="rounded text-indigo-600 focus:ring-indigo-500"
-                          />
-                          <span>{c.name}</span>
-                          <span className="text-zinc-400 text-[10px]">({c.slug})</span>
-                        </label>
-                      );
-                    })}
-                  </div>
-                </div>
-              )}
-
-              {/* Dates */}
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                <div>
-                  <label className="block text-xs font-semibold text-zinc-600 dark:text-zinc-400 mb-1">
-                    Дата публикации
-                  </label>
-                  <input
-                    type="datetime-local"
-                    value={formPublishedAt}
-                    onChange={(e) => setFormPublishedAt(e.target.value)}
-                    className="w-full px-3 py-2 text-sm rounded-lg border border-zinc-200 dark:border-zinc-700 bg-transparent text-zinc-900 dark:text-zinc-100 focus:outline-none focus:ring-2 focus:ring-indigo-500"
-                  />
-                </div>
-
-                <div>
-                  <label className="block text-xs font-semibold text-zinc-600 dark:text-zinc-400 mb-1">
-                    Истекает (опционально)
-                  </label>
-                  <input
-                    type="datetime-local"
-                    value={formExpiresAt}
-                    onChange={(e) => setFormExpiresAt(e.target.value)}
-                    className="w-full px-3 py-2 text-sm rounded-lg border border-zinc-200 dark:border-zinc-700 bg-transparent text-zinc-900 dark:text-zinc-100 focus:outline-none focus:ring-2 focus:ring-indigo-500"
-                  />
-                </div>
-              </div>
-
-              {/* Footer buttons */}
-              <div className="flex items-center justify-end gap-3 pt-4 border-t border-zinc-200 dark:border-zinc-800">
-                <button
-                  type="button"
-                  onClick={() => setIsModalOpen(false)}
-                  className="px-4 py-2 text-sm font-medium rounded-lg text-zinc-700 dark:text-zinc-300 hover:bg-zinc-100 dark:hover:bg-zinc-800 transition"
-                >
-                  Отмена
-                </button>
-                <button
-                  type="submit"
-                  disabled={saving}
-                  className="px-4 py-2 text-sm font-medium rounded-lg bg-indigo-600 text-white hover:bg-indigo-700 transition disabled:opacity-50"
-                >
-                  {saving ? "Сохранение..." : editingItem ? "Сохранить изменения" : "Опубликовать"}
-                </button>
-              </div>
-            </form>
-          </div>
-        </div>
-      )}
-
-      {/* Delete Confirmation Modal */}
-      {deletingItem && (
-        <div className="fixed inset-0 z-50 bg-black/50 backdrop-blur-sm flex items-center justify-center p-4">
-          <div className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-2xl max-w-md w-full p-6 shadow-xl">
-            <h3 className="text-lg font-bold text-zinc-900 dark:text-zinc-100 mb-2">
-              Удалить объявление?
-            </h3>
-            <p className="text-sm text-zinc-500 dark:text-zinc-400 mb-4">
-              Объявление &laquo;{deletingItem.title}&raquo; будет удалено навсегда. Для безопасности и аудита укажите причину удаления.
-            </p>
-
-            <div className="mb-4">
-              <label className="block text-xs font-semibold text-zinc-600 dark:text-zinc-400 mb-1">
-                Причина удаления (минимум 5 символов) *
-              </label>
-              <input
-                type="text"
-                required
-                placeholder="Например: Ошибочная публикация"
-                value={deleteReason}
-                onChange={(e) => setDeleteReason(e.target.value)}
-                className="w-full px-3 py-2 text-sm rounded-lg border border-zinc-200 dark:border-zinc-700 bg-transparent text-zinc-900 dark:text-zinc-100 focus:outline-none focus:ring-2 focus:ring-red-500"
-              />
+              </FormField>
             </div>
 
-            <div className="flex items-center justify-end gap-3">
-              <button
-                type="button"
-                onClick={() => setDeletingItem(null)}
-                className="px-4 py-2 text-sm font-medium rounded-lg text-zinc-700 dark:text-zinc-300 hover:bg-zinc-100 dark:hover:bg-zinc-800 transition"
-              >
+            <FormActions>
+              <Button type="button" variant="outline" onClick={() => setIsModalOpen(false)}>
                 Отмена
-              </button>
-              <button
-                type="button"
-                disabled={deleting || deleteReason.trim().length < 5}
-                onClick={handleDelete}
-                className="px-4 py-2 text-sm font-medium rounded-lg bg-red-600 text-white hover:bg-red-700 transition disabled:opacity-50"
-              >
-                {deleting ? "Удаление..." : "Подтвердить удаление"}
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
+              </Button>
+              <Button type="submit" variant="primary" disabled={saving}>
+                {saving ? "Сохранение..." : editingItem ? "Сохранить изменения" : "Опубликовать"}
+              </Button>
+            </FormActions>
+          </form>
+        </DialogContent>
+      </Dialog>
+
+      <ConfirmDialog
+        open={Boolean(deletingItem)}
+        onOpenChange={(next) => !next && setDeletingItem(null)}
+        title="Удалить объявление"
+        description={
+          deletingItem
+            ? `Объявление «${deletingItem.title}» будет удалено навсегда. Укажите причину удаления.`
+            : undefined
+        }
+        variant="destructive"
+        loading={deleting}
+        reasonLabel="Причина удаления"
+        reasonPlaceholder="Например: Ошибочная публикация"
+        reasonRequired
+        reasonMinLength={5}
+        confirmLabel="Подтвердить удаление"
+        onConfirm={handleDelete}
+      />
     </div>
   );
 }

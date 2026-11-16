@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
-import { requireTenantAccess, logAuditEvent } from "@/lib/tenant";
+import { requireTenantAccess, logAuditEvent, TenantAccessError } from "@/lib/tenant";
 import { hasPermission } from "@/lib/permissions";
 import type { CenterRole } from "@/lib/permissions";
 
@@ -18,21 +18,42 @@ export async function PATCH(
     const { center, role: actorRole, session } = tenantCtx;
     const tenantDb = tenantCtx.getTenantDb();
 
-    const canManage =
-      tenantCtx.isPlatformStaff ||
-      hasPermission("courses.manage", session.user.platformRole, actorRole as CenterRole) ||
-      actorRole === "TEACHER";
-
-    if (!canManage) {
-      return NextResponse.json({ error: "Forbidden: No permission" }, { status: 403 });
-    }
-
     const moduleRecord = await tenantDb.courseModule.findFirst({
       where: { id: params.id, centerId: center.id },
     });
 
     if (!moduleRecord) {
       return NextResponse.json({ error: "Модуль не найден" }, { status: 404 });
+    }
+
+    const hasGlobalManage =
+      tenantCtx.isPlatformStaff ||
+      hasPermission("courses.manage", session.user.platformRole, actorRole as CenterRole);
+
+    if (!hasGlobalManage) {
+      if (
+        (actorRole === "TEACHER" || actorRole === "TEACHER_ASSISTANT") &&
+        tenantCtx.membership?.id &&
+        moduleRecord.courseId
+      ) {
+        const group = await tenantDb.group.findFirst({
+          where: {
+            centerId: center.id,
+            courseId: moduleRecord.courseId,
+            ...(actorRole === "TEACHER"
+              ? { teacherMembershipId: tenantCtx.membership.id }
+              : { assistantMembershipId: tenantCtx.membership.id }),
+          },
+        });
+        if (!group) {
+          return NextResponse.json(
+            { error: "Forbidden: You are not assigned to this course" },
+            { status: 403 }
+          );
+        }
+      } else {
+        return NextResponse.json({ error: "Forbidden: No permission" }, { status: 403 });
+      }
     }
 
     const body = await req.json();
@@ -57,6 +78,9 @@ export async function PATCH(
 
     return NextResponse.json({ success: true, module: updated });
   } catch (err: unknown) {
+    if (err instanceof TenantAccessError) {
+      return NextResponse.json({ error: err.message, code: err.code }, { status: err.status });
+    }
     if (err instanceof z.ZodError) {
       return NextResponse.json({ error: err.issues[0]?.message || "Validation error" }, { status: 400 });
     }
@@ -105,6 +129,9 @@ export async function DELETE(
 
     return NextResponse.json({ success: true, message: "Модуль удален" });
   } catch (err: unknown) {
+    if (err instanceof TenantAccessError) {
+      return NextResponse.json({ error: err.message, code: err.code }, { status: err.status });
+    }
     console.error("DELETE /api/modules/[id] error:", err);
     return NextResponse.json({ error: "Не удалось удалить модуль" }, { status: 500 });
   }

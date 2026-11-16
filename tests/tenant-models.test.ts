@@ -41,7 +41,9 @@ describe("TRUST-2 Item 2: Prisma DMMF TENANT_MODELS completeness", () => {
       })
       .map((m) => m.name);
 
-    // Notification (global vs tenant), SupportTicket (platform vs tenant), AuditLog (platform vs tenant)
-    expect(nullableCenterIdModels.sort()).toEqual(["AuditLog", "DevicePushToken", "Notification", "SupportTicket"].sort());
+    // Notification (global vs tenant), NotificationDelivery (global vs tenant, mirrors Notification), SupportTicket (platform vs tenant), AuditLog (platform vs tenant), PaymentWebhookEvent (unmatched webhook payload)
+    expect(nullableCenterIdModels.sort()).toEqual(
+      ["AuditLog", "DevicePushToken", "Notification", "NotificationDelivery", "PaymentWebhookEvent", "SupportTicket"].sort()
+    );
   });
 });

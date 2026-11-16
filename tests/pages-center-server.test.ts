@@ -43,6 +43,8 @@ function makeDb() {
     announcement: { findMany: vi.fn().mockResolvedValue([]) },
     parentLink: { findMany: vi.fn().mockResolvedValue([]) },
     enrollment: { findMany: vi.fn().mockResolvedValue([]) },
+    learningCenter: { findUnique: vi.fn().mockResolvedValue({ name: "Center", allowAdminDiscount: true }) },
+    centerMerchantConfig: { findFirst: vi.fn().mockResolvedValue(null) },
   };
 }
 
@@ -64,7 +66,20 @@ function session(overrides: Record<string, unknown> = {}) {
 
 /** Attach a fake tenant db + session and return the db for assertions. */
 function setUp(db: Db, sess: unknown) {
-  requireTenantPageAccessMock.mockResolvedValue({ getTenantDb: () => db });
+  const s = sess as {
+    activeCenterId?: string | null;
+    activeCenterRole?: string | null;
+    memberships?: Array<{ id: string; centerId: string }>;
+    user?: { platformRole?: string };
+  } | null;
+  const activeCenterId = s?.activeCenterId;
+  requireTenantPageAccessMock.mockResolvedValue({
+    getTenantDb: () => db,
+    center: activeCenterId ? { id: activeCenterId, name: "Center" } : undefined,
+    role: s?.activeCenterRole || "",
+    membership: s?.memberships?.find((m) => m.centerId === activeCenterId) || null,
+    isPlatformStaff: Boolean(s?.user?.platformRole),
+  });
   getAuthSessionMock.mockResolvedValue(sess);
 }
 
@@ -143,7 +158,7 @@ async function loadPage(name: PageName): Promise<() => Promise<unknown>> {
     case "homework":
       return (await import("@/app/center/homework/page")).default;
     case "profile":
-      return (await import("@/app/center/profile/page")).default;
+      return (await import("@/app/account/page")).default;
     case "attendance":
       return (await import("@/app/center/attendance/page")).default;
     case "branches":
@@ -441,7 +456,7 @@ describe("center/groups page", () => {
     ]);
     expect(element.props.locale).toBe("uz-Latn");
     expect(db.centerMembership.findMany).toHaveBeenCalledWith({
-      where: { centerId: "center-1", role: "TEACHER" },
+      where: { centerId: "center-1", role: "TEACHER", status: "ACTIVE" },
       include: { user: { select: { fullName: true, email: true } } },
     });
   });
@@ -503,7 +518,7 @@ describe("center/payments page", () => {
     const Page = await load();
     await Page();
     expect(db.centerPayment.findMany).toHaveBeenCalledWith(
-      expect.objectContaining({ where: { centerId: "center-1" } }),
+      expect.objectContaining({ where: { centerId: "center-1", deletedAt: null } }),
     );
   });
 
@@ -524,7 +539,7 @@ describe("center/payments page", () => {
 
     expect(db.centerPayment.findMany).toHaveBeenCalledWith(
       expect.objectContaining({
-        where: { centerId: "center-1", studentMembershipId: "m-student" },
+        where: { centerId: "center-1", deletedAt: null, studentMembershipId: "m-student" },
       }),
     );
     expect(db.centerMembership.findMany).toHaveBeenCalledWith(
@@ -558,7 +573,7 @@ describe("center/payments page", () => {
     });
     expect(db.centerPayment.findMany).toHaveBeenCalledWith(
       expect.objectContaining({
-        where: { centerId: "center-1", studentMembershipId: { in: ["s-1", "s-2"] } },
+        where: { centerId: "center-1", deletedAt: null, studentMembershipId: { in: ["s-1", "s-2"] } },
       }),
     );
     expect(db.centerMembership.findMany).toHaveBeenCalledWith(
@@ -629,14 +644,16 @@ describe("center/support page", () => {
 
     const Page = await load();
     const element = await Page();
-    const text = collectText(element);
+    const manager = findElementByName(element, "CenterSupportList");
 
-    expect(text).toContain("Broken login");
-    expect(text).toContain("Cannot sign in");
-    expect(text).toContain("CENTER");
+    expect(manager).not.toBeNull();
+    const initialTickets = manager!.props.initialTickets as Array<Record<string, unknown>>;
+    expect(initialTickets).toHaveLength(1);
+    expect(initialTickets[0].subject).toBe("Broken login");
+    expect(manager!.props.locale).toBe("ru");
     expect(db.supportTicket.findMany).toHaveBeenCalledWith(
       expect.objectContaining({
-        where: { OR: [{ creatorUserId: "u-1" }, { centerId: "center-1" }] },
+        where: { centerId: "center-1" },
       }),
     );
   });
@@ -661,14 +678,11 @@ describe("center/support page", () => {
     setUp(db, session());
 
     const Page = await load();
-    const text = collectText(await Page());
-
-    expect(text).toContain("Открыт");
-    expect(text).toContain("В работе");
-    expect(text).toContain("Решён");
-    expect(text).toContain("Закрыт");
-    // No raw key such as `support.statusIn_progress` may leak into the UI.
-    expect(text).not.toContain("support.status");
+    const element = await Page();
+    const manager = findElementByName(element, "CenterSupportList");
+    expect(manager).not.toBeNull();
+    const initialTickets = manager!.props.initialTickets as Array<Record<string, unknown>>;
+    expect(initialTickets.map((t) => t.status)).toEqual(["OPEN", "IN_PROGRESS", "RESOLVED", "CLOSED"]);
   });
 });
 
@@ -841,7 +855,7 @@ describe("center/homework page", () => {
     await Page();
 
     expect(db.enrollment.findMany).toHaveBeenCalledWith({
-      where: { studentMembershipId: "m-student" },
+      where: { studentMembershipId: "m-student", status: "ACTIVE" },
       select: { group: { select: { courseId: true } } },
     });
     expect(db.homework.findMany).toHaveBeenCalledWith(
@@ -876,7 +890,7 @@ describe("center/homework page", () => {
       select: { studentMembershipId: true },
     });
     expect(db.enrollment.findMany).toHaveBeenCalledWith({
-      where: { studentMembershipId: { in: ["s-1", "s-2"] } },
+      where: { studentMembershipId: { in: ["s-1", "s-2"] }, status: "ACTIVE" },
       select: { group: { select: { courseId: true } } },
     });
     expect(db.homework.findMany).toHaveBeenCalledWith(
@@ -911,124 +925,13 @@ describe("center/homework page", () => {
 });
 
 // ---------------------------------------------------------------------------
-// 9. /center/profile
+// 9. /center/profile (legacy redirect)
 // ---------------------------------------------------------------------------
 
-describe("center/profile page", () => {
-  const load = () => loadPage("profile");
-
-  function user() {
-    return {
-      id: "u-1",
-      fullName: "Ivan Petrov",
-      email: "ivan@x.uz",
-      phone: "+998900000000",
-      createdAt: new Date("2025-01-15T00:00:00.000Z"),
-    };
-  }
-
-  it("redirects to /login when there is no session", async () => {
-    setUp(makeDb(), null);
-    const Page = await load();
-    await expect(Page()).rejects.toThrow("NEXT_REDIRECT:/login");
-  });
-
-  it("redirects to /center when there is no active center", async () => {
-    setUp(makeDb(), session({ activeCenterId: null }));
-    const Page = await load();
-    await expect(Page()).rejects.toThrow("NEXT_REDIRECT:/center");
-  });
-
-  it("redirects to /login when the user record is missing", async () => {
-    const db = makeDb();
-    db.platformUser.findUnique.mockResolvedValue(null);
-    setUp(db, session());
-    const Page = await load();
-    await expect(Page()).rejects.toThrow("NEXT_REDIRECT:/login");
-  });
-
-  it("renders the base profile card for a staff member", async () => {
-    const db = makeDb();
-    db.platformUser.findUnique.mockResolvedValue(user());
-    db.centerMembership.findFirst.mockResolvedValue({
-      id: "m-1",
-      center: { id: "center-1", name: "Center" },
-      enrollments: [],
-      parentLinksAsParent: [],
-    });
-    setUp(db, session({ activeCenterRole: "CENTER_ADMIN" }));
-
-    const Page = await load();
-    const text = collectText(await Page());
-
-    expect(text).toContain("Ivan Petrov");
-    expect(text).toContain("ivan@x.uz");
-    expect(text).toContain("+998900000000");
-    expect(text).toContain("CENTER_ADMIN");
-    expect(db.platformUser.findUnique).toHaveBeenCalledWith({ where: { id: "u-1" } });
-    expect(db.centerMembership.findFirst).toHaveBeenCalledWith(
-      expect.objectContaining({ where: { userId: "u-1", centerId: "center-1" } }),
-    );
-  });
-
-  it("shows a student's groups and an empty-state fallback", async () => {
-    const db = makeDb();
-    db.platformUser.findUnique.mockResolvedValue(user());
-    db.centerMembership.findFirst.mockResolvedValue({
-      id: "m-1",
-      center: { id: "center-1" },
-      enrollments: [{ id: "e-1", status: "ACTIVE", group: { name: "A1" } }],
-      parentLinksAsParent: [],
-    });
-    setUp(
-      db,
-      session({
-        activeCenterRole: "STUDENT",
-        memberships: [{ id: "m-1", centerId: "center-1" }],
-      }),
-    );
-
-    const Page = await load();
-    const text = collectText(await Page());
-    expect(text).toContain("A1");
-    expect(text).toContain("ACTIVE");
-    expect(text).toContain("Мои группы");
-  });
-
-  it("shows a parent's children", async () => {
-    const db = makeDb();
-    db.platformUser.findUnique.mockResolvedValue(user());
-    db.centerMembership.findFirst.mockResolvedValue({
-      id: "m-1",
-      center: { id: "center-1" },
-      enrollments: [],
-      parentLinksAsParent: [
-        { id: "p-1", status: "CONFIRMED", student: { user: { fullName: "Child One" } } },
-      ],
-    });
-    setUp(
-      db,
-      session({
-        activeCenterRole: "PARENT",
-        memberships: [{ id: "m-1", centerId: "center-1" }],
-      }),
-    );
-
-    const Page = await load();
-    const text = collectText(await Page());
-    expect(text).toContain("Child One");
-    expect(text).toContain("Мои дети");
-  });
-
-  it("does not crash when membership is null", async () => {
-    const db = makeDb();
-    db.platformUser.findUnique.mockResolvedValue(user());
-    db.centerMembership.findFirst.mockResolvedValue(null);
-    setUp(db, session({ activeCenterRole: "STUDENT" }));
-
-    const Page = await load();
-    const text = collectText(await Page());
-    expect(text).toContain("Ivan Petrov");
+describe("center/profile page redirect", () => {
+  it("redirects legacy /center/profile to /account?tab=profile", async () => {
+    const RedirectPage = (await import("@/app/center/profile/page")).default;
+    expect(() => RedirectPage()).toThrow("NEXT_REDIRECT:/account?tab=profile");
   });
 });
 
@@ -1316,14 +1219,16 @@ describe("center/branches page", () => {
 
     const Page = await load();
     const element = await Page();
-    const text = collectText(element);
+    const manager = findElementByName(element, "BranchesManager");
 
-    expect(text).toContain("Main");
-    expect(text).toContain("Closed");
-    expect(text).toContain("Tashkent");
-    expect(text).toContain("main@x.uz");
-    expect(text).toContain("Нет групп");
-    expect(flatText(element)).toContain("1 активных · 1 неактивных");
+    expect(manager).not.toBeNull();
+    const initialBranches = manager!.props.initialBranches as Array<Record<string, unknown>>;
+    expect(initialBranches).toHaveLength(2);
+    expect(initialBranches[0].name).toBe("Main");
+    expect(initialBranches[1].name).toBe("Closed");
+    expect(initialBranches[0].address).toBe("Tashkent");
+    expect(initialBranches[0].email).toBe("main@x.uz");
+    expect(manager!.props.locale).toBe("ru");
     expect(db.branch.findMany).toHaveBeenCalledWith(
       expect.objectContaining({ where: { centerId: "center-1" } }),
     );
@@ -1334,9 +1239,11 @@ describe("center/branches page", () => {
     setUp(db, session({ activeCenterRole: "CENTER_ADMIN" }));
 
     const Page = await load();
-    const text = collectText(await Page());
+    const element = await Page();
+    const manager = findElementByName(element, "BranchesManager");
 
-    expect(text).toContain("Нет филиалов");
+    expect(manager).not.toBeNull();
+    expect(manager!.props.initialBranches).toEqual([]);
   });
 });
 
@@ -1378,25 +1285,15 @@ describe("center/announcements page", () => {
 
     const Page = await load();
     const element = await Page();
-    const text = collectText(element);
-    const card = findElementByName(element, "AnnouncementCard");
+    const manager = findElementByName(element, "AnnouncementsManager");
 
-    // The card is a nested component, so its text only exists in its props.
-    expect(text).toContain("Закреплённые");
-    expect(card).not.toBeNull();
-    expect(card!.props.isPinned).toBe(true);
-    const ann = card!.props.announcement as {
-      title: string;
-      body: string;
-      group: { name: string };
-      author: { user: { fullName: string } };
-    };
-    expect(ann.title).toBe("Holiday");
-    expect(ann.body).toBe("Closed on Sunday");
-    expect(ann.author.user.fullName).toBe("Admin");
-    expect(ann.group.name).toBe("A1");
-    expect(card!.props.locale).toBe("ru");
-    expect((card!.props.roleLabels as Record<string, string>).STUDENT).toBe("Ученики");
+    expect(manager).not.toBeNull();
+    const initialAnnouncements = manager!.props.initialAnnouncements as Array<Record<string, unknown>>;
+    expect(initialAnnouncements).toHaveLength(1);
+    expect(initialAnnouncements[0].title).toBe("Holiday");
+    expect(initialAnnouncements[0].body).toBe("Closed on Sunday");
+    expect(manager!.props.canManage).toBe(true);
+    expect(manager!.props.locale).toBe("ru");
     expect(db.announcement.findMany).toHaveBeenCalledWith(
       expect.objectContaining({ where: expect.objectContaining({ centerId: "center-1" }) }),
     );
@@ -1437,9 +1334,10 @@ describe("center/announcements page", () => {
     setUp(db, session({ activeCenterRole: "TEACHER" }));
 
     const Page = await load();
-    const text = collectText(await Page());
+    const element = await Page();
+    const manager = findElementByName(element, "AnnouncementsManager");
 
-    expect(text).toContain("Нет объявлений");
-    expect(text).toContain("Нет актуальных объявлений");
+    expect(manager).not.toBeNull();
+    expect(manager!.props.initialAnnouncements).toEqual([]);
   });
 });

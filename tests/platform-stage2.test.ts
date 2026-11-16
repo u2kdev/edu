@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach } from "vitest";
+import { describe, it, expect, beforeEach, afterAll } from "vitest";
 import type { PlatformUser, LearningCenter, SubscriptionPlan, Subscription } from "@prisma/client";
 import { db } from "@/lib/db";
 import { createSessionToken, hashPassword } from "@/lib/auth";
@@ -418,5 +418,27 @@ describe("Stage 2: Subscriptions & Platform Finance", () => {
       expect(stats.activeSubscriptionsCount).toBeGreaterThan(0);
       expect(stats.arpu).toBe(Math.round(stats.mrr / stats.activeSubscriptionsCount));
     });
+  });
+
+  afterAll(async () => {
+    await db.platformExpense.deleteMany({});
+    await db.platformExpenseCategory.deleteMany({});
+    await db.platformPayment.deleteMany({});
+    await db.subscription.deleteMany({});
+    await db.notification.deleteMany({ where: { user: { email: { startsWith: "stage2_" } } } });
+    await db.learningCenter.deleteMany({
+      where: {
+        OR: [
+          { slug: { startsWith: "finance-center-" } },
+          { slug: { startsWith: "exp-center-" } },
+          { owner: { email: { startsWith: "stage2_" } } },
+        ],
+      },
+    });
+    await db.subscriptionPlan.deleteMany({ where: { name: { startsWith: "Small Plan" } } });
+    await db.subscriptionPlan.deleteMany({ where: { name: { startsWith: "Large Plan" } } });
+    await db.userSession.deleteMany({ where: { user: { email: { startsWith: "stage2_" } } } });
+    await db.auditLog.deleteMany({ where: { actor: { email: { startsWith: "stage2_" } } } });
+    await db.platformUser.deleteMany({ where: { email: { startsWith: "stage2_" } } });
   });
 });

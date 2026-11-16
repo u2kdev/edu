@@ -4,6 +4,11 @@ import { requireFinanceTenantAccess } from "@/lib/tenant";
 import { hasPermission } from "@/lib/permissions";
 import { checkRateLimit, getClientIp } from "@/lib/rate-limit";
 import { reverseFinanceTransaction } from "@/lib/finance";
+import {
+  requirePlanFeature,
+  PlanFeatureLockedError,
+  formatPlanFeatureLockedPayload,
+} from "@/lib/plan-features";
 
 const reverseSchema = z.object({
   reason: z.string().trim().min(3, "Reversal reason must be at least 3 characters").max(500),
@@ -25,6 +30,8 @@ export async function POST(
         { status: 403 }
       );
     }
+
+    await requirePlanFeature(tenantCtx.center.id, "financeAccounting");
 
     const ip = getClientIp(req);
     const allowed = await checkRateLimit(`finance_storno:${tenantCtx.session.user.id}:${ip}`, 40, 60_000);
@@ -53,6 +60,9 @@ export async function POST(
 
     return NextResponse.json({ reversal });
   } catch (err: unknown) {
+    if (err instanceof PlanFeatureLockedError) {
+      return NextResponse.json(formatPlanFeatureLockedPayload(err), { status: 403 });
+    }
     const error = err as { message?: string; status?: number; code?: string };
     const msg = error.message || "Failed to reverse transaction";
     const status =

@@ -1,19 +1,27 @@
 "use client";
 
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
-import Link from "next/link";
-import {
-  HelpCircle,
-  MessageSquare,
-  Plus,
-  Clock,
-  AlertCircle,
-  Loader2,
-  ChevronRight,
-  ShieldAlert,
-} from "lucide-react";
+import { HelpCircle, Plus, Loader2, ChevronRight } from "lucide-react";
 import { formatDateLocalized } from "@/i18n";
+import { Alert, AlertDescription } from "@/components/ui/alert";
+import { Badge, type BadgeVariant } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
+import { DataTable, type DataTableColumn } from "@/components/ui/data-table";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import { FilterBar } from "@/components/ui/filter-bar";
+import { FormActions, FormField } from "@/components/ui/form-field";
+import { Input } from "@/components/ui/input";
+import { PageHeader } from "@/components/ui/page-header";
+import { Textarea } from "@/components/ui/textarea";
+
+const SELECT_CLS =
+  "flex h-9 w-full rounded-md border border-input bg-card px-3 py-1.5 text-sm text-foreground transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-1 focus-visible:ring-offset-background disabled:cursor-not-allowed disabled:opacity-50";
 
 export interface TicketSummary {
   id: string;
@@ -32,30 +40,18 @@ interface CenterSupportListProps {
   locale?: string;
 }
 
-const STATUS_CONFIG: Record<string, { label: string; badge: string }> = {
-  OPEN: {
-    label: "Открыт",
-    badge: "bg-blue-500/10 text-blue-400 border-blue-500/20",
-  },
-  IN_PROGRESS: {
-    label: "В работе",
-    badge: "bg-amber-500/10 text-amber-400 border-amber-500/20",
-  },
-  RESOLVED: {
-    label: "Решен",
-    badge: "bg-emerald-500/10 text-emerald-400 border-emerald-500/20",
-  },
-  CLOSED: {
-    label: "Закрыт",
-    badge: "bg-slate-800 text-slate-400 border-slate-700",
-  },
+const STATUS_CONFIG: Record<string, { label: string; variant: BadgeVariant }> = {
+  OPEN: { label: "Открыт", variant: "info" },
+  IN_PROGRESS: { label: "В работе", variant: "warning" },
+  RESOLVED: { label: "Решен", variant: "success" },
+  CLOSED: { label: "Закрыт", variant: "neutral" },
 };
 
-const PRIORITY_CONFIG: Record<string, { label: string; color: string }> = {
-  LOW: { label: "Низкий", color: "text-slate-400" },
-  MEDIUM: { label: "Средний", color: "text-blue-400" },
-  HIGH: { label: "Высокий", color: "text-amber-400" },
-  URGENT: { label: "Срочный", color: "text-rose-400 font-bold" },
+const PRIORITY_CONFIG: Record<string, { label: string; className: string }> = {
+  LOW: { label: "Низкий", className: "text-muted-foreground" },
+  MEDIUM: { label: "Средний", className: "text-info" },
+  HIGH: { label: "Высокий", className: "text-warning" },
+  URGENT: { label: "Критический", className: "text-destructive font-semibold" },
 };
 
 export default function CenterSupportList({
@@ -63,10 +59,11 @@ export default function CenterSupportList({
   locale = "ru",
 }: CenterSupportListProps) {
   const router = useRouter();
-  const [tickets, setTickets] = useState<TicketSummary[]>(initialTickets);
+  const [tickets] = useState<TicketSummary[]>(initialTickets);
+  const [search, setSearch] = useState("");
+  const [statusFilter, setStatusFilter] = useState("");
   const [showModal, setShowModal] = useState(false);
 
-  // Form states
   const [subject, setSubject] = useState("");
   const [message, setMessage] = useState("");
   const [priority, setPriority] = useState("MEDIUM");
@@ -113,201 +110,235 @@ export default function CenterSupportList({
     }
   };
 
+  const filteredTickets = useMemo(() => {
+    const q = search.trim().toLowerCase();
+    return tickets.filter((tkt) => {
+      if (statusFilter && tkt.status !== statusFilter) return false;
+      if (q && !tkt.subject.toLowerCase().includes(q)) return false;
+      return true;
+    });
+  }, [tickets, search, statusFilter]);
+
+  const columns = useMemo<DataTableColumn<TicketSummary>[]>(
+    () => [
+      {
+        id: "subject",
+        header: "Тема обращения",
+        sortable: true,
+        sortValue: (tkt) => tkt.subject,
+        cell: (tkt) => (
+          <div className="font-medium text-foreground">{tkt.subject}</div>
+        ),
+      },
+      {
+        id: "status",
+        header: "Статус",
+        sortable: true,
+        sortValue: (tkt) => tkt.status,
+        cell: (tkt) => {
+          const statusInfo = STATUS_CONFIG[tkt.status] || {
+            label: tkt.status,
+            variant: "neutral" as BadgeVariant,
+          };
+          return <Badge variant={statusInfo.variant}>{statusInfo.label}</Badge>;
+        },
+      },
+      {
+        id: "priority",
+        header: "Приоритет",
+        cell: (tkt) => {
+          const pInfo = PRIORITY_CONFIG[tkt.priority] || {
+            label: tkt.priority,
+            className: "text-muted-foreground",
+          };
+          return <span className={`text-xs font-medium ${pInfo.className}`}>{pInfo.label}</span>;
+        },
+      },
+      {
+        id: "createdAt",
+        header: "Создан",
+        sortable: true,
+        sortValue: (tkt) => new Date(tkt.createdAt).getTime(),
+        cell: (tkt) => (
+          <span className="text-xs text-muted-foreground tabular-nums">
+            {formatDateLocalized(tkt.createdAt, locale)}
+          </span>
+        ),
+      },
+      {
+        id: "go",
+        header: "",
+        align: "right",
+        cell: () => (
+          <span className="inline-flex items-center gap-1 text-xs font-medium text-muted-foreground">
+            <span>Перейти</span>
+            <ChevronRight className="h-3.5 w-3.5" aria-hidden="true" />
+          </span>
+        ),
+      },
+    ],
+    [locale]
+  );
+
   return (
     <div className="space-y-6">
-      {/* Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-        <div>
-          <h2 className="text-xl font-bold text-white flex items-center gap-2">
-            <HelpCircle className="w-6 h-6 text-brand-400" />
-            Служба поддержки
-          </h2>
-          <p className="text-sm text-slate-400 mt-0.5">
-            Вопросы по платформе, тарифам, настройкам центра и техническим проблемам
-          </p>
-        </div>
-        <button
-          onClick={() => {
-            setShowModal(true);
-            setErrorMessage(null);
+      <PageHeader
+        title="Служба поддержки"
+        description="Вопросы по платформе, тарифам, настройкам центра и техническим проблемам"
+        actions={
+          <Button
+            type="button"
+            size="sm"
+            onClick={() => {
+              setErrorMessage(null);
+              setShowModal(true);
+            }}
+          >
+            <Plus className="h-4 w-4" aria-hidden="true" />
+            <span>Новое обращение</span>
+          </Button>
+        }
+      />
+
+      {tickets.length > 0 && (
+        <FilterBar
+          locale={locale}
+          search={search}
+          onSearchChange={setSearch}
+          searchPlaceholder="Поиск по теме обращения..."
+          hasActiveFilters={Boolean(search || statusFilter)}
+          onReset={() => {
+            setSearch("");
+            setStatusFilter("");
           }}
-          className="px-4 py-2.5 rounded-xl bg-brand-600 hover:bg-brand-500 text-white font-semibold text-sm transition-colors flex items-center gap-2 self-start sm:self-auto shadow-lg shadow-brand-500/20"
         >
-          <Plus className="w-4 h-4" />
-          Новое обращение
-        </button>
-      </div>
+          <select
+            aria-label="Статус"
+            value={statusFilter}
+            onChange={(e) => setStatusFilter(e.target.value)}
+            className={`${SELECT_CLS} w-44 text-[13px]`}
+          >
+            <option value="">Все статусы</option>
+            <option value="OPEN">Открыт</option>
+            <option value="IN_PROGRESS">В работе</option>
+            <option value="RESOLVED">Решен</option>
+            <option value="CLOSED">Закрыт</option>
+          </select>
+        </FilterBar>
+      )}
 
-      {/* Tickets List */}
-      <div className="space-y-3">
-        {tickets.length === 0 ? (
-          <div className="glass-panel p-16 rounded-2xl border border-slate-800 text-center">
-            <HelpCircle className="w-12 h-12 text-slate-700 mx-auto mb-3" />
-            <h3 className="text-lg font-semibold text-slate-300 mb-1">Обращений пока нет</h3>
-            <p className="text-sm text-slate-500 mb-4 max-w-sm mx-auto">
-              Если у вас возникнут вопросы или потребуется помощь, создайте тикет в службу поддержки.
-            </p>
-            <button
-              onClick={() => setShowModal(true)}
-              className="px-4 py-2 rounded-xl bg-brand-600 hover:bg-brand-500 text-white text-xs font-semibold inline-flex items-center gap-1.5"
-            >
-              <Plus className="w-3.5 h-3.5" />
-              Создать обращение
-            </button>
-          </div>
-        ) : (
-          tickets.map((tkt) => {
-            const statusInfo = STATUS_CONFIG[tkt.status] || {
-              label: tkt.status,
-              badge: "bg-slate-800 text-slate-300",
-            };
-            const priorityInfo = PRIORITY_CONFIG[tkt.priority] || {
-              label: tkt.priority,
-              color: "text-slate-400",
-            };
+      <DataTable
+        data={filteredTickets}
+        columns={columns}
+        getRowId={(tkt) => tkt.id}
+        getRowHref={(tkt) => `/center/support/${tkt.id}`}
+        locale={locale}
+        emptyTitle="Обращений пока нет"
+        emptyDescription="Если у вас возникнут вопросы или потребуется помощь, создайте тикет в службу поддержки."
+        mobileCardRender={(tkt) => {
+          const statusInfo = STATUS_CONFIG[tkt.status] || {
+            label: tkt.status,
+            variant: "neutral" as BadgeVariant,
+          };
+          const pInfo = PRIORITY_CONFIG[tkt.priority] || {
+            label: tkt.priority,
+            className: "text-muted-foreground",
+          };
+          return (
+            <div className="space-y-1.5 text-xs">
+              <div className="flex items-start justify-between gap-2">
+                <div className="font-semibold text-foreground">{tkt.subject}</div>
+                <Badge variant={statusInfo.variant}>{statusInfo.label}</Badge>
+              </div>
+              <div className="flex items-center justify-between gap-2 text-muted-foreground tabular-nums">
+                <span>
+                  Приоритет: <span className={pInfo.className}>{pInfo.label}</span>
+                </span>
+                <span>{formatDateLocalized(tkt.createdAt, locale)}</span>
+              </div>
+            </div>
+          );
+        }}
+      />
 
-            return (
-              <Link
-                key={tkt.id}
-                href={`/center/support/${tkt.id}`}
-                className="glass-panel p-5 rounded-2xl border border-slate-800 hover:border-brand-500/40 flex items-center justify-between gap-4 transition-all block group"
-              >
-                <div className="space-y-1.5 flex-1 min-w-0">
-                  <div className="flex flex-wrap items-center gap-2">
-                    <span
-                      className={`px-2.5 py-0.5 rounded-full text-[11px] font-semibold border ${statusInfo.badge}`}
-                    >
-                      {statusInfo.label}
-                    </span>
-                    <span className="text-xs text-slate-500 font-medium">
-                      Приоритет: <span className={priorityInfo.color}>{priorityInfo.label}</span>
-                    </span>
-                    <span className="text-xs text-slate-600">•</span>
-                    <span className="text-xs text-slate-400">
-                      {formatDateLocalized(tkt.createdAt, locale)}
-                    </span>
-                  </div>
-                  <h3 className="text-base font-bold text-white group-hover:text-brand-300 transition-colors truncate">
-                    {tkt.subject}
-                  </h3>
-                </div>
+      <Dialog open={showModal} onOpenChange={setShowModal}>
+        <DialogContent className="max-w-lg">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <HelpCircle className="h-4 w-4 text-primary" aria-hidden="true" />
+              <span>Новое обращение в поддержку</span>
+            </DialogTitle>
+          </DialogHeader>
 
-                <div className="flex items-center gap-2 text-slate-500 group-hover:text-white transition-colors shrink-0">
-                  <span className="text-xs hidden sm:inline">Перейти</span>
-                  <ChevronRight className="w-4 h-4" />
-                </div>
-              </Link>
-            );
-          })
-        )}
-      </div>
+          {errorMessage && (
+            <Alert variant="destructive">
+              <AlertDescription>{errorMessage}</AlertDescription>
+            </Alert>
+          )}
 
-      {/* New Ticket Modal */}
-      {showModal && (
-        <div className="fixed inset-0 z-50 bg-black/70 backdrop-blur-sm flex items-center justify-center p-4">
-          <div className="glass-panel w-full max-w-lg p-6 rounded-3xl border border-slate-800 space-y-6">
-            <div className="flex items-center justify-between">
-              <h3 className="text-lg font-bold text-white flex items-center gap-2">
-                <HelpCircle className="w-5 h-5 text-brand-400" />
-                Новое обращение в поддержку
-              </h3>
-              <button
-                onClick={() => setShowModal(false)}
-                className="text-slate-400 hover:text-white text-sm"
-              >
-                ✕
-              </button>
+          <form onSubmit={handleCreate} className="space-y-4">
+            <FormField label="Тема обращения" htmlFor="ticket-subject" required>
+              <Input
+                id="ticket-subject"
+                type="text"
+                required
+                value={subject}
+                onChange={(e) => setSubject(e.target.value)}
+                placeholder="Например: Вопрос по оплате тарифа / Сбой в расписании"
+              />
+            </FormField>
+
+            <div className="grid grid-cols-2 gap-3">
+              <FormField label="Категория" htmlFor="ticket-scope">
+                <select
+                  id="ticket-scope"
+                  value={scope}
+                  onChange={(e) => setScope(e.target.value)}
+                  className={SELECT_CLS}
+                >
+                  <option value="TENANT">Учебный центр</option>
+                  <option value="PLATFORM">Платформа и тарифы</option>
+                </select>
+              </FormField>
+
+              <FormField label="Приоритет" htmlFor="ticket-priority">
+                <select
+                  id="ticket-priority"
+                  value={priority}
+                  onChange={(e) => setPriority(e.target.value)}
+                  className={SELECT_CLS}
+                >
+                  <option value="LOW">Низкий</option>
+                  <option value="MEDIUM">Средний</option>
+                  <option value="HIGH">Высокий</option>
+                  <option value="URGENT">Критический</option>
+                </select>
+              </FormField>
             </div>
 
-            {errorMessage && (
-              <div className="p-3.5 bg-rose-500/10 border border-rose-500/30 rounded-xl text-xs text-rose-300 flex items-start gap-2">
-                <AlertCircle className="w-4 h-4 text-rose-400 shrink-0 mt-0.5" />
-                <span>{errorMessage}</span>
-              </div>
-            )}
+            <FormField label="Описание проблемы или вопроса" htmlFor="ticket-message" required>
+              <Textarea
+                id="ticket-message"
+                required
+                rows={4}
+                value={message}
+                onChange={(e) => setMessage(e.target.value)}
+                placeholder="Опишите подробно, с чем требуется помощь..."
+              />
+            </FormField>
 
-            <form onSubmit={handleCreate} className="space-y-4">
-              <div>
-                <label className="block text-xs font-semibold text-slate-300 uppercase tracking-wider mb-1.5">
-                  Тема обращения *
-                </label>
-                <input
-                  type="text"
-                  required
-                  value={subject}
-                  onChange={(e) => setSubject(e.target.value)}
-                  placeholder="e.g. Вопрос по оплате тарифа / Сбой в расписании"
-                  className="w-full px-4 py-2.5 bg-slate-900 border border-slate-700 rounded-xl text-white text-sm focus:outline-none focus:border-brand-500"
-                />
-              </div>
-
-              <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <label className="block text-xs font-semibold text-slate-300 uppercase tracking-wider mb-1.5">
-                    Категория
-                  </label>
-                  <select
-                    value={scope}
-                    onChange={(e) => setScope(e.target.value)}
-                    className="w-full px-3 py-2 bg-slate-900 border border-slate-700 rounded-xl text-white text-sm focus:outline-none focus:border-brand-500"
-                  >
-                    <option value="TENANT">Учебный центр</option>
-                    <option value="PLATFORM">Платформа и тарифы</option>
-                  </select>
-                </div>
-
-                <div>
-                  <label className="block text-xs font-semibold text-slate-300 uppercase tracking-wider mb-1.5">
-                    Приоритет
-                  </label>
-                  <select
-                    value={priority}
-                    onChange={(e) => setPriority(e.target.value)}
-                    className="w-full px-3 py-2 bg-slate-900 border border-slate-700 rounded-xl text-white text-sm focus:outline-none focus:border-brand-500"
-                  >
-                    <option value="LOW">Низкий</option>
-                    <option value="MEDIUM">Средний</option>
-                    <option value="HIGH">Высокий</option>
-                    <option value="URGENT">Критический</option>
-                  </select>
-                </div>
-              </div>
-
-              <div>
-                <label className="block text-xs font-semibold text-slate-300 uppercase tracking-wider mb-1.5">
-                  Описание проблемы или вопроса *
-                </label>
-                <textarea
-                  required
-                  rows={4}
-                  value={message}
-                  onChange={(e) => setMessage(e.target.value)}
-                  placeholder="Опишите подробно, с чем требуется помощь..."
-                  className="w-full px-4 py-2.5 bg-slate-900 border border-slate-700 rounded-xl text-white text-sm focus:outline-none focus:border-brand-500"
-                />
-              </div>
-
-              <div className="pt-3 border-t border-slate-800 flex items-center justify-end gap-3">
-                <button
-                  type="button"
-                  onClick={() => setShowModal(false)}
-                  className="px-4 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-medium transition-colors"
-                >
-                  Отмена
-                </button>
-                <button
-                  type="submit"
-                  disabled={loading}
-                  className="px-5 py-2 rounded-xl bg-brand-600 hover:bg-brand-500 text-white text-xs font-semibold transition-colors flex items-center gap-1.5 disabled:opacity-50"
-                >
-                  {loading && <Loader2 className="w-3.5 h-3.5 animate-spin" />}
-                  Отправить в поддержку
-                </button>
-              </div>
-            </form>
-          </div>
-        </div>
-      )}
+            <FormActions>
+              <Button type="button" variant="outline" onClick={() => setShowModal(false)}>
+                Отмена
+              </Button>
+              <Button type="submit" disabled={loading}>
+                {loading && <Loader2 className="h-3.5 w-3.5 animate-spin" aria-hidden="true" />}
+                <span>Отправить в поддержку</span>
+              </Button>
+            </FormActions>
+          </form>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

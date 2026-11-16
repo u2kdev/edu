@@ -191,6 +191,8 @@ export async function cleanupTestEntities(entities: CleanableEntities): Promise<
     }
 
     if (userIds.length > 0) {
+      await db.platformAnnouncementRead.deleteMany({ where: { userId: { in: userIds } } });
+      await db.platformAnnouncement.deleteMany({ where: { createdBy: { in: userIds } } });
       await db.userSession.deleteMany({ where: { userId: { in: userIds } } });
       await db.auditLog.deleteMany({ where: { actorUserId: { in: userIds } } });
       await db.centerMembership.deleteMany({ where: { userId: { in: userIds } } });

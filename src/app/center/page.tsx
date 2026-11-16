@@ -1,2285 +1,313 @@
-import type { Prisma } from "@prisma/client";
+import { cookies } from "next/headers";
+import Link from "next/link";
+import { redirect } from "next/navigation";
 import { requireTenantPageAccess } from "@/lib/tenant";
 import { getAuthSession } from "@/lib/auth";
-import { redirect } from "next/navigation";
-import Link from "next/link";
+import { t } from "@/i18n";
+import { PARENT_CHILD_COOKIE } from "@/lib/sidebar-constants";
+import type { AnalyticsPeriodPreset } from "@/lib/finance-analytics";
+import { getCenterFinanceAnalytics } from "@/lib/finance-analytics";
 import {
-  Users, BookOpen, CreditCard, Sparkles, CheckCircle2,
-  ArrowRight, AlertTriangle, CalendarDays, ClipboardCheck,
-  Flame, Clock, ShieldCheck, BarChart3, GraduationCap, Plus,
-  Building2, Layers, AlertCircle, UserX, CalendarX, FileWarning
-} from "lucide-react";
-import { t, formatCurrencyLocalized, formatDateLocalized } from "@/i18n";
-import { getCenterSubscriptionUsage } from "@/lib/limits";
-import { calculateStudentDebts } from "@/lib/finance";
+  getDirectorDashboardData,
+  getStudentPerformanceData,
+  getTeacherDashboardData,
+} from "@/lib/dashboard-analytics";
+import { EmptyState } from "@/components/ui/empty-state";
+import { PageHeader } from "@/components/ui/page-header";
+import { StatCard } from "@/components/ui/stat-card";
+import { Button } from "@/components/ui/button";
+import { DirectorDashboardView } from "@/components/dashboard/DirectorDashboardView";
+import { TeacherDashboardView } from "@/components/dashboard/TeacherDashboardView";
+import { StudentDashboardView } from "@/components/dashboard/StudentDashboardView";
 import {
-  calculateStudentBalances,
-  StudentBalanceSummaryDTO,
-} from "@/lib/student-balance";
-import { CenterTrendCharts, DailyTrendPoint } from "@/components/dashboard/CenterTrendCharts";
-import {
-  ParentChildSwitcherBar,
-  ParentChildFilterSlot,
-} from "@/components/dashboard/ParentChildFilter";
+  ParentDashboardView,
+  type ParentChildDashboardEntry,
+} from "@/components/dashboard/ParentDashboardView";
+import { CenterFinanceAnalytics } from "@/components/finance/CenterFinanceAnalytics";
 
-export default async function CenterDashboardPage() {
+export const dynamic = "force-dynamic";
+
+function normalizePeriod(raw?: string): AnalyticsPeriodPreset {
+  if (raw === "7d" || raw === "30d" || raw === "90d" || raw === "12m") return raw;
+  return "30d";
+}
+
+export default async function CenterDashboardPage({
+  searchParams,
+}: {
+  searchParams?: { period?: string; childId?: string };
+}) {
   const tenantCtx = await requireTenantPageAccess();
-
   const session = await getAuthSession();
   if (!session) redirect("/login");
 
-  const locale = session.user.preferredLanguage;
+  const locale = session.user.preferredLanguage || "ru";
   const activeCenterId = session.activeCenterId;
   const activeRole = session.activeCenterRole || "";
 
   if (!activeCenterId) {
     return (
-      <div className="text-center py-20">
-        <p className="text-slate-400">{t(locale, "dashboard.selectCenter")}</p>
+      <div className="py-12">
+        <EmptyState title={t(locale, "dashboard.selectCenter")} locale={locale} />
       </div>
     );
   }
 
-  const center = await tenantCtx.getTenantDb().learningCenter.findUnique({
+  const tenantDb = tenantCtx.getTenantDb();
+  const center = await tenantDb.learningCenter.findUnique({
     where: { id: activeCenterId },
-    include: {
-      subscriptions: {
-        include: { plan: true },
-        orderBy: { createdAt: "desc" },
-        take: 1,
-      },
-    },
+    select: { id: true, name: true, slug: true, status: true },
   });
 
   if (!center) redirect("/login");
 
-interface StudentEnrollmentItem {
-  id: string;
-  group: {
-    id: string;
-    name: string;
-    course: { id: string; title: string };
-    teacher?: { user: { fullName: string } } | null;
-  };
-}
+  const period = normalizePeriod(searchParams?.period);
+  const currentMem = session.memberships.find((m) => m.centerId === activeCenterId);
+  const roleLabel = activeRole ? t(locale, `roles.${activeRole}`) : "";
 
-interface ParentChildItem {
-  id: string;
-  student: {
-    user: { fullName: string; email: string };
-    enrollments: Array<{ id: string; group: { name: string; course: { title: string } } }>;
-    payments: Array<{ id: string; amount: number; status: string }>;
-  };
-}
-
-interface UrgentHomeworkItem {
-  id: string;
-  title: string;
-  dueDate?: Date | null;
-}
-
-  let activeStudentsCount = 0;
-  let activeTeachersCount = 0;
-  let coursesCount = 0;
-  let totalRevenue = 0;
-  let overallAttendanceRate: number | null = null;
-  let atRiskStudentsCount = 0;
-  let centerScheduleSlots: Array<{
-    id: string;
-    dayOfWeek: number;
-    startTime: string;
-    endTime: string;
-    roomName?: string | null;
-    group: { name: string; course: { title: string } };
-    teacher: { user: { fullName: string } };
-  }> = [];
-  let studentEnrollments: StudentEnrollmentItem[] = [];
-  let parentChildren: ParentChildItem[] = [];
-  let pendingHomeworksCount = 0;
-  let urgentHomeworks: UrgentHomeworkItem[] = [];
-  let attendanceRate: number | null = null;
-  let debtorsCount = 0;
-  let totalDebtAmount = 0;
-  let groupsWithoutTeacherCount = 0;
-  let groupsWithoutScheduleCount = 0;
-  let unmarkedLessonsCount = 0;
-  let inactiveTeachersCount = 0;
-  let trendPoints: DailyTrendPoint[] = [];
-  let todayLessonsCount = 0;
-  let teacherUnmarkedCount = 0;
-  let teacherUpcomingHomeworks: Array<{ id: string; title: string; dueDate: Date | null }> = [];
-  let teacherAtRiskStudents: Array<{ id: string; name: string; group: string; rate: number | null }> = [];
-
-  activeStudentsCount = await tenantCtx.getTenantDb().centerMembership.count({
-    where: { centerId: activeCenterId, role: "STUDENT", status: "ACTIVE" },
-  });
-
-  activeTeachersCount = await tenantCtx.getTenantDb().centerMembership.count({
-    where: { centerId: activeCenterId, role: "TEACHER", status: "ACTIVE" },
-  });
-
-  coursesCount = await tenantCtx.getTenantDb().course.count({
-    where: { centerId: activeCenterId },
-  });
-
-  const payments = await tenantCtx.getTenantDb().centerPayment.aggregate({
-    where: { centerId: activeCenterId, status: "PAID" },
-    _sum: { amount: true },
-  });
-  totalRevenue = payments._sum.amount || 0;
-
-  // Director / Admin specific attendance analytics and upcoming schedule
   if (activeRole === "DIRECTOR" || activeRole === "CENTER_ADMIN") {
-    const centerAttendances = await tenantCtx.getTenantDb().attendance.findMany({
-      where: { lesson: { module: { course: { centerId: activeCenterId } } } },
-      select: { studentMembershipId: true, status: true },
+    const directorData = await getDirectorDashboardData({
+      centerId: activeCenterId,
+      period,
     });
-    const totalCenterAtt = centerAttendances.length;
-    const presentCenterAtt = centerAttendances.filter(
-      (a) => a.status === "PRESENT" || a.status === "LATE"
-    ).length;
-    overallAttendanceRate =
-      totalCenterAtt > 0 ? Math.round((presentCenterAtt / totalCenterAtt) * 100) : null;
+    return (
+      <DirectorDashboardView
+        data={directorData}
+        roleLabel={roleLabel}
+        centerSlug={center.slug}
+        locale={locale}
+      />
+    );
+  }
 
-    const studentAttMap = new Map<string, { total: number; present: number }>();
-    for (const a of centerAttendances) {
-      const cur = studentAttMap.get(a.studentMembershipId) || { total: 0, present: 0 };
-      cur.total++;
-      if (a.status === "PRESENT" || a.status === "LATE") cur.present++;
-      studentAttMap.set(a.studentMembershipId, cur);
-    }
-    for (const [, stats] of studentAttMap) {
-      if (stats.total > 0 && stats.present / stats.total < 0.8) {
-        atRiskStudentsCount++;
-      }
-    }
+  if (activeRole === "ACCOUNTANT") {
+    const financeAnalytics = await getCenterFinanceAnalytics({
+      centerId: activeCenterId,
+      period,
+    });
+    return (
+      <div className="space-y-6">
+        <PageHeader
+          title={t(locale, "ui3.accountantOverviewTitle")}
+          description={`${t(locale, "ui3.accountantOverviewSubtitle")} (${center.slug})`}
+          actions={
+            <div className="flex flex-wrap items-center gap-2">
+              <Button asChild variant="outline" size="sm">
+                <Link href="/center/finance">{t(locale, "nav.finance")}</Link>
+              </Button>
+              <Button asChild variant="outline" size="sm">
+                <Link href="/center/reports">{t(locale, "nav.reports")}</Link>
+              </Button>
+            </div>
+          }
+        />
+        <CenterFinanceAnalytics initialData={financeAnalytics} locale={locale} />
+      </div>
+    );
+  }
 
-    centerScheduleSlots = await tenantCtx.getTenantDb().scheduleSlot.findMany({
-      where: { centerId: activeCenterId, status: "ACTIVE" },
-      include: {
-        group: { include: { course: { select: { title: true } } } },
-        teacher: { include: { user: { select: { fullName: true } } } },
+  if (activeRole === "TEACHER" || activeRole === "TEACHER_ASSISTANT") {
+    const emptyTeacherData = {
+      period,
+      kpis: {
+        todayLessonsCount: 0,
+        pendingReviewsCount: 0,
+        unmarkedLessonsCount: 0,
+        groupsCount: 0,
+        avgAttendanceRate: null,
+        atRiskCount: 0,
+        monthlyHours: 0,
+        monthlyCalculatedSalary: 0,
+        monthlyUnpaidSalary: 0,
       },
-      orderBy: [{ dayOfWeek: "asc" }, { startTime: "asc" }],
-      take: 6,
-    });
+      todayLessons: [],
+      weeklySchedule: [],
+      attendanceByGroup: [],
+      pendingReviews: [],
+      gradeDistribution: [],
+      atRiskStudents: [],
+      salarySummary: {
+        conductedLessons: 0,
+        totalMinutes: 0,
+        totalHours: 0,
+        calculatedSalary: 0,
+        paidSalary: 0,
+        unpaidSalary: 0,
+      },
+    };
 
-    // 1. Debtors calculation
-    const debtCalc = await calculateStudentDebts(activeCenterId).catch(() => null);
-    if (debtCalc) {
-      debtorsCount = debtCalc.summary.debtorsCount;
-      totalDebtAmount = debtCalc.summary.totalDebt;
+    const teacherData = currentMem
+      ? await getTeacherDashboardData({
+          centerId: activeCenterId,
+          membershipId: currentMem.id,
+          role: activeRole,
+          period,
+        })
+      : emptyTeacherData;
+
+    return (
+      <TeacherDashboardView
+        data={teacherData}
+        roleLabel={roleLabel}
+        centerSlug={center.slug}
+        locale={locale}
+      />
+    );
+  }
+
+  if (activeRole === "STUDENT") {
+    if (!currentMem) {
+      return (
+        <StudentDashboardView
+          performance={null}
+          enrollmentsCount={0}
+          scheduleSlots={[]}
+          centerSlug={center.slug}
+          locale={locale}
+        />
+      );
     }
 
-    const tdb = tenantCtx.getTenantDb();
+    const enrollments = await tenantDb.enrollment.findMany({
+      where: { studentMembershipId: currentMem.id, status: "ACTIVE" },
+      select: { groupId: true },
+    });
+    const enrolledGroupIds = enrollments.map((e) => e.groupId);
 
-    // 2. Groups without teacher
-    groupsWithoutTeacherCount = tdb.group?.count
-      ? await tdb.group.count({
-          where: { centerId: activeCenterId, teacherMembershipId: null },
-        })
-      : 0;
-
-    // 3. Groups without schedule
-    groupsWithoutScheduleCount = tdb.group?.count
-      ? await tdb.group.count({
-          where: {
+    const [performance, scheduleSlots] = await Promise.all([
+      enrollments.length > 0
+        ? getStudentPerformanceData({
             centerId: activeCenterId,
-            scheduleSlots: { none: { status: "ACTIVE" } },
-          },
-        })
-      : 0;
-
-    // 4. Lessons without attendance for 3 days
-    const threeDaysAgo = new Date(Date.now() - 3 * 24 * 60 * 60 * 1000);
-    unmarkedLessonsCount = tdb.lesson?.count
-      ? await tdb.lesson.count({
-          where: {
-            module: { course: { centerId: activeCenterId } },
-            scheduledAt: { gte: threeDaysAgo, lte: new Date() },
-            attendances: { none: {} },
-          },
-        })
-      : 0;
-
-    // 5. Inactive teachers (no login for 14 days or never)
-    const fourteenDaysAgo = new Date(Date.now() - 14 * 24 * 60 * 60 * 1000);
-    inactiveTeachersCount = tdb.centerMembership?.count
-      ? await tdb.centerMembership.count({
-          where: {
-            centerId: activeCenterId,
-            role: "TEACHER",
-            status: "ACTIVE",
-            OR: [
-              { user: { lastLoginAt: null } },
-              { user: { lastLoginAt: { lt: fourteenDaysAgo } } },
-            ],
-          },
-        })
-      : 0;
-
-    // 6. 90-day trend data for Attendance & Revenue
-    const ninetyDaysAgo = new Date(Date.now() - 90 * 24 * 60 * 60 * 1000);
-    const [recentAttendances, recentPayments] = await Promise.all([
-      tdb.attendance?.findMany
-        ? tdb.attendance.findMany({
-            where: {
-              lesson: { module: { course: { centerId: activeCenterId } } },
-              createdAt: { gte: ninetyDaysAgo },
-            },
-            select: { createdAt: true, status: true },
+            studentMembershipId: currentMem.id,
+            viewerRole: "STUDENT",
+            viewerMembershipId: currentMem.id,
+            period,
           })
-        : Promise.resolve([]),
-      tdb.centerPayment?.findMany
-        ? tdb.centerPayment.findMany({
+        : Promise.resolve(null),
+      enrolledGroupIds.length > 0
+        ? tenantDb.scheduleSlot.findMany({
             where: {
               centerId: activeCenterId,
-              status: "PAID",
-              paidAt: { gte: ninetyDaysAgo },
+              groupId: { in: enrolledGroupIds },
+              status: "ACTIVE",
             },
-            select: { paidAt: true, amount: true },
+            include: {
+              group: { include: { course: { select: { title: true } } } },
+              teacher: { include: { user: { select: { fullName: true } } } },
+            },
+            orderBy: [{ dayOfWeek: "asc" }, { startTime: "asc" }],
+            take: 6,
           })
         : Promise.resolve([]),
     ]);
 
-    const dayMap = new Map<string, { totalAttendance: number; presentAttendance: number; revenue: number }>();
-    for (let i = 89; i >= 0; i--) {
-      const d = new Date(Date.now() - i * 24 * 60 * 60 * 1000);
-      const key = d.toISOString().slice(0, 10);
-      dayMap.set(key, { totalAttendance: 0, presentAttendance: 0, revenue: 0 });
-    }
-
-    for (const a of recentAttendances) {
-      if (!a.createdAt) continue;
-      const key = a.createdAt.toISOString().slice(0, 10);
-      const existing = dayMap.get(key);
-      if (existing) {
-        existing.totalAttendance++;
-        if (a.status === "PRESENT" || a.status === "LATE") {
-          existing.presentAttendance++;
-        }
-      }
-    }
-
-    for (const p of recentPayments) {
-      if (p.paidAt) {
-        const key = p.paidAt.toISOString().slice(0, 10);
-        const existing = dayMap.get(key);
-        if (existing) {
-          existing.revenue += p.amount;
-        }
-      }
-    }
-
-    trendPoints = Array.from(dayMap.entries()).map(([date, val]) => {
-      const d = new Date(date);
-      const label = d.toLocaleDateString(locale === "uz" ? "uz-UZ" : "ru-RU", { day: "numeric", month: "short" });
-      return {
-        date,
-        label,
-        totalAttendance: val.totalAttendance,
-        presentAttendance: val.presentAttendance,
-        revenue: val.revenue,
-      };
-    });
-  }
-
-  // Teacher specific schedule and pending homework reviews
-  interface TeacherScheduleSlotItem {
-    id: string;
-    dayOfWeek: number;
-    startTime: string;
-    endTime: string;
-    roomName?: string | null;
-    groupId: string;
-    group: { name: string; course: { title: string } };
-  }
-
-  interface PendingReviewItem {
-    id: string;
-    studentName: string;
-    homeworkTitle: string;
-    submittedAt: Date;
-  }
-
-  let teacherScheduleSlots: TeacherScheduleSlotItem[] = [];
-  let pendingReviewsList: PendingReviewItem[] = [];
-
-  if (activeRole === "TEACHER" || activeRole === "TEACHER_ASSISTANT") {
-    const teacherMem = session.memberships.find((m) => m.centerId === activeCenterId);
-    if (teacherMem) {
-      const tdb = tenantCtx.getTenantDb();
-      const memberGroups = tdb.group?.findMany
-        ? await tdb.group.findMany({
-            where: {
-              centerId: activeCenterId,
-              OR: [
-                { teacherMembershipId: teacherMem.id },
-                { assistantMembershipId: teacherMem.id },
-              ],
-            },
-            select: { id: true },
-          })
-        : [];
-      const memberGroupIds = memberGroups.map((g) => g.id);
-
-      teacherScheduleSlots = tdb.scheduleSlot?.findMany
-        ? await tdb.scheduleSlot.findMany({
-            where: {
-              centerId: activeCenterId,
-              ...(memberGroupIds.length > 0
-                ? {
-                    OR: [
-                      { teacherMembershipId: teacherMem.id },
-                      { groupId: { in: memberGroupIds } },
-                    ],
-                  }
-                : { teacherMembershipId: teacherMem.id }),
-              status: "ACTIVE",
-            },
-            include: {
-              group: { include: { course: { select: { title: true } } } },
-            },
-            orderBy: [{ dayOfWeek: "asc" }, { startTime: "asc" }],
-          })
-        : [];
-
-      const reviewFilter: Prisma.HomeworkSubmissionWhereInput =
-        memberGroupIds.length > 0
-          ? {
-              OR: [
-                { groupId: { in: memberGroupIds } },
-                {
-                  student: {
-                    enrollments: {
-                      some: { groupId: { in: memberGroupIds }, status: "ACTIVE" },
-                    },
-                  },
-                },
-              ],
-              homework: { lesson: { module: { course: { centerId: activeCenterId } } } },
-              grade: null,
-              status: "SUBMITTED",
-            }
-          : {
-              homework: { lesson: { module: { course: { centerId: activeCenterId } } } },
-              grade: null,
-              status: "SUBMITTED",
-            };
-
-      if (memberGroupIds.length > 0 || tdb.homeworkSubmission?.count) {
-        pendingHomeworksCount = tdb.homeworkSubmission?.count
-          ? await tdb.homeworkSubmission.count({ where: reviewFilter })
-          : 0;
-
-        const rawSubmissions = tdb.homeworkSubmission?.findMany
-          ? await tdb.homeworkSubmission.findMany({
-              where: reviewFilter,
-              include: {
-                student: { include: { user: { select: { fullName: true, email: true } } } },
-                homework: { select: { title: true } },
-              },
-              orderBy: { submittedAt: "desc" },
-              take: 5,
-            })
-          : [];
-
-        pendingReviewsList = rawSubmissions.map((s) => ({
+    return (
+      <StudentDashboardView
+        performance={performance}
+        enrollmentsCount={enrollments.length}
+        scheduleSlots={scheduleSlots.map((s) => ({
           id: s.id,
-          studentName: s.student.user.fullName || s.student.user.email,
-          homeworkTitle: s.homework.title,
-          submittedAt: s.submittedAt,
-        }));
-      }
-
-      if (memberGroupIds.length > 0) {
-        // Teacher / Assistant extra KPIs
-        const todayDayOfWeek = new Date().getDay();
-        todayLessonsCount = teacherScheduleSlots.filter((s) => s.dayOfWeek === todayDayOfWeek).length;
-
-        const thirtyDaysAgo = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000);
-        teacherUnmarkedCount = tdb.lesson?.count
-          ? await tdb.lesson.count({
-              where: {
-                centerId: activeCenterId,
-                status: "ACTIVE",
-                scheduledAt: { lt: new Date(), gte: thirtyDaysAgo },
-                attendances: { none: {} },
-                module: { course: { groups: { some: { id: { in: memberGroupIds } } } } },
-              },
-            })
-          : 0;
-
-        teacherUpcomingHomeworks = tdb.homework?.findMany
-          ? await tdb.homework.findMany({
-              where: {
-                centerId: activeCenterId,
-                dueDate: { gte: new Date(), lte: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000) },
-                lesson: { module: { course: { groups: { some: { id: { in: memberGroupIds } } } } } },
-              },
-              select: { id: true, title: true, dueDate: true },
-              orderBy: { dueDate: "asc" },
-              take: 4,
-            })
-          : [];
-
-        const teacherEnrollments = tdb.enrollment?.findMany
-          ? await tdb.enrollment.findMany({
-              where: { groupId: { in: memberGroupIds }, status: "ACTIVE" },
-              include: {
-                student: {
-                  include: {
-                    user: { select: { fullName: true } },
-                    attendances: { select: { status: true } },
-                  },
-                },
-                group: { select: { name: true } },
-              },
-            })
-          : [];
-
-        teacherAtRiskStudents = teacherEnrollments
-          .map((en) => {
-            const atts = en.student.attendances || [];
-            const tot = atts.length;
-            const pres = atts.filter((a) => a.status === "PRESENT" || a.status === "LATE").length;
-            const rate = tot > 0 ? Math.round((pres / tot) * 100) : null;
-            return {
-              id: en.student.id,
-              name: en.student.user.fullName,
-              group: en.group.name,
-              rate,
-            };
-          })
-          .filter((s) => s.rate !== null && s.rate < 80)
-          .slice(0, 5);
-      }
-    }
-  }
-
-  // Student specific data
-  interface StudentScheduleSlotItem {
-    id: string;
-    dayOfWeek: number;
-    startTime: string;
-    endTime: string;
-    roomName?: string | null;
-    group: { name: string; course: { title: string } };
-    teacher: { user: { fullName: string } };
-  }
-
-  interface StudentRecentGradeItem {
-    id: string;
-    title: string;
-    score: number;
-    maxScore: number;
-    letterGrade: string;
-    feedback?: string | null;
-    createdAt: Date;
-  }
-
-  interface StudentHomeworkDeadlineItem {
-    id: string;
-    title: string;
-    courseTitle: string;
-    dueDate?: Date | null;
-    status: string;
-    gradeScore?: number | null;
-  }
-
-  let studentScheduleSlots: StudentScheduleSlotItem[] = [];
-  let studentRecentGrades: StudentRecentGradeItem[] = [];
-  let studentHomeworkDeadlines: StudentHomeworkDeadlineItem[] = [];
-  let studentAvgGradeScore: number | null = null;
-
-  if (activeRole === "STUDENT") {
-    const studentMem = session.memberships.find((m) => m.centerId === activeCenterId);
-    if (studentMem) {
-      studentEnrollments = await tenantCtx.getTenantDb().enrollment.findMany({
-        where: { studentMembershipId: studentMem.id, status: "ACTIVE" },
-        include: {
-          group: {
-            include: {
-              course: true,
-              teacher: { include: { user: { select: { fullName: true } } } },
-            },
-          },
-        },
-      });
-
-      const enrolledGroupIds = studentEnrollments.map((en) => en.group.id);
-      if (enrolledGroupIds.length > 0) {
-        studentScheduleSlots = await tenantCtx.getTenantDb().scheduleSlot.findMany({
-          where: {
-            centerId: activeCenterId,
-            groupId: { in: enrolledGroupIds },
-            status: "ACTIVE",
-          },
-          include: {
-            group: { include: { course: { select: { title: true } } } },
-            teacher: { include: { user: { select: { fullName: true } } } },
-          },
-          orderBy: [{ dayOfWeek: "asc" }, { startTime: "asc" }],
-        });
-      }
-
-      const enrolledCourseIds = studentEnrollments.map((en) => en.group.course.id);
-      if (enrolledCourseIds.length > 0) {
-        const studentHomeworks = await tenantCtx.getTenantDb().homework.findMany({
-          where: {
-            lesson: { module: { courseId: { in: enrolledCourseIds } } },
-          },
-          include: {
-            lesson: { include: { module: { include: { course: { select: { title: true } } } } } },
-            submissions: {
-              where: { studentMembershipId: studentMem.id },
-            },
-          },
-          orderBy: { dueDate: "asc" },
-          take: 6,
-        });
-
-        const now = new Date();
-        studentHomeworkDeadlines = studentHomeworks.map((hw) => {
-          const sub = hw.submissions[0];
-          let status = "PENDING";
-          let gradeScore: number | null = null;
-
-          if (sub) {
-            if (sub.grade !== null && sub.grade !== undefined) {
-              status = "GRADED";
-              gradeScore = sub.grade;
-            } else if (sub.status === "REVISION_REQUESTED") {
-              status = "REVISION_REQUESTED";
-            } else {
-              status = "SUBMITTED";
-            }
-          } else if (hw.dueDate && hw.dueDate < now) {
-            status = "OVERDUE";
-          }
-
-          return {
-            id: hw.id,
-            title: hw.title,
-            courseTitle: hw.lesson.module.course.title,
-            dueDate: hw.dueDate,
-            status,
-            gradeScore,
-          };
-        });
-      }
-
-      const studentAttendances = await tenantCtx.getTenantDb().attendance.findMany({
-        where: { studentMembershipId: studentMem.id },
-      });
-      const presentCount = studentAttendances.filter(
-        (a) => a.status === "PRESENT" || a.status === "LATE"
-      ).length;
-      const totalAttendances = studentAttendances.length;
-      attendanceRate =
-        totalAttendances > 0 ? Math.round((presentCount / totalAttendances) * 100) : null;
-
-      const allGrades = await tenantCtx.getTenantDb().grade.findMany({
-        where: { studentMembershipId: studentMem.id },
-        include: {
-          lesson: { select: { title: true } },
-          homeworkSubmission: {
-            include: {
-              homework: { select: { title: true } },
-            },
-          },
-        },
-        orderBy: { createdAt: "desc" },
-      });
-
-      if (allGrades.length > 0) {
-        const totalPct = allGrades.reduce(
-          (sum, g) => sum + (g.maxValue > 0 ? (g.value / g.maxValue) * 100 : 0),
-          0
-        );
-        studentAvgGradeScore = Math.round(totalPct / allGrades.length);
-      }
-
-      studentRecentGrades = allGrades.slice(0, 5).map((g) => ({
-        id: g.id,
-        title: g.homeworkSubmission?.homework?.title || g.lesson?.title || t(locale, "homework.assignmentFallback"),
-        score: g.value,
-        maxScore: g.maxValue,
-        letterGrade:
-          g.value >= 90 ? "A" : g.value >= 80 ? "B" : g.value >= 70 ? "C" : g.value >= 60 ? "D" : "F",
-        feedback: g.comment,
-        createdAt: g.createdAt,
-      }));
-    }
-  }
-
-  let studentBalanceSummary: StudentBalanceSummaryDTO | null = null;
-  if (activeRole === "STUDENT") {
-    const studentMem = session.memberships.find((m) => m.centerId === activeCenterId);
-    if (studentMem) {
-      try {
-        const balances = await calculateStudentBalances({
-          centerId: activeCenterId,
-          studentMembershipIds: [studentMem.id],
-        });
-        studentBalanceSummary = balances[0] || null;
-      } catch {
-        studentBalanceSummary = null;
-      }
-    }
-  }
-
-  // Parent specific data
-  interface ParentChildDetail {
-    id: string;
-    studentMembershipId: string;
-    fullName: string;
-    email: string;
-    debtAmount: number;
-    totalPaid: number;
-    nextPaymentAmount: number | null;
-    nextPaymentDate: string | null;
-    enrollments: Array<{ id: string; groupName: string; courseTitle: string }>;
-    scheduleSlots: Array<{
-      id: string;
-      dayOfWeek: number;
-      startTime: string;
-      endTime: string;
-      roomName?: string | null;
-      courseTitle: string;
-      groupName: string;
-      teacherName: string;
-    }>;
-    homeworkItems: Array<{
-      id: string;
-      title: string;
-      courseTitle: string;
-      dueDate: Date | null;
-      status: string;
-    }>;
-    attendanceRate: number | null;
-    attendedClasses: number;
-    totalClasses: number;
-    absentCount: number;
-    avgGradeScore: number | null;
-    recentGrades: Array<{
-      id: string;
-      title: string;
-      score: number;
-      maxScore: number;
-      letterGrade: string;
-      comment?: string | null;
-    }>;
-    payments: Array<{
-      id: string;
-      amount: number;
-      status: string;
-      createdAt: Date;
-    }>;
-  }
-
-  let detailedChildren: ParentChildDetail[] = [];
-  let subUsage: Awaited<ReturnType<typeof getCenterSubscriptionUsage>> | null = null;
-
-  if (activeRole === "DIRECTOR" || activeRole === "CENTER_ADMIN") {
-    subUsage = await getCenterSubscriptionUsage(activeCenterId);
+          dayOfWeek: s.dayOfWeek,
+          startTime: s.startTime,
+          endTime: s.endTime,
+          roomName: s.roomName ?? null,
+          groupName: s.group.name,
+          courseTitle: s.group.course.title,
+          teacherName: s.teacher.user.fullName,
+        }))}
+        centerSlug={center.slug}
+        locale={locale}
+      />
+    );
   }
 
   if (activeRole === "PARENT") {
-    const parentMem = session.memberships.find((m) => m.centerId === activeCenterId);
-    if (parentMem) {
-      const rawLinks = await tenantCtx.getTenantDb().parentLink.findMany({
-        where: { parentMembershipId: parentMem.id, status: "CONFIRMED" },
+    let initialSelectedChildId: string | null = searchParams?.childId || null;
+    try {
+      if (!initialSelectedChildId) {
+        initialSelectedChildId = cookies().get(PARENT_CHILD_COOKIE)?.value || null;
+      }
+    } catch {
+      // Ignore outside request context
+    }
+
+    const childrenData: ParentChildDashboardEntry[] = [];
+    if (currentMem) {
+      const links = await tenantDb.parentLink.findMany({
+        where: { parentMembershipId: currentMem.id, status: "CONFIRMED" },
         include: {
           student: {
-            include: {
-              user: true,
-              enrollments: {
-                where: { status: "ACTIVE" },
-                include: { group: { include: { course: true } } },
-              },
-              payments: { take: 5, orderBy: { createdAt: "desc" } },
+            select: {
+              id: true,
+              user: { select: { fullName: true, email: true } },
             },
           },
         },
       });
 
-      const childIdsAll = rawLinks.map((l) => l.student.id);
-      let childBalances: StudentBalanceSummaryDTO[] = [];
-      if (childIdsAll.length > 0) {
-        try {
-          childBalances = await calculateStudentBalances({
+      const perfList = await Promise.all(
+        links.map((link) =>
+          getStudentPerformanceData({
             centerId: activeCenterId,
-            studentMembershipIds: childIdsAll,
-          });
-        } catch {
-          childBalances = [];
-        }
-      }
-      const childBalanceMap = new Map(
-        childBalances.map((b) => [b.studentMembershipId, b])
+            studentMembershipId: link.student.id,
+            viewerRole: "PARENT",
+            viewerMembershipId: currentMem.id,
+            period,
+          }).then((performance) => ({
+            studentMembershipId: link.student.id,
+            fullName: link.student.user.fullName,
+            email: link.student.user.email.endsWith("@noemail.local")
+              ? null
+              : link.student.user.email,
+            performance,
+          }))
+        )
       );
-
-      for (const link of rawLinks) {
-        const sMemId = link.student.id;
-        const childGroupIds = link.student.enrollments.map((en) => en.group.id);
-        const childCourseIds = link.student.enrollments.map(
-          (en) => en.group.courseId
-        );
-        const childBal = childBalanceMap.get(sMemId);
-
-        let childHomeworks: ParentChildDetail["homeworkItems"] = [];
-        if (childCourseIds.length > 0) {
-          const hws = await tenantCtx.getTenantDb().homework.findMany({
-            where: {
-              lesson: {
-                module: { courseId: { in: childCourseIds } },
-              },
-            },
-            include: {
-              lesson: {
-                include: {
-                  module: {
-                    include: { course: { select: { title: true } } },
-                  },
-                },
-              },
-              submissions: {
-                where: { studentMembershipId: sMemId },
-              },
-            },
-            orderBy: { createdAt: "desc" },
-            take: 4,
-          });
-          childHomeworks = hws.map((hw) => ({
-            id: hw.id,
-            title: hw.title,
-            courseTitle: hw.lesson.module.course.title,
-            dueDate: hw.dueDate,
-            status: hw.submissions[0]?.status || "NOT_SUBMITTED",
-          }));
-        }
-
-        let childSchedule: ParentChildDetail["scheduleSlots"] = [];
-        if (childGroupIds.length > 0) {
-          const slots = await tenantCtx.getTenantDb().scheduleSlot.findMany({
-            where: {
-              centerId: activeCenterId,
-              groupId: { in: childGroupIds },
-              status: "ACTIVE",
-            },
-            include: {
-              group: { include: { course: { select: { title: true } } } },
-              teacher: { include: { user: { select: { fullName: true } } } },
-            },
-            orderBy: [{ dayOfWeek: "asc" }, { startTime: "asc" }],
-            take: 4,
-          });
-          childSchedule = slots.map((s) => ({
-            id: s.id,
-            dayOfWeek: s.dayOfWeek,
-            startTime: s.startTime,
-            endTime: s.endTime,
-            roomName: s.roomName,
-            courseTitle: s.group.course.title,
-            groupName: s.group.name,
-            teacherName: s.teacher.user.fullName,
-          }));
-        }
-
-        const attendances = await tenantCtx.getTenantDb().attendance.findMany({
-          where: { studentMembershipId: sMemId },
-        });
-        const totalClasses = attendances.length;
-        const attendedClasses = attendances.filter(
-          (a) => a.status === "PRESENT" || a.status === "LATE"
-        ).length;
-        const absentCount = attendances.filter((a) => a.status === "ABSENT").length;
-        const childAttRate =
-          totalClasses > 0 ? Math.round((attendedClasses / totalClasses) * 100) : null;
-
-        const grades = await tenantCtx.getTenantDb().grade.findMany({
-          where: { studentMembershipId: sMemId },
-          include: {
-            lesson: { select: { title: true } },
-            homeworkSubmission: { include: { homework: { select: { title: true } } } },
-          },
-          orderBy: { createdAt: "desc" },
-          take: 3,
-        });
-
-        const allChildGrades = await tenantCtx.getTenantDb().grade.findMany({
-          where: { studentMembershipId: sMemId },
-          select: { value: true, maxValue: true },
-        });
-        const avgGradeScore =
-          allChildGrades.length > 0
-            ? Math.round(
-                allChildGrades.reduce(
-                  (sum, g) => sum + (g.maxValue > 0 ? (g.value / g.maxValue) * 100 : 0),
-                  0
-                ) / allChildGrades.length
-              )
-            : null;
-
-        detailedChildren.push({
-          id: link.id,
-          studentMembershipId: sMemId,
-          fullName: link.student.user.fullName,
-          email: link.student.user.email,
-          debtAmount: childBal?.debtAmount ?? 0,
-          totalPaid: childBal?.totalPaid ?? 0,
-          nextPaymentAmount: childBal?.nextPayment?.amount ?? null,
-          nextPaymentDate: childBal?.nextPayment?.dueDate ?? null,
-          enrollments: link.student.enrollments.map((en) => ({
-            id: en.id,
-            groupName: en.group.name,
-            courseTitle: en.group.course.title,
-          })),
-          scheduleSlots: childSchedule,
-          homeworkItems: childHomeworks,
-          attendanceRate: childAttRate,
-          attendedClasses,
-          totalClasses,
-          absentCount,
-          avgGradeScore,
-          recentGrades: grades.map((g) => ({
-            id: g.id,
-            title: g.homeworkSubmission?.homework?.title || g.lesson?.title || t(locale, "homework.assignmentFallback"),
-            score: g.value,
-            maxScore: g.maxValue,
-            letterGrade:
-              g.value >= 90 ? "A" : g.value >= 80 ? "B" : g.value >= 70 ? "C" : g.value >= 60 ? "D" : "F",
-            comment: g.comment,
-          })),
-          payments: link.student.payments.map((p) => ({
-            id: p.id,
-            amount: p.amount,
-            status: p.status,
-            createdAt: p.createdAt,
-          })),
-        });
-      }
+      childrenData.push(...perfList);
     }
+
+    return (
+      <ParentDashboardView
+        childrenData={childrenData}
+        initialSelectedChildId={initialSelectedChildId}
+        centerSlug={center.slug}
+        locale={locale}
+      />
+    );
   }
 
-  const currentSub = center.subscriptions[0];
+  // Fallback for CENTER_SUPPORT / administrative roles
+  const [activeStudentsCount, activeTeachersCount, coursesCount] = await Promise.all([
+    tenantDb.centerMembership.count({
+      where: { centerId: activeCenterId, role: "STUDENT", status: "ACTIVE" },
+    }),
+    tenantDb.centerMembership.count({
+      where: { centerId: activeCenterId, role: "TEACHER", status: "ACTIVE" },
+    }),
+    tenantDb.course.count({ where: { centerId: activeCenterId } }),
+  ]);
 
   return (
-    <div className="space-y-8">
-      {/* Header Banner */}
-      <div className="relative glass-panel p-8 rounded-3xl border border-slate-800/80 overflow-hidden">
-        <div className="absolute top-0 right-0 w-96 h-96 bg-brand-500/10 rounded-full blur-[100px] pointer-events-none" />
-        
-        <div className="relative z-10 flex flex-col md:flex-row md:items-center justify-between gap-6">
-          <div>
-            <div className="flex items-center gap-2 mb-2">
-              <span className="px-3 py-1 bg-brand-500/10 border border-brand-500/20 text-brand-400 text-xs font-semibold uppercase tracking-wider rounded-full">
-                {activeRole === "DIRECTOR" && t(locale, "dashboard.directorCabinet")}
-                {activeRole === "CENTER_ADMIN" && t(locale, "dashboard.adminCabinet")}
-                {activeRole === "TEACHER" && t(locale, "dashboard.teacherCabinet")}
-                {activeRole === "TEACHER_ASSISTANT" && t(locale, "dashboard.assistantCabinet")}
-                {activeRole === "STUDENT" && t(locale, "dashboard.studentCabinet")}
-                {activeRole === "PARENT" && t(locale, "dashboard.parentCabinet")}
-              </span>
-              <span className="text-xs text-slate-400">
-                • Slug: <code className="text-slate-200">{center.slug}</code>
-              </span>
-            </div>
-
-            <h1 className="text-3xl font-extrabold text-white">
-              {t(locale, "dashboard.welcome", { name: session.user.fullName })}
-            </h1>
-            <p className="text-sm text-slate-400 mt-1">
-              {t(locale, "dashboard.welcomeToCenter", { centerName: center.name })}
-            </p>
+    <div className="space-y-6">
+      <PageHeader
+        title={`${t(locale, "ui3.supportOverviewTitle")}`}
+        description={`${t(locale, "ui3.supportOverviewSubtitle")} (${center.slug})`}
+        actions={
+          <div className="flex flex-wrap items-center gap-2">
+            <Button asChild variant="outline" size="sm">
+              <Link href="/center/students">{t(locale, "nav.students")}</Link>
+            </Button>
+            <Button asChild variant="outline" size="sm">
+              <Link href="/center/support">{t(locale, "nav.support")}</Link>
+            </Button>
           </div>
-
-          {(activeRole === "TEACHER" || activeRole === "TEACHER_ASSISTANT") && (
-            <div className="glass-panel p-4 rounded-2xl border border-amber-500/30 bg-amber-950/20 text-right shrink-0">
-              <div className="text-xs text-slate-400 uppercase tracking-wider font-semibold">{t(locale, "dashboard.pendingHomeworks")}</div>
-              <div className="text-2xl font-extrabold text-amber-400 mt-0.5">{t(locale, "dashboard.homeworksCount", { count: pendingHomeworksCount })}</div>
-              <Link href="/center/homework" className="text-xs text-brand-400 hover:underline mt-1 inline-block">
-                {t(locale, "dashboard.goToReview")}
-              </Link>
-            </div>
-          )}
-
-          {activeRole === "STUDENT" && (
-            <div className="glass-panel p-4 rounded-2xl border border-emerald-500/30 bg-emerald-950/20 text-right shrink-0 flex items-center gap-3">
-              <ClipboardCheck className="w-8 h-8 text-emerald-400 shrink-0" />
-              <div>
-                <div className="text-xs text-slate-400 uppercase tracking-wider font-semibold">{t(locale, "nav.attendance")}</div>
-                <div className="text-xl font-bold text-white">
-                  {attendanceRate !== null ? `${attendanceRate}%` : "—"}
-                </div>
-                <div className="text-[10px] text-emerald-400">{t(locale, "dashboard.academicPerformance")}</div>
-              </div>
-            </div>
-          )}
-        </div>
+        }
+      />
+      <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
+        <StatCard label={t(locale, "dashboard.activeStudents")} value={activeStudentsCount} />
+        <StatCard label={t(locale, "dashboard.teachers")} value={activeTeachersCount} />
+        <StatCard label={t(locale, "dashboard.totalCourses")} value={coursesCount} />
       </div>
-
-      {/* Teacher View: Schedule & Pending Reviews */}
-      {(activeRole === "TEACHER" || activeRole === "TEACHER_ASSISTANT") && (
-        <div className="space-y-8">
-          {/* Teacher & Assistant KPIs */}
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-            <div className="glass-panel p-4 rounded-2xl border border-slate-800 space-y-1">
-              <span className="text-xs font-semibold text-slate-400 uppercase tracking-wider">
-                {t(locale, "dashboard.todayLessons")}
-              </span>
-              <div className="text-2xl font-bold text-white">{todayLessonsCount}</div>
-              <p className="text-[11px] text-slate-500">
-                {t(locale, "dashboard.byTodaySchedule")}
-              </p>
-            </div>
-
-            <Link
-              href="/center/attendance"
-              className="glass-panel p-4 rounded-2xl border border-slate-800 hover:border-amber-500/50 transition-colors space-y-1 block"
-            >
-              <span className="text-xs font-semibold text-slate-400 uppercase tracking-wider">
-                {t(locale, "dashboard.unmarkedAttendance")}
-              </span>
-              <div className={`text-2xl font-bold ${teacherUnmarkedCount > 0 ? "text-amber-400" : "text-emerald-400"}`}>
-                {teacherUnmarkedCount}
-              </div>
-              <p className="text-[11px] text-slate-500">
-                {teacherUnmarkedCount > 0
-                  ? t(locale, "dashboard.needsMarking")
-                  : t(locale, "dashboard.allMarked")}
-              </p>
-            </Link>
-
-            <Link
-              href="/center/homework?status=SUBMITTED"
-              className="glass-panel p-4 rounded-2xl border border-slate-800 hover:border-brand-500/50 transition-colors space-y-1 block"
-            >
-              <span className="text-xs font-semibold text-slate-400 uppercase tracking-wider">
-                {t(locale, "dashboard.homeworksToCheck")}
-              </span>
-              <div className={`text-2xl font-bold ${pendingHomeworksCount > 0 ? "text-amber-400" : "text-slate-300"}`}>
-                {pendingHomeworksCount}
-              </div>
-              <p className="text-[11px] text-slate-500">
-                {t(locale, "dashboard.awaitingCheck")}
-              </p>
-            </Link>
-
-            <Link
-              href="/center/groups"
-              className="glass-panel p-4 rounded-2xl border border-slate-800 hover:border-rose-500/50 transition-colors space-y-1 block"
-            >
-              <span className="text-xs font-semibold text-slate-400 uppercase tracking-wider">
-                {t(locale, "dashboard.riskGroup")}
-              </span>
-              <div className={`text-2xl font-bold ${teacherAtRiskStudents.length > 0 ? "text-rose-400" : "text-emerald-400"}`}>
-                {teacherAtRiskStudents.length}
-              </div>
-              <p className="text-[11px] text-slate-500">
-                {teacherAtRiskStudents.length > 0
-                  ? t(locale, "dashboard.studentsWithAbsences")
-                  : t(locale, "dashboard.noLaggingStudents")}
-              </p>
-            </Link>
-          </div>
-
-          {/* Unmarked Attendance Alert */}
-          {teacherUnmarkedCount > 0 && (
-            <div className="p-4 rounded-2xl bg-amber-500/10 border border-amber-500/30 flex items-center justify-between gap-4">
-              <div className="flex items-center gap-3">
-                <AlertTriangle className="w-5 h-5 text-amber-400 shrink-0" />
-                <div>
-                  <h4 className="text-sm font-bold text-white">
-                    {t(locale, "dashboard.unmarkedLessonsTitle")}
-                  </h4>
-                  <p className="text-xs text-slate-300 mt-0.5">
-                    {t(locale, "dashboard.unmarkedLessonsBody", { count: teacherUnmarkedCount })}
-                  </p>
-                </div>
-              </div>
-              <Link
-                href="/center/attendance"
-                className="px-3.5 py-1.5 bg-amber-600 hover:bg-amber-500 text-white rounded-xl text-xs font-bold shrink-0 transition-colors"
-              >
-                {t(locale, "dashboard.fillJournal")}
-              </Link>
-            </div>
-          )}
-
-          {/* My Schedule Grid */}
-          <div className="space-y-4">
-            <div className="flex items-center justify-between">
-              <h2 className="text-xl font-bold text-white flex items-center gap-2">
-                <CalendarDays className="w-5 h-5 text-brand-400" />
-                <span>{t(locale, "dashboard.mySchedule")}</span>
-              </h2>
-              <Link
-                href="/center/schedule"
-                className="text-xs font-semibold text-brand-400 hover:text-brand-300 flex items-center gap-1 hover:underline"
-              >
-                {t(locale, "dashboard.viewSchedule")}
-                <ArrowRight className="w-3.5 h-3.5" />
-              </Link>
-            </div>
-
-            {teacherScheduleSlots.length === 0 ? (
-              <div className="glass-panel p-8 rounded-2xl border border-slate-800 text-center space-y-2">
-                <CalendarDays className="w-10 h-10 text-slate-600 mx-auto" />
-                <p className="text-sm text-slate-400">{t(locale, "dashboard.noTeacherSchedule")}</p>
-              </div>
-            ) : (
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                {teacherScheduleSlots.map((slot) => {
-                  const dayNames: Record<number, string> = {
-                    1: t(locale, "schedule.monShort"),
-                    2: t(locale, "schedule.tueShort"),
-                    3: t(locale, "schedule.wedShort"),
-                    4: t(locale, "schedule.thuShort"),
-                    5: t(locale, "schedule.friShort"),
-                    6: t(locale, "schedule.satShort"),
-                    7: t(locale, "schedule.sunShort"),
-                  };
-                  return (
-                    <div
-                      key={slot.id}
-                      className="glass-panel p-5 rounded-2xl border border-slate-800 flex flex-col justify-between space-y-4 hover:border-slate-700 transition-colors"
-                    >
-                      <div className="space-y-2">
-                        <div className="flex items-center justify-between">
-                          <span className="px-2.5 py-1 rounded-md text-xs font-bold bg-brand-500/10 text-brand-400 border border-brand-500/20">
-                            {dayNames[slot.dayOfWeek] || `${t(locale, "schedule.day")} ${slot.dayOfWeek}`} • {slot.startTime} - {slot.endTime}
-                          </span>
-                          {slot.roomName && (
-                            <span className="text-xs text-slate-400 bg-slate-900 px-2 py-0.5 rounded border border-slate-800">
-                              {slot.roomName}
-                            </span>
-                          )}
-                        </div>
-                        <h4 className="text-base font-bold text-white line-clamp-1">{slot.group.course.title}</h4>
-                        <p className="text-xs text-emerald-400 font-semibold">{slot.group.name}</p>
-                      </div>
-
-                      <div className="pt-2 border-t border-slate-800/80 flex items-center justify-between">
-                        <Link
-                          href={`/center/attendance?groupId=${slot.groupId}`}
-                          className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-emerald-600/20 hover:bg-emerald-600/30 text-emerald-300 border border-emerald-500/30 rounded-xl text-xs font-semibold transition-colors"
-                        >
-                          <ClipboardCheck className="w-3.5 h-3.5" />
-                          <span>{t(locale, "dashboard.quickAttendance")}</span>
-                        </Link>
-                      </div>
-                    </div>
-                  );
-                })}
-              </div>
-            )}
-          </div>
-
-          {/* Pending Reviews Section */}
-          <div className="space-y-4">
-            <div className="flex items-center justify-between">
-              <h2 className="text-xl font-bold text-white flex items-center gap-2">
-                <Clock className="w-5 h-5 text-amber-400" />
-                <span>{t(locale, "dashboard.pendingReviews")}</span>
-                <span className="px-2 py-0.5 rounded-full bg-amber-500/20 text-amber-400 text-xs font-bold">
-                  {pendingHomeworksCount}
-                </span>
-              </h2>
-              <Link
-                href="/center/homework?status=SUBMITTED"
-                className="text-xs font-semibold text-brand-400 hover:text-brand-300 flex items-center gap-1 hover:underline"
-              >
-                {t(locale, "nav.homework")}
-                <ArrowRight className="w-3.5 h-3.5" />
-              </Link>
-            </div>
-
-            {pendingReviewsList.length === 0 ? (
-              <div className="glass-panel p-8 rounded-2xl border border-emerald-500/20 bg-emerald-950/10 text-center space-y-2">
-                <CheckCircle2 className="w-10 h-10 text-emerald-400 mx-auto" />
-                <p className="text-sm font-semibold text-emerald-300">{t(locale, "dashboard.noPendingReviews")}</p>
-              </div>
-            ) : (
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                {pendingReviewsList.map((rev) => (
-                  <div
-                    key={rev.id}
-                    className="glass-panel p-5 rounded-2xl border border-slate-800 space-y-3 flex flex-col justify-between hover:border-slate-700 transition-colors"
-                  >
-                    <div>
-                      <div className="flex items-center justify-between text-xs text-slate-400 mb-1">
-                        <span>{formatDateLocalized(rev.submittedAt, locale)}</span>
-                        <span className="px-2 py-0.5 rounded bg-amber-500/10 text-amber-400 font-semibold">
-                          {t(locale, "homework.submitted")}
-                        </span>
-                      </div>
-                      <h4 className="text-sm font-bold text-white line-clamp-1">{rev.homeworkTitle}</h4>
-                      <p className="text-xs text-slate-300 font-medium mt-1">
-                        {t(locale, "dashboard.submissionFrom", { name: rev.studentName })}
-                      </p>
-                    </div>
-
-                    <div className="pt-2 border-t border-slate-800/80">
-                      <Link
-                        href="/center/homework?status=SUBMITTED"
-                        className="inline-flex items-center gap-1 text-xs font-semibold text-brand-400 hover:text-brand-300 hover:underline"
-                      >
-                        <span>{t(locale, "dashboard.reviewAction")}</span>
-                        <ArrowRight className="w-3.5 h-3.5" />
-                      </Link>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            )}
-          </div>
-        </div>
-      )}
-
-      {/* Student View: Academic Performance, Schedule, Deadlines & Courses */}
-      {activeRole === "STUDENT" && (
-        <div className="space-y-8">
-          {/* Student Balance Summary Card */}
-          {studentBalanceSummary && (
-            <div className="glass-panel p-6 rounded-2xl border border-slate-800 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-              <div className="space-y-1">
-                <span className="text-xs font-semibold text-slate-400 uppercase tracking-wider">
-                  {t(locale, "dashboard.studentBalanceTitle")}
-                </span>
-                <div className="flex flex-wrap items-baseline gap-4 pt-1">
-                  <div>
-                    <span className="text-xs text-slate-400 mr-1.5">{t(locale, "dashboard.currentDebt")}</span>
-                    <span
-                      className={`text-xl font-extrabold ${
-                        studentBalanceSummary.debtAmount > 0
-                          ? "text-rose-400"
-                          : "text-emerald-400"
-                      }`}
-                    >
-                      {formatCurrencyLocalized(
-                        studentBalanceSummary.debtAmount,
-                        locale,
-                        "UZS"
-                      )}
-                    </span>
-                  </div>
-                  <div>
-                    <span className="text-xs text-slate-400 mr-1.5">{t(locale, "dashboard.totalPaidLabel")}</span>
-                    <span className="text-base font-bold text-slate-200">
-                      {formatCurrencyLocalized(
-                        studentBalanceSummary.totalPaid,
-                        locale,
-                        "UZS"
-                      )}
-                    </span>
-                  </div>
-                  {studentBalanceSummary.nextPayment && (
-                    <div>
-                      <span className="text-xs text-slate-400 mr-1.5">{t(locale, "dashboard.nextPaymentLabel")}</span>
-                      <span className="text-sm font-semibold text-amber-400">
-                        {formatCurrencyLocalized(
-                          studentBalanceSummary.nextPayment.amount,
-                          locale,
-                          "UZS"
-                        )}
-                      </span>
-                    </div>
-                  )}
-                </div>
-              </div>
-              <Link
-                href="/center/payments"
-                className="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl bg-brand-600 hover:bg-brand-500 text-white text-xs font-bold shrink-0 transition-all"
-              >
-                <CreditCard className="w-4 h-4" />
-                <span>{t(locale, "dashboard.paymentHistoryAndReceipts")}</span>
-              </Link>
-            </div>
-          )}
-
-          {/* Academic Performance & Attendance Overview */}
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-            {/* GPA & Attendance Summary */}
-            <div className="glass-panel p-6 rounded-2xl border border-slate-800 space-y-4 flex flex-col justify-between">
-              <div className="flex items-center justify-between">
-                <div>
-                  <span className="text-xs font-semibold text-slate-400 uppercase tracking-wider">
-                    {t(locale, "dashboard.academicPerformance")}
-                  </span>
-                  <div className="flex items-baseline gap-3 mt-1">
-                    <span className="text-3xl font-extrabold text-white">
-                      {studentAvgGradeScore !== null ? `${studentAvgGradeScore}%` : "—"}
-                    </span>
-                    {studentAvgGradeScore !== null && (
-                      <span className="px-2.5 py-0.5 rounded-full text-xs font-bold bg-brand-500/20 text-brand-300 border border-brand-500/30">
-                        {studentAvgGradeScore >= 90 ? t(locale, "grades.gradeExcellent") : studentAvgGradeScore >= 80 ? t(locale, "grades.gradeGood") : studentAvgGradeScore >= 70 ? t(locale, "grades.gradeSatisfactory") : "D/F"}
-                      </span>
-                    )}
-                  </div>
-                </div>
-                <div className="w-12 h-12 rounded-xl bg-brand-500/10 border border-brand-500/20 flex items-center justify-center text-brand-400">
-                  <GraduationCap className="w-6 h-6" />
-                </div>
-              </div>
-
-              {/* Attendance Bar */}
-              <div className="space-y-1.5 pt-2 border-t border-slate-800/80">
-                <div className="flex items-center justify-between text-xs">
-                  <span className="text-slate-400">{t(locale, "attendance.title")}</span>
-                  <span className={`font-bold ${attendanceRate !== null && attendanceRate < 80 ? "text-amber-400" : "text-emerald-400"}`}>
-                    {attendanceRate !== null ? `${attendanceRate}%` : "—"}
-                  </span>
-                </div>
-                {attendanceRate !== null && (
-                  <div className="w-full bg-slate-800 h-2 rounded-full overflow-hidden">
-                    <div
-                      className={`h-full rounded-full transition-all ${
-                        attendanceRate >= 80 ? "bg-emerald-500" : "bg-amber-500"
-                      }`}
-                      style={{ width: `${attendanceRate}%` }}
-                    />
-                  </div>
-                )}
-                {attendanceRate !== null && attendanceRate < 80 && (
-                  <p className="text-[11px] text-amber-400 flex items-center gap-1 mt-1">
-                    <AlertTriangle className="w-3.5 h-3.5 shrink-0" />
-                    <span>{t(locale, "dashboard.inRiskZoneWarning")}</span>
-                  </p>
-                )}
-              </div>
-            </div>
-
-            {/* Recent Grades */}
-            <div className="glass-panel p-6 rounded-2xl border border-slate-800 space-y-4">
-              <div className="flex items-center justify-between">
-                <span className="text-xs font-semibold text-slate-400 uppercase tracking-wider">
-                  {t(locale, "dashboard.recentGrades")}
-                </span>
-                <Link
-                  href="/center/grades"
-                  className="text-xs font-semibold text-brand-400 hover:text-brand-300 hover:underline flex items-center gap-1"
-                >
-                  {t(locale, "grades.title")}
-                  <ArrowRight className="w-3.5 h-3.5" />
-                </Link>
-              </div>
-
-              {studentRecentGrades.length === 0 ? (
-                <div className="py-6 text-center text-xs text-slate-500">
-                  {t(locale, "dashboard.noGradesYet")}
-                </div>
-              ) : (
-                <div className="space-y-2">
-                  {studentRecentGrades.map((g) => (
-                    <div
-                      key={g.id}
-                      className="p-2.5 rounded-xl bg-slate-900/60 border border-slate-800 flex items-center justify-between text-xs"
-                    >
-                      <div className="truncate mr-2">
-                        <div className="font-semibold text-white truncate">{g.title}</div>
-                        {g.feedback && <div className="text-[11px] text-slate-400 truncate">{g.feedback}</div>}
-                      </div>
-                      <div className="flex items-center gap-2 shrink-0">
-                        <span className="font-bold text-slate-200">
-                          {g.score} / {g.maxScore}
-                        </span>
-                        <span className="px-1.5 py-0.5 rounded bg-brand-500/20 text-brand-400 font-bold text-[10px]">
-                          {g.letterGrade}
-                        </span>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              )}
-            </div>
-          </div>
-
-          {/* Student Schedule */}
-          <div className="space-y-4">
-            <div className="flex items-center justify-between">
-              <h2 className="text-xl font-bold text-white flex items-center gap-2">
-                <CalendarDays className="w-5 h-5 text-brand-400" />
-                <span>{t(locale, "dashboard.mySchedule")}</span>
-              </h2>
-              <Link
-                href="/center/schedule"
-                className="text-xs font-semibold text-brand-400 hover:text-brand-300 flex items-center gap-1 hover:underline"
-              >
-                {t(locale, "dashboard.viewSchedule")}
-                <ArrowRight className="w-3.5 h-3.5" />
-              </Link>
-            </div>
-
-            {studentScheduleSlots.length === 0 ? (
-              <div className="glass-panel p-8 rounded-2xl border border-slate-800 text-center space-y-2">
-                <CalendarDays className="w-10 h-10 text-slate-600 mx-auto" />
-                <p className="text-sm text-slate-400">{t(locale, "dashboard.noUpcomingClasses")}</p>
-              </div>
-            ) : (
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                {studentScheduleSlots.map((slot) => {
-                  const dayNames: Record<number, string> = {
-                    1: t(locale, "schedule.monShort"),
-                    2: t(locale, "schedule.tueShort"),
-                    3: t(locale, "schedule.wedShort"),
-                    4: t(locale, "schedule.thuShort"),
-                    5: t(locale, "schedule.friShort"),
-                    6: t(locale, "schedule.satShort"),
-                    7: t(locale, "schedule.sunShort"),
-                  };
-                  return (
-                    <div
-                      key={slot.id}
-                      className="glass-panel p-5 rounded-2xl border border-slate-800 space-y-3 hover:border-slate-700 transition-colors"
-                    >
-                      <div className="flex items-center justify-between">
-                        <span className="px-2.5 py-1 rounded-md text-xs font-bold bg-brand-500/10 text-brand-400 border border-brand-500/20">
-                          {dayNames[slot.dayOfWeek] || `${t(locale, "schedule.day")} ${slot.dayOfWeek}`} • {slot.startTime} - {slot.endTime}
-                        </span>
-                        {slot.roomName && (
-                          <span className="text-xs text-slate-400 bg-slate-900 px-2 py-0.5 rounded border border-slate-800">
-                            {slot.roomName}
-                          </span>
-                        )}
-                      </div>
-                      <div>
-                        <h4 className="text-base font-bold text-white line-clamp-1">{slot.group.course.title}</h4>
-                        <p className="text-xs text-emerald-400 font-semibold">{slot.group.name}</p>
-                      </div>
-                      <div className="pt-2 border-t border-slate-800/80 text-xs text-slate-400 flex items-center justify-between">
-                        <span>{t(locale, "student.teacher")}:</span>
-                        <span className="text-slate-200 font-medium">{slot.teacher.user.fullName}</span>
-                      </div>
-                    </div>
-                  );
-                })}
-              </div>
-            )}
-          </div>
-
-          {/* Homework Deadlines */}
-          <div className="space-y-4">
-            <div className="flex items-center justify-between">
-              <h2 className="text-xl font-bold text-white flex items-center gap-2">
-                <Clock className="w-5 h-5 text-amber-400" />
-                <span>{t(locale, "dashboard.upcomingDeadlines")}</span>
-              </h2>
-              <Link
-                href="/center/homework"
-                className="text-xs font-semibold text-brand-400 hover:text-brand-300 flex items-center gap-1 hover:underline"
-              >
-                {t(locale, "nav.homework")}
-                <ArrowRight className="w-3.5 h-3.5" />
-              </Link>
-            </div>
-
-            {studentHomeworkDeadlines.length === 0 ? (
-              <div className="glass-panel p-8 rounded-2xl border border-slate-800 text-center space-y-2">
-                <CheckCircle2 className="w-10 h-10 text-emerald-400 mx-auto" />
-                <p className="text-sm text-slate-400">{t(locale, "dashboard.noHomeworkDeadlines")}</p>
-              </div>
-            ) : (
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                {studentHomeworkDeadlines.map((hw) => {
-                  const statusColors: Record<string, string> = {
-                    GRADED: "bg-emerald-500/20 text-emerald-400 border-emerald-500/30",
-                    SUBMITTED: "bg-blue-500/20 text-blue-400 border-blue-500/30",
-                    REVISION_REQUESTED: "bg-amber-500/20 text-amber-400 border-amber-500/30",
-                    OVERDUE: "bg-red-500/20 text-red-400 border-red-500/30",
-                    PENDING: "bg-slate-800 text-slate-400 border-slate-700",
-                  };
-                  return (
-                    <div
-                      key={hw.id}
-                      className="glass-panel p-5 rounded-2xl border border-slate-800 space-y-3 flex flex-col justify-between hover:border-slate-700 transition-colors"
-                    >
-                      <div className="space-y-1">
-                        <div className="flex items-center justify-between text-xs mb-1">
-                          <span className={`px-2 py-0.5 rounded text-[11px] font-bold border ${statusColors[hw.status] || statusColors.PENDING}`}>
-                            {hw.status === "GRADED" && `${t(locale, "homework.graded")}: ${hw.gradeScore} ${t(locale, "grades.points")}`}
-                            {hw.status === "SUBMITTED" && t(locale, "homework.submitted")}
-                            {hw.status === "REVISION_REQUESTED" && t(locale, "homework.revisionRequested")}
-                            {hw.status === "OVERDUE" && t(locale, "homework.overdue")}
-                            {hw.status === "PENDING" && t(locale, "homework.notStarted")}
-                          </span>
-                        </div>
-                        <h4 className="text-sm font-bold text-white line-clamp-1">{hw.title}</h4>
-                        <p className="text-xs text-brand-400 font-medium">{hw.courseTitle}</p>
-                        {hw.dueDate && (
-                          <p className="text-xs text-slate-400 pt-1">
-                            {t(locale, "homework.dueDate")}: <span className="text-slate-200">{formatDateLocalized(hw.dueDate, locale)}</span>
-                          </p>
-                        )}
-                      </div>
-
-                      <div className="pt-2 border-t border-slate-800/80">
-                        <Link
-                          href="/center/homework"
-                          className="inline-flex items-center gap-1 text-xs font-semibold text-brand-400 hover:text-brand-300 hover:underline"
-                        >
-                          <span>{t(locale, "dashboard.submitHomeworkPrompt")}</span>
-                          <ArrowRight className="w-3.5 h-3.5" />
-                        </Link>
-                      </div>
-                    </div>
-                  );
-                })}
-              </div>
-            )}
-          </div>
-
-          {/* Enrolled Courses Grid */}
-          <div className="space-y-4">
-            <h2 className="text-xl font-bold text-white">{t(locale, "student.myCourses")}</h2>
-            {studentEnrollments.length === 0 ? (
-              <div className="glass-panel p-8 rounded-2xl border border-slate-800 text-center space-y-2">
-                <BookOpen className="w-10 h-10 text-slate-600 mx-auto" />
-                <p className="text-slate-300 font-semibold">{t(locale, "student.noCourses")}</p>
-                <p className="text-xs text-slate-500">{t(locale, "student.useInviteCode")}</p>
-              </div>
-            ) : (
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                {studentEnrollments.map((en) => (
-                  <div key={en.id} className="glass-panel p-6 rounded-2xl border border-slate-800 space-y-4 hover:border-slate-700 transition-colors">
-                    <div className="flex justify-between items-start">
-                      <div>
-                        <span className="text-xs font-semibold text-brand-400 uppercase tracking-wider">
-                          {t(locale, "courses.title")}
-                        </span>
-                        <h3 className="text-lg font-bold text-white mt-1">{en.group.course.title}</h3>
-                      </div>
-                      <span className="px-2.5 py-1 rounded-full bg-emerald-500/10 text-emerald-400 text-xs font-semibold">
-                        {en.group.name}
-                      </span>
-                    </div>
-                    <div className="text-xs text-slate-400 pt-2 border-t border-slate-800/80">
-                      {t(locale, "student.teacher")}: <span className="text-slate-200 font-medium">
-                        {en.group.teacher?.user.fullName || t(locale, "student.assigningTeacher")}
-                      </span>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            )}
-          </div>
-        </div>
-      )}
-
-      {/* Parent View: Multi-child Overview */}
-      {activeRole === "PARENT" && (
-        <div className="space-y-6">
-          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-            <h2 className="text-xl font-bold text-white flex items-center gap-2">
-              <span>{t(locale, "dashboard.childrenOverview")}</span>
-            </h2>
-            <Link
-              href="/center/support"
-              className="inline-flex items-center gap-2 px-4 py-2 rounded-xl bg-indigo-600/20 hover:bg-indigo-600/30 border border-indigo-500/30 text-indigo-300 text-xs font-semibold transition-all self-start sm:self-auto"
-            >
-              <span>💬 {t(locale, "dashboard.supportCenterRequest")}</span>
-              <ArrowRight className="w-3.5 h-3.5" />
-            </Link>
-          </div>
-
-          <ParentChildSwitcherBar
-            childrenList={detailedChildren.map((c) => ({
-              studentMembershipId: c.studentMembershipId,
-              fullName: c.fullName,
-            }))}
-          />
-
-          {detailedChildren.length === 0 ? (
-            <div className="glass-panel p-8 rounded-2xl border border-slate-800 text-center space-y-2">
-              <Users className="w-10 h-10 text-slate-600 mx-auto" />
-              <p className="text-slate-300 font-semibold">{t(locale, "dashboard.parentNoChildrenLinked")}</p>
-              <p className="text-xs text-slate-500">{t(locale, "dashboard.parentLinkHint")}</p>
-            </div>
-          ) : (
-            detailedChildren.map((child) => {
-              const dayNames: Record<number, string> = {
-                1: t(locale, "schedule.monShort"),
-                2: t(locale, "schedule.tueShort"),
-                3: t(locale, "schedule.wedShort"),
-                4: t(locale, "schedule.thuShort"),
-                5: t(locale, "schedule.friShort"),
-                6: t(locale, "schedule.satShort"),
-                7: t(locale, "schedule.sunShort"),
-              };
-
-              return (
-                <ParentChildFilterSlot
-                  key={child.id}
-                  studentMembershipId={child.studentMembershipId}
-                >
-                <div className="glass-panel p-6 rounded-2xl border border-slate-800 space-y-6">
-                  {/* Child Top Bar */}
-                  <div className="flex flex-col sm:flex-row sm:items-center justify-between border-b border-slate-800 pb-4 gap-4">
-                    <div className="flex items-center gap-3">
-                      <div className="w-12 h-12 rounded-2xl bg-brand-600/20 text-brand-400 flex items-center justify-center font-bold text-xl border border-brand-500/20">
-                        👶
-                      </div>
-                      <div>
-                        <h3 className="text-lg font-bold text-white">{child.fullName}</h3>
-                        {child.email && (
-                          <p className="text-xs text-slate-400">{child.email}</p>
-                        )}
-                        <p className="text-xs text-slate-400">
-                          {t(locale, "dashboard.debtShort")}{" "}
-                          <span
-                            className={`font-bold ${
-                              child.debtAmount > 0 ? "text-rose-400" : "text-emerald-400"
-                            }`}
-                          >
-                            {formatCurrencyLocalized(child.debtAmount, locale, "UZS")}
-                          </span>{" "}
-                          • {t(locale, "dashboard.paidShort")} {formatCurrencyLocalized(child.totalPaid, locale, "UZS")}
-                        </p>
-                      </div>
-                    </div>
-
-                    <div className="flex flex-wrap items-center gap-2">
-                      <Link
-                        href="/center/homework"
-                        className="px-3.5 py-2 bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-semibold rounded-xl transition-all"
-                      >
-                        📝 {t(locale, "dashboard.hwShort")} ({child.homeworkItems.length})
-                      </Link>
-                      <Link
-                        href="/center/payments"
-                        className="px-4 py-2 bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold rounded-xl transition-all shadow-lg shadow-emerald-600/20"
-                      >
-                        💳 {t(locale, "dashboard.parentPayNext")}
-                      </Link>
-                    </div>
-                  </div>
-
-                  {/* Child Academic & Attendance Stats Row */}
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                    {/* Attendance Card */}
-                    <div className="p-4 rounded-xl bg-slate-900/60 border border-slate-800 flex flex-col justify-between space-y-3">
-                      <div className="flex items-center justify-between">
-                        <div>
-                          <span className="text-xs font-semibold text-slate-400 uppercase tracking-wider">
-                            {t(locale, "attendance.title")}
-                          </span>
-                          <div className="text-2xl font-bold text-white mt-1">
-                            {child.attendanceRate !== null ? `${child.attendanceRate}%` : "—"}
-                          </div>
-                        </div>
-                        <div className="flex flex-col items-end gap-1">
-                          <span className="px-2 py-0.5 rounded text-[11px] font-bold bg-slate-800 text-slate-300 border border-slate-700">
-                            {t(locale, "attendance.classesCount", { attended: child.attendedClasses, total: child.totalClasses })}
-                          </span>
-                          {child.absentCount > 0 && (
-                            <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-red-500/10 text-red-400 border border-red-500/20">
-                              {t(locale, "dashboard.childAbsences", { count: child.absentCount })}
-                            </span>
-                          )}
-                        </div>
-                      </div>
-
-                      {child.attendanceRate !== null && (
-                        <div className="w-full bg-slate-800 h-2 rounded-full overflow-hidden">
-                          <div
-                            className={`h-full rounded-full transition-all ${
-                              child.attendanceRate >= 80 ? "bg-emerald-500" : "bg-amber-500"
-                            }`}
-                            style={{ width: `${child.attendanceRate}%` }}
-                          />
-                        </div>
-                      )}
-
-                      {child.attendanceRate !== null && child.attendanceRate < 80 && (
-                        <p className="text-[11px] text-amber-400 flex items-center gap-1">
-                          <AlertTriangle className="w-3.5 h-3.5 shrink-0" />
-                          <span>{t(locale, "dashboard.inRiskZoneWarning")}</span>
-                        </p>
-                      )}
-                    </div>
-
-                    {/* Academic Performance Card */}
-                    <div className="p-4 rounded-xl bg-slate-900/60 border border-slate-800 space-y-3">
-                      <div className="flex items-center justify-between">
-                        <div>
-                          <span className="text-xs font-semibold text-slate-400 uppercase tracking-wider">
-                            {t(locale, "dashboard.academicPerformance")}
-                          </span>
-                          <div className="flex items-baseline gap-2 mt-1">
-                            <span className="text-2xl font-bold text-white">
-                              {child.avgGradeScore !== null ? `${child.avgGradeScore}%` : "—"}
-                            </span>
-                            {child.avgGradeScore !== null && (
-                              <span className="px-2 py-0.5 rounded text-[11px] font-bold bg-brand-500/20 text-brand-300">
-                                {child.avgGradeScore >= 90 ? "A" : child.avgGradeScore >= 80 ? "B" : child.avgGradeScore >= 70 ? "C" : "D/F"}
-                              </span>
-                            )}
-                          </div>
-                        </div>
-                      </div>
-
-                      <div className="space-y-1.5 pt-1 border-t border-slate-800">
-                        <span className="text-[11px] font-semibold text-slate-400 uppercase">
-                          {t(locale, "dashboard.childRecentGrades")}
-                        </span>
-                        {child.recentGrades.length === 0 ? (
-                          <p className="text-xs text-slate-500">{t(locale, "dashboard.childNoGrades")}</p>
-                        ) : (
-                          <div className="space-y-1">
-                            {child.recentGrades.map((g) => (
-                              <div
-                                key={g.id}
-                                className="flex items-center justify-between text-xs py-1 px-2 rounded bg-slate-950/40 border border-slate-800/60"
-                              >
-                                <span className="text-slate-300 truncate mr-2">{g.title}</span>
-                                <span className="font-bold text-brand-400 shrink-0">
-                                  {g.score} / {g.maxScore} ({g.letterGrade})
-                                </span>
-                              </div>
-                            ))}
-                          </div>
-                        )}
-                      </div>
-                    </div>
-                  </div>
-
-                  {/* Child Schedule & Courses Details */}
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                    {/* Child Schedule */}
-                    <div className="p-4 rounded-xl bg-slate-900/60 border border-slate-800 space-y-3">
-                      <span className="text-xs font-semibold text-slate-400 uppercase tracking-wider">
-                        {t(locale, "dashboard.childUpcomingClasses")}
-                      </span>
-
-                      {child.scheduleSlots.length === 0 ? (
-                        <p className="text-xs text-slate-500">{t(locale, "dashboard.childNoClasses")}</p>
-                      ) : (
-                        <div className="space-y-2">
-                          {child.scheduleSlots.map((slot) => (
-                            <div
-                              key={slot.id}
-                              className="p-2.5 rounded-lg bg-slate-950/60 border border-slate-800 text-xs space-y-1"
-                            >
-                              <div className="flex items-center justify-between">
-                                <span className="font-bold text-brand-400">
-                                  {dayNames[slot.dayOfWeek] || `${t(locale, "schedule.day")} ${slot.dayOfWeek}`} • {slot.startTime} - {slot.endTime}
-                                </span>
-                                {slot.roomName && (
-                                  <span className="text-[11px] text-slate-400 bg-slate-900 px-1.5 py-0.5 rounded">
-                                    {slot.roomName}
-                                  </span>
-                                )}
-                              </div>
-                              <div className="font-semibold text-white">{slot.courseTitle}</div>
-                              <div className="text-slate-400 flex items-center justify-between text-[11px]">
-                                <span>{slot.groupName}</span>
-                                <span>{slot.teacherName}</span>
-                              </div>
-                            </div>
-                          ))}
-                        </div>
-                      )}
-                    </div>
-
-                    {/* Courses & Payments History */}
-                    <div className="space-y-4">
-                      {/* Enrolled Courses */}
-                      <div className="p-4 rounded-xl bg-slate-900/60 border border-slate-800">
-                        <span className="text-xs font-semibold text-slate-400 uppercase tracking-wider">
-                          {t(locale, "parent.coursesAndGroups")}
-                        </span>
-                        <ul className="mt-2 space-y-2 text-sm">
-                          {child.enrollments.map((e) => (
-                            <li key={e.id} className="text-slate-200 font-medium flex justify-between">
-                              <span>{e.courseTitle}</span>
-                              <span className="text-xs text-brand-400 font-semibold">{e.groupName}</span>
-                            </li>
-                          ))}
-                        </ul>
-                      </div>
-
-                      {/* Homework Summary for Child */}
-                      <div className="p-4 rounded-xl bg-slate-900/60 border border-slate-800">
-                        <span className="text-xs font-semibold text-slate-400 uppercase tracking-wider">
-                          {t(locale, "dashboard.childHomeworksTitle")}
-                        </span>
-                        {child.homeworkItems.length === 0 ? (
-                          <p className="text-xs text-slate-500 mt-2">{t(locale, "dashboard.noActiveHomeworks")}</p>
-                        ) : (
-                          <ul className="mt-2 space-y-1.5 text-xs">
-                            {child.homeworkItems.map((hw) => (
-                              <li key={hw.id} className="flex items-center justify-between text-slate-200">
-                                <span className="truncate mr-2">{hw.title}</span>
-                                <span className="px-2 py-0.5 rounded bg-slate-800 text-[10px] font-semibold text-brand-300 shrink-0">
-                                  {hw.status}
-                                </span>
-                              </li>
-                            ))}
-                          </ul>
-                        )}
-                      </div>
-
-                      {/* Payment History */}
-                      <div className="p-4 rounded-xl bg-slate-900/60 border border-slate-800">
-                        <span className="text-xs font-semibold text-slate-400 uppercase tracking-wider">
-                          {t(locale, "parent.paymentHistory")}
-                        </span>
-                        {child.payments.length === 0 ? (
-                          <p className="text-xs text-slate-500 mt-2">{t(locale, "payments.noPaymentsYet")}</p>
-                        ) : (
-                          <ul className="mt-2 space-y-2 text-sm">
-                            {child.payments.map((p) => (
-                              <li key={p.id} className="text-slate-200 flex justify-between text-xs">
-                                <span>{formatCurrencyLocalized(p.amount, locale, "UZS")}</span>
-                                <span className="text-emerald-400 font-semibold">{p.status}</span>
-                              </li>
-                            ))}
-                          </ul>
-                        )}
-                      </div>
-                    </div>
-                  </div>
-                </div>
-                </ParentChildFilterSlot>
-              );
-            })
-          )}
-        </div>
-      )}
-
-      {/* Director & Admin Dashboard */}
-      {(activeRole === "DIRECTOR" || activeRole === "CENTER_ADMIN") && (
-        <div className="space-y-6">
-          {/* Subscription and Limits Overview */}
-          {subUsage?.subscription && (
-            <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-              {/* Subscription Card */}
-              <div className="glass-panel p-6 rounded-2xl border border-slate-800 space-y-4">
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-2">
-                    <div className="w-9 h-9 rounded-xl bg-brand-500/10 border border-brand-500/20 flex items-center justify-center text-brand-400">
-                      <ShieldCheck className="w-5 h-5" />
-                    </div>
-                    <div>
-                      <div className="text-xs text-slate-400 uppercase tracking-wider font-semibold">{t(locale, "dashboard.subscriptionPlanTitle")}</div>
-                      <h3 className="text-lg font-bold text-white">{subUsage.subscription.planName}</h3>
-                    </div>
-                  </div>
-                  <span className={`px-2.5 py-1 rounded-full text-xs font-semibold ${
-                    subUsage.subscription.status === "ACTIVE"
-                      ? "bg-emerald-500/10 text-emerald-400 border border-emerald-500/20"
-                      : subUsage.subscription.status === "TRIAL"
-                      ? "bg-blue-500/10 text-blue-400 border border-blue-500/20"
-                      : "bg-amber-500/10 text-amber-400 border border-amber-500/20"
-                  }`}>
-                    {subUsage.subscription.status}
-                  </span>
-                </div>
-
-                <div className="pt-2 border-t border-slate-800/80 grid grid-cols-2 gap-4">
-                  <div>
-                    <div className="text-[11px] text-slate-500 uppercase tracking-wider font-semibold">
-                      {subUsage.subscription.isTrial ? t(locale, "dashboard.trialDaysLabel") : t(locale, "dashboard.daysToRenewalLabel")}
-                    </div>
-                    <div className="text-2xl font-black text-brand-400 mt-0.5">
-                      {t(locale, "dashboard.daysShort", { count: subUsage.subscription.daysRemaining })}
-                    </div>
-                  </div>
-                  <div>
-                    <div className="text-[11px] text-slate-500 uppercase tracking-wider font-semibold">{t(locale, "dashboard.expiresAtLabel")}</div>
-                    <div className="text-xs font-semibold text-slate-300 mt-1">
-                      {subUsage.subscription.expiresAt
-                        ? formatDateLocalized(subUsage.subscription.expiresAt, locale)
-                        : t(locale, "dashboard.unlimitedLabel")}
-                    </div>
-                  </div>
-                </div>
-
-                <div className="pt-2 border-t border-slate-800/80 flex items-center justify-between text-xs">
-                  <span className="text-slate-400">{t(locale, "dashboard.planQuestions")}</span>
-                  <Link
-                    href="/center/support"
-                    className="text-brand-400 hover:text-brand-300 font-medium hover:underline flex items-center gap-1"
-                  >
-                    {t(locale, "dashboard.supportShort")}
-                    <ArrowRight className="w-3.5 h-3.5" />
-                  </Link>
-                </div>
-              </div>
-
-              {/* Limits and Progress Bars */}
-              <div className="lg:col-span-2 glass-panel p-6 rounded-2xl border border-slate-800 flex flex-col justify-between space-y-4">
-                <div className="flex items-center justify-between">
-                  <div>
-                    <h3 className="text-sm font-bold text-white uppercase tracking-wider flex items-center gap-2">
-                      <Layers className="w-4 h-4 text-brand-400" />
-                      {t(locale, "dashboard.planLimitsTitle")}
-                    </h3>
-                    <p className="text-xs text-slate-400 mt-0.5">
-                      {t(locale, "dashboard.planLimitsSubtitle")}
-                    </p>
-                  </div>
-                  {subUsage.hasWarnings && (
-                    <span className="px-2.5 py-1 rounded-full text-xs font-semibold bg-amber-500/10 text-amber-400 border border-amber-500/20 flex items-center gap-1">
-                      <AlertTriangle className="w-3.5 h-3.5" />
-                      {t(locale, "dashboard.quotaWarning90")}
-                    </span>
-                  )}
-                </div>
-
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                  {subUsage.limits.map((lim) => (
-                    <div key={lim.resource} className="p-3.5 rounded-xl bg-slate-900/60 border border-slate-800/80 space-y-2">
-                      <div className="flex items-center justify-between text-xs">
-                        <span className="font-semibold text-slate-300">{lim.label}</span>
-                        <span className={`font-bold ${lim.isReached ? "text-rose-400" : lim.isWarning ? "text-amber-400" : "text-white"}`}>
-                          {lim.current} / {lim.max} <span className="text-slate-500 font-normal">({lim.percent}%)</span>
-                        </span>
-                      </div>
-                      <div className="w-full bg-slate-800 h-2 rounded-full overflow-hidden">
-                        <div
-                          className={`h-full rounded-full transition-all duration-500 ${
-                            lim.isReached
-                              ? "bg-rose-500"
-                              : lim.isWarning
-                              ? "bg-amber-500"
-                              : "bg-brand-500"
-                          }`}
-                          style={{ width: `${lim.percent}%` }}
-                        />
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              </div>
-            </div>
-          )}
-
-          {/* Needs Attention Block */}
-          <div className="space-y-4">
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-2">
-                <div className="w-8 h-8 rounded-lg bg-amber-500/10 border border-amber-500/20 flex items-center justify-center text-amber-400">
-                  <AlertTriangle className="w-4 h-4" />
-                </div>
-                <div>
-                  <h2 className="text-lg font-bold text-white">
-                    {t(locale, "dashboard.needsAttentionTitle")}
-                  </h2>
-                  <p className="text-xs text-slate-400">
-                    {t(locale, "dashboard.needsAttentionSubtitle")}
-                  </p>
-                </div>
-              </div>
-            </div>
-
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-              {/* 1. Debtors */}
-              <div className="glass-panel p-4 rounded-xl border border-slate-800 flex flex-col justify-between space-y-3">
-                <div className="flex items-start justify-between">
-                  <div className="space-y-1">
-                    <span className="text-xs font-semibold text-slate-400 uppercase tracking-wider">
-                      {t(locale, "dashboard.debtorsTitle")}
-                    </span>
-                    <div className="text-xl font-bold text-rose-400">
-                      {t(locale, "dashboard.studentsCountUnit", { count: debtorsCount })}
-                    </div>
-                    <p className="text-xs text-slate-500">
-                      {t(locale, "dashboard.debtSumPrefix")}: {formatCurrencyLocalized(totalDebtAmount, locale, "UZS")}
-                    </p>
-                  </div>
-                  <div className="w-9 h-9 rounded-lg bg-rose-500/10 border border-rose-500/20 flex items-center justify-center text-rose-400">
-                    <CreditCard className="w-4 h-4" />
-                  </div>
-                </div>
-                <Link
-                  href="/center/finance"
-                  className="text-xs font-semibold text-rose-400 hover:text-rose-300 flex items-center gap-1 hover:underline pt-2 border-t border-slate-800/80"
-                >
-                  <span>{t(locale, "dashboard.goToDebts")}</span>
-                  <ArrowRight className="w-3.5 h-3.5" />
-                </Link>
-              </div>
-
-              {/* 2. Low Attendance */}
-              <div className="glass-panel p-4 rounded-xl border border-slate-800 flex flex-col justify-between space-y-3">
-                <div className="flex items-start justify-between">
-                  <div className="space-y-1">
-                    <span className="text-xs font-semibold text-slate-400 uppercase tracking-wider">
-                      {t(locale, "dashboard.lowAttendanceTitle")}
-                    </span>
-                    <div className={`text-xl font-bold ${atRiskStudentsCount > 0 ? "text-amber-400" : "text-emerald-400"}`}>
-                      {t(locale, "dashboard.studentsCountUnit", { count: atRiskStudentsCount })}
-                    </div>
-                    <p className="text-xs text-slate-500">
-                      {atRiskStudentsCount > 0
-                        ? t(locale, "dashboard.inAbsenceRisk")
-                        : t(locale, "dashboard.allStudentsNormal")}
-                    </p>
-                  </div>
-                  <div className="w-9 h-9 rounded-lg bg-amber-500/10 border border-amber-500/20 flex items-center justify-center text-amber-400">
-                    <AlertCircle className="w-4 h-4" />
-                  </div>
-                </div>
-                <Link
-                  href="/center/attendance"
-                  className="text-xs font-semibold text-amber-400 hover:text-amber-300 flex items-center gap-1 hover:underline pt-2 border-t border-slate-800/80"
-                >
-                  <span>{t(locale, "dashboard.openJournal")}</span>
-                  <ArrowRight className="w-3.5 h-3.5" />
-                </Link>
-              </div>
-
-              {/* 3. Groups without teacher */}
-              <div className="glass-panel p-4 rounded-xl border border-slate-800 flex flex-col justify-between space-y-3">
-                <div className="flex items-start justify-between">
-                  <div className="space-y-1">
-                    <span className="text-xs font-semibold text-slate-400 uppercase tracking-wider">
-                      {t(locale, "dashboard.groupsNoTeacherTitle")}
-                    </span>
-                    <div className={`text-xl font-bold ${groupsWithoutTeacherCount > 0 ? "text-purple-400" : "text-slate-300"}`}>
-                      {t(locale, "dashboard.groupsCountUnit", { count: groupsWithoutTeacherCount })}
-                    </div>
-                    <p className="text-xs text-slate-500">
-                      {groupsWithoutTeacherCount > 0
-                        ? t(locale, "dashboard.needAssignTeacher")
-                        : t(locale, "dashboard.allGroupsStaffed")}
-                    </p>
-                  </div>
-                  <div className="w-9 h-9 rounded-lg bg-purple-500/10 border border-purple-500/20 flex items-center justify-center text-purple-400">
-                    <UserX className="w-4 h-4" />
-                  </div>
-                </div>
-                <Link
-                  href="/center/groups"
-                  className="text-xs font-semibold text-purple-400 hover:text-purple-300 flex items-center gap-1 hover:underline pt-2 border-t border-slate-800/80"
-                >
-                  <span>{t(locale, "dashboard.assignTeacherCta")}</span>
-                  <ArrowRight className="w-3.5 h-3.5" />
-                </Link>
-              </div>
-
-              {/* 4. Groups without schedule */}
-              <div className="glass-panel p-4 rounded-xl border border-slate-800 flex flex-col justify-between space-y-3">
-                <div className="flex items-start justify-between">
-                  <div className="space-y-1">
-                    <span className="text-xs font-semibold text-slate-400 uppercase tracking-wider">
-                      {t(locale, "dashboard.groupsNoScheduleTitle")}
-                    </span>
-                    <div className={`text-xl font-bold ${groupsWithoutScheduleCount > 0 ? "text-blue-400" : "text-slate-300"}`}>
-                      {t(locale, "dashboard.groupsCountUnit", { count: groupsWithoutScheduleCount })}
-                    </div>
-                    <p className="text-xs text-slate-500">
-                      {groupsWithoutScheduleCount > 0
-                        ? t(locale, "dashboard.noActiveSlots")
-                        : t(locale, "dashboard.scheduleComplete")}
-                    </p>
-                  </div>
-                  <div className="w-9 h-9 rounded-lg bg-blue-500/10 border border-blue-500/20 flex items-center justify-center text-blue-400">
-                    <CalendarX className="w-4 h-4" />
-                  </div>
-                </div>
-                <Link
-                  href="/center/schedule"
-                  className="text-xs font-semibold text-blue-400 hover:text-blue-300 flex items-center gap-1 hover:underline pt-2 border-t border-slate-800/80"
-                >
-                  <span>{t(locale, "dashboard.configureScheduleCta")}</span>
-                  <ArrowRight className="w-3.5 h-3.5" />
-                </Link>
-              </div>
-
-              {/* 5. Unmarked attendance for 3 days */}
-              <div className="glass-panel p-4 rounded-xl border border-slate-800 flex flex-col justify-between space-y-3">
-                <div className="flex items-start justify-between">
-                  <div className="space-y-1">
-                    <span className="text-xs font-semibold text-slate-400 uppercase tracking-wider">
-                      {t(locale, "dashboard.missedAttendance3d")}
-                    </span>
-                    <div className={`text-xl font-bold ${unmarkedLessonsCount > 0 ? "text-rose-400" : "text-emerald-400"}`}>
-                      {t(locale, "dashboard.lessonsCountUnit", { count: unmarkedLessonsCount })}
-                    </div>
-                    <p className="text-xs text-slate-500">
-                      {unmarkedLessonsCount > 0
-                        ? t(locale, "dashboard.lessonsWithoutJournal")
-                        : t(locale, "dashboard.allMarksFilled")}
-                    </p>
-                  </div>
-                  <div className="w-9 h-9 rounded-lg bg-rose-500/10 border border-rose-500/20 flex items-center justify-center text-rose-400">
-                    <FileWarning className="w-4 h-4" />
-                  </div>
-                </div>
-                <Link
-                  href="/center/attendance"
-                  className="text-xs font-semibold text-rose-400 hover:text-rose-300 flex items-center gap-1 hover:underline pt-2 border-t border-slate-800/80"
-                >
-                  <span>{t(locale, "dashboard.checkMarksCta")}</span>
-                  <ArrowRight className="w-3.5 h-3.5" />
-                </Link>
-              </div>
-
-              {/* 6. Inactive Teachers */}
-              <div className="glass-panel p-4 rounded-xl border border-slate-800 flex flex-col justify-between space-y-3">
-                <div className="flex items-start justify-between">
-                  <div className="space-y-1">
-                    <span className="text-xs font-semibold text-slate-400 uppercase tracking-wider">
-                      {t(locale, "dashboard.inactiveTeachersTitle")}
-                    </span>
-                    <div className={`text-xl font-bold ${inactiveTeachersCount > 0 ? "text-amber-400" : "text-slate-300"}`}>
-                      {t(locale, "dashboard.teachersCountUnit", { count: inactiveTeachersCount })}
-                    </div>
-                    <p className="text-xs text-slate-500">
-                      {inactiveTeachersCount > 0
-                        ? t(locale, "dashboard.inactiveTeachersDesc")
-                        : t(locale, "dashboard.allTeachersActive")}
-                    </p>
-                  </div>
-                  <div className="w-9 h-9 rounded-lg bg-slate-800 flex items-center justify-center text-slate-400">
-                    <Users className="w-4 h-4" />
-                  </div>
-                </div>
-                <Link
-                  href="/center/staff"
-                  className="text-xs font-semibold text-brand-400 hover:text-brand-300 flex items-center gap-1 hover:underline pt-2 border-t border-slate-800/80"
-                >
-                  <span>{t(locale, "dashboard.teachersListCta")}</span>
-                  <ArrowRight className="w-3.5 h-3.5" />
-                </Link>
-              </div>
-            </div>
-          </div>
-
-          {/* 30-Day Trend Charts Component */}
-          <CenterTrendCharts data={trendPoints} locale={locale} />
-
-          {/* Key Metrics Grid */}
-          <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
-            <div className="glass-panel p-6 rounded-2xl border border-slate-800 flex items-center justify-between">
-              <div>
-                <span className="text-xs font-semibold text-slate-400 uppercase tracking-wider">
-                  {t(locale, "dashboard.activeStudents")}
-                </span>
-                <div className="text-3xl font-bold text-white mt-2">{activeStudentsCount}</div>
-              </div>
-              <div className="w-12 h-12 rounded-xl bg-brand-500/10 border border-brand-500/20 flex items-center justify-center text-brand-400">
-                <Users className="w-6 h-6" />
-              </div>
-            </div>
-
-            <div className="glass-panel p-6 rounded-2xl border border-slate-800 flex items-center justify-between">
-              <div>
-                <span className="text-xs font-semibold text-slate-400 uppercase tracking-wider">
-                  {t(locale, "dashboard.teachers")}
-                </span>
-                <div className="text-3xl font-bold text-white mt-2">{activeTeachersCount}</div>
-              </div>
-              <div className="w-12 h-12 rounded-xl bg-emerald-500/10 border border-emerald-500/20 flex items-center justify-center text-emerald-400">
-                <Sparkles className="w-6 h-6" />
-              </div>
-            </div>
-
-            <div className="glass-panel p-6 rounded-2xl border border-slate-800 flex items-center justify-between">
-              <div>
-                <span className="text-xs font-semibold text-slate-400 uppercase tracking-wider">
-                  {t(locale, "dashboard.totalCourses")}
-                </span>
-                <div className="text-3xl font-bold text-white mt-2">{coursesCount}</div>
-              </div>
-              <div className="w-12 h-12 rounded-xl bg-blue-500/10 border border-blue-500/20 flex items-center justify-center text-blue-400">
-                <BookOpen className="w-6 h-6" />
-              </div>
-            </div>
-
-            <div className="glass-panel p-6 rounded-2xl border border-slate-800 flex items-center justify-between">
-              <div>
-                <span className="text-xs font-semibold text-slate-400 uppercase tracking-wider">
-                  {t(locale, "dashboard.centerRevenue")}
-                </span>
-                <div className="text-3xl font-bold text-emerald-400 mt-2">
-                  {formatCurrencyLocalized(totalRevenue, locale, "UZS")}
-                </div>
-              </div>
-              <div className="w-12 h-12 rounded-xl bg-purple-500/10 border border-purple-500/20 flex items-center justify-center text-purple-400">
-                <CreditCard className="w-6 h-6" />
-              </div>
-            </div>
-          </div>
-
-          {/* Attendance Summary & Quality Bar */}
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-            <div className="glass-panel p-6 rounded-2xl border border-slate-800 flex flex-col justify-between space-y-4">
-              <div className="flex items-center justify-between">
-                <div>
-                  <span className="text-xs font-semibold text-slate-400 uppercase tracking-wider">
-                    {t(locale, "dashboard.centerAttendanceRate")}
-                  </span>
-                  <div className="text-2xl font-extrabold text-white mt-1">
-                    {overallAttendanceRate !== null ? `${overallAttendanceRate}%` : "—"}
-                  </div>
-                </div>
-                <div className="w-10 h-10 rounded-xl bg-emerald-500/10 border border-emerald-500/20 flex items-center justify-center text-emerald-400">
-                  <BarChart3 className="w-5 h-5" />
-                </div>
-              </div>
-
-              {overallAttendanceRate !== null && (
-                <div className="w-full bg-slate-800 h-2 rounded-full overflow-hidden">
-                  <div
-                    className={`h-full rounded-full transition-all ${
-                      overallAttendanceRate >= 80 ? "bg-emerald-500" : "bg-red-500"
-                    }`}
-                    style={{ width: `${overallAttendanceRate}%` }}
-                  />
-                </div>
-              )}
-
-              <div className="flex items-center justify-between text-xs pt-1 border-t border-slate-800/80">
-                <span className="text-slate-400">{t(locale, "attendance.title")}</span>
-                <Link
-                  href="/center/attendance"
-                  className="text-brand-400 hover:text-brand-300 font-medium hover:underline flex items-center gap-1"
-                >
-                  {t(locale, "dashboard.viewAttendanceJournal")}
-                  <ArrowRight className="w-3.5 h-3.5" />
-                </Link>
-              </div>
-            </div>
-
-            <div className="glass-panel p-6 rounded-2xl border border-slate-800 flex flex-col justify-between space-y-4">
-              <div className="flex items-center justify-between">
-                <div>
-                  <span className="text-xs font-semibold text-slate-400 uppercase tracking-wider">
-                    {t(locale, "dashboard.atRiskCount")}
-                  </span>
-                  <div className={`text-2xl font-extrabold mt-1 ${atRiskStudentsCount > 0 ? "text-amber-400" : "text-emerald-400"}`}>
-                    {atRiskStudentsCount}
-                  </div>
-                </div>
-                <div className={`w-10 h-10 rounded-xl flex items-center justify-center ${atRiskStudentsCount > 0 ? "bg-amber-500/10 border border-amber-500/20 text-amber-400" : "bg-emerald-500/10 border border-emerald-500/20 text-emerald-400"}`}>
-                  <AlertTriangle className="w-5 h-5" />
-                </div>
-              </div>
-
-              <p className="text-xs text-slate-400">
-                {atRiskStudentsCount > 0
-                  ? t(locale, "dashboard.attendanceLowWarning")
-                  : t(locale, "dashboard.attendanceSatisfactory")}
-              </p>
-
-              <div className="flex items-center justify-between text-xs pt-1 border-t border-slate-800/80">
-                <span className="text-slate-400">{t(locale, "attendance.riskList")}</span>
-                <Link
-                  href="/center/attendance"
-                  className="text-brand-400 hover:text-brand-300 font-medium hover:underline flex items-center gap-1"
-                >
-                  {t(locale, "dashboard.viewAttendanceJournal")}
-                  <ArrowRight className="w-3.5 h-3.5" />
-                </Link>
-              </div>
-            </div>
-          </div>
-
-          {/* Upcoming Center Schedule */}
-          <div className="space-y-4">
-            <div className="flex items-center justify-between">
-              <h2 className="text-xl font-bold text-white flex items-center gap-2">
-                <CalendarDays className="w-5 h-5 text-brand-400" />
-                <span>{t(locale, "dashboard.upcomingCenterSchedule")}</span>
-              </h2>
-              <Link
-                href="/center/schedule"
-                className="text-xs font-semibold text-brand-400 hover:text-brand-300 flex items-center gap-1 hover:underline"
-              >
-                {t(locale, "dashboard.viewSchedule")}
-                <ArrowRight className="w-3.5 h-3.5" />
-              </Link>
-            </div>
-
-            {centerScheduleSlots.length === 0 ? (
-              <div className="glass-panel p-8 rounded-2xl border border-slate-800 text-center space-y-3">
-                <CalendarDays className="w-10 h-10 text-slate-600 mx-auto" />
-                <p className="text-sm text-slate-400">{t(locale, "dashboard.noUpcomingClasses")}</p>
-                <Link
-                  href="/center/schedule"
-                  className="inline-flex items-center gap-1.5 px-4 py-2 bg-brand-600 hover:bg-brand-500 text-white text-xs font-bold rounded-xl transition-all"
-                >
-                  <Plus className="w-4 h-4" />
-                  {t(locale, "dashboard.setupSchedulePrompt")}
-                </Link>
-              </div>
-            ) : (
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                {centerScheduleSlots.map((slot) => {
-                  const dayNames: Record<number, string> = {
-                    1: t(locale, "schedule.monShort"),
-                    2: t(locale, "schedule.tueShort"),
-                    3: t(locale, "schedule.wedShort"),
-                    4: t(locale, "schedule.thuShort"),
-                    5: t(locale, "schedule.friShort"),
-                    6: t(locale, "schedule.satShort"),
-                    7: t(locale, "schedule.sunShort"),
-                  };
-                  return (
-                    <div
-                      key={slot.id}
-                      className="glass-panel p-4 rounded-xl border border-slate-800/80 hover:border-slate-700 transition-colors space-y-3"
-                    >
-                      <div className="flex items-center justify-between">
-                        <span className="px-2.5 py-0.5 rounded-md text-xs font-bold bg-brand-500/10 text-brand-400 border border-brand-500/20">
-                          {dayNames[slot.dayOfWeek] || `${t(locale, "schedule.day")} ${slot.dayOfWeek}`} • {slot.startTime} - {slot.endTime}
-                        </span>
-                        {slot.roomName && (
-                          <span className="text-[11px] text-slate-400 bg-slate-900 px-2 py-0.5 rounded border border-slate-800">
-                            {slot.roomName}
-                          </span>
-                        )}
-                      </div>
-                      <div>
-                        <h4 className="text-sm font-bold text-white line-clamp-1">{slot.group.course.title}</h4>
-                        <p className="text-xs text-brand-400 font-medium mt-0.5">{slot.group.name}</p>
-                      </div>
-                      <div className="text-xs text-slate-400 border-t border-slate-800/60 pt-2 flex items-center justify-between">
-                        <span>{slot.teacher.user.fullName}</span>
-                      </div>
-                    </div>
-                  );
-                })}
-              </div>
-            )}
-          </div>
-
-          {/* Helpful Empty State Banners */}
-          {coursesCount === 0 && (
-            <div className="p-4 rounded-2xl bg-brand-500/10 border border-brand-500/20 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-              <div className="flex items-center gap-3">
-                <BookOpen className="w-5 h-5 text-brand-400 shrink-0" />
-                <p className="text-xs text-slate-300">{t(locale, "dashboard.noCoursesYet")}</p>
-              </div>
-              <Link
-                href="/center/courses"
-                className="px-3.5 py-1.5 bg-brand-500 hover:bg-brand-600 text-white text-xs font-bold rounded-xl transition-all shrink-0 text-center"
-              >
-                {t(locale, "dashboard.createFirstCourse")}
-              </Link>
-            </div>
-          )}
-
-          {activeStudentsCount === 0 && (
-            <div className="p-4 rounded-2xl bg-emerald-500/10 border border-emerald-500/20 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-              <div className="flex items-center gap-3">
-                <Users className="w-5 h-5 text-emerald-400 shrink-0" />
-                <p className="text-xs text-slate-300">{t(locale, "dashboard.noActiveStudents")}</p>
-              </div>
-              <Link
-                href="/center/students"
-                className="px-3.5 py-1.5 bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold rounded-xl transition-all shrink-0 text-center"
-              >
-                {t(locale, "dashboard.addStudentsPrompt")}
-              </Link>
-            </div>
-          )}
-        </div>
-      )}
     </div>
   );
 }

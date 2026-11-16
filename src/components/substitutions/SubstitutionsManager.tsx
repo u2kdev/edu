@@ -2,19 +2,28 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
-import {
-  Calendar,
-  Clock,
-  UserCheck,
-  CheckCircle2,
-  XCircle,
-  Plus,
-  AlertCircle,
-  Loader2,
-  Ban,
-  ArrowRight,
-} from "lucide-react";
+import { Calendar, CheckCircle2, XCircle, Plus } from "lucide-react";
 import { formatDateLocalized } from "@/i18n";
+import { Alert, AlertDescription } from "@/components/ui/alert";
+import { Badge, StatusDot } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
+import { Card, CardContent } from "@/components/ui/card";
+import { ConfirmDialog } from "@/components/ui/confirm-dialog";
+import {
+  Dialog,
+  DialogContent,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import { EmptyState } from "@/components/ui/empty-state";
+import { Label } from "@/components/ui/label";
+import { PageHeader } from "@/components/ui/page-header";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Textarea } from "@/components/ui/textarea";
+
+const SELECT_CLS =
+  "flex h-9 w-full rounded-md border border-input bg-card px-3 py-1.5 text-sm text-foreground transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-1 focus-visible:ring-offset-background disabled:cursor-not-allowed disabled:opacity-50";
 
 export interface SubstitutionItem {
   id: string;
@@ -92,6 +101,7 @@ export default function SubstitutionsManager({
   locale = "ru",
 }: SubstitutionsManagerProps) {
   const router = useRouter();
+  const isUz = locale === "uz-Latn";
   const [requests, setRequests] = useState<SubstitutionItem[]>(initialRequests);
   const [activeTab, setActiveTab] = useState<"ACTIVE" | "HISTORY">("ACTIVE");
 
@@ -101,8 +111,9 @@ export default function SubstitutionsManager({
   const [proposedSubstituteId, setProposedSubstituteId] = useState("");
   const [loading, setLoading] = useState(false);
   const [errorMsg, setErrorMsg] = useState("");
+  const [actionError, setActionError] = useState<string | null>(null);
+  const [cancelTargetId, setCancelTargetId] = useState<string | null>(null);
 
-  // Approval modal state
   const [resolveTarget, setResolveTarget] = useState<{
     request: SubstitutionItem;
     action: "APPROVE" | "REJECT";
@@ -114,12 +125,13 @@ export default function SubstitutionsManager({
 
   const activeRequests = requests.filter((r) => r.status === "REQUESTED");
   const historyRequests = requests.filter((r) => r.status !== "REQUESTED");
-  const displayedRequests = activeTab === "ACTIVE" ? activeRequests : historyRequests;
 
   const handleCreate = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!selectedLessonId || !reason.trim()) {
-      setErrorMsg(locale === "uz-Latn" ? "Dars va sabab ko'rsatilishi shart" : "Укажите урок и причину");
+      setErrorMsg(
+        isUz ? "Dars va sabab ko'rsatilishi shart" : "Укажите урок и причину"
+      );
       return;
     }
 
@@ -146,11 +158,10 @@ export default function SubstitutionsManager({
       setShowCreateModal(false);
       setReason("");
       setProposedSubstituteId("");
-      router.refresh();
-      // Optimistic update
       setRequests([data.substitutionRequest, ...requests]);
+      router.refresh();
     } catch {
-      setErrorMsg(locale === "uz-Latn" ? "Tarmoq xatosi" : "Ошибка сети");
+      setErrorMsg(isUz ? "Tarmoq xatosi" : "Ошибка сети");
     } finally {
       setLoading(false);
     }
@@ -160,7 +171,11 @@ export default function SubstitutionsManager({
     if (!resolveTarget) return;
 
     if (resolveTarget.action === "APPROVE" && !assignSubstituteId) {
-      setErrorMsg(locale === "uz-Latn" ? "O'rinbosar o'qituvchini tanlang" : "Выберите заменяющего учителя");
+      setErrorMsg(
+        isUz
+          ? "O'rinbosar o'qituvchini tanlang"
+          : "Выберите заменяющего преподавателя"
+      );
       return;
     }
 
@@ -187,406 +202,448 @@ export default function SubstitutionsManager({
       setResolveTarget(null);
       setAssignSubstituteId("");
       setResolverComment("");
+      setRequests(
+        requests.map((r) =>
+          r.id === data.substitutionRequest.id ? data.substitutionRequest : r
+        )
+      );
       router.refresh();
-      // Update state
-      setRequests(requests.map((r) => (r.id === data.substitutionRequest.id ? data.substitutionRequest : r)));
     } catch {
-      setErrorMsg(locale === "uz-Latn" ? "Tarmoq xatosi" : "Ошибка сети");
+      setErrorMsg(isUz ? "Tarmoq xatosi" : "Ошибка сети");
     } finally {
       setLoading(false);
     }
   };
 
-  const handleCancel = async (reqId: string) => {
-    if (!confirm(locale === "uz-Latn" ? "Arizani bekor qilasizmi?" : "Отменить заявку на замену?")) return;
-
+  const handleConfirmCancel = async () => {
+    if (!cancelTargetId) return;
     setLoading(true);
+    setActionError(null);
     try {
-      const res = await fetch(`/api/substitutions/${reqId}`, {
+      const res = await fetch(`/api/substitutions/${cancelTargetId}`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ action: "CANCEL" }),
       });
       const data = await res.json();
       if (res.ok) {
-        setRequests(requests.map((r) => (r.id === reqId ? data.substitutionRequest : r)));
+        setRequests(
+          requests.map((r) =>
+            r.id === cancelTargetId ? data.substitutionRequest : r
+          )
+        );
+        setCancelTargetId(null);
         router.refresh();
+      } else {
+        setActionError(
+          data.error ||
+            (isUz ? "Bekor qilib bo'lmadi" : "Не удалось отменить заявку")
+        );
+        setCancelTargetId(null);
       }
-    } catch (err) {
-      console.error(err);
+    } catch {
+      setActionError(isUz ? "Tarmoq xatosi" : "Ошибка сети");
+      setCancelTargetId(null);
     } finally {
       setLoading(false);
     }
   };
 
-  const statusBadge = (st: SubstitutionItem["status"]) => {
+  const renderStatus = (st: SubstitutionItem["status"]) => {
     switch (st) {
       case "REQUESTED":
-        return (
-          <span className="px-2.5 py-1 rounded-full text-xs font-semibold bg-amber-500/10 text-amber-400 border border-amber-500/20 flex items-center gap-1">
-            <Clock className="w-3 h-3" />
-            {locale === "uz-Latn" ? "Kutilmoqda" : "Ожидает"}
-          </span>
-        );
+        return <StatusDot tone="warning" label={isUz ? "Kutilmoqda" : "Ожидает"} />;
       case "APPROVED":
-        return (
-          <span className="px-2.5 py-1 rounded-full text-xs font-semibold bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 flex items-center gap-1">
-            <CheckCircle2 className="w-3 h-3" />
-            {locale === "uz-Latn" ? "Tasdiqlangan" : "Одобрена"}
-          </span>
-        );
+        return <StatusDot tone="success" label={isUz ? "Tasdiqlangan" : "Одобрена"} />;
       case "REJECTED":
-        return (
-          <span className="px-2.5 py-1 rounded-full text-xs font-semibold bg-rose-500/10 text-rose-400 border border-rose-500/20 flex items-center gap-1">
-            <XCircle className="w-3 h-3" />
-            {locale === "uz-Latn" ? "Rad etilgan" : "Отклонена"}
-          </span>
-        );
+        return <StatusDot tone="destructive" label={isUz ? "Rad etilgan" : "Отклонена"} />;
       case "CANCELLED":
-        return (
-          <span className="px-2.5 py-1 rounded-full text-xs font-semibold bg-slate-800 text-slate-400 border border-slate-700 flex items-center gap-1">
-            <Ban className="w-3 h-3" />
-            {locale === "uz-Latn" ? "Bekor qilingan" : "Отменена"}
-          </span>
-        );
+        return <StatusDot tone="neutral" label={isUz ? "Bekor qilingan" : "Отменена"} />;
     }
   };
 
-  return (
-    <div className="space-y-6">
-      {/* Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-        <div>
-          <h1 className="text-2xl font-bold text-white flex items-center gap-2">
-            <Calendar className="w-6 h-6 text-brand-400" />
-            <span>{locale === "uz-Latn" ? "Dars almashish va almashtirishlar" : "Замены преподавателей"}</span>
-          </h1>
-          <p className="text-sm text-slate-400 mt-1">
-            {locale === "uz-Latn"
-              ? "Darslarni o'zaro almashtirish va o'rinbosarlarni tasdiqlash"
-              : "Заявки на замену уроков, согласование и назначение замещающих"}
-          </p>
-        </div>
-
-        {(role === "TEACHER" || role === "TEACHER_ASSISTANT" || isPrivileged) && (
-          <button
-            onClick={() => {
-              setErrorMsg("");
-              setShowCreateModal(true);
-            }}
-            className="px-4 py-2.5 bg-brand-600 hover:bg-brand-500 text-white font-medium rounded-xl text-sm flex items-center justify-center gap-2 transition-colors shadow-lg shadow-brand-500/20"
-          >
-            <Plus className="w-4 h-4" />
-            <span>{locale === "uz-Latn" ? "Almashtirish so'rovi" : "Запросить замену"}</span>
-          </button>
-        )}
-      </div>
-
-      {/* Tabs */}
-      <div className="flex items-center gap-2 border-b border-slate-800 pb-2">
-        <button
-          onClick={() => setActiveTab("ACTIVE")}
-          className={`px-4 py-2 rounded-xl text-sm font-semibold transition-colors flex items-center gap-2 ${
-            activeTab === "ACTIVE"
-              ? "bg-slate-800 text-white border border-slate-700"
-              : "text-slate-400 hover:text-white"
-          }`}
-        >
-          <span>{locale === "uz-Latn" ? "Faol so'rovlar" : "Активные заявки"}</span>
-          {activeRequests.length > 0 && (
-            <span className="px-2 py-0.5 rounded-full text-xs bg-amber-500/20 text-amber-400 font-bold">
-              {activeRequests.length}
-            </span>
-          )}
-        </button>
-        <button
-          onClick={() => setActiveTab("HISTORY")}
-          className={`px-4 py-2 rounded-xl text-sm font-semibold transition-colors ${
-            activeTab === "HISTORY"
-              ? "bg-slate-800 text-white border border-slate-700"
-              : "text-slate-400 hover:text-white"
-          }`}
-        >
-          <span>{locale === "uz-Latn" ? "Tarix" : "История замен"}</span>
-        </button>
-      </div>
-
-      {/* Requests List */}
-      {displayedRequests.length === 0 ? (
-        <div className="glass-panel p-12 rounded-2xl border border-slate-800 text-center space-y-3">
-          <Calendar className="w-12 h-12 text-slate-600 mx-auto" />
-          <h3 className="text-base font-semibold text-white">
-            {activeTab === "ACTIVE"
-              ? locale === "uz-Latn"
-                ? "Hozirda faol so'rovlar yo'q"
-                : "Нет активных заявок на замену"
-              : locale === "uz-Latn"
-              ? "Tarix bo'sh"
-              : "История замен пуста"}
-          </h3>
-          <p className="text-xs text-slate-400 max-w-sm mx-auto">
-            {locale === "uz-Latn"
-              ? "O'qituvchilar darsni o'zgartirish yoki almashtirish uchun ariza yuborishi mumkin."
-              : "Преподаватели могут запрашивать замену уроков при болезни или невозможности провести занятие."}
-          </p>
-        </div>
-      ) : (
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-          {displayedRequests.map((req) => {
-            const isMine = req.requester.id === currentMembershipId;
-            return (
-              <div
-                key={req.id}
-                className="glass-panel p-5 rounded-2xl border border-slate-800 space-y-4 flex flex-col justify-between hover:border-slate-700 transition-colors"
-              >
+  const renderRequestsPanel = (
+    tab: "ACTIVE" | "HISTORY",
+    items: SubstitutionItem[]
+  ) =>
+    items.length === 0 ? (
+      <EmptyState
+        icon={<Calendar className="w-5 h-5" aria-hidden="true" />}
+        title={
+          tab === "ACTIVE"
+            ? isUz
+              ? "Hozirda faol so'rovlar yo'q"
+              : "Нет активных заявок на замену"
+            : isUz
+            ? "Tarix bo'sh"
+            : "История замен пуста"
+        }
+        description={
+          isUz
+            ? "O'qituvchilar darsni o'zgartirish yoki almashtirish uchun ariza yuborishi mumkin."
+            : "Преподаватели могут запрашивать замену уроков при болезни или невозможности провести занятие."
+        }
+      />
+    ) : (
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+        {items.map((req) => {
+          const isMine = req.requester.id === currentMembershipId;
+          return (
+            <Card key={req.id} className="flex flex-col justify-between">
+              <CardContent className="p-5 flex-1 flex flex-col justify-between space-y-4">
                 <div className="space-y-3">
                   <div className="flex items-start justify-between gap-2">
-                    <div>
-                      <span className="text-xs font-semibold text-brand-400 uppercase tracking-wider block">
+                    <div className="min-w-0">
+                      <span className="text-xs font-medium text-primary block">
                         {req.lesson.module?.course.title || "Курс"}
                       </span>
-                      <h4 className="text-base font-bold text-white mt-0.5">{req.lesson.title}</h4>
+                      <h3 className="text-sm font-semibold text-foreground mt-0.5">
+                        {req.lesson.title}
+                      </h3>
                       {req.lesson.scheduledAt && (
-                        <p className="text-xs text-slate-400 mt-0.5">
-                          {formatDateLocalized(new Date(req.lesson.scheduledAt), locale)} •{" "}
-                          {req.lesson.durationMinutes || 60} мин
+                        <p className="text-xs text-muted-foreground mt-0.5 tabular-nums">
+                          {formatDateLocalized(new Date(req.lesson.scheduledAt), locale)}{" "}
+                          · {req.lesson.durationMinutes || 60} мин
                         </p>
                       )}
                     </div>
-                    <div>{statusBadge(req.status)}</div>
+                    <div className="shrink-0">{renderStatus(req.status)}</div>
                   </div>
 
-                  <div className="p-3 rounded-xl bg-slate-900/60 border border-slate-800/80 space-y-1.5 text-xs">
-                    <div className="flex items-center justify-between text-slate-300">
-                      <span className="text-slate-500">{locale === "uz-Latn" ? "O'qituvchi:" : "Преподаватель:"}</span>
-                      <span className="font-semibold text-white">{req.requester.user.fullName}</span>
+                  <div className="p-3 rounded-md bg-muted/60 border border-border space-y-1.5 text-xs">
+                    <div className="flex items-center justify-between gap-2">
+                      <span className="text-muted-foreground">
+                        {isUz ? "O'qituvchi:" : "Преподаватель:"}
+                      </span>
+                      <span className="font-semibold text-foreground">
+                        {req.requester.user.fullName}
+                      </span>
                     </div>
 
                     {req.proposedSubstitute && (
-                      <div className="flex items-center justify-between text-slate-300">
-                        <span className="text-slate-500">{locale === "uz-Latn" ? "Taklif etilgan:" : "Предложен:"}</span>
-                        <span className="text-amber-300">{req.proposedSubstitute.user.fullName}</span>
+                      <div className="flex items-center justify-between gap-2">
+                        <span className="text-muted-foreground">
+                          {isUz ? "Taklif etilgan:" : "Предложен:"}
+                        </span>
+                        <span className="text-warning font-medium">
+                          {req.proposedSubstitute.user.fullName}
+                        </span>
                       </div>
                     )}
 
                     {req.substituteTeacher && (
-                      <div className="flex items-center justify-between text-slate-300">
-                        <span className="text-slate-500">{locale === "uz-Latn" ? "O'rinbosar:" : "Заменяет:"}</span>
-                        <span className="font-bold text-emerald-400">{req.substituteTeacher.user.fullName}</span>
+                      <div className="flex items-center justify-between gap-2">
+                        <span className="text-muted-foreground">
+                          {isUz ? "O'rinbosar:" : "Заменяет:"}
+                        </span>
+                        <span className="font-semibold text-success">
+                          {req.substituteTeacher.user.fullName}
+                        </span>
                       </div>
                     )}
 
-                    <div className="pt-1.5 border-t border-slate-800/80 text-slate-300">
-                      <span className="text-slate-500 block mb-0.5">{locale === "uz-Latn" ? "Sabab:" : "Причина:"}</span>
-                      <p className="text-slate-300 italic">«{req.reason}»</p>
+                    <div className="pt-1.5 border-t border-border">
+                      <span className="text-muted-foreground block mb-0.5">
+                        {isUz ? "Sabab:" : "Причина:"}
+                      </span>
+                      <p className="text-foreground/90">«{req.reason}»</p>
                     </div>
 
                     {req.resolverComment && (
-                      <div className="pt-1 text-slate-300">
-                        <span className="text-slate-500 block mb-0.5">{locale === "uz-Latn" ? "Izoh:" : "Комментарий:"}</span>
-                        <p className="text-slate-400">{req.resolverComment}</p>
+                      <div className="pt-1">
+                        <span className="text-muted-foreground block mb-0.5">
+                          {isUz ? "Izoh:" : "Комментарий:"}
+                        </span>
+                        <p className="text-muted-foreground">{req.resolverComment}</p>
                       </div>
                     )}
                   </div>
                 </div>
 
-                {/* Actions */}
-                <div className="pt-2 border-t border-slate-800/80 flex items-center justify-between gap-2">
-                  <span className="text-[11px] text-slate-500 font-mono">
+                <div className="pt-3 border-t border-border flex items-center justify-between gap-2">
+                  <span className="text-xs text-muted-foreground tabular-nums">
                     {formatDateLocalized(new Date(req.createdAt), locale)}
                   </span>
 
                   <div className="flex items-center gap-2">
                     {req.status === "REQUESTED" && isMine && !isPrivileged && (
-                      <button
-                        onClick={() => handleCancel(req.id)}
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        onClick={() => setCancelTargetId(req.id)}
                         disabled={loading}
-                        className="px-3 py-1 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded-lg text-xs font-semibold transition-colors"
                       >
-                        {locale === "uz-Latn" ? "Bekor qilish" : "Отменить"}
-                      </button>
+                        {isUz ? "Bekor qilish" : "Отменить"}
+                      </Button>
                     )}
 
                     {req.status === "REQUESTED" && isPrivileged && (
                       <>
-                        <button
+                        <Button
+                          type="button"
+                          variant="primary"
+                          size="sm"
                           onClick={() => {
                             setErrorMsg("");
-                            setAssignSubstituteId(req.proposedSubstitute?.id || teachers[0]?.id || "");
+                            setAssignSubstituteId(
+                              req.proposedSubstitute?.id || teachers[0]?.id || ""
+                            );
                             setResolverComment("");
                             setResolveTarget({ request: req, action: "APPROVE" });
                           }}
-                          className="px-3 py-1.5 bg-emerald-600 hover:bg-emerald-500 text-white rounded-lg text-xs font-semibold transition-colors shadow-sm"
                         >
-                          {locale === "uz-Latn" ? "Tasdiqlash" : "Одобрить"}
-                        </button>
-                        <button
+                          {isUz ? "Tasdiqlash" : "Одобрить"}
+                        </Button>
+                        <Button
+                          type="button"
+                          variant="destructive"
+                          size="sm"
                           onClick={() => {
                             setErrorMsg("");
                             setResolverComment("");
                             setResolveTarget({ request: req, action: "REJECT" });
                           }}
-                          className="px-3 py-1.5 bg-rose-600/80 hover:bg-rose-600 text-white rounded-lg text-xs font-semibold transition-colors"
                         >
-                          {locale === "uz-Latn" ? "Rad etish" : "Отклонить"}
-                        </button>
+                          {isUz ? "Rad etish" : "Отклонить"}
+                        </Button>
                       </>
                     )}
                   </div>
                 </div>
-              </div>
-            );
-          })}
-        </div>
+              </CardContent>
+            </Card>
+          );
+        })}
+      </div>
+    );
+
+  return (
+    <div className="space-y-6">
+      <PageHeader
+        title={isUz ? "Dars almashtirishlar" : "Замены преподавателей"}
+        description={
+          isUz
+            ? "Darslarni almashtirish so'rovlari va o'rinbosarlarni tasdiqlash"
+            : "Заявки на замену уроков, согласование и назначение замещающих"
+        }
+        actions={
+          role === "TEACHER" || role === "TEACHER_ASSISTANT" || isPrivileged ? (
+            <Button
+              type="button"
+              size="sm"
+              onClick={() => {
+                setErrorMsg("");
+                setShowCreateModal(true);
+              }}
+            >
+              <Plus className="w-4 h-4" aria-hidden="true" />
+              <span>{isUz ? "Almashtirish so'rovi" : "Запросить замену"}</span>
+            </Button>
+          ) : undefined
+        }
+      />
+
+      {actionError && (
+        <Alert variant="destructive">
+          <AlertDescription>{actionError}</AlertDescription>
+        </Alert>
       )}
 
-      {/* Create Modal */}
-      {showCreateModal && (
-        <div className="fixed inset-0 z-50 bg-black/70 backdrop-blur-sm flex items-center justify-center p-4">
-          <div className="glass-panel w-full max-w-lg p-6 rounded-3xl border border-slate-800 space-y-6">
-            <h3 className="text-xl font-bold text-white flex items-center gap-2">
-              <Calendar className="w-5 h-5 text-brand-400" />
-              <span>{locale === "uz-Latn" ? "Dars almashish so'rovi" : "Запрос на замену урока"}</span>
-            </h3>
-
-            {errorMsg && (
-              <div className="p-3 rounded-xl bg-rose-500/10 border border-rose-500/20 text-rose-400 text-xs flex items-center gap-2">
-                <AlertCircle className="w-4 h-4 shrink-0" />
-                <span>{errorMsg}</span>
-              </div>
+      <Tabs
+        value={activeTab}
+        onValueChange={(v) => setActiveTab(v as "ACTIVE" | "HISTORY")}
+      >
+        <TabsList>
+          <TabsTrigger value="ACTIVE">
+            <span>{isUz ? "Faol so'rovlar" : "Активные заявки"}</span>
+            {activeRequests.length > 0 && (
+              <Badge variant="warning">{activeRequests.length}</Badge>
             )}
+          </TabsTrigger>
+          <TabsTrigger value="HISTORY">
+            <span>{isUz ? "Tarix" : "История замен"}</span>
+          </TabsTrigger>
+        </TabsList>
 
-            <form onSubmit={handleCreate} className="space-y-4">
-              <div>
-                <label className="block text-xs font-semibold text-slate-300 uppercase tracking-wider mb-2">
-                  {locale === "uz-Latn" ? "Darsni tanlang" : "Выберите урок"}
-                </label>
-                {myLessons.length === 0 ? (
-                  <p className="text-xs text-amber-400 p-3 rounded-xl bg-amber-500/10 border border-amber-500/20">
-                    {locale === "uz-Latn"
+        <TabsContent value="ACTIVE">
+          {renderRequestsPanel("ACTIVE", activeRequests)}
+        </TabsContent>
+        <TabsContent value="HISTORY">
+          {renderRequestsPanel("HISTORY", historyRequests)}
+        </TabsContent>
+      </Tabs>
+
+      <Dialog open={showCreateModal} onOpenChange={setShowCreateModal}>
+        <DialogContent locale={locale} className="max-w-lg">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Calendar className="w-4 h-4 text-primary" aria-hidden="true" />
+              <span>
+                {isUz ? "Dars almashtirish so'rovi" : "Запрос на замену урока"}
+              </span>
+            </DialogTitle>
+          </DialogHeader>
+
+          {errorMsg && (
+            <Alert variant="destructive">
+              <AlertDescription>{errorMsg}</AlertDescription>
+            </Alert>
+          )}
+
+          <form onSubmit={handleCreate} className="space-y-4">
+            <div className="space-y-1.5">
+              <Label htmlFor="sub-lesson">
+                {isUz ? "Darsni tanlang" : "Выберите урок"}
+              </Label>
+              {myLessons.length === 0 ? (
+                <Alert variant="warning">
+                  <AlertDescription>
+                    {isUz
                       ? "Sizda almashtirish uchun darslar topilmadi"
                       : "У вас нет доступных запланированных уроков"}
-                  </p>
-                ) : (
-                  <select
-                    required
-                    value={selectedLessonId}
-                    onChange={(e) => setSelectedLessonId(e.target.value)}
-                    className="w-full px-4 py-3 bg-slate-900 border border-slate-700 rounded-xl text-white text-sm focus:outline-none focus:border-brand-500"
-                  >
-                    {myLessons.map((l) => (
-                      <option key={l.id} value={l.id}>
-                        {l.title}{" "}
-                        {l.scheduledAt ? `(${formatDateLocalized(new Date(l.scheduledAt), locale)})` : ""}
-                      </option>
-                    ))}
-                  </select>
-                )}
-              </div>
-
-              <div>
-                <label className="block text-xs font-semibold text-slate-300 uppercase tracking-wider mb-2">
-                  {locale === "uz-Latn" ? "Almashtirish sababi" : "Причина замены"}
-                </label>
-                <textarea
-                  required
-                  rows={3}
-                  value={reason}
-                  onChange={(e) => setReason(e.target.value)}
-                  placeholder={
-                    locale === "uz-Latn"
-                      ? "Masalan: Kasallik tufayli yoki shoshilinch safar..."
-                      : "Например: Больничный лист, семейные обстоятельства..."
-                  }
-                  className="w-full px-4 py-3 bg-slate-900 border border-slate-700 rounded-xl text-white text-sm focus:outline-none focus:border-brand-500 resize-none"
-                />
-              </div>
-
-              <div>
-                <label className="block text-xs font-semibold text-slate-300 uppercase tracking-wider mb-2">
-                  {locale === "uz-Latn" ? "Taklif etilayotgan o'qituvchi (ixtiyoriy)" : "Предпочтительный заменяющий (опционально)"}
-                </label>
+                  </AlertDescription>
+                </Alert>
+              ) : (
                 <select
-                  value={proposedSubstituteId}
-                  onChange={(e) => setProposedSubstituteId(e.target.value)}
-                  className="w-full px-4 py-3 bg-slate-900 border border-slate-700 rounded-xl text-white text-sm focus:outline-none focus:border-brand-500"
+                  id="sub-lesson"
+                  required
+                  value={selectedLessonId}
+                  onChange={(e) => setSelectedLessonId(e.target.value)}
+                  className={SELECT_CLS}
                 >
-                  <option value="">{locale === "uz-Latn" ? "Ma'muriyat o'zi tanlasin" : "На усмотрение директора"}</option>
-                  {teachers
-                    .filter((t) => t.id !== currentMembershipId)
-                    .map((t) => (
-                      <option key={t.id} value={t.id}>
-                        {t.fullName} ({t.role})
-                      </option>
-                    ))}
+                  {myLessons.map((l) => (
+                    <option key={l.id} value={l.id}>
+                      {l.title}{" "}
+                      {l.scheduledAt
+                        ? `(${formatDateLocalized(new Date(l.scheduledAt), locale)})`
+                        : ""}
+                    </option>
+                  ))}
                 </select>
-              </div>
+              )}
+            </div>
 
-              <div className="flex justify-end gap-3 pt-4 border-t border-slate-800">
-                <button
-                  type="button"
-                  onClick={() => setShowCreateModal(false)}
-                  className="px-4 py-2.5 bg-slate-800 hover:bg-slate-700 text-slate-300 font-semibold rounded-xl text-sm"
-                >
-                  {locale === "uz-Latn" ? "Bekor qilish" : "Отмена"}
-                </button>
-                <button
-                  type="submit"
-                  disabled={loading || myLessons.length === 0}
-                  className="px-5 py-2.5 bg-brand-600 hover:bg-brand-500 disabled:opacity-50 text-white font-semibold rounded-xl text-sm flex items-center gap-2 shadow-lg shadow-brand-500/20"
-                >
-                  {loading && <Loader2 className="w-4 h-4 animate-spin" />}
-                  <span>{locale === "uz-Latn" ? "Yuborish" : "Отправить заявку"}</span>
-                </button>
-              </div>
-            </form>
-          </div>
-        </div>
-      )}
+            <div className="space-y-1.5">
+              <Label htmlFor="sub-reason">
+                {isUz ? "Almashtirish sababi" : "Причина замены"}
+              </Label>
+              <Textarea
+                id="sub-reason"
+                required
+                rows={3}
+                value={reason}
+                onChange={(e) => setReason(e.target.value)}
+                placeholder={
+                  isUz
+                    ? "Masalan: Kasallik tufayli yoki shoshilinch safar..."
+                    : "Например: Больничный лист, семейные обстоятельства..."
+                }
+              />
+            </div>
 
-      {/* Resolve (Approve / Reject) Modal */}
-      {resolveTarget && (
-        <div className="fixed inset-0 z-50 bg-black/70 backdrop-blur-sm flex items-center justify-center p-4">
-          <div className="glass-panel w-full max-w-lg p-6 rounded-3xl border border-slate-800 space-y-6">
-            <h3 className="text-xl font-bold text-white flex items-center gap-2">
-              {resolveTarget.action === "APPROVE" ? (
+            <div className="space-y-1.5">
+              <Label htmlFor="sub-proposed">
+                {isUz
+                  ? "Taklif etilayotgan o'qituvchi (ixtiyoriy)"
+                  : "Предпочтительный заменяющий (опционально)"}
+              </Label>
+              <select
+                id="sub-proposed"
+                value={proposedSubstituteId}
+                onChange={(e) => setProposedSubstituteId(e.target.value)}
+                className={SELECT_CLS}
+              >
+                <option value="">
+                  {isUz ? "Ma'muriyat o'zi tanlasin" : "На усмотрение директора"}
+                </option>
+                {teachers
+                  .filter((t) => t.id !== currentMembershipId)
+                  .map((t) => (
+                    <option key={t.id} value={t.id}>
+                      {t.fullName} ({t.role})
+                    </option>
+                  ))}
+              </select>
+            </div>
+
+            <DialogFooter>
+              <Button
+                type="button"
+                variant="outline"
+                onClick={() => setShowCreateModal(false)}
+              >
+                {isUz ? "Bekor qilish" : "Отмена"}
+              </Button>
+              <Button
+                type="submit"
+                loading={loading}
+                disabled={myLessons.length === 0}
+              >
+                {isUz ? "Yuborish" : "Отправить заявку"}
+              </Button>
+            </DialogFooter>
+          </form>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog
+        open={Boolean(resolveTarget)}
+        onOpenChange={(open) => {
+          if (!open) setResolveTarget(null);
+        }}
+      >
+        <DialogContent locale={locale} className="max-w-lg">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              {resolveTarget?.action === "APPROVE" ? (
                 <>
-                  <CheckCircle2 className="w-5 h-5 text-emerald-400" />
-                  <span>{locale === "uz-Latn" ? "Almashtirishni tasdiqlash" : "Одобрение заявки на замену"}</span>
+                  <CheckCircle2 className="w-4 h-4 text-success" aria-hidden="true" />
+                  <span>
+                    {isUz ? "Almashtirishni tasdiqlash" : "Одобрение заявки на замену"}
+                  </span>
                 </>
               ) : (
                 <>
-                  <XCircle className="w-5 h-5 text-rose-400" />
-                  <span>{locale === "uz-Latn" ? "Almashtirishni rad etish" : "Отклонение заявки на замену"}</span>
+                  <XCircle className="w-4 h-4 text-destructive" aria-hidden="true" />
+                  <span>
+                    {isUz ? "Almashtirishni rad etish" : "Отклонение заявки на замену"}
+                  </span>
                 </>
               )}
-            </h3>
+            </DialogTitle>
+          </DialogHeader>
 
-            {errorMsg && (
-              <div className="p-3 rounded-xl bg-rose-500/10 border border-rose-500/20 text-rose-400 text-xs flex items-center gap-2">
-                <AlertCircle className="w-4 h-4 shrink-0" />
-                <span>{errorMsg}</span>
-              </div>
-            )}
+          {errorMsg && (
+            <Alert variant="destructive">
+              <AlertDescription>{errorMsg}</AlertDescription>
+            </Alert>
+          )}
 
-            <div className="p-3 rounded-xl bg-slate-900/60 border border-slate-800 text-xs space-y-1">
-              <span className="text-slate-400">{locale === "uz-Latn" ? "Dars:" : "Урок:"}</span>
-              <p className="text-white font-bold">{resolveTarget.request.lesson.title}</p>
-              <p className="text-slate-400 italic">«{resolveTarget.request.reason}»</p>
-            </div>
-
+          {resolveTarget && (
             <div className="space-y-4">
+              <div className="p-3 rounded-md bg-muted/60 border border-border text-xs space-y-1">
+                <span className="text-muted-foreground">{isUz ? "Dars:" : "Урок:"}</span>
+                <p className="text-foreground font-semibold">
+                  {resolveTarget.request.lesson.title}
+                </p>
+                <p className="text-muted-foreground">«{resolveTarget.request.reason}»</p>
+              </div>
+
               {resolveTarget.action === "APPROVE" && (
-                <div>
-                  <label className="block text-xs font-semibold text-slate-300 uppercase tracking-wider mb-2">
-                    {locale === "uz-Latn" ? "O'rinbosar o'qituvchini tayinlang" : "Назначить заменяющего преподавателя"}
-                  </label>
+                <div className="space-y-1.5">
+                  <Label htmlFor="sub-assign">
+                    {isUz
+                      ? "O'rinbosar o'qituvchini tayinlang"
+                      : "Назначить заменяющего преподавателя"}
+                  </Label>
                   <select
+                    id="sub-assign"
                     value={assignSubstituteId}
                     onChange={(e) => setAssignSubstituteId(e.target.value)}
-                    className="w-full px-4 py-3 bg-slate-900 border border-slate-700 rounded-xl text-white text-sm focus:outline-none focus:border-brand-500"
+                    className={SELECT_CLS}
                   >
-                    <option value="">{locale === "uz-Latn" ? "Tanlang..." : "Выберите..."}</option>
+                    <option value="">{isUz ? "Tanlang..." : "Выберите..."}</option>
                     {teachers
                       .filter((t) => t.id !== resolveTarget.request.requester.id)
                       .map((t) => (
@@ -598,53 +655,66 @@ export default function SubstitutionsManager({
                 </div>
               )}
 
-              <div>
-                <label className="block text-xs font-semibold text-slate-300 uppercase tracking-wider mb-2">
-                  {locale === "uz-Latn" ? "Izoh (ixtiyoriy)" : "Комментарий для преподавателя (опционально)"}
-                </label>
-                <textarea
+              <div className="space-y-1.5">
+                <Label htmlFor="sub-comment">
+                  {isUz
+                    ? "Izoh (ixtiyoriy)"
+                    : "Комментарий для преподавателя (опционально)"}
+                </Label>
+                <Textarea
+                  id="sub-comment"
                   rows={2}
                   value={resolverComment}
                   onChange={(e) => setResolverComment(e.target.value)}
-                  placeholder={locale === "uz-Latn" ? "Izoh yozing..." : "Например: Согласовано с директором..."}
-                  className="w-full px-4 py-3 bg-slate-900 border border-slate-700 rounded-xl text-white text-sm focus:outline-none focus:border-brand-500 resize-none"
+                  placeholder={
+                    isUz ? "Izoh yozing..." : "Например: Согласовано с директором..."
+                  }
                 />
               </div>
 
-              <div className="flex justify-end gap-3 pt-4 border-t border-slate-800">
-                <button
+              <DialogFooter>
+                <Button
                   type="button"
+                  variant="outline"
                   onClick={() => setResolveTarget(null)}
-                  className="px-4 py-2.5 bg-slate-800 hover:bg-slate-700 text-slate-300 font-semibold rounded-xl text-sm"
                 >
-                  {locale === "uz-Latn" ? "Bekor qilish" : "Отмена"}
-                </button>
-                <button
+                  {isUz ? "Bekor qilish" : "Отмена"}
+                </Button>
+                <Button
                   type="button"
+                  variant={resolveTarget.action === "APPROVE" ? "primary" : "destructive"}
                   onClick={handleResolve}
-                  disabled={loading}
-                  className={`px-5 py-2.5 font-semibold rounded-xl text-sm flex items-center gap-2 text-white ${
-                    resolveTarget.action === "APPROVE"
-                      ? "bg-emerald-600 hover:bg-emerald-500 shadow-lg shadow-emerald-500/20"
-                      : "bg-rose-600 hover:bg-rose-500 shadow-lg shadow-rose-500/20"
-                  }`}
+                  loading={loading}
                 >
-                  {loading && <Loader2 className="w-4 h-4 animate-spin" />}
-                  <span>
-                    {resolveTarget.action === "APPROVE"
-                      ? locale === "uz-Latn"
-                        ? "Tasdiqlash"
-                        : "Одобрить замену"
-                      : locale === "uz-Latn"
-                      ? "Rad etish"
-                      : "Отклонить замену"}
-                  </span>
-                </button>
-              </div>
+                  {resolveTarget.action === "APPROVE"
+                    ? isUz
+                      ? "Tasdiqlash"
+                      : "Одобрить замену"
+                    : isUz
+                    ? "Rad etish"
+                    : "Отклонить замену"}
+                </Button>
+              </DialogFooter>
             </div>
-          </div>
-        </div>
-      )}
+          )}
+        </DialogContent>
+      </Dialog>
+
+      <ConfirmDialog
+        open={Boolean(cancelTargetId)}
+        onOpenChange={(open) => {
+          if (!open) setCancelTargetId(null);
+        }}
+        locale={locale}
+        variant="destructive"
+        loading={loading}
+        title={isUz ? "Arizani bekor qilish" : "Отменить заявку на замену"}
+        description={
+          isUz ? "Arizani bekor qilasizmi?" : "Вы действительно хотите отменить эту заявку?"
+        }
+        confirmLabel={isUz ? "Bekor qilish" : "Отменить заявку"}
+        onConfirm={handleConfirmCancel}
+      />
     </div>
   );
 }

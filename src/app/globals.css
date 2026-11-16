@@ -2,31 +2,317 @@
 @tailwind components;
 @tailwind utilities;
 
-:root {
-  --font-sans: 'Inter', system-ui, -apple-system, sans-serif;
+:root,
+.panel-shell[data-resolved-theme="light"] {
+  color-scheme: light;
+  --font-sans: var(--font-wix-text), var(--font-inter), "Wix Madefor Text", "Manrope", system-ui, -apple-system, sans-serif;
+  --font-display: var(--font-wix-display), var(--font-wix-text), var(--font-inter), "Wix Madefor Display", system-ui, sans-serif;
+  --font-mono: var(--font-jetbrains-mono), ui-monospace, SFMono-Regular, Menlo, monospace;
+  --radius: 0.5rem;
+
+  /* Semantic design tokens — Light (HSL channels for Tailwind alpha support + full CSS colors) */
+  --background-hsl: 210 40% 98%;
+  --foreground-hsl: 222 47% 11%;
+  --card-hsl: 0 0% 100%;
+  --card-foreground-hsl: 222 47% 11%;
+  --popover-hsl: 0 0% 100%;
+  --popover-foreground-hsl: 222 47% 11%;
+  --muted-hsl: 210 40% 96%;
+  --muted-foreground-hsl: 215 19% 35%;
+  --border-hsl: 214 32% 91%;
+  --input-hsl: 213 27% 84%;
+  --ring-hsl: 224 76% 48%;
+  --scrim-hsl: 222 47% 7%;
+  --primary-hsl: 224 76% 48%;
+  --primary-foreground-hsl: 0 0% 100%;
+  --primary-hover-hsl: 226 71% 40%;
+  --secondary-hsl: 210 40% 96%;
+  --secondary-foreground-hsl: 222 47% 11%;
+  --accent-hsl: 222 100% 97%;
+  --accent-foreground-hsl: 226 71% 40%;
+  --destructive-hsl: 0 74% 42%;
+  --destructive-foreground-hsl: 0 0% 100%;
+  --destructive-subtle-hsl: 0 86% 97%;
+  --destructive-subtle-foreground-hsl: 0 70% 35%;
+  --success-hsl: 142 72% 29%;
+  --success-foreground-hsl: 0 0% 100%;
+  --success-subtle-hsl: 138 76% 97%;
+  --success-subtle-foreground-hsl: 143 64% 24%;
+  --warning-hsl: 26 90% 37%;
+  --warning-foreground-hsl: 0 0% 100%;
+  --warning-subtle-hsl: 48 100% 96%;
+  --warning-subtle-foreground-hsl: 23 83% 31%;
+  --info-hsl: 201 96% 32%;
+  --info-foreground-hsl: 0 0% 100%;
+  --info-subtle-hsl: 204 100% 97%;
+  --info-subtle-foreground-hsl: 201 90% 27%;
+  --chart-1-hsl: 224 76% 48%;
+  --chart-2-hsl: 175 77% 26%;
+  --chart-3-hsl: 26 90% 37%;
+  --chart-4-hsl: 262 83% 58%;
+  --chart-5-hsl: 345 83% 41%;
+  --chart-6-hsl: 201 96% 32%;
+  --chart-7-hsl: 86 78% 27%;
+  --chart-8-hsl: 215 19% 35%;
+
+  --background: hsl(var(--background-hsl));
+  --foreground: hsl(var(--foreground-hsl));
+  --card: hsl(var(--card-hsl));
+  --card-foreground: hsl(var(--card-foreground-hsl));
+  --popover: hsl(var(--popover-hsl));
+  --popover-foreground: hsl(var(--popover-foreground-hsl));
+  --muted: hsl(var(--muted-hsl));
+  --muted-foreground: hsl(var(--muted-foreground-hsl));
+  --border: hsl(var(--border-hsl));
+  --input: hsl(var(--input-hsl));
+  --ring: hsl(var(--ring-hsl));
+  --primary: hsl(var(--primary-hsl));
+  --primary-foreground: hsl(var(--primary-foreground-hsl));
+  --primary-hover: hsl(var(--primary-hover-hsl));
+  --secondary: hsl(var(--secondary-hsl));
+  --secondary-foreground: hsl(var(--secondary-foreground-hsl));
+  --accent: hsl(var(--accent-hsl));
+  --accent-foreground: hsl(var(--accent-foreground-hsl));
+  --destructive: hsl(var(--destructive-hsl));
+  --destructive-foreground: hsl(var(--destructive-foreground-hsl));
+  --destructive-subtle: hsl(var(--destructive-subtle-hsl));
+  --destructive-subtle-foreground: hsl(var(--destructive-subtle-foreground-hsl));
+  --success: hsl(var(--success-hsl));
+  --success-foreground: hsl(var(--success-foreground-hsl));
+  --success-subtle: hsl(var(--success-subtle-hsl));
+  --success-subtle-foreground: hsl(var(--success-subtle-foreground-hsl));
+  --warning: hsl(var(--warning-hsl));
+  --warning-foreground: hsl(var(--warning-foreground-hsl));
+  --warning-subtle: hsl(var(--warning-subtle-hsl));
+  --warning-subtle-foreground: hsl(var(--warning-subtle-foreground-hsl));
+  --info: hsl(var(--info-hsl));
+  --info-foreground: hsl(var(--info-foreground-hsl));
+  --info-subtle: hsl(var(--info-subtle-hsl));
+  --info-subtle-foreground: hsl(var(--info-subtle-foreground-hsl));
+  --chart-1: hsl(var(--chart-1-hsl));
+  --chart-2: hsl(var(--chart-2-hsl));
+  --chart-3: hsl(var(--chart-3-hsl));
+  --chart-4: hsl(var(--chart-4-hsl));
+  --chart-5: hsl(var(--chart-5-hsl));
+  --chart-6: hsl(var(--chart-6-hsl));
+  --chart-7: hsl(var(--chart-7-hsl));
+  --chart-8: hsl(var(--chart-8-hsl));
+
+  /* Legacy surface variables kept in sync for unrefactored views */
   --bg-main: #FFFFFF;
   --bg-alt: #F4F8FF;
   --bg-card: #FFFFFF;
   --border-card: rgba(30, 58, 138, 0.12);
   --text-main: #0F172A;
   --text-muted: #475569;
-  --primary: #2563EB;
-  --primary-hover: #1D4ED8;
-  --accent: #1E3A8A;
-  --glow-color: rgba(37, 99, 235, 0.15);
+  --glow-color: rgba(29, 78, 216, 0.14);
 }
 
-.dark {
-  --bg-main: #0A1128;
-  --bg-alt: #0F1B3D;
-  --bg-card: #13224D;
-  --border-card: rgba(255, 255, 255, 0.12);
-  --text-main: #E2E8F0;
+.dark,
+.panel-shell[data-resolved-theme="dark"] {
+  color-scheme: dark;
+  --background-hsl: 220 35% 7%;
+  --foreground-hsl: 210 40% 96%;
+  --card-hsl: 221 39% 11%;
+  --card-foreground-hsl: 210 40% 96%;
+  --popover-hsl: 218 37% 13%;
+  --popover-foreground-hsl: 210 40% 96%;
+  --muted-hsl: 217 33% 17%;
+  --muted-foreground-hsl: 215 20% 65%;
+  --border-hsl: 215 28% 17%;
+  --input-hsl: 215 25% 27%;
+  --ring-hsl: 213 94% 68%;
+  --primary-hsl: 213 94% 68%;
+  --primary-foreground-hsl: 223 49% 8%;
+  --primary-hover-hsl: 212 96% 78%;
+  --secondary-hsl: 217 33% 17%;
+  --secondary-foreground-hsl: 210 40% 96%;
+  --accent-hsl: 226 57% 21%;
+  --accent-foreground-hsl: 213 97% 87%;
+  --destructive-hsl: 0 91% 71%;
+  --destructive-foreground-hsl: 0 70% 6%;
+  --destructive-subtle-hsl: 351 44% 12%;
+  --destructive-subtle-foreground-hsl: 0 94% 82%;
+  --success-hsl: 142 69% 58%;
+  --success-foreground-hsl: 145 80% 10%;
+  --success-subtle-hsl: 146 49% 10%;
+  --success-subtle-foreground-hsl: 142 77% 73%;
+  --warning-hsl: 43 96% 56%;
+  --warning-foreground-hsl: 33 81% 8%;
+  --warning-subtle-hsl: 37 59% 10%;
+  --warning-subtle-foreground-hsl: 48 97% 77%;
+  --info-hsl: 198 93% 60%;
+  --info-foreground-hsl: 204 80% 16%;
+  --info-subtle-hsl: 206 62% 12%;
+  --info-subtle-foreground-hsl: 199 95% 74%;
+  --chart-1-hsl: 213 94% 68%;
+  --chart-2-hsl: 172 66% 50%;
+  --chart-3-hsl: 43 96% 56%;
+  --chart-4-hsl: 255 92% 76%;
+  --chart-5-hsl: 351 95% 71%;
+  --chart-6-hsl: 198 93% 60%;
+  --chart-7-hsl: 83 78% 55%;
+  --chart-8-hsl: 215 20% 65%;
+
+  --background: hsl(var(--background-hsl));
+  --foreground: hsl(var(--foreground-hsl));
+  --card: hsl(var(--card-hsl));
+  --card-foreground: hsl(var(--card-foreground-hsl));
+  --popover: hsl(var(--popover-hsl));
+  --popover-foreground: hsl(var(--popover-foreground-hsl));
+  --muted: hsl(var(--muted-hsl));
+  --muted-foreground: hsl(var(--muted-foreground-hsl));
+  --border: hsl(var(--border-hsl));
+  --input: hsl(var(--input-hsl));
+  --ring: hsl(var(--ring-hsl));
+  --primary: hsl(var(--primary-hsl));
+  --primary-foreground: hsl(var(--primary-foreground-hsl));
+  --primary-hover: hsl(var(--primary-hover-hsl));
+  --secondary: hsl(var(--secondary-hsl));
+  --secondary-foreground: hsl(var(--secondary-foreground-hsl));
+  --accent: hsl(var(--accent-hsl));
+  --accent-foreground: hsl(var(--accent-foreground-hsl));
+  --destructive: hsl(var(--destructive-hsl));
+  --destructive-foreground: hsl(var(--destructive-foreground-hsl));
+  --destructive-subtle: hsl(var(--destructive-subtle-hsl));
+  --destructive-subtle-foreground: hsl(var(--destructive-subtle-foreground-hsl));
+  --success: hsl(var(--success-hsl));
+  --success-foreground: hsl(var(--success-foreground-hsl));
+  --success-subtle: hsl(var(--success-subtle-hsl));
+  --success-subtle-foreground: hsl(var(--success-subtle-foreground-hsl));
+  --warning: hsl(var(--warning-hsl));
+  --warning-foreground: hsl(var(--warning-foreground-hsl));
+  --warning-subtle: hsl(var(--warning-subtle-hsl));
+  --warning-subtle-foreground: hsl(var(--warning-subtle-foreground-hsl));
+  --info: hsl(var(--info-hsl));
+  --info-foreground: hsl(var(--info-foreground-hsl));
+  --info-subtle: hsl(var(--info-subtle-hsl));
+  --info-subtle-foreground: hsl(var(--info-subtle-foreground-hsl));
+  --chart-1: hsl(var(--chart-1-hsl));
+  --chart-2: hsl(var(--chart-2-hsl));
+  --chart-3: hsl(var(--chart-3-hsl));
+  --chart-4: hsl(var(--chart-4-hsl));
+  --chart-5: hsl(var(--chart-5-hsl));
+  --chart-6: hsl(var(--chart-6-hsl));
+  --chart-7: hsl(var(--chart-7-hsl));
+  --chart-8: hsl(var(--chart-8-hsl));
+
+  --bg-main: #0B0F17;
+  --bg-alt: #111827;
+  --bg-card: #111827;
+  --border-card: rgba(148, 163, 184, 0.16);
+  --text-main: #F1F5F9;
   --text-muted: #94A3B8;
-  --primary: #3B82F6;
-  --primary-hover: #60A5FA;
-  --accent: #1E3A8A;
-  --glow-color: rgba(59, 130, 246, 0.35);
+  --glow-color: rgba(96, 165, 250, 0.25);
+}
+
+@media (prefers-color-scheme: dark) {
+  .panel-shell[data-panel-theme="system"]:not([data-resolved-theme="light"]) {
+    color-scheme: dark;
+    --background-hsl: 220 35% 7%;
+    --foreground-hsl: 210 40% 96%;
+    --card-hsl: 221 39% 11%;
+    --card-foreground-hsl: 210 40% 96%;
+    --popover-hsl: 218 37% 13%;
+    --popover-foreground-hsl: 210 40% 96%;
+    --muted-hsl: 217 33% 17%;
+    --muted-foreground-hsl: 215 20% 65%;
+    --border-hsl: 215 28% 17%;
+    --input-hsl: 215 25% 27%;
+    --ring-hsl: 213 94% 68%;
+    --primary-hsl: 213 94% 68%;
+    --primary-foreground-hsl: 223 49% 8%;
+    --primary-hover-hsl: 212 96% 78%;
+    --secondary-hsl: 217 33% 17%;
+    --secondary-foreground-hsl: 210 40% 96%;
+    --accent-hsl: 226 57% 21%;
+    --accent-foreground-hsl: 213 97% 87%;
+    --destructive-hsl: 0 91% 71%;
+    --destructive-foreground-hsl: 0 70% 6%;
+    --destructive-subtle-hsl: 351 44% 12%;
+    --destructive-subtle-foreground-hsl: 0 94% 82%;
+    --success-hsl: 142 69% 58%;
+    --success-foreground-hsl: 145 80% 10%;
+    --success-subtle-hsl: 146 49% 10%;
+    --success-subtle-foreground-hsl: 142 77% 73%;
+    --warning-hsl: 43 96% 56%;
+    --warning-foreground-hsl: 33 81% 8%;
+    --warning-subtle-hsl: 37 59% 10%;
+    --warning-subtle-foreground-hsl: 48 97% 77%;
+    --info-hsl: 198 93% 60%;
+    --info-foreground-hsl: 204 80% 16%;
+    --info-subtle-hsl: 206 62% 12%;
+    --info-subtle-foreground-hsl: 199 95% 74%;
+    --chart-1-hsl: 213 94% 68%;
+    --chart-2-hsl: 172 66% 50%;
+    --chart-3-hsl: 43 96% 56%;
+    --chart-4-hsl: 255 92% 76%;
+    --chart-5-hsl: 351 95% 71%;
+    --chart-6-hsl: 198 93% 60%;
+    --chart-7-hsl: 83 78% 55%;
+    --chart-8-hsl: 215 20% 65%;
+    --background: hsl(var(--background-hsl));
+    --foreground: hsl(var(--foreground-hsl));
+    --card: hsl(var(--card-hsl));
+    --card-foreground: hsl(var(--card-foreground-hsl));
+    --popover: hsl(var(--popover-hsl));
+    --popover-foreground: hsl(var(--popover-foreground-hsl));
+    --muted: hsl(var(--muted-hsl));
+    --muted-foreground: hsl(var(--muted-foreground-hsl));
+    --border: hsl(var(--border-hsl));
+    --input: hsl(var(--input-hsl));
+    --ring: hsl(var(--ring-hsl));
+    --primary: hsl(var(--primary-hsl));
+    --primary-foreground: hsl(var(--primary-foreground-hsl));
+    --primary-hover: hsl(var(--primary-hover-hsl));
+    --secondary: hsl(var(--secondary-hsl));
+    --secondary-foreground: hsl(var(--secondary-foreground-hsl));
+    --accent: hsl(var(--accent-hsl));
+    --accent-foreground: hsl(var(--accent-foreground-hsl));
+    --destructive: hsl(var(--destructive-hsl));
+    --destructive-foreground: hsl(var(--destructive-foreground-hsl));
+    --destructive-subtle: hsl(var(--destructive-subtle-hsl));
+    --destructive-subtle-foreground: hsl(var(--destructive-subtle-foreground-hsl));
+    --success: hsl(var(--success-hsl));
+    --success-foreground: hsl(var(--success-foreground-hsl));
+    --success-subtle: hsl(var(--success-subtle-hsl));
+    --success-subtle-foreground: hsl(var(--success-subtle-foreground-hsl));
+    --warning: hsl(var(--warning-hsl));
+    --warning-foreground: hsl(var(--warning-foreground-hsl));
+    --warning-subtle: hsl(var(--warning-subtle-hsl));
+    --warning-subtle-foreground: hsl(var(--warning-subtle-foreground-hsl));
+    --info: hsl(var(--info-hsl));
+    --info-foreground: hsl(var(--info-foreground-hsl));
+    --info-subtle: hsl(var(--info-subtle-hsl));
+    --info-subtle-foreground: hsl(var(--info-subtle-foreground-hsl));
+    --chart-1: hsl(var(--chart-1-hsl));
+    --chart-2: hsl(var(--chart-2-hsl));
+    --chart-3: hsl(var(--chart-3-hsl));
+    --chart-4: hsl(var(--chart-4-hsl));
+    --chart-5: hsl(var(--chart-5-hsl));
+    --chart-6: hsl(var(--chart-6-hsl));
+    --chart-7: hsl(var(--chart-7-hsl));
+    --chart-8: hsl(var(--chart-8-hsl));
+  }
+}
+
+/* Role panel root shell: inherits exact self-hosted Wix typography and semantic tokens */
+.panel-shell {
+  font-family: var(--font-sans);
+  font-size: 14px;
+  line-height: 1.5;
+  background-color: var(--background);
+  color: var(--foreground);
+}
+
+.panel-shell .font-tabular,
+.tabular-nums {
+  font-variant-numeric: tabular-nums;
+}
+
+body:has(.panel-shell[data-resolved-theme="dark"]),
+html.dark body:has(.panel-shell) {
+  background-color: hsl(220 35% 7%);
 }
 
 html {
@@ -58,35 +344,12 @@ body {
   box-shadow: 0 1px 3px 0 rgba(0, 0, 0, 0.04), 0 1px 2px -1px rgba(0, 0, 0, 0.04);
 }
 
-.glass-panel-hover {
-  transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
-}
-
-.glass-panel-hover:hover {
-  background: rgba(25, 37, 61, 0.85);
-  border-color: rgba(79, 110, 247, 0.3);
-  transform: translateY(-2px);
-}
-
 /* Apple & Emil Design Engineering tactile press feedback */
 button:active:not(:disabled),
 .btn-interactive:active:not(:disabled),
 [role="button"]:active {
   transform: scale(0.97);
   transition: transform 100ms ease-out;
-}
-
-.gradient-border {
-  position: relative;
-  border-radius: 0.75rem;
-  background: linear-gradient(135deg, rgba(79, 110, 247, 0.2), rgba(168, 85, 247, 0.2));
-  padding: 1px;
-}
-
-.gradient-text {
-  background: linear-gradient(135deg, #2563eb 0%, #4f46e5 50%, #7c3aed 100%);
-  -webkit-background-clip: text;
-  -webkit-text-fill-color: transparent;
 }
 
 /* Custom Scrollbar */
@@ -115,22 +378,12 @@ button:active:not(:disabled),
   letter-spacing: -0.018em;
 }
 
-/* Mesh Gradients */
+/* Mesh Gradients (public landing only) */
 .mesh-gradient-light {
   background-color: #ffffff;
   background-image:
     radial-gradient(70% 55% at 50% -10%, rgba(29, 78, 216, 0.10) 0%, rgba(29, 78, 216, 0) 62%),
     radial-gradient(50% 40% at 100% 0%, rgba(15, 23, 42, 0.05) 0%, rgba(15, 23, 42, 0) 70%);
-}
-
-.mesh-gradient-card {
-  background: linear-gradient(135deg, rgba(255, 255, 255, 0.95) 0%, rgba(248, 250, 252, 0.85) 100%);
-}
-
-/* Background Particles Grid */
-.particles-bg {
-  background-image: radial-gradient(rgba(148, 163, 184, 0.22) 1px, transparent 1px);
-  background-size: 24px 24px;
 }
 
 /* ==========================================================================
@@ -139,8 +392,8 @@ button:active:not(:disabled),
    `.public-shell` so the admin panels keep their look and typography untouched.
    ========================================================================== */
 .public-shell {
-  --font-sans: "Wix Madefor Text", "Manrope", ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
-  --font-display: "Wix Madefor Display", "Wix Madefor Text", ui-sans-serif, system-ui, sans-serif;
+  --font-sans: var(--font-wix-text), var(--font-inter), "Wix Madefor Text", "Manrope", ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+  --font-display: var(--font-wix-display), var(--font-wix-text), var(--font-inter), "Wix Madefor Display", ui-sans-serif, system-ui, sans-serif;
 
   --ink: #0b1220;
   --ink-soft: #384258;

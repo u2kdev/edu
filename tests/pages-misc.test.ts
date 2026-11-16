@@ -295,16 +295,24 @@ describe("dev/ui-kit page", () => {
   it("throws notFound in production", async () => {
     vi.stubEnv("NODE_ENV", "production");
     const Page = (await import("@/app/dev/ui-kit/page")).default;
-    expect(() => Page()).toThrow("NEXT_NOT_FOUND");
+    expect(() => Page({})).toThrow("NEXT_NOT_FOUND");
   });
 
   it("renders the showroom outside production", async () => {
     vi.stubEnv("NODE_ENV", "test");
     const Page = (await import("@/app/dev/ui-kit/page")).default;
-    const text = flatText(Page());
+    const element = Page({});
+    const provider = findElementByName(element, "PanelThemeProvider");
+    const showcase = findElementByName(element, "DevUiKitShowcase");
 
-    expect(text).toContain("Dev UI Kit");
-    expect(text).toContain("Internal development component showroom");
+    expect(provider).not.toBeNull();
+    expect(provider!.props.initialTheme).toBe("light");
+    expect(showcase).not.toBeNull();
+    expect(showcase!.props.initialTheme).toBe("light");
+
+    const darkElement = Page({ searchParams: { theme: "dark" } });
+    const darkShowcase = findElementByName(darkElement, "DevUiKitShowcase");
+    expect(darkShowcase!.props.initialTheme).toBe("dark");
   });
 });
 

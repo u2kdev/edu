@@ -3,20 +3,28 @@
 import React, { useState, useEffect, useCallback } from "react";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
+import { Download, PlusCircle, Printer, RotateCcw } from "lucide-react";
 import {
-  CreditCard,
-  PlusCircle,
-  Download,
-  Filter,
-  Search,
-  Printer,
-  RotateCcw,
-  ChevronLeft,
-  ChevronRight,
-  CheckCircle2,
-  AlertCircle,
-  FileText,
-} from "lucide-react";
+  Alert,
+  AlertDescription,
+  Badge,
+  type BadgeVariant,
+  Button,
+  DataTable,
+  type DataTableColumn,
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  FilterBar,
+  FormActions,
+  FormField,
+  Input,
+  PageHeader,
+  StatCard,
+  Textarea,
+} from "@/components/ui";
+import { t } from "@/i18n";
 
 interface PaymentItem {
   id: string;
@@ -55,6 +63,12 @@ interface SummaryStats {
   count: number;
 }
 
+const PAYMENT_STATUS_VARIANTS: Record<string, BadgeVariant> = {
+  PAID: "success",
+  REFUNDED: "destructive",
+  PENDING: "warning",
+};
+
 export default function PlatformPaymentsPage() {
   const searchParams = useSearchParams();
   const prefillCenterId = searchParams.get("centerId") || "";
@@ -70,7 +84,6 @@ export default function PlatformPaymentsPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
-  // Filters
   const [search, setSearch] = useState("");
   const [centerId, setCenterId] = useState(prefillCenterId);
   const [status, setStatus] = useState("");
@@ -80,11 +93,9 @@ export default function PlatformPaymentsPage() {
   const [page, setPage] = useState(1);
   const [totalPages, setTotalPages] = useState(1);
 
-  // Centers & Plans options for dropdowns
   const [centersList, setCentersList] = useState<{ id: string; name: string }[]>([]);
   const [plansList, setPlansList] = useState<{ id: string; name: string; priceMonthly: number }[]>([]);
 
-  // Record Payment Modal
   const [isRecordModalOpen, setIsRecordModalOpen] = useState(false);
   const [recordCenterId, setRecordCenterId] = useState(prefillCenterId);
   const [recordPlanId, setRecordPlanId] = useState(prefillPlanId);
@@ -93,14 +104,14 @@ export default function PlatformPaymentsPage() {
   const [recordNotes, setRecordNotes] = useState("");
   const [recordReceiptUrl, setRecordReceiptUrl] = useState("");
   const [recording, setRecording] = useState(false);
+  const [recordError, setRecordError] = useState<string | null>(null);
 
-  // Refund Modal
   const [refundPayment, setRefundPayment] = useState<PaymentItem | null>(null);
   const [refundAmount, setRefundAmount] = useState<number>(0);
   const [refundReason, setRefundReason] = useState("");
   const [refunding, setRefunding] = useState(false);
+  const [refundError, setRefundError] = useState<string | null>(null);
 
-  // Load centers and plans
   useEffect(() => {
     async function loadMeta() {
       try {
@@ -155,7 +166,6 @@ export default function PlatformPaymentsPage() {
     fetchPayments();
   }, [fetchPayments]);
 
-  // Open modal if prefilled
   useEffect(() => {
     if (prefillCenterId) {
       setIsRecordModalOpen(true);
@@ -163,7 +173,6 @@ export default function PlatformPaymentsPage() {
     }
   }, [prefillCenterId]);
 
-  // Handle plan change to prefill amount
   const handlePlanChange = (pId: string) => {
     setRecordPlanId(pId);
     const selected = plansList.find((p) => p.id === pId);
@@ -174,12 +183,13 @@ export default function PlatformPaymentsPage() {
 
   const handleRecordPayment = async (e: React.FormEvent) => {
     e.preventDefault();
+    setRecordError(null);
     if (!recordCenterId) {
-      alert("Выберите учебный центр");
+      setRecordError("Выберите учебный центр");
       return;
     }
     if (recordAmount <= 0) {
-      alert("Сумма должна быть больше 0");
+      setRecordError("Сумма должна быть больше 0");
       return;
     }
 
@@ -201,7 +211,7 @@ export default function PlatformPaymentsPage() {
       });
       const data = await res.json();
       if (!res.ok || !data.success) {
-        alert(data.error || "Ошибка при записи оплаты");
+        setRecordError(data.error || "Ошибка при записи оплаты");
       } else {
         setIsRecordModalOpen(false);
         setRecordNotes("");
@@ -209,7 +219,7 @@ export default function PlatformPaymentsPage() {
         fetchPayments();
       }
     } catch {
-      alert("Ошибка сети при отправке формы");
+      setRecordError("Ошибка сети при отправке формы");
     } finally {
       setRecording(false);
     }
@@ -218,12 +228,13 @@ export default function PlatformPaymentsPage() {
   const handleRefund = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!refundPayment) return;
+    setRefundError(null);
     if (refundAmount <= 0) {
-      alert("Сумма возврата должна быть больше 0");
+      setRefundError("Сумма возврата должна быть больше 0");
       return;
     }
     if (refundReason.trim().length < 5) {
-      alert("Причина возврата обязательна (минимум 5 символов)");
+      setRefundError("Причина возврата обязательна (минимум 5 символов)");
       return;
     }
 
@@ -239,14 +250,14 @@ export default function PlatformPaymentsPage() {
       });
       const data = await res.json();
       if (!res.ok || !data.success) {
-        alert(data.error || "Ошибка выполнения возврата");
+        setRefundError(data.error || "Ошибка выполнения возврата");
       } else {
         setRefundPayment(null);
         setRefundReason("");
         fetchPayments();
       }
     } catch {
-      alert("Ошибка сети при возврате");
+      setRefundError("Ошибка сети при возврате");
     } finally {
       setRefunding(false);
     }
@@ -261,110 +272,204 @@ export default function PlatformPaymentsPage() {
     ...(dateTo && { dateTo }),
   }).toString()}`;
 
+  const columns: DataTableColumn<PaymentItem>[] = [
+    {
+      id: "invoice",
+      header: "Счёт / Дата",
+      sortable: true,
+      sortValue: (p) => p.paidAt ?? "",
+      cell: (p) => (
+        <div>
+          <div className="font-mono font-semibold text-foreground">
+            {p.invoiceNumber || `INV-${p.id.slice(0, 8)}`}
+          </div>
+          <div className="mt-0.5 text-xs text-muted-foreground tabular-nums">
+            {p.paidAt ? new Date(p.paidAt).toLocaleDateString() : "Не оплачен"}
+          </div>
+        </div>
+      ),
+    },
+    {
+      id: "center",
+      header: "Учебный центр",
+      isMobilePrimary: true,
+      sortable: true,
+      sortValue: (p) => p.center.name,
+      cell: (p) => (
+        <div>
+          <Link
+            href={`/platform-admin/centers/${p.center.id}`}
+            className="font-medium text-foreground hover:text-primary block"
+          >
+            {p.center.name}
+          </Link>
+          <div className="font-mono text-xs text-muted-foreground">{p.center.slug}</div>
+        </div>
+      ),
+    },
+    {
+      id: "plan",
+      header: "Тариф / Способ",
+      cell: (p) => (
+        <div>
+          <div className="font-medium text-foreground">{p.plan?.name || "LMS Тариф"}</div>
+          <div className="text-xs text-muted-foreground">{p.paymentMethod}</div>
+        </div>
+      ),
+    },
+    {
+      id: "amount",
+      header: "Сумма (UZS)",
+      align: "right",
+      sortable: true,
+      sortValue: (p) => p.amount,
+      cell: (p) => (
+        <div className="tabular-nums">
+          <div className="font-semibold text-foreground">{p.amount.toLocaleString()} UZS</div>
+          {p.refundAmount ? (
+            <div className="text-xs font-medium text-destructive">
+              Возврат: -{p.refundAmount.toLocaleString()} UZS
+            </div>
+          ) : null}
+        </div>
+      ),
+    },
+    {
+      id: "status",
+      header: "Статус",
+      align: "center",
+      sortable: true,
+      sortValue: (p) => p.status,
+      cell: (p) => (
+        <Badge variant={PAYMENT_STATUS_VARIANTS[p.status] || "neutral"}>{p.status}</Badge>
+      ),
+    },
+    {
+      id: "actions",
+      header: "Действия",
+      align: "right",
+      hideable: false,
+      cell: (p) => (
+        <div className="inline-flex items-center justify-end gap-1.5">
+          <Button asChild variant="outline" size="sm">
+            <Link href={`/platform-admin/finance/payments/${p.id}/invoice`}>
+              <Printer className="h-3.5 w-3.5" aria-hidden="true" />
+              <span>Чек</span>
+            </Link>
+          </Button>
+          {p.status === "PAID" && (
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              onClick={() => {
+                setRefundPayment(p);
+                setRefundAmount(p.amount - (p.refundAmount || 0));
+                setRefundReason("");
+                setRefundError(null);
+              }}
+              className="border-destructive/30 text-destructive hover:bg-destructive-subtle"
+            >
+              <RotateCcw className="h-3.5 w-3.5" aria-hidden="true" />
+              <span>Возврат</span>
+            </Button>
+          )}
+        </div>
+      ),
+    },
+  ];
+
+  const hasFilters = Boolean(search || centerId || status || paymentMethod || dateFrom || dateTo);
+
   return (
     <div className="space-y-6">
-      {/* Header and Subnav */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-        <div>
-          <h1 className="text-2xl md:text-3xl font-extrabold text-slate-900 tracking-tight">
-            Платежи центров
-          </h1>
-          <p className="text-sm text-slate-500 mt-1">
-            Реестр поступивших платежей, выставление счетов и оформление возвратов
-          </p>
-        </div>
-        <div className="flex items-center gap-2">
-          <a
-            href={exportUrl}
-            download
-            className="inline-flex items-center gap-2 px-3.5 py-2 bg-white hover:bg-slate-50 text-slate-700 text-sm font-semibold rounded-xl border border-slate-200 shadow-sm transition-all"
-          >
-            <Download className="w-4 h-4 text-slate-500" />
-            <span>Экспорт CSV</span>
-          </a>
-          <button
-            onClick={() => setIsRecordModalOpen(true)}
-            className="inline-flex items-center gap-2 px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white text-sm font-semibold rounded-xl shadow-sm transition-all"
-          >
-            <PlusCircle className="w-4 h-4" />
-            <span>Записать оплату</span>
-          </button>
-        </div>
-      </div>
+      <PageHeader
+        title="Платежи центров"
+        description="Реестр поступивших платежей, выставление счетов и оформление возвратов"
+        actions={
+          <>
+            <Button asChild variant="outline" size="sm">
+              <a href={exportUrl} download>
+                <Download className="h-4 w-4" aria-hidden="true" />
+                <span>Экспорт CSV</span>
+              </a>
+            </Button>
+            <Button
+              type="button"
+              variant="primary"
+              size="sm"
+              onClick={() => {
+                setRecordError(null);
+                setIsRecordModalOpen(true);
+              }}
+            >
+              <PlusCircle className="h-4 w-4" aria-hidden="true" />
+              <span>Записать оплату</span>
+            </Button>
+          </>
+        }
+      />
 
-      {/* Navigation Tabs */}
-      <div className="flex items-center gap-2 border-b border-slate-200 pb-2">
+      <div className="flex items-center gap-2 border-b border-border pb-2 text-sm">
         <Link
           href="/platform-admin/finance"
-          className="px-4 py-2 text-sm font-semibold text-slate-600 hover:text-slate-900 transition-colors"
+          className="px-3 py-1.5 font-medium text-muted-foreground hover:text-foreground transition-colors"
         >
           Обзор и отчёты
         </Link>
         <Link
           href="/platform-admin/finance/payments"
-          className="px-4 py-2 text-sm font-semibold text-indigo-600 border-b-2 border-indigo-600"
+          className="border-b-2 border-primary px-3 py-1.5 font-medium text-primary"
         >
           Платежи центров
         </Link>
         <Link
           href="/platform-admin/finance/expenses"
-          className="px-4 py-2 text-sm font-semibold text-slate-600 hover:text-slate-900 transition-colors"
+          className="px-3 py-1.5 font-medium text-muted-foreground hover:text-foreground transition-colors"
         >
           Расходы платформы
         </Link>
       </div>
 
-      {/* Summary KPI Bar */}
-      <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 bg-white p-4 rounded-2xl border border-slate-200 shadow-sm">
-        <div>
-          <div className="text-xs text-slate-500 uppercase font-semibold">Всего платежей</div>
-          <div className="text-xl font-extrabold text-slate-900 mt-0.5">{summary.count}</div>
-        </div>
-        <div>
-          <div className="text-xs text-slate-500 uppercase font-semibold">Начислено</div>
-          <div className="text-xl font-extrabold text-slate-900 mt-0.5">
-            {summary.totalAmount.toLocaleString()} UZS
-          </div>
-        </div>
-        <div>
-          <div className="text-xs text-slate-500 uppercase font-semibold">Возвращено</div>
-          <div className="text-xl font-extrabold text-rose-600 mt-0.5">
-            -{summary.totalRefunded.toLocaleString()} UZS
-          </div>
-        </div>
-        <div>
-          <div className="text-xs text-slate-500 uppercase font-semibold">Чистая выручка</div>
-          <div className="text-xl font-extrabold text-emerald-600 mt-0.5">
-            {summary.netAmount.toLocaleString()} UZS
-          </div>
-        </div>
+      <div className="grid grid-cols-2 gap-4 sm:grid-cols-4">
+        <StatCard label="Всего платежей" value={summary.count} />
+        <StatCard label="Начислено" value={`${summary.totalAmount.toLocaleString()} UZS`} />
+        <StatCard
+          label="Возвращено"
+          value={`-${summary.totalRefunded.toLocaleString()} UZS`}
+        />
+        <StatCard
+          label="Чистая выручка"
+          value={`${summary.netAmount.toLocaleString()} UZS`}
+        />
       </div>
 
-      {/* Filters Toolbar */}
-      <div className="bg-white p-4 rounded-2xl border border-slate-200 shadow-sm flex flex-wrap items-center gap-3">
-        {/* Search */}
-        <div className="relative min-w-[200px] flex-1">
-          <Search className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
-          <input
-            type="text"
-            placeholder="Номер счёта, центр, чек..."
-            value={search}
-            onChange={(e) => {
-              setSearch(e.target.value);
-              setPage(1);
-            }}
-            className="w-full pl-9 pr-3 py-1.5 bg-slate-50 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500/20"
-          />
-        </div>
-
-        {/* Center Select */}
+      <FilterBar
+        search={search}
+        onSearchChange={(val) => {
+          setSearch(val);
+          setPage(1);
+        }}
+        searchPlaceholder="Номер счёта, центр, чек..."
+        hasActiveFilters={hasFilters}
+        onReset={() => {
+          setSearch("");
+          setCenterId("");
+          setStatus("");
+          setPaymentMethod("");
+          setDateFrom("");
+          setDateTo("");
+          setPage(1);
+        }}
+      >
         <select
+          aria-label="Учебный центр"
           value={centerId}
           onChange={(e) => {
             setCenterId(e.target.value);
             setPage(1);
           }}
-          className="py-1.5 px-3 bg-slate-50 border border-slate-200 rounded-xl text-sm text-slate-700"
+          className="h-9 rounded-md border border-input bg-background px-3 text-sm text-foreground"
         >
           <option value="">Все центры</option>
           {centersList.map((c) => (
@@ -374,14 +479,14 @@ export default function PlatformPaymentsPage() {
           ))}
         </select>
 
-        {/* Status */}
         <select
+          aria-label="Статус"
           value={status}
           onChange={(e) => {
             setStatus(e.target.value);
             setPage(1);
           }}
-          className="py-1.5 px-3 bg-slate-50 border border-slate-200 rounded-xl text-sm text-slate-700"
+          className="h-9 rounded-md border border-input bg-background px-3 text-sm text-foreground"
         >
           <option value="">Все статусы</option>
           <option value="PAID">PAID (Оплачено)</option>
@@ -389,14 +494,14 @@ export default function PlatformPaymentsPage() {
           <option value="PENDING">PENDING (Ожидает)</option>
         </select>
 
-        {/* Payment Method */}
         <select
+          aria-label="Способ оплаты"
           value={paymentMethod}
           onChange={(e) => {
             setPaymentMethod(e.target.value);
             setPage(1);
           }}
-          className="py-1.5 px-3 bg-slate-50 border border-slate-200 rounded-xl text-sm text-slate-700"
+          className="h-9 rounded-md border border-input bg-background px-3 text-sm text-foreground"
         >
           <option value="">Все способы</option>
           <option value="BANK_TRANSFER">Банковский перевод</option>
@@ -404,182 +509,85 @@ export default function PlatformPaymentsPage() {
           <option value="ONLINE">Онлайн (Click/Payme/Uzum)</option>
         </select>
 
-        {/* Date From & To */}
-        <input
-          type="date"
-          value={dateFrom}
-          onChange={(e) => {
-            setDateFrom(e.target.value);
-            setPage(1);
-          }}
-          className="py-1 px-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs text-slate-700"
-        />
-        <span className="text-slate-400 text-xs">—</span>
-        <input
-          type="date"
-          value={dateTo}
-          onChange={(e) => {
-            setDateTo(e.target.value);
-            setPage(1);
-          }}
-          className="py-1 px-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs text-slate-700"
-        />
-      </div>
+        <div className="flex items-center gap-1.5">
+          <Input
+            aria-label="С даты"
+            type="date"
+            value={dateFrom}
+            onChange={(e) => {
+              setDateFrom(e.target.value);
+              setPage(1);
+            }}
+            className="h-9 w-36 text-xs"
+          />
+          <span className="text-xs text-muted-foreground">—</span>
+          <Input
+            aria-label="По дату"
+            type="date"
+            value={dateTo}
+            onChange={(e) => {
+              setDateTo(e.target.value);
+              setPage(1);
+            }}
+            className="h-9 w-36 text-xs"
+          />
+        </div>
+      </FilterBar>
 
-      {/* Payments Table */}
-      {loading ? (
-        <div className="bg-white rounded-2xl border border-slate-200 p-12 text-center text-slate-500 text-sm shadow-sm animate-pulse">
-          Загрузка истории платежей...
-        </div>
-      ) : error ? (
-        <div className="bg-rose-50 border border-rose-200 text-rose-800 p-6 rounded-2xl text-center text-sm">
-          {error}
-        </div>
-      ) : payments.length === 0 ? (
-        <div className="bg-white rounded-2xl border border-slate-200 p-12 text-center shadow-sm">
-          <FileText className="w-12 h-12 text-slate-300 mx-auto mb-3" />
-          <h3 className="text-base font-semibold text-slate-800">Платежи не найдены</h3>
-          <p className="text-sm text-slate-500 mt-1">По выбранным фильтрам записей не обнаружено.</p>
-        </div>
-      ) : (
-        <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
-          <div className="overflow-x-auto">
-            <table className="w-full text-sm">
-              <thead>
-                <tr className="bg-slate-50/80 text-xs font-semibold text-slate-500 uppercase tracking-wider border-b border-slate-200">
-                  <th className="text-left px-6 py-3.5">Счёт / Дата</th>
-                  <th className="text-left px-6 py-3.5">Учебный центр</th>
-                  <th className="text-left px-6 py-3.5">Тариф / Способ</th>
-                  <th className="text-right px-6 py-3.5">Сумма (UZS)</th>
-                  <th className="text-center px-6 py-3.5">Статус</th>
-                  <th className="text-right px-6 py-3.5">Действия</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-slate-100">
-                {payments.map((p) => {
-                  const net = p.amount - (p.refundAmount || 0);
-                  return (
-                    <tr key={p.id} className="hover:bg-slate-50/70 transition-colors">
-                      <td className="px-6 py-4">
-                        <div className="font-mono font-bold text-slate-900">
-                          {p.invoiceNumber || `INV-${p.id.slice(0, 8)}`}
-                        </div>
-                        <div className="text-xs text-slate-500 mt-0.5">
-                          {p.paidAt ? new Date(p.paidAt).toLocaleDateString() : "Не оплачен"}
-                        </div>
-                      </td>
-                      <td className="px-6 py-4">
-                        <Link
-                          href={`/platform-admin/centers/${p.center.id}`}
-                          className="font-semibold text-slate-900 hover:text-indigo-600 block"
-                        >
-                          {p.center.name}
-                        </Link>
-                        <div className="text-xs text-slate-500 font-mono">{p.center.slug}</div>
-                      </td>
-                      <td className="px-6 py-4">
-                        <div className="font-medium text-slate-800">{p.plan?.name || "LMS Тариф"}</div>
-                        <div className="text-xs text-slate-500">{p.paymentMethod}</div>
-                      </td>
-                      <td className="px-6 py-4 text-right">
-                        <div className="font-bold text-slate-900">{p.amount.toLocaleString()} UZS</div>
-                        {p.refundAmount ? (
-                          <div className="text-xs text-rose-600 font-medium">
-                            Возврат: -{p.refundAmount.toLocaleString()} UZS
-                          </div>
-                        ) : null}
-                      </td>
-                      <td className="px-6 py-4 text-center">
-                        <span
-                          className={`inline-flex px-2.5 py-0.5 rounded-full text-xs font-semibold ${
-                            p.status === "PAID"
-                              ? "bg-emerald-50 text-emerald-700 border border-emerald-200"
-                              : p.status === "REFUNDED"
-                              ? "bg-rose-50 text-rose-700 border border-rose-200"
-                              : "bg-amber-50 text-amber-700 border border-amber-200"
-                          }`}
-                        >
-                          {p.status}
-                        </span>
-                      </td>
-                      <td className="px-6 py-4 text-right">
-                        <div className="inline-flex items-center gap-1.5">
-                          <Link
-                            href={`/platform-admin/finance/payments/${p.id}/invoice`}
-                            className="inline-flex items-center gap-1 px-2.5 py-1 text-xs font-medium text-slate-700 bg-slate-100 hover:bg-slate-200 rounded-lg transition-colors"
-                            title="Печатная квитанция"
-                          >
-                            <Printer className="w-3.5 h-3.5" />
-                            <span>Чек</span>
-                          </Link>
-                          {p.status === "PAID" && (
-                            <button
-                              onClick={() => {
-                                setRefundPayment(p);
-                                setRefundAmount(p.amount - (p.refundAmount || 0));
-                                setRefundReason("");
-                              }}
-                              className="inline-flex items-center gap-1 px-2.5 py-1 text-xs font-medium text-rose-700 bg-rose-50 hover:bg-rose-100 rounded-lg transition-colors border border-rose-200"
-                              title="Оформить возврат"
-                            >
-                              <RotateCcw className="w-3.5 h-3.5" />
-                              <span>Возврат</span>
-                            </button>
-                          )}
-                        </div>
-                      </td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
-          </div>
+      <DataTable
+        data={payments}
+        columns={columns}
+        getRowId={(p) => p.id}
+        loading={loading}
+        error={error}
+        onRetry={fetchPayments}
+        page={page}
+        totalPages={totalPages}
+        onPageChange={setPage}
+        emptyTitle="Платежи не найдены"
+        emptyDescription={t("ru", "ui4.emptyPaymentsDesc")}
+        emptyAction={
+          hasFilters ? (
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              onClick={() => {
+                setSearch("");
+                setCenterId("");
+                setStatus("");
+                setPaymentMethod("");
+                setDateFrom("");
+                setDateTo("");
+                setPage(1);
+              }}
+            >
+              {t("ru", "ui4.resetFilters")}
+            </Button>
+          ) : undefined
+        }
+      />
 
-          {/* Pagination */}
-          {totalPages > 1 && (
-            <div className="p-4 border-t border-slate-100 flex items-center justify-between bg-slate-50/50">
-              <button
-                onClick={() => setPage((p) => Math.max(1, p - 1))}
-                disabled={page === 1}
-                className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-slate-600 bg-white border border-slate-200 rounded-lg hover:bg-slate-50 disabled:opacity-40 transition-colors"
-              >
-                <ChevronLeft className="w-3.5 h-3.5" />
-                <span>Назад</span>
-              </button>
-              <span className="text-xs font-medium text-slate-500">
-                Страница {page} из {totalPages}
-              </span>
-              <button
-                onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
-                disabled={page === totalPages}
-                className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-slate-600 bg-white border border-slate-200 rounded-lg hover:bg-slate-50 disabled:opacity-40 transition-colors"
-              >
-                <span>Вперед</span>
-                <ChevronRight className="w-3.5 h-3.5" />
-              </button>
-            </div>
+      <Dialog open={isRecordModalOpen} onOpenChange={setIsRecordModalOpen}>
+        <DialogContent className="max-w-lg max-h-[90vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle>Запись оплаты от учебного центра</DialogTitle>
+          </DialogHeader>
+
+          {recordError && (
+            <Alert variant="destructive">
+              <AlertDescription>{recordError}</AlertDescription>
+            </Alert>
           )}
-        </div>
-      )}
 
-      {/* Record Payment Modal */}
-      {isRecordModalOpen && (
-        <div className="fixed inset-0 z-50 bg-slate-900/40 backdrop-blur-sm flex items-center justify-center p-4">
-          <form
-            onSubmit={handleRecordPayment}
-            className="bg-white rounded-2xl shadow-xl max-w-lg w-full p-6 border border-slate-200 space-y-4"
-          >
-            <h3 className="text-lg font-bold text-slate-900">Запись оплаты от учебного центра</h3>
-
-            <div>
-              <label className="block text-xs font-semibold text-slate-700 uppercase mb-1">
-                Учебный центр *
-              </label>
+          <form onSubmit={handleRecordPayment} className="space-y-4">
+            <FormField label="Учебный центр" htmlFor="rec-center" required>
               <select
+                id="rec-center"
                 value={recordCenterId}
                 onChange={(e) => setRecordCenterId(e.target.value)}
                 required
-                className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm"
+                className="h-9 w-full rounded-md border border-input bg-background px-3 text-sm text-foreground"
               >
                 <option value="">Выберите центр...</option>
                 {centersList.map((c) => (
@@ -588,17 +596,15 @@ export default function PlatformPaymentsPage() {
                   </option>
                 ))}
               </select>
-            </div>
+            </FormField>
 
-            <div className="grid grid-cols-2 gap-3">
-              <div>
-                <label className="block text-xs font-semibold text-slate-700 uppercase mb-1">
-                  Тарифный план
-                </label>
+            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+              <FormField label="Тарифный план" htmlFor="rec-plan">
                 <select
+                  id="rec-plan"
                   value={recordPlanId}
                   onChange={(e) => handlePlanChange(e.target.value)}
-                  className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm"
+                  className="h-9 w-full rounded-md border border-input bg-background px-3 text-sm text-foreground"
                 >
                   <option value="">Выберите тариф...</option>
                   {plansList.map((p) => (
@@ -607,169 +613,144 @@ export default function PlatformPaymentsPage() {
                     </option>
                   ))}
                 </select>
-              </div>
+              </FormField>
 
-              <div>
-                <label className="block text-xs font-semibold text-slate-700 uppercase mb-1">
-                  Сумма оплаты (UZS) *
-                </label>
-                <input
+              <FormField label="Сумма оплаты (UZS)" htmlFor="rec-amount" required>
+                <Input
+                  id="rec-amount"
                   type="number"
                   min="1"
                   required
                   value={recordAmount || ""}
                   onChange={(e) => setRecordAmount(parseInt(e.target.value || "0", 10))}
                   placeholder="Например: 500000"
-                  className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm"
                 />
-              </div>
+              </FormField>
             </div>
 
-            <div>
-              <label className="block text-xs font-semibold text-slate-700 uppercase mb-1">
-                Способ оплаты *
-              </label>
+            <FormField label="Способ оплаты" htmlFor="rec-method" required>
               <select
+                id="rec-method"
                 value={recordMethod}
                 onChange={(e) =>
                   setRecordMethod(e.target.value as "BANK_TRANSFER" | "CASH" | "ONLINE")
                 }
-                className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm"
+                className="h-9 w-full rounded-md border border-input bg-background px-3 text-sm text-foreground"
               >
-                <option value="BANK_TRANSFER">Банковский перевод (Расчётный счёт)</option>
+                <option value="BANK_TRANSFER">Банковский перевод (расчётный счёт)</option>
                 <option value="CASH">Наличный расчёт</option>
-                <option value="ONLINE">Онлайн-платеж (Click, Payme, Uzum)</option>
+                <option value="ONLINE">Онлайн-платёж (Click, Payme, Uzum)</option>
               </select>
-            </div>
+            </FormField>
 
-            <div>
-              <label className="block text-xs font-semibold text-slate-700 uppercase mb-1">
-                Ссылка на чек / платёжное поручение
-              </label>
-              <input
+            <FormField label="Ссылка на чек / платёжное поручение" htmlFor="rec-receipt">
+              <Input
+                id="rec-receipt"
                 type="text"
                 value={recordReceiptUrl}
                 onChange={(e) => setRecordReceiptUrl(e.target.value)}
                 placeholder="https://storage.../receipt.pdf"
-                className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm"
               />
-            </div>
+            </FormField>
 
-            <div>
-              <label className="block text-xs font-semibold text-slate-700 uppercase mb-1">
-                Примечание / Комментарий
-              </label>
-              <textarea
+            <FormField label="Примечание / комментарий" htmlFor="rec-notes">
+              <Textarea
+                id="rec-notes"
                 value={recordNotes}
                 onChange={(e) => setRecordNotes(e.target.value)}
                 rows={2}
                 placeholder="Номер транзакции, плательщик, договор..."
-                className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm"
               />
-            </div>
+            </FormField>
 
-            <div className="p-3 bg-emerald-50 rounded-xl text-xs text-emerald-800 border border-emerald-200">
-              При подтверждении оплаты статус подписки автоматически станет <strong>ACTIVE</strong>,
-              срок продлится на 1 месяц, а центру будет присвоен активный статус.
-            </div>
+            <Alert variant="success">
+              <AlertDescription className="text-xs">
+                При подтверждении оплаты статус подписки станет <strong>ACTIVE</strong>, срок
+                продлится на 1 месяц, а центру будет присвоен активный статус.
+              </AlertDescription>
+            </Alert>
 
-            <div className="flex justify-end gap-2 pt-2">
-              <button
-                type="button"
-                onClick={() => setIsRecordModalOpen(false)}
-                className="px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl text-sm font-medium"
-              >
+            <FormActions>
+              <Button type="button" variant="outline" onClick={() => setIsRecordModalOpen(false)}>
                 Отмена
-              </button>
-              <button
-                type="submit"
-                disabled={recording}
-                className="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl text-sm font-semibold shadow-sm disabled:opacity-50"
-              >
+              </Button>
+              <Button type="submit" variant="primary" disabled={recording}>
                 {recording ? "Сохранение..." : "Записать оплату"}
-              </button>
-            </div>
+              </Button>
+            </FormActions>
           </form>
-        </div>
-      )}
+        </DialogContent>
+      </Dialog>
 
-      {/* Refund Modal */}
-      {refundPayment && (
-        <div className="fixed inset-0 z-50 bg-slate-900/40 backdrop-blur-sm flex items-center justify-center p-4">
-          <form
-            onSubmit={handleRefund}
-            className="bg-white rounded-2xl shadow-xl max-w-md w-full p-6 border border-slate-200 space-y-4"
-          >
-            <div className="flex items-center gap-2 text-rose-600">
-              <RotateCcw className="w-5 h-5" />
-              <h3 className="text-lg font-bold text-slate-900">Оформление возврата</h3>
-            </div>
+      <Dialog open={Boolean(refundPayment)} onOpenChange={(next) => !next && setRefundPayment(null)}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle>Оформление возврата</DialogTitle>
+          </DialogHeader>
 
-            <p className="text-sm text-slate-600">
-              Платёж <strong>{refundPayment.invoiceNumber || refundPayment.id.slice(0, 8)}</strong> для{" "}
-              <strong>{refundPayment.center.name}</strong>.
-            </p>
+          {refundPayment && (
+            <form onSubmit={handleRefund} className="space-y-4">
+              <p className="text-sm text-muted-foreground">
+                Платёж{" "}
+                <strong className="text-foreground">
+                  {refundPayment.invoiceNumber || refundPayment.id.slice(0, 8)}
+                </strong>{" "}
+                для <strong className="text-foreground">{refundPayment.center.name}</strong>.
+              </p>
 
-            <div className="p-3 bg-slate-50 rounded-xl text-xs space-y-1 text-slate-600">
-              <div>Исходная сумма: {refundPayment.amount.toLocaleString()} UZS</div>
-              <div>
-                Уже возвращено: {(refundPayment.refundAmount || 0).toLocaleString()} UZS
+              <div className="space-y-1 rounded-lg border border-border bg-muted/40 p-3 text-xs tabular-nums text-muted-foreground">
+                <div>Исходная сумма: {refundPayment.amount.toLocaleString()} UZS</div>
+                <div>
+                  Уже возвращено: {(refundPayment.refundAmount || 0).toLocaleString()} UZS
+                </div>
+                <div className="font-semibold text-foreground">
+                  Максимально к возврату:{" "}
+                  {(refundPayment.amount - (refundPayment.refundAmount || 0)).toLocaleString()} UZS
+                </div>
               </div>
-              <div className="font-semibold text-slate-900">
-                Максимально к возврату:{" "}
-                {(refundPayment.amount - (refundPayment.refundAmount || 0)).toLocaleString()} UZS
-              </div>
-            </div>
 
-            <div>
-              <label className="block text-xs font-semibold text-slate-700 uppercase mb-1">
-                Сумма возврата (UZS) *
-              </label>
-              <input
-                type="number"
-                min="1"
-                max={refundPayment.amount - (refundPayment.refundAmount || 0)}
-                required
-                value={refundAmount || ""}
-                onChange={(e) => setRefundAmount(parseInt(e.target.value || "0", 10))}
-                className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm"
-              />
-            </div>
+              {refundError && (
+                <Alert variant="destructive">
+                  <AlertDescription>{refundError}</AlertDescription>
+                </Alert>
+              )}
 
-            <div>
-              <label className="block text-xs font-semibold text-slate-700 uppercase mb-1">
-                Причина возврата (минимум 5 символов) *
-              </label>
-              <textarea
-                required
-                minLength={5}
-                value={refundReason}
-                onChange={(e) => setRefundReason(e.target.value)}
-                rows={3}
-                placeholder="Укажите подробную причину возврата средств..."
-                className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm"
-              />
-            </div>
+              <FormField label="Сумма возврата (UZS)" htmlFor="refund-amount" required>
+                <Input
+                  id="refund-amount"
+                  type="number"
+                  min="1"
+                  max={refundPayment.amount - (refundPayment.refundAmount || 0)}
+                  required
+                  value={refundAmount || ""}
+                  onChange={(e) => setRefundAmount(parseInt(e.target.value || "0", 10))}
+                />
+              </FormField>
 
-            <div className="flex justify-end gap-2 pt-2">
-              <button
-                type="button"
-                onClick={() => setRefundPayment(null)}
-                className="px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl text-sm font-medium"
-              >
-                Отмена
-              </button>
-              <button
-                type="submit"
-                disabled={refunding}
-                className="px-4 py-2 bg-rose-600 hover:bg-rose-700 text-white rounded-xl text-sm font-semibold shadow-sm disabled:opacity-50"
-              >
-                {refunding ? "Оформление..." : "Подтвердить возврат"}
-              </button>
-            </div>
-          </form>
-        </div>
-      )}
+              <FormField label="Причина возврата (минимум 5 символов)" htmlFor="refund-reason" required>
+                <Textarea
+                  id="refund-reason"
+                  required
+                  minLength={5}
+                  value={refundReason}
+                  onChange={(e) => setRefundReason(e.target.value)}
+                  rows={3}
+                  placeholder="Укажите причину возврата средств..."
+                />
+              </FormField>
+
+              <FormActions>
+                <Button type="button" variant="outline" onClick={() => setRefundPayment(null)}>
+                  Отмена
+                </Button>
+                <Button type="submit" variant="destructive" disabled={refunding}>
+                  {refunding ? "Оформление..." : "Подтвердить возврат"}
+                </Button>
+              </FormActions>
+            </form>
+          )}
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
-import { render, screen, fireEvent, waitFor, cleanup } from "@testing-library/react";
+import { render, screen, within, fireEvent, waitFor, cleanup } from "@testing-library/react";
 import type { ComponentProps } from "react";
 import StaffManager from "@/components/StaffManager";
 import {
@@ -150,15 +150,14 @@ function renderManager(overrides: Partial<ComponentProps<typeof StaffManager>> =
   return render(<StaffManager locale="ru" currentRole="DIRECTOR" {...overrides} />);
 }
 
-/** The red error banner (the status badges only share `border-red-500/20`). */
 const errorBanner = (container: HTMLElement) =>
-  container.querySelector(".border-red-500\\/30");
-/** The green success banner (the role badges only share `border-emerald-500/20`). */
+  container.querySelector(".border-destructive\\/30");
 const successBanner = (container: HTMLElement) =>
-  container.querySelector(".border-emerald-500\\/30");
+  container.querySelector(".border-success\\/30");
 
-const formOf = (container: HTMLElement) => container.querySelector("form") as HTMLFormElement;
-const roleSelect = (container: HTMLElement) => container.querySelector("select") as HTMLSelectElement;
+const formOf = (_container?: HTMLElement) => document.querySelector("form") as HTMLFormElement;
+const roleSelect = (_container?: HTMLElement) =>
+  (document.getElementById("staff-role") || document.querySelector("select")) as HTMLSelectElement;
 const optionValues = (select: HTMLSelectElement) => Array.from(select.options).map((o) => o.value);
 const optionLabels = (select: HTMLSelectElement) => Array.from(select.options).map((o) => o.textContent);
 
@@ -211,6 +210,7 @@ describe("StaffManager (UI)", () => {
 
     expect(await screen.findByText("Сотрудники центра")).toBeTruthy();
     expect(screen.getByText("Всего 6 сотрудников")).toBeTruthy();
+    const table = within(screen.getByRole("table"));
 
     // Every member name.
     for (const name of [
@@ -221,33 +221,34 @@ describe("StaffManager (UI)", () => {
       "Ученик Учеников",
       "Загадочный Роль",
     ]) {
-      expect(screen.getByText(name)).toBeTruthy();
+      expect(table.getByText(name)).toBeTruthy();
     }
 
     // Role badges: known roles use the RU label, an unknown role falls back to the raw code.
-    expect(screen.getByText("Директор")).toBeTruthy();
-    expect(screen.getByText("Админ центра")).toBeTruthy();
-    expect(screen.getByText("Преподаватель")).toBeTruthy();
-    expect(screen.getByText("Саппорт центра")).toBeTruthy();
-    expect(screen.getByText("Ученик")).toBeTruthy();
-    expect(screen.getByText("SUPERADMIN")).toBeTruthy();
+    expect(table.getByText("Директор")).toBeTruthy();
+    expect(table.getByText("Админ центра")).toBeTruthy();
+    expect(table.getByText("Преподаватель")).toBeTruthy();
+    expect(table.getByText("Саппорт центра")).toBeTruthy();
+    expect(table.getByText("Ученик")).toBeTruthy();
+    expect(table.getByText("SUPERADMIN")).toBeTruthy();
 
     // Status badges: exactly one INACTIVE and one ARCHIVED.
-    expect(screen.getByText("Неактивен")).toBeTruthy();
-    expect(screen.getByText("Архивирован")).toBeTruthy();
+    expect(table.getByText("Неактивен")).toBeTruthy();
+    expect(table.getByText("Архивирован")).toBeTruthy();
 
     // Emails always render; a NULL phone renders nothing.
-    expect(screen.getByText("teacher@example.uz")).toBeTruthy();
-    expect(screen.getByText("+998900000001")).toBeTruthy();
-    expect(screen.getByText("+998900000004")).toBeTruthy();
-    expect(screen.queryByText("+998900000003")).toBeNull();
+    expect(table.getByText("teacher@example.uz")).toBeTruthy();
+    expect(table.getByText("+998900000001")).toBeTruthy();
+    expect(table.getByText("+998900000004")).toBeTruthy();
+    expect(table.queryByText("+998900000003")).toBeNull();
 
-    // Avatar block shows the uppercased first letter of the full name.
-    const avatars = Array.from(container.querySelectorAll(".w-11")).map((el) => el.textContent);
+    // Avatar block shows the uppercased first letter of the full name inside desktop table.
+    const tableEl = screen.getByRole("table");
+    const avatars = Array.from(tableEl.querySelectorAll(".rounded-full.bg-primary\\/10")).map(
+      (el) => el.textContent
+    );
     expect(avatars).toEqual(["Д", "А", "У", "С", "У", "З"]);
-
-    // Only the two non-ACTIVE rows carry the `opacity-50` dimming.
-    expect(container.querySelectorAll(".opacity-50")).toHaveLength(2);
+    expect(container.querySelectorAll("tbody tr")).toHaveLength(6);
   });
 
   it("shows every action for non-director members and hides the whole action group for a DIRECTOR", async () => {
@@ -256,16 +257,17 @@ describe("StaffManager (UI)", () => {
     renderManager();
 
     await screen.findByText("Сотрудники центра");
+    const table = within(screen.getByRole("table"));
 
-    // 5 non-director members -> 5 toggle buttons + 5 delete buttons.
-    expect(screen.getAllByTitle("Деактивировать")).toHaveLength(3); // m-2, m-5, m-6
-    expect(screen.getAllByTitle("Активировать")).toHaveLength(2); // m-3, m-4
-    expect(screen.getAllByTitle("Удалить")).toHaveLength(5);
+    // 5 non-director members -> 5 toggle buttons + 5 delete buttons inside the desktop table.
+    expect(table.getAllByTitle("Деактивировать")).toHaveLength(3); // m-2, m-5, m-6
+    expect(table.getAllByTitle("Активировать")).toHaveLength(2); // m-3, m-4
+    expect(table.getAllByTitle("Удалить")).toHaveLength(5);
     // The ARCHIVED member hides its own archive button -> 4 instead of 5.
-    expect(screen.getAllByTitle("Архивировать")).toHaveLength(4);
+    expect(table.getAllByTitle("Архивировать")).toHaveLength(4);
 
-    // The DIRECTOR row exposes no buttons at all — his only control would be the delete.
-    const directorRow = screen.getByText("Директор Директоров").closest(".glass-panel") as HTMLElement;
+    // The DIRECTOR row exposes no buttons at all.
+    const directorRow = table.getByText("Директор Директоров").closest("tr") as HTMLElement;
     expect(directorRow.querySelectorAll("button")).toHaveLength(0);
   });
 
@@ -335,21 +337,22 @@ describe("StaffManager (UI)", () => {
     expect(screen.getByText("Jami 6 xodim")).toBeTruthy();
     expect(screen.getByRole("button", { name: /Xodim qoʻshish/ })).toBeTruthy();
 
+    const table = within(screen.getByRole("table"));
     // Role badges use the uz labels (the unknown role keeps falling back to the code).
-    expect(screen.getByText("Direktor")).toBeTruthy();
-    expect(screen.getByText("Markaz admini")).toBeTruthy();
-    expect(screen.getByText("Oʻqituvchi")).toBeTruthy();
-    expect(screen.getByText("Markaz qoʻllab-quvvatlashi")).toBeTruthy();
-    expect(screen.getByText("Oʻquvchi")).toBeTruthy();
-    expect(screen.getByText("SUPERADMIN")).toBeTruthy();
+    expect(table.getByText("Direktor")).toBeTruthy();
+    expect(table.getByText("Markaz admini")).toBeTruthy();
+    expect(table.getByText("Oʻqituvchi")).toBeTruthy();
+    expect(table.getByText("Markaz qoʻllab-quvvatlashi")).toBeTruthy();
+    expect(table.getByText("Oʻquvchi")).toBeTruthy();
+    expect(table.getByText("SUPERADMIN")).toBeTruthy();
 
     // Status badges and the action tooltips are localized too.
-    expect(screen.getByText("Faolsiz")).toBeTruthy();
-    expect(screen.getByText("Arxivlangan")).toBeTruthy();
-    expect(screen.getAllByTitle("Faolsizlantirish")).toHaveLength(3);
-    expect(screen.getAllByTitle("Faollashtirish")).toHaveLength(2);
-    expect(screen.getAllByTitle("Arxivlash")).toHaveLength(4);
-    expect(screen.getAllByTitle("Oʻchirish")).toHaveLength(5);
+    expect(table.getByText("Faolsiz")).toBeTruthy();
+    expect(table.getByText("Arxivlangan")).toBeTruthy();
+    expect(table.getAllByTitle("Faolsizlantirish")).toHaveLength(3);
+    expect(table.getAllByTitle("Faollashtirish")).toHaveLength(2);
+    expect(table.getAllByTitle("Arxivlash")).toHaveLength(4);
+    expect(table.getAllByTitle("Oʻchirish")).toHaveLength(5);
   });
 
   it("falls back to Russian for an unsupported locale", async () => {
@@ -359,7 +362,7 @@ describe("StaffManager (UI)", () => {
 
     expect(await screen.findByText("Сотрудники центра")).toBeTruthy();
     expect(screen.getByRole("button", { name: /Добавить сотрудника/ })).toBeTruthy();
-    expect(screen.getByText("Преподаватель")).toBeTruthy();
+    expect(within(screen.getByRole("table")).getByText("Преподаватель")).toBeTruthy();
   });
 
   it("lets a DIRECTOR assign center-admin, teacher and support roles", async () => {
@@ -407,11 +410,12 @@ describe("StaffManager (UI)", () => {
     // A STUDENT still sees the add form and all the row actions.
     renderManager({ currentRole: "STUDENT" });
     await screen.findByText("Сотрудники центра");
+    const table = within(screen.getByRole("table"));
+    expect(table.getAllByTitle("Удалить")).toHaveLength(5);
+    expect(table.getAllByTitle("Деактивировать")).toHaveLength(3);
 
     fireEvent.click(screen.getByRole("button", { name: addButtonName("ru") }));
     expect(optionValues(roleSelect(document.body))).toEqual(["TEACHER", "CENTER_SUPPORT"]);
-    expect(screen.getAllByTitle("Удалить")).toHaveLength(5);
-    expect(screen.getAllByTitle("Деактивировать")).toHaveLength(3);
   });
 
   it("renders the uz-Latn add form labels", async () => {
@@ -466,7 +470,7 @@ describe("StaffManager (UI)", () => {
     fireEvent.change(roleSelect(container), { target: { value: "CENTER_ADMIN" } });
     fireEvent.submit(formOf(container));
 
-    expect(await screen.findByText("Иван Иванов успешно добавлен(а)!")).toBeTruthy();
+    expect(await screen.findByText("Иван Иванов успешно добавлен(а)")).toBeTruthy();
 
     const post = byMethod(calls, "POST")[0];
     expect(post.url).toBe("/api/tenant/staff");
@@ -503,7 +507,7 @@ describe("StaffManager (UI)", () => {
     });
     fireEvent.submit(formOf(container));
 
-    expect(await screen.findByText("Азиз Азизов muvaffaqiyatli qoʻshildi!")).toBeTruthy();
+    expect(await screen.findByText("Азиз Азизов muvaffaqiyatli qoʻshildi")).toBeTruthy();
 
     // `phone: newPhone || undefined` -> JSON.stringify drops the key entirely.
     expect(sentBody(byMethod(calls, "POST")[0])).toEqual({
@@ -543,6 +547,9 @@ describe("StaffManager (UI)", () => {
     await screen.findByText("Сотрудники центра");
 
     fireEvent.click(screen.getByRole("button", { name: addButtonName("ru") }));
+    fireEvent.change(screen.getByPlaceholderText("staff@example.com"), {
+      target: { value: "x@example.uz" },
+    });
     fireEvent.submit(formOf(container));
 
     expect(await screen.findByText("Error adding staff member")).toBeTruthy();
@@ -594,7 +601,7 @@ describe("StaffManager (UI)", () => {
 
     const submit = screen.getByRole("button", { name: "Добавить" }) as HTMLButtonElement;
     await waitFor(() => expect(submit.disabled).toBe(true));
-    expect(container.querySelector(".animate-spin")).toBeTruthy();
+    expect(document.body.querySelector(".animate-spin")).toBeTruthy();
     // The form stays mounted while saving.
     expect(screen.getByPlaceholderText("staff@example.com")).toBeTruthy();
   });
@@ -614,7 +621,7 @@ describe("StaffManager (UI)", () => {
     });
     fireEvent.submit(formOf(container));
 
-    expect(await screen.findByText("Иван Иванов успешно добавлен(а)!")).toBeTruthy();
+    expect(await screen.findByText("Иван Иванов успешно добавлен(а)")).toBeTruthy();
 
     fireEvent.click(successBanner(container)!.querySelector("button")!);
     expect(successBanner(container)).toBeNull();
@@ -748,6 +755,11 @@ describe("StaffManager (UI)", () => {
     expect(refresh).not.toHaveBeenCalled();
   });
 
+  const clickConfirmDelete = (label = "Удалить") => {
+    const dialog = screen.getByRole("dialog");
+    fireEvent.click(within(dialog).getByRole("button", { name: label }));
+  };
+
   it("deletes a member with the membership id in the query string and refetches", async () => {
     const { calls } = installFetchMock([
       getRoute(staffResponse()),
@@ -759,6 +771,7 @@ describe("StaffManager (UI)", () => {
 
     // First deletable row is m-2.
     fireEvent.click(screen.getAllByTitle("Удалить")[0]);
+    clickConfirmDelete("Удалить");
 
     expect(await screen.findByText("Пользователь успешно удалён")).toBeTruthy();
 
@@ -769,17 +782,21 @@ describe("StaffManager (UI)", () => {
     expect(refresh).not.toHaveBeenCalled();
   });
 
-  it("deletes without any confirmation dialog (jsdom dialogs are never called)", async () => {
-    installFetchMock([getRoute(staffResponse()), deleteRoute(jsonResponse({ ok: true }))]);
+  it("opens an in-app ConfirmDialog without browser confirm/alert and cancels safely", async () => {
+    const { calls } = installFetchMock([getRoute(staffResponse()), deleteRoute(jsonResponse({ ok: true }))]);
 
     renderManager();
     await screen.findByText("Сотрудники центра");
 
     fireEvent.click(screen.getAllByTitle("Удалить")[0]);
+    const dialog = screen.getByRole("dialog");
+    fireEvent.click(within(dialog).getByRole("button", { name: "Отмена" }));
+    expect(byMethod(calls, "DELETE")).toHaveLength(0);
+
+    fireEvent.click(screen.getAllByTitle("Удалить")[0]);
+    clickConfirmDelete("Удалить");
     await screen.findByText("Пользователь успешно удалён");
 
-    // NOTE (observed behaviour): `handleDelete` never calls `confirm()`, so there
-    // is no "confirm false" branch to exercise and the mutation fires immediately.
     expect(window.confirm).not.toHaveBeenCalled();
     expect(window.alert).not.toHaveBeenCalled();
   });
@@ -796,6 +813,7 @@ describe("StaffManager (UI)", () => {
     await screen.findByText("Сотрудники центра");
 
     fireEvent.click(screen.getAllByTitle("Удалить")[0]);
+    clickConfirmDelete("Удалить");
 
     expect(
       await screen.findByText("У сотрудника есть группы. Подсказка: Сначала переведите группы"),
@@ -812,6 +830,7 @@ describe("StaffManager (UI)", () => {
     await screen.findByText("Markaz xodimlari");
 
     fireEvent.click(screen.getAllByTitle("Oʻchirish")[0]);
+    clickConfirmDelete("Oʻchirish");
 
     expect(
       await screen.findByText("Oʻchirib boʻlmaydi. Maslahat: Guruhlardan chiqaring"),
@@ -825,6 +844,7 @@ describe("StaffManager (UI)", () => {
     await screen.findByText("Сотрудники центра");
 
     fireEvent.click(screen.getAllByTitle("Удалить")[0]);
+    clickConfirmDelete("Удалить");
 
     expect(await screen.findByText("Error deleting member")).toBeTruthy();
   });
@@ -839,6 +859,7 @@ describe("StaffManager (UI)", () => {
     await screen.findByText("Сотрудники центра");
 
     fireEvent.click(screen.getAllByTitle("Удалить")[0]);
+    clickConfirmDelete("Удалить");
 
     expect(await screen.findByText("Ошибка удаления")).toBeTruthy();
     expect(screen.queryByText(/Подсказка/)).toBeNull();
@@ -852,6 +873,7 @@ describe("StaffManager (UI)", () => {
     await screen.findByText("Сотрудники центра");
 
     fireEvent.click(screen.getAllByTitle("Удалить")[0]);
+    clickConfirmDelete("Удалить");
 
     expect(await screen.findByText("Network error")).toBeTruthy();
   });
@@ -863,6 +885,7 @@ describe("StaffManager (UI)", () => {
     await screen.findByText("Сотрудники центра");
 
     fireEvent.click(screen.getAllByTitle("Удалить")[0]);
+    clickConfirmDelete("Удалить");
 
     expect(await screen.findByText("Network error")).toBeTruthy();
   });
@@ -881,6 +904,7 @@ describe("StaffManager (UI)", () => {
     await screen.findByText("Сотрудники центра");
 
     fireEvent.click(screen.getAllByTitle("Удалить")[0]);
+    clickConfirmDelete("Удалить");
 
     // The refresh wipes the view back to the bare spinner until it resolves.
     await waitFor(() => expect(container.querySelector(".animate-spin")).toBeTruthy());

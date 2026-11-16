@@ -3,7 +3,16 @@ import { getAuthSession } from "@/lib/auth";
 // eslint-disable-next-line no-restricted-imports
 import { db } from "@/lib/db";
 import { redirect } from "next/navigation";
-import { Shield } from "lucide-react";
+import {
+  Card,
+  PageHeader,
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui";
 import PlatformAuditInteractive from "@/components/platform/PlatformAuditInteractive";
 
 function formatDetails(raw: string | null): string {
@@ -35,94 +44,73 @@ export default async function PlatformAuditPage() {
 
   return (
     <div className="space-y-6">
-      {/* Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
-        <div className="flex items-center gap-3">
-          <div className="p-2 bg-indigo-50 dark:bg-indigo-900/20 rounded-lg text-indigo-600 dark:text-indigo-400">
-            <Shield className="w-6 h-6" />
-          </div>
-          <div>
-            <h1 className="text-2xl font-bold text-zinc-900 dark:text-zinc-100">
-              Журнал аудита платформы
-            </h1>
-            <p className="text-sm text-zinc-500 dark:text-zinc-400">
-              Сквозной протокол действий администраторов, финансовых и системных событий • Всего записей: {logs.length}
-            </p>
-          </div>
-        </div>
-      </div>
+      <PageHeader
+        title="Журнал аудита платформы"
+        description={`Сквозной протокол действий администраторов, финансовых и системных событий • Всего записей: ${logs.length}`}
+      />
 
-      {/* Interactive search, filters & export toolbar */}
       <PlatformAuditInteractive />
 
-      {/* Audit Log Table */}
-      <div className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl overflow-hidden shadow-sm">
-        <div className="overflow-x-auto">
-          <table className="w-full text-sm text-left">
-            <thead className="bg-zinc-50 dark:bg-zinc-800/50 text-xs font-semibold text-zinc-500 uppercase border-b border-zinc-200 dark:border-zinc-700">
-              <tr>
-                <th className="px-4 py-3">Дата и время</th>
-                <th className="px-4 py-3">Действие</th>
-                <th className="px-4 py-3">Актор</th>
-                <th className="px-4 py-3">Центр</th>
-                <th className="px-4 py-3">Ресурс</th>
-                <th className="px-4 py-3">IP-адрес</th>
-                <th className="px-4 py-3">Детали</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-zinc-100 dark:divide-zinc-800">
+      <Card>
+        <div className="overflow-x-auto" tabIndex={0}>
+          <Table>
+            <TableHeader className="sticky top-0 z-10 bg-muted/60">
+              <TableRow>
+                <TableHead>Дата и время</TableHead>
+                <TableHead>Действие</TableHead>
+                <TableHead>Актор</TableHead>
+                <TableHead>Центр</TableHead>
+                <TableHead>Ресурс</TableHead>
+                <TableHead>IP-адрес</TableHead>
+                <TableHead>Детали</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
               {logs.length === 0 ? (
-                <tr>
-                  <td colSpan={7} className="px-4 py-8 text-center text-zinc-400">
+                <TableRow>
+                  <TableCell colSpan={7} className="py-8 text-center text-muted-foreground">
                     Журнал аудита пуст
-                  </td>
-                </tr>
+                  </TableCell>
+                </TableRow>
               ) : (
                 logs.map((log) => {
-                  const actorText = log.actor
-                    ? `${log.actor.fullName || log.actor.email} (${log.actor.email})`
-                    : "Система";
-                  const centerText = log.center ? `${log.center.name} (${log.center.slug})` : "— (Платформа)";
+                  const centerText = log.center
+                    ? `${log.center.name} (${log.center.slug})`
+                    : "— (Платформа)";
                   const detailsFormatted = formatDetails(log.detailsJson);
 
                   return (
-                    <tr key={log.id} className="hover:bg-zinc-50 dark:hover:bg-zinc-800/40 transition">
-                      <td className="px-4 py-3 whitespace-nowrap text-xs text-zinc-500 font-mono">
+                    <TableRow key={log.id}>
+                      <TableCell className="whitespace-nowrap font-mono text-xs text-muted-foreground tabular-nums">
                         {new Date(log.createdAt).toLocaleString("ru-RU")}
-                      </td>
-                      <td className="px-4 py-3">
-                        <span className="font-semibold text-zinc-900 dark:text-zinc-100">
-                          {log.action}
-                        </span>
-                      </td>
-                      <td className="px-4 py-3 text-xs">
-                        <div className="font-medium text-zinc-800 dark:text-zinc-200">
+                      </TableCell>
+                      <TableCell className="font-medium text-foreground">{log.action}</TableCell>
+                      <TableCell className="text-xs">
+                        <div className="font-medium text-foreground">
                           {log.actor?.fullName || "Система"}
                         </div>
                         {log.actor?.email && (
-                          <div className="text-zinc-400 text-[11px]">{log.actor.email}</div>
+                          <div className="text-muted-foreground">{log.actor.email}</div>
                         )}
-                      </td>
-                      <td className="px-4 py-3 text-xs text-zinc-600 dark:text-zinc-400">
-                        {centerText}
-                      </td>
-                      <td className="px-4 py-3 text-xs font-mono text-zinc-600 dark:text-zinc-400">
+                      </TableCell>
+                      <TableCell className="text-xs text-muted-foreground">{centerText}</TableCell>
+                      <TableCell className="font-mono text-xs text-muted-foreground">
                         {log.resource}
-                      </td>
-                      <td className="px-4 py-3 text-xs font-mono text-zinc-500">
+                      </TableCell>
+                      <TableCell className="font-mono text-xs text-muted-foreground">
                         {log.ipAddress || "—"}
-                      </td>
-                      <td className="px-4 py-3 text-xs font-mono text-zinc-600 dark:text-zinc-300 max-w-xs truncate">
+                      </TableCell>
+                      <TableCell className="max-w-xs truncate font-mono text-xs text-muted-foreground">
                         {detailsFormatted}
-                      </td>
-                    </tr>
+                      </TableCell>
+                    </TableRow>
                   );
                 })
               )}
-            </tbody>
-          </table>
+            </TableBody>
+          </Table>
         </div>
-      </div>
+      </Card>
     </div>
   );
 }

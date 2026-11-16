@@ -2,14 +2,21 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import { render, screen, fireEvent, waitFor, cleanup } from "@testing-library/react";
 import { t } from "@/i18n";
-import ChangePasswordPage from "@/app/center/profile/password/page";
-import MySessionsPage from "@/app/center/profile/sessions/page";
+import CenterPasswordRedirectPage from "@/app/center/profile/password/page";
+import CenterSessionsRedirectPage from "@/app/center/profile/sessions/page";
+import { SecurityTabPanel } from "@/components/account/SecurityTabPanel";
 import NotificationsPage from "@/app/center/notifications/page";
 import { installFetchMock, jsonResponse, brokenResponse, sentBody } from "./helpers/ui";
 
-const { pushMock } = vi.hoisted(() => ({ pushMock: vi.fn() }));
+const { pushMock, redirectMock } = vi.hoisted(() => ({
+  pushMock: vi.fn(),
+  redirectMock: vi.fn((url: string) => {
+    throw new Error(`NEXT_REDIRECT:${url}`);
+  }),
+}));
 
 vi.mock("next/navigation", () => ({
+  redirect: redirectMock,
   useRouter: () => ({
     push: pushMock,
     replace: pushMock,
@@ -17,7 +24,7 @@ vi.mock("next/navigation", () => ({
     back: vi.fn(),
     prefetch: vi.fn(),
   }),
-  usePathname: () => "/center",
+  usePathname: () => "/account",
   useSearchParams: () => new URLSearchParams(),
 }));
 
@@ -25,6 +32,7 @@ const ru = (key: string) => t("ru", key);
 
 beforeEach(() => {
   pushMock.mockReset();
+  redirectMock.mockClear();
   vi.spyOn(window, "alert").mockImplementation(() => {});
 });
 
@@ -33,10 +41,15 @@ afterEach(() => {
   vi.restoreAllMocks();
 });
 
-describe("ChangePasswordPage (redirect)", () => {
-  it("redirects to /account/change-password", () => {
-    render(<ChangePasswordPage />);
-    expect(pushMock).toHaveBeenCalledWith("/account/change-password");
+describe("legacy /center/profile security redirects", () => {
+  it("redirects /center/profile/password to /account?tab=security", () => {
+    expect(() => CenterPasswordRedirectPage()).toThrow("NEXT_REDIRECT:/account?tab=security");
+  });
+
+  it("redirects /center/profile/sessions to /account?tab=security#sessions", () => {
+    expect(() => CenterSessionsRedirectPage()).toThrow(
+      "NEXT_REDIRECT:/account?tab=security#sessions",
+    );
   });
 });
 
@@ -67,12 +80,14 @@ const sessions = [
   },
 ];
 
-describe("MySessionsPage", () => {
+describe("SecurityTabPanel active sessions", () => {
   it("shows a loading placeholder, then the device cards", async () => {
     installFetchMock([
       { match: "/api/auth/sessions", reply: jsonResponse({ success: true, sessions }) },
     ]);
-    const { container } = render(<MySessionsPage />);
+    const { container } = render(
+      <SecurityTabPanel initialTwoFactorEnabled={false} locale="ru" isReadOnly={false} />,
+    );
 
     expect(screen.getByText(ru("common.loading"))).toBeTruthy();
     await waitFor(() => expect(screen.queryByText(ru("common.loading"))).toBeNull());
@@ -81,7 +96,7 @@ describe("MySessionsPage", () => {
     expect(screen.getByText("IP: 10.0.0.1")).toBeTruthy();
     expect(screen.getByText("IP: N/A")).toBeTruthy();
     expect(screen.getByText("Unknown Device")).toBeTruthy();
-    expect(container.textContent).toContain("A very long user agent strin");
+    expect(container.textContent).toContain("A very long user agent");
     // 3 cards, only the current one hides its revoke button
     expect(screen.getAllByText(ru("profile.revokeSession"))).toHaveLength(2);
     expect(screen.getByText(ru("profile.revokeAll"))).toBeTruthy();
@@ -91,7 +106,7 @@ describe("MySessionsPage", () => {
     installFetchMock([
       { match: "/api/auth/sessions", reply: jsonResponse({ success: true, sessions: [] }) },
     ]);
-    render(<MySessionsPage />);
+    render(<SecurityTabPanel initialTwoFactorEnabled={false} locale="ru" isReadOnly={false} />);
 
     await waitFor(() => expect(screen.getByText(ru("profile.noDevices"))).toBeTruthy());
     expect(screen.queryByText(ru("profile.revokeAll"))).toBeNull();
@@ -104,12 +119,14 @@ describe("MySessionsPage", () => {
         reply: jsonResponse({ error: { message: "auth.token.required" } }, 500),
       },
     ]);
-    const first = render(<MySessionsPage />);
+    const first = render(
+      <SecurityTabPanel initialTwoFactorEnabled={false} locale="ru" isReadOnly={false} />,
+    );
     await waitFor(() => expect(screen.getByText(ru("auth.token.required"))).toBeTruthy());
     first.unmount();
 
     installFetchMock([{ match: "/api/auth/sessions", reply: brokenResponse(200) }]);
-    render(<MySessionsPage />);
+    render(<SecurityTabPanel initialTwoFactorEnabled={false} locale="ru" isReadOnly={false} />);
     await waitFor(() => expect(screen.getByText(ru("common.error"))).toBeTruthy());
   });
 
@@ -118,7 +135,7 @@ describe("MySessionsPage", () => {
       { match: "/api/auth/sessions", reply: jsonResponse({ success: true, sessions }) },
       { match: "/api/auth/sessions", method: "DELETE", reply: jsonResponse({ success: true }) },
     ]);
-    render(<MySessionsPage />);
+    render(<SecurityTabPanel initialTwoFactorEnabled={false} locale="ru" isReadOnly={false} />);
     await waitFor(() => expect(screen.getAllByText(ru("profile.revokeSession"))).toHaveLength(2));
 
     fireEvent.click(screen.getAllByText(ru("profile.revokeSession"))[0]);
@@ -126,10 +143,9 @@ describe("MySessionsPage", () => {
     await waitFor(() => expect(screen.getAllByText(ru("profile.revokeSession"))).toHaveLength(1));
     const del = calls.find((c) => c.init?.method === "DELETE")!;
     expect(del.url).toContain("id=s-2");
-    expect(window.alert).not.toHaveBeenCalled();
   });
 
-  it("alerts when a revoke fails", async () => {
+  it("surfaces an error when a revoke fails", async () => {
     installFetchMock([
       { match: "/api/auth/sessions", reply: jsonResponse({ success: true, sessions }) },
       {
@@ -138,28 +154,33 @@ describe("MySessionsPage", () => {
         reply: jsonResponse({ error: { message: "auth.token.required" } }, 403),
       },
     ]);
-    render(<MySessionsPage />);
+    render(<SecurityTabPanel initialTwoFactorEnabled={false} locale="ru" isReadOnly={false} />);
     await waitFor(() => expect(screen.getAllByText(ru("profile.revokeSession"))).toHaveLength(2));
 
     fireEvent.click(screen.getAllByText(ru("profile.revokeSession"))[0]);
 
-    await waitFor(() => expect(window.alert).toHaveBeenCalledWith(ru("auth.token.required")));
+    await waitFor(() => expect(screen.getByText(ru("auth.token.required"))).toBeTruthy());
   });
 
   it("keeps only the current session when revoke-all is confirmed, and does nothing otherwise", async () => {
-    const confirmSpy = vi.spyOn(window, "confirm").mockReturnValue(false);
     const { calls } = installFetchMock([
       { match: "/api/auth/sessions", reply: jsonResponse({ success: true, sessions }) },
       { match: "/api/auth/sessions", method: "DELETE", reply: jsonResponse({ success: true }) },
     ]);
-    render(<MySessionsPage />);
+    render(<SecurityTabPanel initialTwoFactorEnabled={false} locale="ru" isReadOnly={false} />);
     await waitFor(() => expect(screen.getByText(ru("profile.revokeAll"))).toBeTruthy());
 
+    // Open confirmation dialog and cancel it
     fireEvent.click(screen.getByText(ru("profile.revokeAll")));
+    await waitFor(() => expect(screen.getByText(ru("profile.confirmRevokeAll"))).toBeTruthy());
+    fireEvent.click(screen.getByRole("button", { name: ru("common.cancel") }));
     expect(calls.filter((c) => c.init?.method === "DELETE")).toHaveLength(0);
 
-    confirmSpy.mockReturnValue(true);
+    // Reopen and confirm
     fireEvent.click(screen.getByText(ru("profile.revokeAll")));
+    await waitFor(() => expect(screen.getByText(ru("profile.confirmRevokeAll"))).toBeTruthy());
+    const buttons = screen.getAllByRole("button", { name: ru("profile.revokeAll") });
+    fireEvent.click(buttons[buttons.length - 1]);
 
     await waitFor(() =>
       expect(calls.some((c) => c.url.includes("allButCurrent=true"))).toBe(true),
@@ -215,9 +236,9 @@ const feedPage = (overrides: Record<string, unknown> = {}) => ({
 describe("NotificationsPage", () => {
   it("renders every notification, its translated copy and its action links", async () => {
     installFetchMock([{ match: "/api/notifications", reply: jsonResponse(feedPage()) }]);
-    render(<NotificationsPage />);
+    const { container } = render(<NotificationsPage />);
 
-    expect(screen.getByText("Загрузка уведомлений...")).toBeTruthy();
+    expect(container.querySelector(".animate-pulse")).toBeTruthy();
     await waitFor(() => expect(screen.getByText("Новое домашнее задание")).toBeTruthy());
 
     expect(screen.getByText("Оценка выставлена")).toBeTruthy();
@@ -254,7 +275,7 @@ describe("NotificationsPage", () => {
     installFetchMock([{ match: "/api/notifications", reply: jsonResponse({}, 500) }]);
     const first = render(<NotificationsPage />);
     await waitFor(() =>
-      expect(screen.getByText("Failed to fetch notifications")).toBeTruthy(),
+      expect(screen.getByText("Не удалось загрузить уведомления")).toBeTruthy(),
     );
     first.unmount();
 

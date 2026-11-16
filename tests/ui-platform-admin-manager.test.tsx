@@ -3,6 +3,7 @@ import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import {
   render,
   screen,
+  within,
   fireEvent,
   waitFor,
   cleanup,
@@ -95,35 +96,36 @@ describe("PlatformAdminManager (UI)", () => {
     renderManager();
 
     // Metrics cards.
-    expect(screen.getByText("Всего Центров")).toBeTruthy();
+    expect(screen.getByText("Всего центров")).toBeTruthy();
     expect(screen.getByText("4")).toBeTruthy();
     expect(screen.getByText("Активных")).toBeTruthy();
-    expect(screen.getByText("Заморожены (Frozen)")).toBeTruthy();
+    expect(screen.getByText("Заморожены")).toBeTruthy();
     expect(screen.getAllByText("1").length).toBeGreaterThanOrEqual(2);
 
-    // Registry rows + slugs.
-    expect(screen.getByText("Quantum Academy")).toBeTruthy();
-    expect(screen.getByText("slug: quantum-academy")).toBeTruthy();
-    expect(screen.getByText("Code School")).toBeTruthy();
-    expect(screen.getByText("Frozen Lab")).toBeTruthy();
-    expect(screen.getByText("Blocked Inc")).toBeTruthy();
+    // Registry rows + slugs (scoped to the desktop table; mobile card view renders the same items).
+    const table = within(screen.getByRole("table"));
+    expect(table.getByText("Quantum Academy")).toBeTruthy();
+    expect(table.getByText("slug: quantum-academy")).toBeTruthy();
+    expect(table.getByText("Code School")).toBeTruthy();
+    expect(table.getByText("Frozen Lab")).toBeTruthy();
+    expect(table.getByText("Blocked Inc")).toBeTruthy();
 
     // Owners.
-    expect(screen.getByText("Александр Волков")).toBeTruthy();
-    expect(screen.getByText("director@quantum.ru")).toBeTruthy();
-    expect(screen.getByText("Елена Смирнова")).toBeTruthy();
-    expect(screen.getByText("x@blocked.uz")).toBeTruthy();
+    expect(table.getByText("Александр Волков")).toBeTruthy();
+    expect(table.getByText("director@quantum.ru")).toBeTruthy();
+    expect(table.getByText("Елена Смирнова")).toBeTruthy();
+    expect(table.getByText("x@blocked.uz")).toBeTruthy();
 
     // Subscription plan names, with "Trial" fallback for missing/empty plans.
-    expect(screen.getByText("Про")).toBeTruthy();
-    expect(screen.getByText("Базовый")).toBeTruthy();
-    expect(screen.getAllByText("Trial")).toHaveLength(2);
+    expect(table.getByText("Про")).toBeTruthy();
+    expect(table.getByText("Базовый")).toBeTruthy();
+    expect(table.getAllByText("Trial")).toHaveLength(2);
 
     // Status badges.
-    expect(screen.getByText("ACTIVE")).toBeTruthy();
-    expect(screen.getByText("TRIAL")).toBeTruthy();
-    expect(screen.getByText("PAUSED")).toBeTruthy();
-    expect(screen.getByText("BLOCKED")).toBeTruthy();
+    expect(table.getByText("ACTIVE")).toBeTruthy();
+    expect(table.getByText("TRIAL")).toBeTruthy();
+    expect(table.getByText("PAUSED")).toBeTruthy();
+    expect(table.getByText("BLOCKED")).toBeTruthy();
   });
 
   it("shows the empty state when no centers exist", () => {
@@ -131,34 +133,38 @@ describe("PlatformAdminManager (UI)", () => {
 
     expect(
       screen.getByText(
-        "Центры еще не созданы. Нажмите «Создать Учебный Центр», чтобы добавить первый тенант.",
+        "Нажмите «Создать учебный центр», чтобы добавить первый центр.",
       ),
     ).toBeTruthy();
   });
 
   it("offers the status buttons that make sense for each center status", () => {
     const { unmount } = renderManager({ initialCenters: [centers[0]] }); // ACTIVE
-    expect(screen.queryByRole("button", { name: "Активировать" })).toBeNull();
-    expect(screen.getByRole("button", { name: "Заморозить" })).toBeTruthy();
-    expect(screen.getByRole("button", { name: "Заблокировать" })).toBeTruthy();
+    let table = within(screen.getByRole("table"));
+    expect(table.queryByRole("button", { name: "Активировать" })).toBeNull();
+    expect(table.getByRole("button", { name: "Заморозить" })).toBeTruthy();
+    expect(table.getByRole("button", { name: "Заблокировать" })).toBeTruthy();
     unmount();
 
     const paused = renderManager({ initialCenters: [centers[2]] }); // PAUSED
-    expect(screen.getByRole("button", { name: "Активировать" })).toBeTruthy();
-    expect(screen.queryByRole("button", { name: "Заморозить" })).toBeNull();
-    expect(screen.getByRole("button", { name: "Заблокировать" })).toBeTruthy();
+    table = within(screen.getByRole("table"));
+    expect(table.getByRole("button", { name: "Активировать" })).toBeTruthy();
+    expect(table.queryByRole("button", { name: "Заморозить" })).toBeNull();
+    expect(table.getByRole("button", { name: "Заблокировать" })).toBeTruthy();
     paused.unmount();
 
     const blocked = renderManager({ initialCenters: [centers[3]] }); // BLOCKED
-    expect(screen.getByRole("button", { name: "Активировать" })).toBeTruthy();
-    expect(screen.getByRole("button", { name: "Заморозить" })).toBeTruthy();
-    expect(screen.queryByRole("button", { name: "Заблокировать" })).toBeNull();
+    table = within(screen.getByRole("table"));
+    expect(table.getByRole("button", { name: "Активировать" })).toBeTruthy();
+    expect(table.getByRole("button", { name: "Заморозить" })).toBeTruthy();
+    expect(table.queryByRole("button", { name: "Заблокировать" })).toBeNull();
     blocked.unmount();
 
     renderManager({ initialCenters: [centers[1]] }); // TRIAL -> all three
-    expect(screen.getByRole("button", { name: "Активировать" })).toBeTruthy();
-    expect(screen.getByRole("button", { name: "Заморозить" })).toBeTruthy();
-    expect(screen.getByRole("button", { name: "Заблокировать" })).toBeTruthy();
+    table = within(screen.getByRole("table"));
+    expect(table.getByRole("button", { name: "Активировать" })).toBeTruthy();
+    expect(table.getByRole("button", { name: "Заморозить" })).toBeTruthy();
+    expect(table.getByRole("button", { name: "Заблокировать" })).toBeTruthy();
   });
 
   it("patches a center status and refreshes the router on success", async () => {
@@ -171,8 +177,9 @@ describe("PlatformAdminManager (UI)", () => {
     ]);
 
     renderManager({ initialCenters: [centers[1]] }); // TRIAL
+    const table = within(screen.getByRole("table"));
 
-    fireEvent.click(screen.getByRole("button", { name: "Активировать" }));
+    fireEvent.click(table.getByRole("button", { name: "Активировать" }));
 
     await waitFor(() => expect(refresh).toHaveBeenCalledTimes(1));
 
@@ -182,7 +189,7 @@ describe("PlatformAdminManager (UI)", () => {
     expect(sentBody(calls[0])).toEqual({ centerId: "ct-2", status: "ACTIVE" });
   });
 
-  it("surfaces a status-update API error via alert", async () => {
+  it("surfaces a status-update API error in an alert banner", async () => {
     installFetchMock([
       {
         match: "/api/platform/centers/ct-2",
@@ -192,42 +199,44 @@ describe("PlatformAdminManager (UI)", () => {
     ]);
 
     renderManager({ initialCenters: [centers[1]] });
+    const table = within(screen.getByRole("table"));
 
-    fireEvent.click(screen.getByRole("button", { name: "Заблокировать" }));
+    fireEvent.click(table.getByRole("button", { name: "Заблокировать" }));
 
-    await waitFor(() => expect(window.alert).toHaveBeenCalledWith("Недостаточно прав"));
+    expect(await screen.findByText("Недостаточно прав")).toBeTruthy();
     expect(refresh).not.toHaveBeenCalled();
   });
 
-  it("reports a status-update network failure with a generic alert", async () => {
+  it("reports a status-update network failure in an alert banner", async () => {
     installFetchMock([]); // no route -> fetch throws
 
     renderManager({ initialCenters: [centers[1]] });
+    const table = within(screen.getByRole("table"));
 
-    fireEvent.click(screen.getByRole("button", { name: "Заморозить" }));
+    fireEvent.click(table.getByRole("button", { name: "Заморозить" }));
 
-    await waitFor(() => expect(window.alert).toHaveBeenCalledWith("Ошибка сети"));
+    expect(await screen.findByText("Ошибка сети")).toBeTruthy();
   });
 
   it("opens the create modal and closes it on cancel without sending a request", () => {
     const { calls } = installFetchMock([]);
     renderManager();
 
-    fireEvent.click(screen.getByRole("button", { name: /Создать Учебный Центр/ }));
-    expect(screen.getByText("Создание Учебного Центра и Аккаунта Директора")).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: /Создать учебный центр/ }));
+    expect(screen.getByText("Создание учебного центра и аккаунта директора")).toBeTruthy();
     // Plan options are listed with their price.
-    expect(screen.getByRole("option", { name: "Базовый (150000 ₽/мес)" })).toBeTruthy();
-    expect(screen.getByRole("option", { name: "Про (300000 ₽/мес)" })).toBeTruthy();
+    expect(screen.getByRole("option", { name: /Базовый \(150\s?000 UZS\/мес\)/ })).toBeTruthy();
+    expect(screen.getByRole("option", { name: /Про \(300\s?000 UZS\/мес\)/ })).toBeTruthy();
 
     fireEvent.click(screen.getByRole("button", { name: "Отмена" }));
 
-    expect(screen.queryByText("Создание Учебного Центра и Аккаунта Директора")).toBeNull();
+    expect(screen.queryByText("Создание учебного центра и аккаунта директора")).toBeNull();
     expect(calls).toHaveLength(0);
   });
 
   it("auto-generates a URL slug from the center name", () => {
     renderManager();
-    fireEvent.click(screen.getByRole("button", { name: /Создать Учебный Центр/ }));
+    fireEvent.click(screen.getByRole("button", { name: /Создать учебный центр/ }));
 
     const nameInput = screen.getByPlaceholderText("e.g. Школа Кодинга Квантум");
     const slugInput = screen.getByPlaceholderText(
@@ -254,7 +263,7 @@ describe("PlatformAdminManager (UI)", () => {
     ]);
 
     renderManager();
-    fireEvent.click(screen.getByRole("button", { name: /Создать Учебный Центр/ }));
+    fireEvent.click(screen.getByRole("button", { name: /Создать учебный центр/ }));
 
     fireEvent.change(screen.getByPlaceholderText("e.g. Школа Кодинга Квантум"), {
       target: { value: "Quantum Coding" },
@@ -290,11 +299,11 @@ describe("PlatformAdminManager (UI)", () => {
 
     await waitFor(() =>
       expect(
-        screen.queryByText("Создание Учебного Центра и Аккаунта Директора"),
+        screen.queryByText("Создание учебного центра и аккаунта директора"),
       ).toBeNull(),
     );
     // Reopening shows cleared fields.
-    fireEvent.click(screen.getByRole("button", { name: /Создать Учебный Центр/ }));
+    fireEvent.click(screen.getByRole("button", { name: /Создать учебный центр/ }));
     expect(
       (screen.getByPlaceholderText("e.g. Школа Кодинга Квантум") as HTMLInputElement).value,
     ).toBe("");
@@ -313,14 +322,14 @@ describe("PlatformAdminManager (UI)", () => {
     ]);
 
     renderManager();
-    fireEvent.click(screen.getByRole("button", { name: /Создать Учебный Центр/ }));
+    fireEvent.click(screen.getByRole("button", { name: /Создать учебный центр/ }));
     fireEvent.change(screen.getByPlaceholderText("e.g. Школа Кодинга Квантум"), {
       target: { value: "Quantum" },
     });
     fireEvent.submit(createForm());
 
     expect(await screen.findByText("Такой slug уже занят")).toBeTruthy();
-    expect(screen.getByText("Создание Учебного Центра и Аккаунта Директора")).toBeTruthy();
+    expect(screen.getByText("Создание учебного центра и аккаунта директора")).toBeTruthy();
     expect(refresh).not.toHaveBeenCalled();
   });
 
@@ -330,7 +339,7 @@ describe("PlatformAdminManager (UI)", () => {
     ]);
 
     renderManager();
-    fireEvent.click(screen.getByRole("button", { name: /Создать Учебный Центр/ }));
+    fireEvent.click(screen.getByRole("button", { name: /Создать учебный центр/ }));
     fireEvent.change(screen.getByPlaceholderText("e.g. Школа Кодинга Квантум"), {
       target: { value: "Quantum" },
     });
@@ -343,7 +352,7 @@ describe("PlatformAdminManager (UI)", () => {
     installFetchMock([]); // no route -> fetch throws
 
     renderManager();
-    fireEvent.click(screen.getByRole("button", { name: /Создать Учебный Центр/ }));
+    fireEvent.click(screen.getByRole("button", { name: /Создать учебный центр/ }));
     fireEvent.change(screen.getByPlaceholderText("e.g. Школа Кодинга Квантум"), {
       target: { value: "Quantum" },
     });
@@ -358,7 +367,7 @@ describe("PlatformAdminManager (UI)", () => {
     ]);
 
     renderManager();
-    fireEvent.click(screen.getByRole("button", { name: /Создать Учебный Центр/ }));
+    fireEvent.click(screen.getByRole("button", { name: /Создать учебный центр/ }));
     fireEvent.change(screen.getByPlaceholderText("e.g. Школа Кодинга Квантум"), {
       target: { value: "Quantum" },
     });
@@ -366,9 +375,9 @@ describe("PlatformAdminManager (UI)", () => {
     expect(await screen.findByText("Такой slug уже занят")).toBeTruthy();
 
     fireEvent.click(screen.getByRole("button", { name: /Отмена/ }));
-    expect(screen.queryByText("Создание Учебного Центра и Аккаунта Директора")).toBeNull();
+    expect(screen.queryByText("Создание учебного центра и аккаунта директора")).toBeNull();
 
-    fireEvent.click(screen.getByRole("button", { name: /Создать Учебный Центр/ }));
+    fireEvent.click(screen.getByRole("button", { name: /Создать учебный центр/ }));
     expect(screen.queryByText("Такой slug уже занят")).toBeNull();
   });
 
@@ -378,7 +387,7 @@ describe("PlatformAdminManager (UI)", () => {
     ]);
 
     renderManager();
-    fireEvent.click(screen.getByRole("button", { name: /Создать Учебный Центр/ }));
+    fireEvent.click(screen.getByRole("button", { name: /Создать учебный центр/ }));
     fireEvent.change(screen.getByPlaceholderText("e.g. Школа Кодинга Квантум"), {
       target: { value: "Quantum" },
     });
@@ -388,7 +397,7 @@ describe("PlatformAdminManager (UI)", () => {
     fireEvent.submit(createForm());
     await waitFor(() => expect(refresh).toHaveBeenCalledTimes(1));
 
-    fireEvent.click(screen.getByRole("button", { name: /Создать Учебный Центр/ }));
+    fireEvent.click(screen.getByRole("button", { name: /Создать учебный центр/ }));
     expect(
       (screen.getByPlaceholderText("+7 (999) 111-22-33") as HTMLInputElement).value,
     ).toBe("");

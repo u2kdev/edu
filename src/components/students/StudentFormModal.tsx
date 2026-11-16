@@ -1,11 +1,23 @@
 "use client";
 
 import type { FormEvent } from "react";
-import { UserCheck } from "lucide-react";
 import { t } from "@/i18n";
+import {
+  Alert,
+  AlertDescription,
+  Button,
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  FormActions,
+  FormField,
+  Input,
+} from "@/components/ui";
 import type { GroupOption } from "./students-utils";
 
-interface StudentFormModalProps {
+export interface StudentFormModalProps {
+  open: boolean;
   locale: string;
   initialGroups: GroupOption[];
   namePlaceholder: string;
@@ -20,13 +32,18 @@ interface StudentFormModalProps {
   withInvite: boolean;
   onWithInviteChange: (value: boolean) => void;
   submitting: boolean;
+  error?: string | null;
   createdCode: string | null;
   onSubmit: (e: FormEvent) => void;
   onClose: () => void;
   onCloseWithReset: () => void;
 }
 
+const selectClassName =
+  "flex h-9 w-full rounded-md border border-input bg-card px-3 py-1.5 text-sm text-foreground transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-1 focus-visible:ring-offset-background";
+
 export function StudentFormModal({
+  open,
   locale,
   initialGroups,
   namePlaceholder,
@@ -41,84 +58,78 @@ export function StudentFormModal({
   withInvite,
   onWithInviteChange,
   submitting,
+  error,
   createdCode,
   onSubmit,
   onClose,
   onCloseWithReset,
 }: StudentFormModalProps) {
   return (
-    <div className="fixed inset-0 z-50 bg-black/75 backdrop-blur-sm flex items-center justify-center p-4">
-      <div className="glass-panel w-full max-w-md p-6 rounded-3xl border border-slate-800 space-y-5">
-        <h3 className="text-lg font-bold text-white">
-          {t(locale, "students.addStudent")}
-        </h3>
+    <Dialog open={open} onOpenChange={(next) => !next && (createdCode ? onCloseWithReset() : onClose())}>
+      <DialogContent className="max-w-md">
+        <DialogHeader>
+          <DialogTitle>{t(locale, "students.addStudent")}</DialogTitle>
+        </DialogHeader>
 
         {createdCode ? (
-          <div className="p-4 rounded-2xl bg-emerald-500/10 border border-emerald-500/30 text-emerald-300 space-y-3 text-center">
-            <UserCheck className="w-8 h-8 mx-auto text-emerald-400" />
-            <p className="text-xs font-semibold">
-              {t(locale, "students.studentCreatedInvite")}
-            </p>
-            <div className="font-mono text-lg font-bold text-white bg-slate-950 p-2 rounded-xl border border-emerald-500/30 select-all">
+          <div className="space-y-4">
+            <Alert variant="success">
+              <AlertDescription>{t(locale, "students.studentCreatedInvite")}</AlertDescription>
+            </Alert>
+            <div className="rounded-lg border border-border bg-muted px-4 py-3 text-center font-mono text-xl font-semibold tracking-wider text-primary select-all">
               {createdCode}
             </div>
-            <button
-              onClick={onCloseWithReset}
-              className="w-full py-2 bg-emerald-600 hover:bg-emerald-500 text-white font-semibold rounded-xl text-xs"
-            >
-              {t(locale, "common.close")}
-            </button>
+            <FormActions>
+              <Button type="button" variant="primary" onClick={onCloseWithReset}>
+                {t(locale, "common.close")}
+              </Button>
+            </FormActions>
           </div>
         ) : (
           <form onSubmit={onSubmit} className="space-y-4">
-            <div>
-              <label className="block text-xs font-semibold text-slate-300 uppercase tracking-wider mb-1.5">
-                {t(locale, "students.fullName")} *
-              </label>
-              <input
-                type="text"
+            {error && (
+              <Alert variant="destructive">
+                <AlertDescription>{error}</AlertDescription>
+              </Alert>
+            )}
+
+            <FormField label={t(locale, "students.fullName")} htmlFor="student-fullname" required>
+              <Input
+                id="student-fullname"
                 required
+                type="text"
                 value={fullName}
                 onChange={(e) => onFullNameChange(e.target.value)}
                 placeholder={namePlaceholder}
-                className="w-full px-4 py-2.5 bg-slate-900 border border-slate-700 rounded-xl text-white text-xs focus:outline-none focus:border-brand-500"
               />
-            </div>
+            </FormField>
 
-            <div>
-              <label className="block text-xs font-semibold text-slate-300 uppercase tracking-wider mb-1.5">
-                {t(locale, "students.email")} (необязательно, если указан телефон)
-              </label>
-              <input
+            <FormField label={t(locale, "students.email")} htmlFor="student-email">
+              <Input
+                id="student-email"
                 type="email"
                 value={email}
                 onChange={(e) => onEmailChange(e.target.value)}
                 placeholder="alisher@example.uz"
-                className="w-full px-4 py-2.5 bg-slate-900 border border-slate-700 rounded-xl text-white text-xs focus:outline-none focus:border-brand-500"
               />
-            </div>
+            </FormField>
 
-            <div>
-              <label className="block text-xs font-semibold text-slate-300 uppercase tracking-wider mb-1.5">
-                {t(locale, "students.phone")}
-              </label>
-              <input
-                type="tel"
+            <FormField label={t(locale, "students.phone")} htmlFor="student-phone">
+              <Input
+                id="student-phone"
+                type="text"
                 value={phone}
                 onChange={(e) => onPhoneChange(e.target.value)}
                 placeholder="+998901234567"
-                className="w-full px-4 py-2.5 bg-slate-900 border border-slate-700 rounded-xl text-white text-xs focus:outline-none focus:border-brand-500"
               />
-            </div>
+            </FormField>
 
-            <div>
-              <label className="block text-xs font-semibold text-slate-300 uppercase tracking-wider mb-1.5">
-                {t(locale, "students.group")}
-              </label>
+            <FormField label={t(locale, "students.group")} htmlFor="student-group">
               <select
+                id="student-group"
                 value={groupId}
                 onChange={(e) => onGroupIdChange(e.target.value)}
-                className="w-full px-4 py-2.5 bg-slate-900 border border-slate-700 rounded-xl text-white text-xs focus:outline-none focus:border-brand-500"
+                className={selectClassName}
               >
                 <option value="">{t(locale, "students.noGroupSelected")}</option>
                 {initialGroups.map((g) => (
@@ -127,40 +138,29 @@ export function StudentFormModal({
                   </option>
                 ))}
               </select>
-            </div>
+            </FormField>
 
-            <div className="flex items-center gap-2 pt-1">
+            <label className="flex items-center gap-2 text-sm text-foreground cursor-pointer select-none">
               <input
                 type="checkbox"
-                id="withInvite"
                 checked={withInvite}
                 onChange={(e) => onWithInviteChange(e.target.checked)}
-                className="rounded border-slate-700 bg-slate-900 text-brand-600 focus:ring-0"
+                className="h-4 w-4 rounded border-input text-primary focus:ring-ring"
               />
-              <label htmlFor="withInvite" className="text-xs text-slate-300 cursor-pointer">
-                {t(locale, "students.inviteCodeNotice")}
-              </label>
-            </div>
+              <span>{t(locale, "students.inviteCodeNotice")}</span>
+            </label>
 
-            <div className="flex justify-end gap-2.5 pt-4 border-t border-slate-800">
-              <button
-                type="button"
-                onClick={onClose}
-                className="px-4 py-2 bg-slate-800 hover:bg-slate-700 text-slate-300 font-semibold rounded-xl text-xs"
-              >
+            <FormActions>
+              <Button type="button" variant="secondary" onClick={onClose}>
                 {t(locale, "common.cancel")}
-              </button>
-              <button
-                type="submit"
-                disabled={submitting}
-                className="px-4 py-2 bg-brand-600 hover:bg-brand-500 text-white font-semibold rounded-xl text-xs shadow-lg shadow-brand-600/30 disabled:opacity-50"
-              >
+              </Button>
+              <Button type="submit" variant="primary" disabled={submitting} loading={submitting}>
                 {submitting ? t(locale, "common.loading") : t(locale, "common.save")}
-              </button>
-            </div>
+              </Button>
+            </FormActions>
           </form>
         )}
-      </div>
-    </div>
+      </DialogContent>
+    </Dialog>
   );
 }

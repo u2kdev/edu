@@ -3,6 +3,7 @@ import { NextResponse } from "next/server";
 // eslint-disable-next-line no-restricted-imports
 import { db } from "@/lib/db";
 import { getAuthSession } from "@/lib/auth";
+import { hasPermission } from "@/lib/permissions";
 import { logAuditEvent } from "@/lib/tenant";
 import { apiError, apiSuccess, handleApiError } from "@/lib/api-response";
 import { checkRateLimit } from "@/lib/rate-limit";
@@ -15,24 +16,24 @@ const ticketPatchSchema = z.object({
 
 export async function GET(req: Request, { params }: { params: { id: string } }) {
   try {
-    const session = await getAuthSession();
+    const session = await getAuthSession(req);
     if (!session) return apiError("Unauthorized", "UNAUTHORIZED", 401);
+
+    const isPlatformStaff = hasPermission("platform.support", session.user.platformRole);
 
     const ticket = await db.supportTicket.findUnique({
       where: { id: params.id },
       include: {
         creator: { select: { fullName: true, email: true } },
         center: { select: { name: true, slug: true } },
-        messages: { orderBy: { createdAt: "asc" } },
+        messages: {
+          where: isPlatformStaff ? {} : { isInternal: false },
+          orderBy: { createdAt: "asc" },
+        },
       }
     });
 
     if (!ticket) return apiError("Not found", "NOT_FOUND", 404);
-
-    const isPlatformStaff =
-      session.user.platformRole === "SUPERADMIN" ||
-      session.user.platformRole === "PLATFORM_ADMIN" ||
-      session.user.platformRole === "PLATFORM_SUPPORT";
 
     const isCreator = ticket.creatorUserId === session.user.id;
     const isTenantAdmin = session.activeCenterId === ticket.centerId && 
@@ -55,16 +56,13 @@ export async function PATCH(req: Request, { params }: { params: { id: string } }
       return apiError("Rate limited", "RATE_LIMITED", 429);
     }
 
-    const session = await getAuthSession();
+    const session = await getAuthSession(req);
     if (!session) return apiError("Unauthorized", "UNAUTHORIZED", 401);
 
     const ticket = await db.supportTicket.findUnique({ where: { id: params.id } });
     if (!ticket) return apiError("Not found", "NOT_FOUND", 404);
 
-    const isPlatformStaff =
-      session.user.platformRole === "SUPERADMIN" ||
-      session.user.platformRole === "PLATFORM_ADMIN" ||
-      session.user.platformRole === "PLATFORM_SUPPORT";
+    const isPlatformStaff = hasPermission("platform.support", session.user.platformRole);
 
     const isCreator = ticket.creatorUserId === session.user.id;
     const isTenantAdmin = session.activeCenterId === ticket.centerId && 

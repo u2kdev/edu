@@ -1,10 +1,104 @@
 "use client";
 
 import type { FormEvent } from "react";
+import { AlertTriangle } from "lucide-react";
 import { t } from "@/i18n";
+import {
+  Alert,
+  AlertDescription,
+  Button,
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  FormActions,
+  FormField,
+  Input,
+} from "@/components/ui";
 import type { CourseOption, TeacherOption, AssistantOption } from "./groups-utils";
 
+const selectClassName =
+  "flex h-9 w-full rounded-md border border-input bg-card px-3 py-1.5 text-sm text-foreground transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-1 focus-visible:ring-offset-background";
+
+function PeriodPricingInputs({
+  locale,
+  price1 = "",
+  onPrice1Change,
+  price2 = "",
+  onPrice2Change,
+  price3 = "",
+  onPrice3Change,
+}: {
+  locale: string;
+  price1?: string;
+  onPrice1Change?: (v: string) => void;
+  price2?: string;
+  onPrice2Change?: (v: string) => void;
+  price3?: string;
+  onPrice3Change?: (v: string) => void;
+}) {
+  if (!onPrice1Change) return null;
+  const n1 = parseInt(price1 || "0", 10);
+  const n2 = parseInt(price2 || "0", 10);
+  const n3 = parseInt(price3 || "0", 10);
+  const warn2 = n1 > 0 && n2 > n1 * 2;
+  const warn3 = n1 > 0 && n3 > n1 * 3;
+
+  return (
+    <div className="space-y-2 border-t border-border pt-3">
+      <div className="text-xs font-medium text-muted-foreground">
+        {t(locale, "billing.pricingPlans")} (UZS)
+      </div>
+      <div className="grid grid-cols-3 gap-2">
+        <FormField label={t(locale, "billing.period1")} htmlFor="group-price-1">
+          <Input
+            id="group-price-1"
+            type="number"
+            min="0"
+            value={price1}
+            onChange={(e) => onPrice1Change(e.target.value)}
+            placeholder="500000"
+          />
+        </FormField>
+        <FormField label={t(locale, "billing.period2")} htmlFor="group-price-2">
+          <Input
+            id="group-price-2"
+            type="number"
+            min="0"
+            value={price2}
+            onChange={(e) => onPrice2Change?.(e.target.value)}
+            placeholder="950000"
+          />
+        </FormField>
+        <FormField label={t(locale, "billing.period3")} htmlFor="group-price-3">
+          <Input
+            id="group-price-3"
+            type="number"
+            min="0"
+            value={price3}
+            onChange={(e) => onPrice3Change?.(e.target.value)}
+            placeholder="1350000"
+          />
+        </FormField>
+      </div>
+      {warn2 && (
+        <p className="flex items-center gap-1.5 text-xs text-warning">
+          <AlertTriangle className="h-3.5 w-3.5 shrink-0" aria-hidden="true" />
+          <span>{t(locale, "billing.priceWarningHigher", { months: "2", base: (n1 * 2).toLocaleString("ru-RU") })}</span>
+        </p>
+      )}
+      {warn3 && (
+        <p className="flex items-center gap-1.5 text-xs text-warning">
+          <AlertTriangle className="h-3.5 w-3.5 shrink-0" aria-hidden="true" />
+          <span>{t(locale, "billing.priceWarningHigher", { months: "3", base: (n1 * 3).toLocaleString("ru-RU") })}</span>
+        </p>
+      )}
+    </div>
+  );
+}
+
 interface CreateGroupModalProps {
+  open: boolean;
   locale: string;
   courses: CourseOption[];
   teachers: TeacherOption[];
@@ -20,12 +114,20 @@ interface CreateGroupModalProps {
   onAssistantMembershipIdChange?: (value: string) => void;
   maxStudents: string;
   onMaxStudentsChange: (value: string) => void;
+  price1?: string;
+  onPrice1Change?: (value: string) => void;
+  price2?: string;
+  onPrice2Change?: (value: string) => void;
+  price3?: string;
+  onPrice3Change?: (value: string) => void;
   loading: boolean;
+  error?: string | null;
   onSubmit: (e: FormEvent) => void;
   onClose: () => void;
 }
 
 export function CreateGroupModal({
+  open,
   locale,
   courses,
   teachers,
@@ -41,26 +143,38 @@ export function CreateGroupModal({
   onAssistantMembershipIdChange,
   maxStudents,
   onMaxStudentsChange,
+  price1,
+  onPrice1Change,
+  price2,
+  onPrice2Change,
+  price3,
+  onPrice3Change,
   loading,
+  error,
   onSubmit,
   onClose,
 }: CreateGroupModalProps) {
   return (
-    <div className="fixed inset-0 z-50 bg-black/70 backdrop-blur-sm flex items-center justify-center p-4">
-      <div className="glass-panel w-full max-w-lg p-6 rounded-3xl border border-slate-800 space-y-6">
-        <h3 className="text-xl font-bold text-white">
-          {t(locale, "groups.createGroup")}
-        </h3>
+    <Dialog open={open} onOpenChange={(next) => !next && onClose()}>
+      <DialogContent className="max-w-lg">
+        <DialogHeader>
+          <DialogTitle>{t(locale, "groups.createGroup")}</DialogTitle>
+        </DialogHeader>
+
         <form onSubmit={onSubmit} className="space-y-4">
-          <div>
-            <label className="block text-xs font-semibold text-slate-300 uppercase tracking-wider mb-2">
-              {t(locale, "groups.selectCourse")}
-            </label>
+          {error && (
+            <Alert variant="destructive">
+              <AlertDescription>{error}</AlertDescription>
+            </Alert>
+          )}
+
+          <FormField label={t(locale, "groups.selectCourse")} htmlFor="create-group-course" required>
             <select
+              id="create-group-course"
               required
               value={courseId}
               onChange={(e) => onCourseIdChange(e.target.value)}
-              className="w-full px-4 py-3 bg-slate-900 border border-slate-700 rounded-xl text-white text-sm focus:outline-none focus:border-brand-500"
+              className={selectClassName}
             >
               {courses.map((c) => (
                 <option key={c.id} value={c.id}>
@@ -68,49 +182,45 @@ export function CreateGroupModal({
                 </option>
               ))}
             </select>
-          </div>
+          </FormField>
 
-          <div>
-            <label className="block text-xs font-semibold text-slate-300 uppercase tracking-wider mb-2">
-              {t(locale, "groups.groupName")}
-            </label>
-            <input
+          <FormField label={t(locale, "groups.groupName")} htmlFor="create-group-name" required>
+            <Input
+              id="create-group-name"
               type="text"
               required
               value={name}
               onChange={(e) => onNameChange(e.target.value)}
               placeholder={namePlaceholder}
-              className="w-full px-4 py-3 bg-slate-900 border border-slate-700 rounded-xl text-white text-sm focus:outline-none focus:border-brand-500"
             />
-          </div>
+          </FormField>
 
-          <div>
-            <label className="block text-xs font-semibold text-slate-300 uppercase tracking-wider mb-2">
-              {t(locale, "groups.assignTeacher")}
-            </label>
+          <FormField label={t(locale, "groups.assignTeacher")} htmlFor="create-group-teacher">
             <select
+              id="create-group-teacher"
               value={teacherMembershipId}
               onChange={(e) => onTeacherMembershipIdChange(e.target.value)}
-              className="w-full px-4 py-3 bg-slate-900 border border-slate-700 rounded-xl text-white text-sm focus:outline-none focus:border-brand-500"
+              className={selectClassName}
             >
               <option value="">{t(locale, "groups.noTeacher")}</option>
-              {teachers.map((t) => (
-                <option key={t.id} value={t.id}>
-                  {t.user.fullName}
+              {teachers.map((tr) => (
+                <option key={tr.id} value={tr.id}>
+                  {tr.user.fullName}
                 </option>
               ))}
             </select>
-          </div>
+          </FormField>
 
           {assistants.length > 0 && onAssistantMembershipIdChange && (
-            <div>
-              <label className="block text-xs font-semibold text-slate-300 uppercase tracking-wider mb-2">
-                {locale === "uz-Latn" ? "Yordamchi o'qituvchi" : "Ассистент преподавателя"}
-              </label>
+            <FormField
+              label={locale === "uz-Latn" ? "Yordamchi oʻqituvchi" : "Ассистент преподавателя"}
+              htmlFor="create-group-assistant"
+            >
               <select
+                id="create-group-assistant"
                 value={assistantMembershipId}
                 onChange={(e) => onAssistantMembershipIdChange(e.target.value)}
-                className="w-full px-4 py-3 bg-slate-900 border border-slate-700 rounded-xl text-white text-sm focus:outline-none focus:border-brand-500"
+                className={selectClassName}
               >
                 <option value="">{locale === "uz-Latn" ? "Yordamchisiz" : "Без ассистента"}</option>
                 {assistants.map((a) => (
@@ -119,47 +229,47 @@ export function CreateGroupModal({
                   </option>
                 ))}
               </select>
-            </div>
+            </FormField>
           )}
 
-          <div>
-            <label className="block text-xs font-semibold text-slate-300 uppercase tracking-wider mb-2">
-              {t(locale, "groups.maxStudents")}
-            </label>
-            <input
+          <FormField label={t(locale, "groups.maxStudents")} htmlFor="create-group-max" required>
+            <Input
+              id="create-group-max"
               type="number"
               min="1"
               max="200"
               required
               value={maxStudents}
               onChange={(e) => onMaxStudentsChange(e.target.value)}
-              className="w-full px-4 py-3 bg-slate-900 border border-slate-700 rounded-xl text-white text-sm focus:outline-none focus:border-brand-500"
             />
-          </div>
+          </FormField>
 
-          <div className="flex justify-end gap-3 pt-4 border-t border-slate-800">
-            <button
-              type="button"
-              onClick={onClose}
-              className="px-4 py-2.5 bg-slate-800 hover:bg-slate-700 text-slate-300 font-semibold rounded-xl text-sm"
-            >
+          <PeriodPricingInputs
+            locale={locale}
+            price1={price1}
+            onPrice1Change={onPrice1Change}
+            price2={price2}
+            onPrice2Change={onPrice2Change}
+            price3={price3}
+            onPrice3Change={onPrice3Change}
+          />
+
+          <FormActions>
+            <Button type="button" variant="secondary" onClick={onClose}>
               {t(locale, "common.cancel")}
-            </button>
-            <button
-              type="submit"
-              disabled={loading}
-              className="px-4 py-2.5 bg-brand-600 hover:bg-brand-500 text-white font-semibold rounded-xl text-sm shadow-lg shadow-brand-600/30"
-            >
+            </Button>
+            <Button type="submit" variant="primary" disabled={loading} loading={loading}>
               {loading ? t(locale, "common.loading") : t(locale, "groups.createGroup")}
-            </button>
-          </div>
+            </Button>
+          </FormActions>
         </form>
-      </div>
-    </div>
+      </DialogContent>
+    </Dialog>
   );
 }
 
 interface EditGroupModalProps {
+  open: boolean;
   locale: string;
   teachers: TeacherOption[];
   assistants?: AssistantOption[];
@@ -171,12 +281,20 @@ interface EditGroupModalProps {
   onAssistantMembershipIdChange?: (value: string) => void;
   maxStudents: string;
   onMaxStudentsChange: (value: string) => void;
+  price1?: string;
+  onPrice1Change?: (value: string) => void;
+  price2?: string;
+  onPrice2Change?: (value: string) => void;
+  price3?: string;
+  onPrice3Change?: (value: string) => void;
   loading: boolean;
+  error?: string | null;
   onSubmit: (e: FormEvent) => void;
   onClose: () => void;
 }
 
 export function EditGroupModal({
+  open,
   locale,
   teachers,
   assistants = [],
@@ -188,57 +306,67 @@ export function EditGroupModal({
   onAssistantMembershipIdChange,
   maxStudents,
   onMaxStudentsChange,
+  price1,
+  onPrice1Change,
+  price2,
+  onPrice2Change,
+  price3,
+  onPrice3Change,
   loading,
+  error,
   onSubmit,
   onClose,
 }: EditGroupModalProps) {
   return (
-    <div className="fixed inset-0 z-50 bg-black/70 backdrop-blur-sm flex items-center justify-center p-4">
-      <div className="glass-panel w-full max-w-lg p-6 rounded-3xl border border-slate-800 space-y-6">
-        <h3 className="text-xl font-bold text-white">
-          {t(locale, "groups.editGroup")}
-        </h3>
+    <Dialog open={open} onOpenChange={(next) => !next && onClose()}>
+      <DialogContent className="max-w-lg">
+        <DialogHeader>
+          <DialogTitle>{t(locale, "groups.editGroup")}</DialogTitle>
+        </DialogHeader>
+
         <form onSubmit={onSubmit} className="space-y-4">
-          <div>
-            <label className="block text-xs font-semibold text-slate-300 uppercase tracking-wider mb-2">
-              {t(locale, "groups.groupName")}
-            </label>
-            <input
+          {error && (
+            <Alert variant="destructive">
+              <AlertDescription>{error}</AlertDescription>
+            </Alert>
+          )}
+
+          <FormField label={t(locale, "groups.groupName")} htmlFor="edit-group-name" required>
+            <Input
+              id="edit-group-name"
               type="text"
               required
               value={name}
               onChange={(e) => onNameChange(e.target.value)}
-              className="w-full px-4 py-3 bg-slate-900 border border-slate-700 rounded-xl text-white text-sm focus:outline-none focus:border-brand-500"
             />
-          </div>
+          </FormField>
 
-          <div>
-            <label className="block text-xs font-semibold text-slate-300 uppercase tracking-wider mb-2">
-              {t(locale, "groups.assignTeacher")}
-            </label>
+          <FormField label={t(locale, "groups.assignTeacher")} htmlFor="edit-group-teacher">
             <select
+              id="edit-group-teacher"
               value={teacherMembershipId}
               onChange={(e) => onTeacherMembershipIdChange(e.target.value)}
-              className="w-full px-4 py-3 bg-slate-900 border border-slate-700 rounded-xl text-white text-sm focus:outline-none focus:border-brand-500"
+              className={selectClassName}
             >
               <option value="">{t(locale, "groups.noTeacher")}</option>
-              {teachers.map((t) => (
-                <option key={t.id} value={t.id}>
-                  {t.user.fullName}
+              {teachers.map((tr) => (
+                <option key={tr.id} value={tr.id}>
+                  {tr.user.fullName}
                 </option>
               ))}
             </select>
-          </div>
+          </FormField>
 
-          {onAssistantMembershipIdChange && (
-            <div>
-              <label className="block text-xs font-semibold text-slate-300 uppercase tracking-wider mb-2">
-                {locale === "uz-Latn" ? "Yordamchi o'qituvchi" : "Ассистент преподавателя"}
-              </label>
+          {onAssistantMembershipIdChange && assistants.length > 0 && (
+            <FormField
+              label={locale === "uz-Latn" ? "Yordamchi oʻqituvchi" : "Ассистент преподавателя"}
+              htmlFor="edit-group-assistant"
+            >
               <select
+                id="edit-group-assistant"
                 value={assistantMembershipId}
                 onChange={(e) => onAssistantMembershipIdChange(e.target.value)}
-                className="w-full px-4 py-3 bg-slate-900 border border-slate-700 rounded-xl text-white text-sm focus:outline-none focus:border-brand-500"
+                className={selectClassName}
               >
                 <option value="">{locale === "uz-Latn" ? "Yordamchisiz" : "Без ассистента"}</option>
                 {assistants.map((a) => (
@@ -247,42 +375,41 @@ export function EditGroupModal({
                   </option>
                 ))}
               </select>
-            </div>
+            </FormField>
           )}
 
-          <div>
-            <label className="block text-xs font-semibold text-slate-300 uppercase tracking-wider mb-2">
-              {t(locale, "groups.maxStudents")}
-            </label>
-            <input
+          <FormField label={t(locale, "groups.maxStudents")} htmlFor="edit-group-max" required>
+            <Input
+              id="edit-group-max"
               type="number"
               min="1"
               max="200"
               required
               value={maxStudents}
               onChange={(e) => onMaxStudentsChange(e.target.value)}
-              className="w-full px-4 py-3 bg-slate-900 border border-slate-700 rounded-xl text-white text-sm focus:outline-none focus:border-brand-500"
             />
-          </div>
+          </FormField>
 
-          <div className="flex justify-end gap-3 pt-4 border-t border-slate-800">
-            <button
-              type="button"
-              onClick={onClose}
-              className="px-4 py-2.5 bg-slate-800 hover:bg-slate-700 text-slate-300 font-semibold rounded-xl text-sm"
-            >
+          <PeriodPricingInputs
+            locale={locale}
+            price1={price1}
+            onPrice1Change={onPrice1Change}
+            price2={price2}
+            onPrice2Change={onPrice2Change}
+            price3={price3}
+            onPrice3Change={onPrice3Change}
+          />
+
+          <FormActions>
+            <Button type="button" variant="secondary" onClick={onClose}>
               {t(locale, "common.cancel")}
-            </button>
-            <button
-              type="submit"
-              disabled={loading}
-              className="px-4 py-2.5 bg-brand-600 hover:bg-brand-500 text-white font-semibold rounded-xl text-sm shadow-lg shadow-brand-600/30"
-            >
+            </Button>
+            <Button type="submit" variant="primary" disabled={loading} loading={loading}>
               {loading ? t(locale, "common.loading") : t(locale, "common.save")}
-            </button>
-          </div>
+            </Button>
+          </FormActions>
         </form>
-      </div>
-    </div>
+      </DialogContent>
+    </Dialog>
   );
 }

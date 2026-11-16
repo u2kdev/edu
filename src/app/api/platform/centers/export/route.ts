@@ -4,12 +4,7 @@ import { NextResponse } from "next/server";
 import { db } from "@/lib/db";
 import { requirePlatformPermission, handlePlatformError } from "@/lib/platformAuth";
 import type { Prisma, CenterStatus, OrganizationKind } from "@prisma/client";
-
-function escapeCsv(val: unknown): string {
-  if (val === null || val === undefined) return '""';
-  const str = String(val).replace(/"/g, '""');
-  return `"${str}"`;
-}
+import { generateCsv } from "@/lib/csv";
 
 export async function GET(req: Request) {
   try {
@@ -76,24 +71,23 @@ export async function GET(req: Request) {
     ];
 
     const rows = centers.map((c) => [
-      escapeCsv(c.id),
-      escapeCsv(c.name),
-      escapeCsv(c.slug),
-      escapeCsv(c.organizationKind),
-      escapeCsv(c.centerType),
-      escapeCsv(c.status),
-      escapeCsv(c.owner.fullName),
-      escapeCsv(c.owner.email),
-      escapeCsv(c.phone || c.owner.phone || "—"),
-      escapeCsv(c.inn || "—"),
-      escapeCsv(c.legalName || "—"),
-      escapeCsv(c.subscriptions[0]?.plan?.name || "Без тарифа"),
-      escapeCsv(c._count.memberships),
-      escapeCsv(c.createdAt.toISOString().slice(0, 10)),
+      c.id,
+      c.name,
+      c.slug,
+      c.organizationKind,
+      c.centerType,
+      c.status,
+      c.owner.fullName,
+      c.owner.email,
+      c.phone || c.owner.phone || "—",
+      c.inn || "—",
+      c.legalName || "—",
+      c.subscriptions[0]?.plan?.name || "Без тарифа",
+      c._count.memberships,
+      c.createdAt.toISOString().slice(0, 10),
     ]);
 
-    const csvContent =
-      "\uFEFF" + [headers.join(","), ...rows.map((r) => r.join(","))].join("\r\n");
+    const csvContent = generateCsv(headers, rows);
 
     return new NextResponse(csvContent, {
       status: 200,

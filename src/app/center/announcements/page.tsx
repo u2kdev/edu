@@ -69,9 +69,19 @@ export default async function AnnouncementsPage() {
     <AnnouncementsManager
       initialAnnouncements={announcements.map((a) => ({
         ...a,
-        publishAt: a.publishAt.toISOString(),
-        expiresAt: a.expiresAt ? a.expiresAt.toISOString() : null,
-        createdAt: a.createdAt.toISOString(),
+        publishAt:
+          typeof a.publishAt === "string"
+            ? a.publishAt
+            : a.publishAt?.toISOString?.() || new Date().toISOString(),
+        expiresAt: a.expiresAt
+          ? typeof a.expiresAt === "string"
+            ? a.expiresAt
+            : a.expiresAt.toISOString()
+          : null,
+        createdAt:
+          typeof a.createdAt === "string"
+            ? a.createdAt
+            : a.createdAt?.toISOString?.() || new Date().toISOString(),
       }))}
       groups={groups}
       canManage={canManage}

@@ -4,12 +4,7 @@ import { NextResponse } from "next/server";
 import { db } from "@/lib/db";
 import { requirePlatformPermission, handlePlatformError } from "@/lib/platformAuth";
 import type { Prisma, SubscriptionStatus } from "@prisma/client";
-
-function escapeCsv(val: unknown): string {
-  if (val === null || val === undefined) return '""';
-  const str = String(val).replace(/"/g, '""');
-  return `"${str}"`;
-}
+import { generateCsv } from "@/lib/csv";
 
 export async function GET(req: Request) {
   try {
@@ -58,21 +53,20 @@ export async function GET(req: Request) {
     ];
 
     const rows = subs.map((s) => [
-      escapeCsv(s.id),
-      escapeCsv(s.center.name),
-      escapeCsv(s.center.slug),
-      escapeCsv(s.center.status),
-      escapeCsv(s.plan.name),
-      escapeCsv(s.plan.priceMonthly),
-      escapeCsv(s.status),
-      escapeCsv(s.currentPeriodStartsAt.toISOString().slice(0, 10)),
-      escapeCsv(s.currentPeriodEndsAt.toISOString().slice(0, 10)),
-      escapeCsv(s.autoRenew ? "Да" : "Нет"),
-      escapeCsv(s.createdAt.toISOString().slice(0, 10)),
+      s.id,
+      s.center.name,
+      s.center.slug,
+      s.center.status,
+      s.plan.name,
+      s.plan.priceMonthly,
+      s.status,
+      s.currentPeriodStartsAt.toISOString().slice(0, 10),
+      s.currentPeriodEndsAt.toISOString().slice(0, 10),
+      s.autoRenew ? "Да" : "Нет",
+      s.createdAt.toISOString().slice(0, 10),
     ]);
 
-    const csvContent =
-      "\uFEFF" + [headers.join(","), ...rows.map((r) => r.join(","))].join("\r\n");
+    const csvContent = generateCsv(headers, rows);
 
     return new NextResponse(csvContent, {
       status: 200,

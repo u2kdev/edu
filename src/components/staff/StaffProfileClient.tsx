@@ -2,27 +2,44 @@
 
 import { useState } from "react";
 import Link from "next/link";
-import { useRouter } from "next/navigation";
 import {
-  ArrowLeft,
-  User,
-  Shield,
-  Key,
-  Users,
+  Archive,
+  Calendar,
+  Clock,
   History,
+  Key,
+  Laptop,
+  Lock,
   Mail,
   Phone,
-  Calendar,
-  Lock,
-  Unlock,
-  Archive,
   Send,
-  AlertTriangle,
-  CheckCircle,
-  Clock,
-  Laptop,
+  Shield,
+  Unlock,
+  User,
+  Users,
 } from "lucide-react";
 import { t } from "@/i18n";
+import {
+  Alert,
+  AlertDescription,
+  Badge,
+  type BadgeVariant,
+  Button,
+  Card,
+  CardContent,
+  CardHeader,
+  CardTitle,
+  ConfirmDialog,
+  EntityDetailHeader,
+  type EntityActionItem,
+  FormActions,
+  FormField,
+  Input,
+  Tabs,
+  TabsContent,
+  TabsList,
+  TabsTrigger,
+} from "@/components/ui";
 import { CredentialsModal, type CredentialsData } from "@/components/CredentialsModal";
 
 interface SessionItem {
@@ -72,6 +89,9 @@ interface StaffProfileClientProps {
   locale: string;
 }
 
+const selectClassName =
+  "flex h-9 w-full rounded-md border border-input bg-card px-3 py-1.5 text-sm text-foreground transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-1 focus-visible:ring-offset-background";
+
 export function StaffProfileClient({
   membership: initialMembership,
   user: initialUser,
@@ -82,13 +102,11 @@ export function StaffProfileClient({
   actorRole,
   locale,
 }: StaffProfileClientProps) {
-  const router = useRouter();
   const [activeTab, setActiveTab] = useState<"profile" | "access" | "groups" | "history">("profile");
 
   const [membership, setMembership] = useState(initialMembership);
   const [user, setUser] = useState(initialUser);
 
-  // Profile Edit State
   const [fullName, setFullName] = useState(user.fullName);
   const [phone, setPhone] = useState(user.phone || "");
   const [email, setEmail] = useState(user.email || "");
@@ -99,20 +117,16 @@ export function StaffProfileClient({
   const [profileSuccess, setProfileSuccess] = useState(false);
   const [profileError, setProfileError] = useState<string | null>(null);
 
-  // Access Actions State
   const [actionLoading, setActionLoading] = useState(false);
   const [credentialsModalOpen, setCredentialsModalOpen] = useState(false);
   const [newCredentials, setNewCredentials] = useState<CredentialsData | null>(null);
   const [actionNotice, setActionNotice] = useState<{ type: "success" | "error"; text: string } | null>(null);
 
-  // Reason Modal for Block / Archive
+  const [confirmResetOpen, setConfirmResetOpen] = useState(false);
   const [reasonModalOpen, setReasonModalOpen] = useState<"BLOCK" | "UNBLOCK" | "ARCHIVE" | null>(null);
-  const [reasonText, setReasonText] = useState("");
 
-  const isDirector = actorRole === "DIRECTOR";
-  const canEditRole = isDirector;
+  const canEditRole = actorRole === "DIRECTOR";
 
-  // Save profile changes
   const handleSaveProfile = async (e: React.FormEvent) => {
     e.preventDefault();
     setSavingProfile(true);
@@ -134,9 +148,7 @@ export function StaffProfileClient({
       });
 
       const data = await res.json();
-      if (!res.ok) {
-        throw new Error(data.error || "Ошибка сохранения");
-      }
+      if (!res.ok) throw new Error(data.error || "Ошибка сохранения");
 
       setProfileSuccess(true);
       setUser((prev) => ({
@@ -158,12 +170,8 @@ export function StaffProfileClient({
     }
   };
 
-  // Reset Password Action
   const handleResetPassword = async () => {
-    if (!window.confirm("Сбросить пароль сотрудника? Все текущие сессии будут завершены.")) {
-      return;
-    }
-
+    setConfirmResetOpen(false);
     setActionLoading(true);
     setActionNotice(null);
 
@@ -172,9 +180,7 @@ export function StaffProfileClient({
         method: "POST",
       });
       const data = await res.json();
-      if (!res.ok) {
-        throw new Error(data.error || "Не удалось сбросить пароль");
-      }
+      if (!res.ok) throw new Error(data.error || "Не удалось сбросить пароль");
 
       setNewCredentials(data.credentials);
       setCredentialsModalOpen(true);
@@ -186,7 +192,6 @@ export function StaffProfileClient({
     }
   };
 
-  // Send Reset Link
   const handleSendResetLink = async () => {
     setActionLoading(true);
     setActionNotice(null);
@@ -196,9 +201,7 @@ export function StaffProfileClient({
         method: "POST",
       });
       const data = await res.json();
-      if (!res.ok) {
-        throw new Error(data.error || "Не удалось отправить ссылку");
-      }
+      if (!res.ok) throw new Error(data.error || "Не удалось отправить ссылку");
 
       setActionNotice({
         type: "success",
@@ -213,22 +216,18 @@ export function StaffProfileClient({
     }
   };
 
-  // Execute Block / Unblock / Archive
-  const handleStatusAction = async () => {
-    if (!reasonModalOpen) return;
-    if (reasonText.trim().length < 5) {
-      alert("Причина обязательна (минимум 5 символов)");
-      return;
-    }
+  const handleStatusAction = async (reason?: string) => {
+    if (!reasonModalOpen || !reason || reason.trim().length < 5) return;
 
     setActionLoading(true);
     setActionNotice(null);
 
     try {
       if (reasonModalOpen === "ARCHIVE") {
-        const res = await fetch(`/api/tenant/users/${membership.id}?reason=${encodeURIComponent(reasonText)}`, {
-          method: "DELETE",
-        });
+        const res = await fetch(
+          `/api/tenant/users/${membership.id}?reason=${encodeURIComponent(reason)}`,
+          { method: "DELETE" }
+        );
         const data = await res.json();
         if (!res.ok) throw new Error(data.error || "Ошибка архивации");
 
@@ -241,7 +240,7 @@ export function StaffProfileClient({
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
             status: newStatus,
-            reason: reasonText,
+            reason,
           }),
         });
         const data = await res.json();
@@ -255,7 +254,6 @@ export function StaffProfileClient({
       }
 
       setReasonModalOpen(null);
-      setReasonText("");
     } catch (err: unknown) {
       setActionNotice({ type: "error", text: err instanceof Error ? err.message : "Неизвестная ошибка" });
     } finally {
@@ -263,505 +261,484 @@ export function StaffProfileClient({
     }
   };
 
+  const statusLabel =
+    membership.status === "ACTIVE"
+      ? "Активен"
+      : membership.status === "BLOCKED"
+      ? "Заблокирован"
+      : "В архиве";
+  const statusVariant: BadgeVariant =
+    membership.status === "ACTIVE"
+      ? "success"
+      : membership.status === "BLOCKED"
+      ? "destructive"
+      : "neutral";
+
+  const menuActions: EntityActionItem[] = [
+    ...(manageability.canManage
+      ? [
+          {
+            id: "reset-password",
+            label: "Сбросить пароль",
+            onSelect: () => setConfirmResetOpen(true),
+          },
+        ]
+      : []),
+    {
+      id: "send-reset-link",
+      label: "Отправить ссылку сброса",
+      onSelect: () => void handleSendResetLink(),
+    },
+    ...(membership.status === "ACTIVE"
+      ? [
+          {
+            id: "block",
+            label: "Заблокировать в центре",
+            destructive: true,
+            onSelect: () => setReasonModalOpen("BLOCK"),
+          },
+        ]
+      : [
+          {
+            id: "unblock",
+            label: "Разблокировать в центре",
+            onSelect: () => setReasonModalOpen("UNBLOCK"),
+          },
+        ]),
+    ...(membership.status !== "ARCHIVED"
+      ? [
+          {
+            id: "archive",
+            label: "Архивировать",
+            destructive: true,
+            onSelect: () => setReasonModalOpen("ARCHIVE"),
+          },
+        ]
+      : []),
+  ];
+
   return (
     <div className="space-y-6">
-      {/* Back button */}
-      <div>
-        <Link
-          href="/center/staff"
-          className="inline-flex items-center gap-2 text-xs font-semibold text-slate-400 hover:text-white transition-colors"
-        >
-          <ArrowLeft className="w-4 h-4" />
-          <span>{t(locale, "common.back")}</span>
-        </Link>
-      </div>
+      <EntityDetailHeader
+        backHref="/center/staff"
+        backLabel={t(locale, "common.back")}
+        icon={<User className="h-5 w-5" />}
+        title={user.fullName}
+        statusLabel={statusLabel}
+        statusVariant={statusVariant}
+        locale={locale}
+        badges={
+          <>
+            <Badge variant="neutral">
+              <Shield className="h-3 w-3" aria-hidden="true" />
+              <span>{membership.role}</span>
+            </Badge>
+            {manageability.isShared && <Badge variant="info">Общий аккаунт</Badge>}
+          </>
+        }
+        meta={
+          <>
+            {user.email && (
+              <span className="inline-flex items-center gap-1">
+                <Mail className="h-3.5 w-3.5" aria-hidden="true" />
+                <span>{user.email}</span>
+              </span>
+            )}
+            {user.phone && (
+              <span className="inline-flex items-center gap-1 tabular-nums">
+                <Phone className="h-3.5 w-3.5" aria-hidden="true" />
+                <span>{user.phone}</span>
+              </span>
+            )}
+            <span className="inline-flex items-center gap-1 tabular-nums">
+              <Calendar className="h-3.5 w-3.5" aria-hidden="true" />
+              <span>{new Date(membership.joinedAt).toLocaleDateString()}</span>
+            </span>
+          </>
+        }
+        menuActions={menuActions}
+      />
 
-      {/* Header Profile Card */}
-      <div className="glass-panel p-6 rounded-3xl border border-slate-800 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
-        <div className="flex items-center gap-4">
-          <div className="w-14 h-14 rounded-2xl bg-brand-500/10 border border-brand-500/30 flex items-center justify-center text-brand-400">
-            <User className="w-7 h-7" />
-          </div>
-          <div>
-            <div className="flex items-center gap-2.5">
-              <h1 className="text-2xl font-bold text-white tracking-tight">{user.fullName}</h1>
+      {actionNotice && (
+        <Alert variant={actionNotice.type === "success" ? "success" : "destructive"}>
+          <AlertDescription>{actionNotice.text}</AlertDescription>
+        </Alert>
+      )}
+
+      <Tabs value={activeTab} onValueChange={(v) => setActiveTab(v as typeof activeTab)}>
+        <TabsList>
+          <TabsTrigger value="profile">
+            <User className="h-4 w-4" aria-hidden="true" />
+            <span>Профиль</span>
+          </TabsTrigger>
+          <TabsTrigger value="access">
+            <Key className="h-4 w-4" aria-hidden="true" />
+            <span>Доступ и безопасность</span>
+          </TabsTrigger>
+          <TabsTrigger value="groups">
+            <Users className="h-4 w-4" aria-hidden="true" />
+            <span>Группы ({groups.length})</span>
+          </TabsTrigger>
+          <TabsTrigger value="history">
+            <History className="h-4 w-4" aria-hidden="true" />
+            <span>История ({auditLogs.length})</span>
+          </TabsTrigger>
+        </TabsList>
+
+        <TabsContent value="profile">
+          <Card className="max-w-2xl">
+            <CardContent className="pt-6 space-y-5">
               {manageability.isShared && (
-                <span className="px-2 py-0.5 bg-blue-500/10 border border-blue-500/30 text-blue-400 rounded-full text-[10px] font-semibold">
-                  Общий аккаунт
-                </span>
+                <Alert variant="info">
+                  <AlertDescription>
+                    <strong className="block font-semibold">Пользователь состоит в нескольких центрах</strong>
+                    Смена контактных данных (email, телефон, логин) возможна только самим пользователем в настройках его аккаунта.
+                  </AlertDescription>
+                </Alert>
               )}
-            </div>
-            <div className="flex flex-wrap items-center gap-4 text-xs text-slate-400 mt-1 font-mono">
-              <span className="flex items-center gap-1.5">
-                <Shield className="w-3.5 h-3.5 text-brand-400" />
-                {membership.role}
-              </span>
-              {user.email && (
-                <span className="flex items-center gap-1.5">
-                  <Mail className="w-3.5 h-3.5 text-slate-500" />
-                  {user.email}
-                </span>
+
+              {profileSuccess && (
+                <Alert variant="success">
+                  <AlertDescription>Профиль успешно сохранен</AlertDescription>
+                </Alert>
               )}
-              {user.phone && (
-                <span className="flex items-center gap-1.5">
-                  <Phone className="w-3.5 h-3.5 text-slate-500" />
-                  {user.phone}
-                </span>
+
+              {profileError && (
+                <Alert variant="destructive">
+                  <AlertDescription>{profileError}</AlertDescription>
+                </Alert>
               )}
-              <span className="flex items-center gap-1.5">
-                <Calendar className="w-3.5 h-3.5 text-slate-500" />
-                {new Date(membership.joinedAt).toLocaleDateString()}
-              </span>
-            </div>
-          </div>
-        </div>
 
-        <div className="flex items-center gap-3">
-          <div
-            className={`px-3 py-1 rounded-full text-xs font-semibold border ${
-              membership.status === "ACTIVE"
-                ? "bg-emerald-500/10 border-emerald-500/20 text-emerald-400"
-                : membership.status === "BLOCKED"
-                ? "bg-rose-500/10 border-rose-500/20 text-rose-400"
-                : "bg-slate-500/10 border-slate-500/20 text-slate-400"
-            }`}
-          >
-            {membership.status === "ACTIVE"
-              ? "Активен"
-              : membership.status === "BLOCKED"
-              ? "Заблокирован"
-              : "В архиве"}
-          </div>
-        </div>
-      </div>
+              <form onSubmit={handleSaveProfile} className="space-y-4">
+                <FormField label="ФИО" htmlFor="staff-profile-name" required>
+                  <Input
+                    id="staff-profile-name"
+                    type="text"
+                    value={fullName}
+                    onChange={(e) => setFullName(e.target.value)}
+                    required
+                  />
+                </FormField>
 
-      {/* Tabs */}
-      <div className="flex border-b border-slate-800 gap-2">
-        <button
-          onClick={() => setActiveTab("profile")}
-          className={`px-4 py-2.5 text-xs font-bold rounded-t-xl transition-colors border-b-2 flex items-center gap-2 ${
-            activeTab === "profile"
-              ? "border-brand-500 text-white bg-slate-800/40"
-              : "border-transparent text-slate-400 hover:text-slate-200"
-          }`}
-        >
-          <User className="w-4 h-4" />
-          <span>Профиль</span>
-        </button>
-        <button
-          onClick={() => setActiveTab("access")}
-          className={`px-4 py-2.5 text-xs font-bold rounded-t-xl transition-colors border-b-2 flex items-center gap-2 ${
-            activeTab === "access"
-              ? "border-brand-500 text-white bg-slate-800/40"
-              : "border-transparent text-slate-400 hover:text-slate-200"
-          }`}
-        >
-          <Key className="w-4 h-4" />
-          <span>Доступ и безопасность</span>
-        </button>
-        <button
-          onClick={() => setActiveTab("groups")}
-          className={`px-4 py-2.5 text-xs font-bold rounded-t-xl transition-colors border-b-2 flex items-center gap-2 ${
-            activeTab === "groups"
-              ? "border-brand-500 text-white bg-slate-800/40"
-              : "border-transparent text-slate-400 hover:text-slate-200"
-          }`}
-        >
-          <Users className="w-4 h-4" />
-          <span>Группы ({groups.length})</span>
-        </button>
-        <button
-          onClick={() => setActiveTab("history")}
-          className={`px-4 py-2.5 text-xs font-bold rounded-t-xl transition-colors border-b-2 flex items-center gap-2 ${
-            activeTab === "history"
-              ? "border-brand-500 text-white bg-slate-800/40"
-              : "border-transparent text-slate-400 hover:text-slate-200"
-          }`}
-        >
-          <History className="w-4 h-4" />
-          <span>История ({auditLogs.length})</span>
-        </button>
-      </div>
+                <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+                  <FormField label="Телефон" htmlFor="staff-profile-phone">
+                    <Input
+                      id="staff-profile-phone"
+                      type="text"
+                      value={phone}
+                      disabled={manageability.isShared}
+                      onChange={(e) => setPhone(e.target.value)}
+                      placeholder="+998901234567"
+                    />
+                  </FormField>
 
-      {/* Tab 1: Profile */}
-      {activeTab === "profile" && (
-        <div className="glass-panel p-6 rounded-2xl border border-slate-800 space-y-6 max-w-2xl">
-          {manageability.isShared && (
-            <div className="p-4 bg-blue-500/10 border border-blue-500/20 rounded-xl text-xs text-blue-300 flex items-start gap-3">
-              <AlertTriangle className="w-4 h-4 text-blue-400 flex-shrink-0 mt-0.5" />
-              <div>
-                <strong className="block font-semibold">Пользователь состоит в нескольких центрах</strong>
-                Смена контактных данных (email, телефон, логин) возможна только самим пользователем в настройках его аккаунта.
-              </div>
-            </div>
-          )}
-
-          {profileSuccess && (
-            <div className="p-3 bg-emerald-500/10 border border-emerald-500/20 rounded-xl text-xs text-emerald-400 flex items-center gap-2">
-              <CheckCircle className="w-4 h-4" />
-              <span>Профиль успешно сохранен</span>
-            </div>
-          )}
-
-          {profileError && (
-            <div className="p-3 bg-rose-500/10 border border-rose-500/20 rounded-xl text-xs text-rose-400 flex items-center gap-2">
-              <AlertTriangle className="w-4 h-4" />
-              <span>{profileError}</span>
-            </div>
-          )}
-
-          <form onSubmit={handleSaveProfile} className="space-y-4">
-            <div>
-              <label className="block text-xs font-semibold text-slate-300 mb-1">ФИО</label>
-              <input
-                type="text"
-                value={fullName}
-                onChange={(e) => setFullName(e.target.value)}
-                required
-                className="w-full px-3.5 py-2 bg-slate-900 border border-slate-800 rounded-xl text-xs text-white focus:outline-none focus:border-brand-500"
-              />
-            </div>
-
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-              <div>
-                <label className="block text-xs font-semibold text-slate-300 mb-1">Телефон</label>
-                <input
-                  type="text"
-                  value={phone}
-                  disabled={manageability.isShared}
-                  onChange={(e) => setPhone(e.target.value)}
-                  placeholder="+998901234567"
-                  className="w-full px-3.5 py-2 bg-slate-900 border border-slate-800 rounded-xl text-xs text-white disabled:opacity-50 focus:outline-none focus:border-brand-500"
-                />
-              </div>
-
-              <div>
-                <label className="block text-xs font-semibold text-slate-300 mb-1">Email</label>
-                <input
-                  type="email"
-                  value={email}
-                  disabled={manageability.isShared}
-                  onChange={(e) => setEmail(e.target.value)}
-                  placeholder="name@example.com"
-                  className="w-full px-3.5 py-2 bg-slate-900 border border-slate-800 rounded-xl text-xs text-white disabled:opacity-50 focus:outline-none focus:border-brand-500"
-                />
-              </div>
-            </div>
-
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-              <div>
-                <label className="block text-xs font-semibold text-slate-300 mb-1">Имя пользователя (логин)</label>
-                <input
-                  type="text"
-                  value={username}
-                  disabled={manageability.isShared}
-                  onChange={(e) => setUsername(e.target.value)}
-                  placeholder="username"
-                  className="w-full px-3.5 py-2 bg-slate-900 border border-slate-800 rounded-xl text-xs text-white disabled:opacity-50 focus:outline-none focus:border-brand-500"
-                />
-              </div>
-
-              <div>
-                <label className="block text-xs font-semibold text-slate-300 mb-1">Язык интерфейса</label>
-                <select
-                  value={preferredLanguage}
-                  onChange={(e) => setPreferredLanguage(e.target.value)}
-                  className="w-full px-3.5 py-2 bg-slate-900 border border-slate-800 rounded-xl text-xs text-white focus:outline-none focus:border-brand-500"
-                >
-                  <option value="ru">Русский</option>
-                  <option value="uz-Latn">O&apos;zbekcha</option>
-                </select>
-              </div>
-            </div>
-
-            {canEditRole && (
-              <div>
-                <label className="block text-xs font-semibold text-slate-300 mb-1">Роль в центре</label>
-                <select
-                  value={role}
-                  onChange={(e) => setRole(e.target.value)}
-                  className="w-full px-3.5 py-2 bg-slate-900 border border-slate-800 rounded-xl text-xs text-white focus:outline-none focus:border-brand-500"
-                >
-                  <option value="CENTER_ADMIN">Администратор центра</option>
-                  <option value="ACCOUNTANT">Бухгалтер</option>
-                  <option value="TEACHER">Преподаватель</option>
-                  <option value="TEACHER_ASSISTANT">Помощник преподавателя</option>
-                  <option value="CENTER_SUPPORT">Служба поддержки</option>
-                </select>
-              </div>
-            )}
-
-            <div className="pt-2">
-              <button
-                type="submit"
-                disabled={savingProfile}
-                className="px-5 py-2.5 bg-brand-600 hover:bg-brand-500 text-white text-xs font-bold rounded-xl shadow-lg transition-colors disabled:opacity-50"
-              >
-                {savingProfile ? "Сохранение..." : "Сохранить изменения"}
-              </button>
-            </div>
-          </form>
-        </div>
-      )}
-
-      {/* Tab 2: Access & Security */}
-      {activeTab === "access" && (
-        <div className="space-y-6 max-w-3xl">
-          {actionNotice && (
-            <div
-              className={`p-3 rounded-xl text-xs flex items-center gap-2 border ${
-                actionNotice.type === "success"
-                  ? "bg-emerald-500/10 border-emerald-500/20 text-emerald-400"
-                  : "bg-rose-500/10 border-rose-500/20 text-rose-400"
-              }`}
-            >
-              {actionNotice.type === "success" ? <CheckCircle className="w-4 h-4" /> : <AlertTriangle className="w-4 h-4" />}
-              <span>{actionNotice.text}</span>
-            </div>
-          )}
-
-          {/* Login Status Card */}
-          <div className="glass-panel p-6 rounded-2xl border border-slate-800 space-y-4">
-            <h3 className="text-sm font-bold text-white uppercase tracking-wider flex items-center gap-2">
-              <Key className="w-4 h-4 text-brand-400" />
-              <span>Статус учетной записи</span>
-            </h3>
-
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 text-xs">
-              <div className="bg-slate-900/60 p-4 rounded-xl border border-slate-800/80">
-                <span className="text-slate-400 block text-[11px] uppercase tracking-wider">Последний вход</span>
-                <div className="text-sm font-bold text-white mt-1">
-                  {user.lastLoginAt ? (
-                    new Date(user.lastLoginAt).toLocaleString()
-                  ) : (
-                    <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full bg-amber-500/10 text-amber-400 border border-amber-500/20 text-xs">
-                      <Clock className="w-3 h-3" />
-                      Ни разу не входил
-                    </span>
-                  )}
+                  <FormField label="Email" htmlFor="staff-profile-email">
+                    <Input
+                      id="staff-profile-email"
+                      type="email"
+                      value={email}
+                      disabled={manageability.isShared}
+                      onChange={(e) => setEmail(e.target.value)}
+                      placeholder="name@example.com"
+                    />
+                  </FormField>
                 </div>
-              </div>
 
-              <div className="bg-slate-900/60 p-4 rounded-xl border border-slate-800/80">
-                <span className="text-slate-400 block text-[11px] uppercase tracking-wider">Тип аккаунта</span>
-                <div className="text-sm font-bold text-white mt-1">
-                  {manageability.isShared ? "Общий аккаунт (несколько центров)" : "Локальный аккаунт центра"}
+                <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+                  <FormField label="Имя пользователя (логин)" htmlFor="staff-profile-username">
+                    <Input
+                      id="staff-profile-username"
+                      type="text"
+                      value={username}
+                      disabled={manageability.isShared}
+                      onChange={(e) => setUsername(e.target.value)}
+                      placeholder="username"
+                    />
+                  </FormField>
+
+                  <FormField label="Язык интерфейса" htmlFor="staff-profile-lang">
+                    <select
+                      id="staff-profile-lang"
+                      value={preferredLanguage}
+                      onChange={(e) => setPreferredLanguage(e.target.value)}
+                      className={selectClassName}
+                    >
+                      <option value="ru">Русский</option>
+                      <option value="uz-Latn">O&apos;zbekcha</option>
+                    </select>
+                  </FormField>
                 </div>
-              </div>
-            </div>
 
-            {/* Password Operations */}
-            <div className="pt-2 border-t border-slate-800 space-y-3">
-              <div className="text-xs font-semibold text-slate-300">Действия с паролем:</div>
-              <div className="flex flex-wrap gap-3">
-                {manageability.canManage ? (
-                  <button
-                    onClick={handleResetPassword}
-                    disabled={actionLoading}
-                    className="inline-flex items-center gap-2 px-4 py-2 bg-brand-600 hover:bg-brand-500 text-white text-xs font-bold rounded-xl transition-colors disabled:opacity-50"
-                  >
-                    <Key className="w-4 h-4" />
-                    <span>Сбросить пароль (показать новый)</span>
-                  </button>
+                {canEditRole && (
+                  <FormField label="Роль в центре" htmlFor="staff-profile-role">
+                    <select
+                      id="staff-profile-role"
+                      value={role}
+                      onChange={(e) => setRole(e.target.value)}
+                      className={selectClassName}
+                    >
+                      <option value="CENTER_ADMIN">Администратор центра</option>
+                      <option value="ACCOUNTANT">Бухгалтер</option>
+                      <option value="TEACHER">Преподаватель</option>
+                      <option value="TEACHER_ASSISTANT">Помощник преподавателя</option>
+                      <option value="CENTER_SUPPORT">Служба поддержки</option>
+                    </select>
+                  </FormField>
+                )}
+
+                <FormActions>
+                  <Button type="submit" variant="primary" disabled={savingProfile} loading={savingProfile}>
+                    {savingProfile ? "Сохранение..." : "Сохранить изменения"}
+                  </Button>
+                </FormActions>
+              </form>
+            </CardContent>
+          </Card>
+        </TabsContent>
+
+        <TabsContent value="access">
+          <div className="max-w-3xl space-y-6">
+            <Card>
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2 text-base">
+                  <Key className="h-4 w-4 text-primary" aria-hidden="true" />
+                  <span>Статус учётной записи</span>
+                </CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-5">
+                <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+                  <div className="rounded-lg border border-border bg-muted p-4">
+                    <span className="text-xs text-muted-foreground">Последний вход</span>
+                    <div className="mt-1 text-sm font-semibold text-foreground">
+                      {user.lastLoginAt ? (
+                        <span className="tabular-nums">{new Date(user.lastLoginAt).toLocaleString()}</span>
+                      ) : (
+                        <Badge variant="warning">
+                          <Clock className="h-3 w-3" aria-hidden="true" />
+                          <span>Ни разу не входил</span>
+                        </Badge>
+                      )}
+                    </div>
+                  </div>
+
+                  <div className="rounded-lg border border-border bg-muted p-4">
+                    <span className="text-xs text-muted-foreground">Тип аккаунта</span>
+                    <div className="mt-1 text-sm font-semibold text-foreground">
+                      {manageability.isShared ? "Общий аккаунт (несколько центров)" : "Локальный аккаунт центра"}
+                    </div>
+                  </div>
+                </div>
+
+                <div className="space-y-3 border-t border-border pt-4">
+                  <div className="text-sm font-medium text-foreground">Действия с паролем</div>
+                  <div className="flex flex-wrap gap-3">
+                    {manageability.canManage ? (
+                      <Button
+                        type="button"
+                        variant="primary"
+                        size="sm"
+                        onClick={() => setConfirmResetOpen(true)}
+                        disabled={actionLoading}
+                      >
+                        <Key className="h-4 w-4" aria-hidden="true" />
+                        <span>Сбросить пароль (показать новый)</span>
+                      </Button>
+                    ) : (
+                      <Alert variant="warning">
+                        <AlertDescription>
+                          {manageability.reason}
+                          <div className="mt-1">
+                            Вы можете отправить пользователю ссылку для самостоятельного сброса пароля.
+                          </div>
+                        </AlertDescription>
+                      </Alert>
+                    )}
+
+                    <Button
+                      type="button"
+                      variant="secondary"
+                      size="sm"
+                      onClick={handleSendResetLink}
+                      disabled={actionLoading}
+                    >
+                      <Send className="h-4 w-4" aria-hidden="true" />
+                      <span>Отправить ссылку сброса (Email/SMS)</span>
+                    </Button>
+                  </div>
+                </div>
+
+                <div className="space-y-3 border-t border-border pt-4">
+                  <div className="text-sm font-medium text-foreground">Статус членства в центре</div>
+                  <div className="flex flex-wrap gap-3">
+                    {membership.status === "ACTIVE" ? (
+                      <Button
+                        type="button"
+                        variant="destructive"
+                        size="sm"
+                        onClick={() => setReasonModalOpen("BLOCK")}
+                      >
+                        <Lock className="h-4 w-4" aria-hidden="true" />
+                        <span>Заблокировать в центре</span>
+                      </Button>
+                    ) : (
+                      <Button
+                        type="button"
+                        variant="secondary"
+                        size="sm"
+                        onClick={() => setReasonModalOpen("UNBLOCK")}
+                      >
+                        <Unlock className="h-4 w-4" aria-hidden="true" />
+                        <span>Разблокировать в центре</span>
+                      </Button>
+                    )}
+
+                    {membership.status !== "ARCHIVED" && (
+                      <Button
+                        type="button"
+                        variant="secondary"
+                        size="sm"
+                        onClick={() => setReasonModalOpen("ARCHIVE")}
+                      >
+                        <Archive className="h-4 w-4" aria-hidden="true" />
+                        <span>Архивировать</span>
+                      </Button>
+                    )}
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+
+            <Card>
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2 text-base">
+                  <Laptop className="h-4 w-4 text-primary" aria-hidden="true" />
+                  <span>Активные сессии в этом центре ({activeSessions.length})</span>
+                </CardTitle>
+              </CardHeader>
+              <CardContent>
+                {activeSessions.length === 0 ? (
+                  <p className="text-sm text-muted-foreground">Нет активных сессий</p>
                 ) : (
-                  <div className="text-xs text-amber-400/90 bg-amber-500/10 border border-amber-500/20 rounded-xl p-3 flex items-start gap-2">
-                    <AlertTriangle className="w-4 h-4 flex-shrink-0 mt-0.5" />
-                    <div>
-                      {manageability.reason}
-                      <div className="mt-1">
-                        Вы можете отправить пользователю ссылку для самостоятельного сброса пароля.
+                  <div className="divide-y divide-border">
+                    {activeSessions.map((session) => (
+                      <div key={session.id} className="flex items-center justify-between py-2.5 text-sm">
+                        <div className="min-w-0">
+                          <div className="font-mono text-foreground">{session.ipAddress || "Неизвестный IP"}</div>
+                          <div className="truncate max-w-sm text-xs text-muted-foreground">
+                            {session.userAgent || "Браузер"}
+                          </div>
+                        </div>
+                        <div className="text-right text-xs text-muted-foreground tabular-nums">
+                          <div>Создана: {new Date(session.createdAt).toLocaleDateString()}</div>
+                          <div>Истекает: {new Date(session.expiresAt).toLocaleDateString()}</div>
+                        </div>
                       </div>
-                    </div>
+                    ))}
                   </div>
                 )}
-
-                <button
-                  onClick={handleSendResetLink}
-                  disabled={actionLoading}
-                  className="inline-flex items-center gap-2 px-4 py-2 bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-semibold rounded-xl border border-slate-700 transition-colors disabled:opacity-50"
-                >
-                  <Send className="w-4 h-4" />
-                  <span>Отправить ссылку сброса (Email/SMS)</span>
-                </button>
-              </div>
-            </div>
-
-            {/* Block / Unblock / Archive */}
-            <div className="pt-4 border-t border-slate-800 space-y-3">
-              <div className="text-xs font-semibold text-slate-300">Статус членства в центре:</div>
-              <div className="flex flex-wrap gap-3">
-                {membership.status === "ACTIVE" ? (
-                  <button
-                    onClick={() => {
-                      setReasonModalOpen("BLOCK");
-                      setReasonText("");
-                    }}
-                    className="inline-flex items-center gap-2 px-4 py-2 bg-rose-500/10 hover:bg-rose-500/20 text-rose-400 text-xs font-bold rounded-xl border border-rose-500/30 transition-colors"
-                  >
-                    <Lock className="w-4 h-4" />
-                    <span>Заблокировать в центре</span>
-                  </button>
-                ) : (
-                  <button
-                    onClick={() => {
-                      setReasonModalOpen("UNBLOCK");
-                      setReasonText("");
-                    }}
-                    className="inline-flex items-center gap-2 px-4 py-2 bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-400 text-xs font-bold rounded-xl border border-emerald-500/30 transition-colors"
-                  >
-                    <Unlock className="w-4 h-4" />
-                    <span>Разблокировать в центре</span>
-                  </button>
-                )}
-
-                {membership.status !== "ARCHIVED" && (
-                  <button
-                    onClick={() => {
-                      setReasonModalOpen("ARCHIVE");
-                      setReasonText("");
-                    }}
-                    className="inline-flex items-center gap-2 px-4 py-2 bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-semibold rounded-xl border border-slate-700 transition-colors"
-                  >
-                    <Archive className="w-4 h-4" />
-                    <span>Архивировать</span>
-                  </button>
-                )}
-              </div>
-            </div>
+              </CardContent>
+            </Card>
           </div>
+        </TabsContent>
 
-          {/* Active Sessions */}
-          <div className="glass-panel p-6 rounded-2xl border border-slate-800 space-y-4">
-            <h3 className="text-sm font-bold text-white uppercase tracking-wider flex items-center gap-2">
-              <Laptop className="w-4 h-4 text-brand-400" />
-              <span>Активные сессии в этом центре ({activeSessions.length})</span>
-            </h3>
+        <TabsContent value="groups">
+          <Card className="max-w-2xl">
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2 text-base">
+                <Users className="h-4 w-4 text-primary" aria-hidden="true" />
+                <span>Назначенные группы</span>
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              {groups.length === 0 ? (
+                <p className="text-sm text-muted-foreground">Преподаватель не назначен ни в одну группу</p>
+              ) : (
+                <div className="divide-y divide-border">
+                  {groups.map((group) => (
+                    <div key={group.id} className="flex items-center justify-between py-3">
+                      <span className="text-sm font-medium text-foreground">{group.name}</span>
+                      <Link
+                        href="/center/groups"
+                        className="text-sm font-medium text-primary hover:underline"
+                      >
+                        К группе
+                      </Link>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </CardContent>
+          </Card>
+        </TabsContent>
 
-            {activeSessions.length === 0 ? (
-              <p className="text-xs text-slate-400">Нет активных сессий</p>
-            ) : (
-              <div className="divide-y divide-slate-800/60">
-                {activeSessions.map((session) => (
-                  <div key={session.id} className="py-2.5 flex items-center justify-between text-xs">
-                    <div>
-                      <div className="font-mono text-slate-300">{session.ipAddress || "Неизвестный IP"}</div>
-                      <div className="text-[11px] text-slate-500 truncate max-w-sm">
-                        {session.userAgent || "Браузер"}
+        <TabsContent value="history">
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2 text-base">
+                <History className="h-4 w-4 text-primary" aria-hidden="true" />
+                <span>История действий</span>
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              {auditLogs.length === 0 ? (
+                <p className="text-sm text-muted-foreground">Записей аудита пока нет</p>
+              ) : (
+                <div className="divide-y divide-border text-sm">
+                  {auditLogs.map((log) => (
+                    <div key={log.id} className="flex items-start justify-between gap-4 py-2.5">
+                      <div>
+                        <span className="font-mono font-medium text-primary">{log.action}</span>
+                        <div className="mt-0.5 text-xs text-muted-foreground">
+                          {log.details ? JSON.stringify(log.details) : "—"}
+                        </div>
                       </div>
+                      <span className="whitespace-nowrap text-xs text-muted-foreground tabular-nums">
+                        {new Date(log.createdAt).toLocaleString()}
+                      </span>
                     </div>
-                    <div className="text-right text-[11px] text-slate-400">
-                      <div>Создана: {new Date(session.createdAt).toLocaleDateString()}</div>
-                      <div>Истекает: {new Date(session.expiresAt).toLocaleDateString()}</div>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            )}
-          </div>
-        </div>
-      )}
-
-      {/* Tab 3: Groups */}
-      {activeTab === "groups" && (
-        <div className="glass-panel p-6 rounded-2xl border border-slate-800 space-y-4 max-w-2xl">
-          <h3 className="text-sm font-bold text-white uppercase tracking-wider flex items-center gap-2">
-            <Users className="w-4 h-4 text-brand-400" />
-            <span>Назначенные группы</span>
-          </h3>
-
-          {groups.length === 0 ? (
-            <p className="text-xs text-slate-400">Преподаватель не назначен ни в одну группу</p>
-          ) : (
-            <div className="divide-y divide-slate-800">
-              {groups.map((group) => (
-                <div key={group.id} className="py-3 flex items-center justify-between">
-                  <span className="text-xs font-semibold text-white">{group.name}</span>
-                  <Link
-                    href={`/center/groups`}
-                    className="text-xs text-brand-400 hover:text-brand-300 font-medium"
-                  >
-                    К группе
-                  </Link>
+                  ))}
                 </div>
-              ))}
-            </div>
-          )}
-        </div>
-      )}
+              )}
+            </CardContent>
+          </Card>
+        </TabsContent>
+      </Tabs>
 
-      {/* Tab 4: History / Audit */}
-      {activeTab === "history" && (
-        <div className="glass-panel p-6 rounded-2xl border border-slate-800 space-y-4">
-          <h3 className="text-sm font-bold text-white uppercase tracking-wider flex items-center gap-2">
-            <History className="w-4 h-4 text-brand-400" />
-            <span>История действий (AuditLog)</span>
-          </h3>
+      <ConfirmDialog
+        open={confirmResetOpen}
+        onOpenChange={setConfirmResetOpen}
+        title="Сбросить пароль сотрудника"
+        description="Все текущие сессии сотрудника будут завершены. Новый пароль будет показан один раз."
+        confirmLabel="Сбросить пароль"
+        variant="destructive"
+        loading={actionLoading}
+        locale={locale}
+        onConfirm={handleResetPassword}
+      />
 
-          {auditLogs.length === 0 ? (
-            <p className="text-xs text-slate-400">Записей аудита пока нет</p>
-          ) : (
-            <div className="divide-y divide-slate-800 text-xs">
-              {auditLogs.map((log) => (
-                <div key={log.id} className="py-2.5 flex items-start justify-between gap-4">
-                  <div>
-                    <span className="font-mono font-bold text-brand-300">{log.action}</span>
-                    <div className="text-[11px] text-slate-400 mt-0.5">
-                      {log.details ? JSON.stringify(log.details) : "—"}
-                    </div>
-                  </div>
-                  <span className="text-[11px] text-slate-500 whitespace-nowrap">
-                    {new Date(log.createdAt).toLocaleString()}
-                  </span>
-                </div>
-              ))}
-            </div>
-          )}
-        </div>
-      )}
+      <ConfirmDialog
+        open={Boolean(reasonModalOpen)}
+        onOpenChange={(next) => !next && setReasonModalOpen(null)}
+        title={
+          reasonModalOpen === "BLOCK"
+            ? "Блокировка сотрудника"
+            : reasonModalOpen === "UNBLOCK"
+            ? "Разблокировка сотрудника"
+            : "Архивация сотрудника"
+        }
+        description="Укажите причину действия (минимум 5 символов). Она будет записана в журнал аудита."
+        reasonLabel="Причина"
+        reasonPlaceholder="Причина действия..."
+        reasonRequired
+        reasonMinLength={5}
+        reasonMultiline
+        confirmLabel="Подтвердить"
+        variant={reasonModalOpen === "UNBLOCK" ? "primary" : "destructive"}
+        loading={actionLoading}
+        locale={locale}
+        onConfirm={handleStatusAction}
+      />
 
-      {/* Reason Modal for Block / Unblock / Archive */}
-      {reasonModalOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm">
-          <div className="w-full max-w-md bg-slate-900 border border-slate-800 rounded-3xl p-6 space-y-4 shadow-2xl">
-            <h3 className="text-base font-bold text-white">
-              {reasonModalOpen === "BLOCK"
-                ? "Блокировка сотрудника"
-                : reasonModalOpen === "UNBLOCK"
-                ? "Разблокировка сотрудника"
-                : "Архивация сотрудника"}
-            </h3>
-            <p className="text-xs text-slate-400">
-              Укажите причину действия (минимум 5 символов). Она будет записана в журнал аудита.
-            </p>
-
-            <textarea
-              value={reasonText}
-              onChange={(e) => setReasonText(e.target.value)}
-              placeholder="Причина действия..."
-              rows={3}
-              className="w-full px-3.5 py-2.5 bg-slate-950 border border-slate-800 rounded-xl text-xs text-white focus:outline-none focus:border-brand-500"
-            />
-
-            <div className="flex justify-end gap-3 pt-2">
-              <button
-                onClick={() => setReasonModalOpen(null)}
-                className="px-4 py-2 bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-semibold rounded-xl"
-              >
-                Отмена
-              </button>
-              <button
-                onClick={handleStatusAction}
-                disabled={actionLoading || reasonText.trim().length < 5}
-                className="px-4 py-2 bg-brand-600 hover:bg-brand-500 text-white text-xs font-bold rounded-xl disabled:opacity-50"
-              >
-                {actionLoading ? "Выполнение..." : "Подтвердить"}
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* Single-display Credentials Modal */}
       {newCredentials && (
         <CredentialsModal
           isOpen={credentialsModalOpen}

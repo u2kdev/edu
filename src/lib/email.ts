@@ -1,3 +1,4 @@
+import type { NotificationType } from "@prisma/client";
 import { db } from "./db";
 
 export interface SentEmail {
@@ -25,7 +26,16 @@ export type EmailTemplateType =
   | "PASSWORD_RESET"
   | "INVITE_LINK"
   | "ACCOUNT_LOCKED"
-  | "LOGIN_CREDENTIALS";
+  | "LOGIN_CREDENTIALS"
+  | "PAYMENT_REMINDER"
+  | "PAYMENT_CONFIRMED"
+  | "ATTENDANCE_ALERT"
+  | "GRADE_POSTED"
+  | "NEW_HOMEWORK"
+  | "SCHEDULE_CHANGE"
+  | "LESSON_CHANGE"
+  | "BROADCAST"
+  | "GENERAL";
 
 export interface EmailTemplatePayload {
   lang?: "ru" | "uz";
@@ -35,12 +45,64 @@ export interface EmailTemplatePayload {
   expiresIn?: string;
   login?: string;
   password?: string;
+  studentName?: string;
+  amount?: string | number;
+  paidUntil?: string;
+  dueDate?: string;
+  date?: string;
+  groupName?: string;
+  title?: string;
+  body?: string;
+  lessonTitle?: string;
+  gradeValue?: string | number;
+  maxValue?: string | number;
+  status?: string;
+  payUrl?: string;
+  receiptNumber?: string;
+}
+
+export function maskEmailForLog(email: string): string {
+  if (typeof email !== "string") return "[EMAIL]";
+  const parts = email.split("@");
+  if (parts.length !== 2) return "[EMAIL]";
+  const local = parts[0] || "";
+  const maskedLocal = local.length <= 2 ? `${local[0] || "*"}*` : `${local.slice(0, 2)}***`;
+  return `${maskedLocal}@${parts[1]}`;
+}
+
+function wrapCenterEmailHtml(
+  safeHeading: string,
+  bodyHtml: string,
+  cta?: { label: string; safeUrl: string }
+): string {
+  const buttonHtml = cta?.safeUrl
+    ? `<p style="margin: 24px 0;">
+        <a href="${cta.safeUrl}" style="background-color: #2563eb; color: #ffffff; padding: 12px 24px; text-decoration: none; border-radius: 6px; font-weight: bold; display: inline-block;">${escapeHtml(cta.label)}</a>
+      </p>`
+    : "";
+  return `
+    <div style="font-family: sans-serif; max-width: 600px; margin: 0 auto; padding: 24px; border: 1px solid #e2e8f0; border-radius: 8px;">
+      <h2 style="color: #2563eb; margin-top: 0;">${safeHeading}</h2>
+      ${bodyHtml}
+      ${buttonHtml}
+    </div>
+  `.trim();
 }
 
 export interface RenderedEmail {
   subject: string;
   text: string;
   html: string;
+}
+
+export function escapeHtml(str: string | null | undefined): string {
+  if (!str) return "";
+  return String(str)
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#39;");
 }
 
 export function renderEmailTemplate(
@@ -52,6 +114,11 @@ export function renderEmailTemplate(
   const url = payload.url || "";
   const center = payload.centerName || (lang === "uz" ? "O'quv markazi" : "Учебный центр");
 
+  // Escaped versions for safe HTML interpolation
+  const safeName = escapeHtml(name);
+  const safeUrl = escapeHtml(url);
+  const safeCenter = escapeHtml(center);
+
   switch (template) {
     case "EMAIL_CONFIRMATION": {
       if (lang === "uz") {
@@ -61,12 +128,12 @@ export function renderEmailTemplate(
           html: `
             <div style="font-family: sans-serif; max-width: 600px; margin: 0 auto; padding: 24px; border: 1px solid #e2e8f0; border-radius: 8px;">
               <h2 style="color: #2563eb; margin-top: 0;">e-darschi LMS</h2>
-              <p>Salom, <strong>${name}</strong>!</p>
+              <p>Salom, <strong>${safeName}</strong>!</p>
               <p>e-darschi platformasida hisobingizni faollashtirish uchun quyidagi tugmani bosing:</p>
               <p style="margin: 24px 0;">
-                <a href="${url}" style="background-color: #2563eb; color: #ffffff; padding: 12px 24px; text-decoration: none; border-radius: 6px; font-weight: bold; display: inline-block;">Pochtani tasdiqlash</a>
+                <a href="${safeUrl}" style="background-color: #2563eb; color: #ffffff; padding: 12px 24px; text-decoration: none; border-radius: 6px; font-weight: bold; display: inline-block;">Pochtani tasdiqlash</a>
               </p>
-              <p style="color: #64748b; font-size: 14px;">Yoki ushbu havolani brauzerga nusxalang: <br/><a href="${url}">${url}</a></p>
+              <p style="color: #64748b; font-size: 14px;">Yoki ushbu havolani brauzerga nusxalang: <br/><a href="${safeUrl}">${safeUrl}</a></p>
             </div>
           `.trim(),
         };
@@ -77,12 +144,12 @@ export function renderEmailTemplate(
         html: `
           <div style="font-family: sans-serif; max-width: 600px; margin: 0 auto; padding: 24px; border: 1px solid #e2e8f0; border-radius: 8px;">
             <h2 style="color: #2563eb; margin-top: 0;">e-darschi LMS</h2>
-            <p>Здравствуйте, <strong>${name}</strong>!</p>
+            <p>Здравствуйте, <strong>${safeName}</strong>!</p>
             <p>Для подтверждения вашего адреса электронной почты и завершения регистрации нажмите кнопку ниже:</p>
             <p style="margin: 24px 0;">
-              <a href="${url}" style="background-color: #2563eb; color: #ffffff; padding: 12px 24px; text-decoration: none; border-radius: 6px; font-weight: bold; display: inline-block;">Подтвердить email</a>
+              <a href="${safeUrl}" style="background-color: #2563eb; color: #ffffff; padding: 12px 24px; text-decoration: none; border-radius: 6px; font-weight: bold; display: inline-block;">Подтвердить email</a>
             </p>
-            <p style="color: #64748b; font-size: 14px;">Или перейдите по ссылке: <br/><a href="${url}">${url}</a></p>
+            <p style="color: #64748b; font-size: 14px;">Или перейдите по ссылке: <br/><a href="${safeUrl}">${safeUrl}</a></p>
           </div>
         `.trim(),
       };
@@ -96,12 +163,12 @@ export function renderEmailTemplate(
           html: `
             <div style="font-family: sans-serif; max-width: 600px; margin: 0 auto; padding: 24px; border: 1px solid #e2e8f0; border-radius: 8px;">
               <h2 style="color: #2563eb; margin-top: 0;">e-darschi LMS</h2>
-              <p>Salom, <strong>${name}</strong>!</p>
+              <p>Salom, <strong>${safeName}</strong>!</p>
               <p>Siz e-darschi platformasida parolingizni tiklashni so'rashingiz haqida murojaat qildingiz. Yangi parol o'rnatish uchun quyidagi tugmani bosing:</p>
               <p style="margin: 24px 0;">
-                <a href="${url}" style="background-color: #ef4444; color: #ffffff; padding: 12px 24px; text-decoration: none; border-radius: 6px; font-weight: bold; display: inline-block;">Parolni tiklash</a>
+                <a href="${safeUrl}" style="background-color: #ef4444; color: #ffffff; padding: 12px 24px; text-decoration: none; border-radius: 6px; font-weight: bold; display: inline-block;">Parolni tiklash</a>
               </p>
-              <p style="color: #64748b; font-size: 14px;">Havola: <a href="${url}">${url}</a></p>
+              <p style="color: #64748b; font-size: 14px;">Havola: <a href="${safeUrl}">${safeUrl}</a></p>
             </div>
           `.trim(),
         };
@@ -112,12 +179,12 @@ export function renderEmailTemplate(
         html: `
           <div style="font-family: sans-serif; max-width: 600px; margin: 0 auto; padding: 24px; border: 1px solid #e2e8f0; border-radius: 8px;">
             <h2 style="color: #2563eb; margin-top: 0;">e-darschi LMS</h2>
-            <p>Здравствуйте, <strong>${name}</strong>!</p>
+            <p>Здравствуйте, <strong>${safeName}</strong>!</p>
             <p>Был запрошен сброс пароля для вашей учетной записи. Нажмите кнопку ниже для ввода нового пароля:</p>
             <p style="margin: 24px 0;">
-              <a href="${url}" style="background-color: #ef4444; color: #ffffff; padding: 12px 24px; text-decoration: none; border-radius: 6px; font-weight: bold; display: inline-block;">Сбросить пароль</a>
+              <a href="${safeUrl}" style="background-color: #ef4444; color: #ffffff; padding: 12px 24px; text-decoration: none; border-radius: 6px; font-weight: bold; display: inline-block;">Сбросить пароль</a>
             </p>
-            <p style="color: #64748b; font-size: 14px;">Ссылка для перехода: <br/><a href="${url}">${url}</a></p>
+            <p style="color: #64748b; font-size: 14px;">Ссылка для перехода: <br/><a href="${safeUrl}">${safeUrl}</a></p>
           </div>
         `.trim(),
       };
@@ -130,12 +197,12 @@ export function renderEmailTemplate(
           text: `Salom!\n\nSizni ${center} o'quv markaziga taklif qilishdi. Taklifni qabul qilish havolasi: ${url}`,
           html: `
             <div style="font-family: sans-serif; max-width: 600px; margin: 0 auto; padding: 24px; border: 1px solid #e2e8f0; border-radius: 8px;">
-              <h2 style="color: #2563eb; margin-top: 0;">${center}</h2>
-              <p>Sizni <strong>${center}</strong> o'quv markaziga qo'shilishga taklif qilishdi.</p>
+              <h2 style="color: #2563eb; margin-top: 0;">${safeCenter}</h2>
+              <p>Sizni <strong>${safeCenter}</strong> o'quv markaziga qo'shilishga taklif qilishdi.</p>
               <p style="margin: 24px 0;">
-                <a href="${url}" style="background-color: #10b981; color: #ffffff; padding: 12px 24px; text-decoration: none; border-radius: 6px; font-weight: bold; display: inline-block;">Taklifni qabul qilish</a>
+                <a href="${safeUrl}" style="background-color: #10b981; color: #ffffff; padding: 12px 24px; text-decoration: none; border-radius: 6px; font-weight: bold; display: inline-block;">Taklifni qabul qilish</a>
               </p>
-              <p style="color: #64748b; font-size: 14px;">Havola: <a href="${url}">${url}</a></p>
+              <p style="color: #64748b; font-size: 14px;">Havola: <a href="${safeUrl}">${safeUrl}</a></p>
             </div>
           `.trim(),
         };
@@ -145,12 +212,12 @@ export function renderEmailTemplate(
         text: `Здравствуйте!\n\nВам отправлено приглашение в учебный центр ${center}. Ссылка для входа: ${url}`,
         html: `
           <div style="font-family: sans-serif; max-width: 600px; margin: 0 auto; padding: 24px; border: 1px solid #e2e8f0; border-radius: 8px;">
-            <h2 style="color: #2563eb; margin-top: 0;">${center}</h2>
-            <p>Вы получили приглашение присоединиться к учебному центру <strong>${center}</strong>.</p>
+            <h2 style="color: #2563eb; margin-top: 0;">${safeCenter}</h2>
+            <p>Вы получили приглашение присоединиться к учебному центру <strong>${safeCenter}</strong>.</p>
             <p style="margin: 24px 0;">
-              <a href="${url}" style="background-color: #10b981; color: #ffffff; padding: 12px 24px; text-decoration: none; border-radius: 6px; font-weight: bold; display: inline-block;">Принять приглашение</a>
+              <a href="${safeUrl}" style="background-color: #10b981; color: #ffffff; padding: 12px 24px; text-decoration: none; border-radius: 6px; font-weight: bold; display: inline-block;">Принять приглашение</a>
             </p>
-            <p style="color: #64748b; font-size: 14px;">Ссылка: <a href="${url}">${url}</a></p>
+            <p style="color: #64748b; font-size: 14px;">Ссылка: <a href="${safeUrl}">${safeUrl}</a></p>
           </div>
         `.trim(),
       };
@@ -164,7 +231,7 @@ export function renderEmailTemplate(
           html: `
             <div style="font-family: sans-serif; max-width: 600px; margin: 0 auto; padding: 24px; border: 1px solid #fecaca; background-color: #fef2f2; border-radius: 8px;">
               <h2 style="color: #dc2626; margin-top: 0;">Hisob vaqtincha bloklandi</h2>
-              <p>Salom, <strong>${name}</strong>!</p>
+              <p>Salom, <strong>${safeName}</strong>!</p>
               <p>Parolni ketma-ket noto'g'ri kiritish natijasida tizim profilingizni 15 daqiqaga blokladi.</p>
             </div>
           `.trim(),
@@ -176,7 +243,7 @@ export function renderEmailTemplate(
         html: `
           <div style="font-family: sans-serif; max-width: 600px; margin: 0 auto; padding: 24px; border: 1px solid #fecaca; background-color: #fef2f2; border-radius: 8px;">
             <h2 style="color: #dc2626; margin-top: 0;">Аккаунт временно заблокирован</h2>
-            <p>Здравствуйте, <strong>${name}</strong>!</p>
+            <p>Здравствуйте, <strong>${safeName}</strong>!</p>
             <p>Из соображений безопасности ваша учетная запись заблокирована на 15 минут из-за многократного ввода неверного пароля.</p>
           </div>
         `.trim(),
@@ -186,21 +253,23 @@ export function renderEmailTemplate(
     case "LOGIN_CREDENTIALS": {
       const login = payload.login || "";
       const password = payload.password || "";
+      const safeLogin = escapeHtml(login);
+      const safePassword = escapeHtml(password);
       if (lang === "uz") {
         return {
           subject: `${center}: Tizimga kirish ma'lumotlari`,
           text: `Salom, ${name}!\n\n${center} tizimiga kirish uchun sizning ma'lumotlaringiz:\nLogin: ${login}\nParol: ${password}\nKirish manzili: ${url}\n\nIltimos, birinchi kirishda parolingizni yangilang.`,
           html: `
             <div style="font-family: sans-serif; max-width: 600px; margin: 0 auto; padding: 24px; border: 1px solid #e2e8f0; border-radius: 8px;">
-              <h2 style="color: #2563eb; margin-top: 0;">${center}</h2>
-              <p>Salom, <strong>${name}</strong>!</p>
-              <p>Siz uchun <strong>${center}</strong> tizimida shaxsiy hisob yaratildi. Kirish ma'lumotlari:</p>
+              <h2 style="color: #2563eb; margin-top: 0;">${safeCenter}</h2>
+              <p>Salom, <strong>${safeName}</strong>!</p>
+              <p>Siz uchun <strong>${safeCenter}</strong> tizimida shaxsiy hisob yaratildi. Kirish ma'lumotlari:</p>
               <div style="background-color: #f8fafc; padding: 16px; border-radius: 6px; border: 1px solid #cbd5e1; margin: 16px 0; font-family: monospace;">
-                <p style="margin: 4px 0;"><strong>Login:</strong> ${login}</p>
-                <p style="margin: 4px 0;"><strong>Parol:</strong> ${password}</p>
+                <p style="margin: 4px 0;"><strong>Login:</strong> ${safeLogin}</p>
+                <p style="margin: 4px 0;"><strong>Parol:</strong> ${safePassword}</p>
               </div>
               <p style="margin: 24px 0;">
-                <a href="${url}" style="background-color: #2563eb; color: #ffffff; padding: 12px 24px; text-decoration: none; border-radius: 6px; font-weight: bold; display: inline-block;">Tizimga kirish</a>
+                <a href="${safeUrl}" style="background-color: #2563eb; color: #ffffff; padding: 12px 24px; text-decoration: none; border-radius: 6px; font-weight: bold; display: inline-block;">Tizimga kirish</a>
               </p>
               <p style="color: #64748b; font-size: 13px;">Xavfsizlik talablariga ko'ra, birinchi kirishda parolni o'zgartiring.</p>
             </div>
@@ -212,19 +281,225 @@ export function renderEmailTemplate(
         text: `Здравствуйте, ${name}!\n\nВаши данные для входа в учебный центр ${center}:\nЛогин: ${login}\nПароль: ${password}\nАдрес для входа: ${url}\n\nПожалуйста, измените пароль при первом входе.`,
         html: `
           <div style="font-family: sans-serif; max-width: 600px; margin: 0 auto; padding: 24px; border: 1px solid #e2e8f0; border-radius: 8px;">
-            <h2 style="color: #2563eb; margin-top: 0;">${center}</h2>
-            <p>Здравствуйте, <strong>${name}</strong>!</p>
-            <p>Для вас создана учетная запись в учебном центре <strong>${center}</strong>. Ваши данные для входа:</p>
+            <h2 style="color: #2563eb; margin-top: 0;">${safeCenter}</h2>
+            <p>Здравствуйте, <strong>${safeName}</strong>!</p>
+            <p>Для вас создана учетная запись в учебном центре <strong>${safeCenter}</strong>. Ваши данные для входа:</p>
             <div style="background-color: #f8fafc; padding: 16px; border-radius: 6px; border: 1px solid #cbd5e1; margin: 16px 0; font-family: monospace;">
-              <p style="margin: 4px 0;"><strong>Логин:</strong> ${login}</p>
-              <p style="margin: 4px 0;"><strong>Пароль:</strong> ${password}</p>
+              <p style="margin: 4px 0;"><strong>Логин:</strong> ${safeLogin}</p>
+              <p style="margin: 4px 0;"><strong>Пароль:</strong> ${safePassword}</p>
             </div>
             <p style="margin: 24px 0;">
-              <a href="${url}" style="background-color: #2563eb; color: #ffffff; padding: 12px 24px; text-decoration: none; border-radius: 6px; font-weight: bold; display: inline-block;">Войти в систему</a>
+              <a href="${safeUrl}" style="background-color: #2563eb; color: #ffffff; padding: 12px 24px; text-decoration: none; border-radius: 6px; font-weight: bold; display: inline-block;">Войти в систему</a>
             </p>
             <p style="color: #64748b; font-size: 13px;">В целях безопасности рекомендуем сменить пароль при первом входе в систему.</p>
           </div>
         `.trim(),
+      };
+    }
+
+    case "PAYMENT_REMINDER": {
+      const studentName = payload.studentName || name;
+      const amount = String(payload.amount ?? "0");
+      const dueDate = payload.dueDate || payload.paidUntil || "";
+      const payUrl = payload.payUrl || url;
+      const safeStudent = escapeHtml(studentName);
+      const safeAmount = escapeHtml(amount);
+      const safeDue = escapeHtml(dueDate);
+      const safePayUrl = escapeHtml(payUrl);
+
+      if (lang === "uz") {
+        return {
+          subject: `${center}: To'lov eslatmasi (${amount} UZS)`,
+          text: `Salom, ${name}!\n\n${studentName} uchun to'lov eslatmasi (${center}).\nSumma: ${amount} UZS${dueDate ? `\nMuddati: ${dueDate}` : ""}${payUrl ? `\nTo'lash havolasi: ${payUrl}` : ""}`,
+          html: wrapCenterEmailHtml(
+            safeCenter,
+            `<p>Salom, <strong>${safeName}</strong>!</p>
+             <p><strong>${safeStudent}</strong> uchun o'quv to'lovi haqida eslatma.</p>
+             <p><strong>Summa:</strong> ${safeAmount} UZS${safeDue ? `<br/><strong>Muddati:</strong> ${safeDue}` : ""}</p>`,
+            safePayUrl ? { label: "Click orqali to'lash", safeUrl: safePayUrl } : undefined
+          ),
+        };
+      }
+      return {
+        subject: `${center}: Напоминание об оплате (${amount} UZS)`,
+        text: `Здравствуйте, ${name}!\n\nНапоминание об оплате обучения за ученика ${studentName} в ${center}.\nСумма к оплате: ${amount} UZS${dueDate ? `\nСрок оплаты: ${dueDate}` : ""}${payUrl ? `\nСсылка на оплату: ${payUrl}` : ""}`,
+        html: wrapCenterEmailHtml(
+          safeCenter,
+          `<p>Здравствуйте, <strong>${safeName}</strong>!</p>
+           <p>Напоминаем об оплате обучения за ученика <strong>${safeStudent}</strong>.</p>
+           <p><strong>Сумма:</strong> ${safeAmount} UZS${safeDue ? `<br/><strong>Срок:</strong> ${safeDue}` : ""}</p>`,
+          safePayUrl ? { label: "Оплатить через Click", safeUrl: safePayUrl } : undefined
+        ),
+      };
+    }
+
+    case "PAYMENT_CONFIRMED": {
+      const studentName = payload.studentName || name;
+      const amount = String(payload.amount ?? "0");
+      const paidUntil = payload.paidUntil || "";
+      const receipt = payload.receiptNumber || "";
+      const safeStudent = escapeHtml(studentName);
+      const safeAmount = escapeHtml(amount);
+      const safePaidUntil = escapeHtml(paidUntil);
+      const safeReceipt = escapeHtml(receipt);
+
+      if (lang === "uz") {
+        return {
+          subject: `${center}: To'lov qabul qilindi (${amount} UZS)`,
+          text: `Salom, ${name}!\n\n${studentName} uchun ${amount} UZS miqdoridagi to'lov tasdiqlandi.${paidUntil ? ` Amal qilish muddati: ${paidUntil}.` : ""}${receipt ? ` Kvitansiya: ${receipt}.` : ""}`,
+          html: wrapCenterEmailHtml(
+            safeCenter,
+            `<p>Salom, <strong>${safeName}</strong>!</p>
+             <p><strong>${safeStudent}</strong> uchun <strong>${safeAmount} UZS</strong> miqdoridagi to'lov muvaffaqiyatli qabul qilindi.</p>
+             ${safePaidUntil ? `<p><strong>To'langan davr:</strong> ${safePaidUntil} gacha</p>` : ""}
+             ${safeReceipt ? `<p><strong>Kvitansiya:</strong> ${safeReceipt}</p>` : ""}`,
+            safeUrl ? { label: "Kvitansiyani ko'rish", safeUrl } : undefined
+          ),
+        };
+      }
+      return {
+        subject: `${center}: Оплата подтверждена (${amount} UZS)`,
+        text: `Здравствуйте, ${name}!\n\nПлатёж на сумму ${amount} UZS за ученика ${studentName} подтверждён.${paidUntil ? ` Оплачено до: ${paidUntil}.` : ""}${receipt ? ` Квитанция: ${receipt}.` : ""}`,
+        html: wrapCenterEmailHtml(
+          safeCenter,
+          `<p>Здравствуйте, <strong>${safeName}</strong>!</p>
+           <p>Платёж на сумму <strong>${safeAmount} UZS</strong> за ученика <strong>${safeStudent}</strong> успешно зачислен.</p>
+           ${safePaidUntil ? `<p><strong>Оплачено до:</strong> ${safePaidUntil}</p>` : ""}
+           ${safeReceipt ? `<p><strong>Квитанция:</strong> ${safeReceipt}</p>` : ""}`,
+          safeUrl ? { label: "Открыть квитанцию", safeUrl } : undefined
+        ),
+      };
+    }
+
+    case "ATTENDANCE_ALERT": {
+      const studentName = payload.studentName || name;
+      const dateStr = payload.date || "";
+      const status = payload.status === "LATE" ? "LATE" : "ABSENT";
+      const safeStudent = escapeHtml(studentName);
+      const safeDate = escapeHtml(dateStr);
+      const safeLesson = escapeHtml(payload.lessonTitle || "");
+
+      if (lang === "uz") {
+        const statusLabel = status === "LATE" ? "darsga kechikdi" : "darsga kelmadi";
+        return {
+          subject: `${center}: Davomat xabarnomasi (${studentName})`,
+          text: `${center}: Diqqat! ${studentName} ${dateStr} sanasidagi ${payload.lessonTitle ? `(${payload.lessonTitle}) ` : ""}${statusLabel}.`,
+          html: wrapCenterEmailHtml(
+            safeCenter,
+            `<p><strong>${safeStudent}</strong> (${safeDate}) ${safeLesson ? `${safeLesson} ` : ""}${escapeHtml(statusLabel)}.</p>`
+          ),
+        };
+      }
+      const statusLabelRu = status === "LATE" ? "опоздал(а) на занятие" : "пропустил(а) занятие";
+      return {
+        subject: `${center}: Посещаемость (${studentName})`,
+        text: `${center}: Внимание! ${studentName} ${statusLabelRu} ${dateStr}${payload.lessonTitle ? ` (${payload.lessonTitle})` : ""}.`,
+        html: wrapCenterEmailHtml(
+          safeCenter,
+          `<p>Ученик <strong>${safeStudent}</strong> (${safeDate}) ${escapeHtml(statusLabelRu)}${safeLesson ? `: ${safeLesson}` : ""}.</p>`
+        ),
+      };
+    }
+
+    case "GRADE_POSTED": {
+      const valueStr = payload.gradeValue !== undefined ? String(payload.gradeValue) : "";
+      const maxStr = payload.maxValue !== undefined ? ` / ${payload.maxValue}` : "";
+      const safeVal = escapeHtml(`${valueStr}${maxStr}`);
+      const safeTitle = escapeHtml(payload.title || payload.lessonTitle || "");
+      if (lang === "uz") {
+        return {
+          subject: `${center}: Yangi baho qo'yildi`,
+          text: `Salom, ${name}!\n\n${payload.title ? `${payload.title}: ` : ""}Yangi baho: ${valueStr}${maxStr}.`,
+          html: wrapCenterEmailHtml(
+            safeCenter,
+            `<p>Salom, <strong>${safeName}</strong>!</p><p>${safeTitle ? `<strong>${safeTitle}:</strong> ` : ""}Yangi baho: <strong>${safeVal}</strong>.</p>`,
+            safeUrl ? { label: "Jurnalni ochish", safeUrl } : undefined
+          ),
+        };
+      }
+      return {
+        subject: `${center}: Выставлена новая оценка`,
+        text: `Здравствуйте, ${name}!\n\n${payload.title ? `${payload.title}: ` : ""}Оценка: ${valueStr}${maxStr}.`,
+        html: wrapCenterEmailHtml(
+          safeCenter,
+          `<p>Здравствуйте, <strong>${safeName}</strong>!</p><p>${safeTitle ? `<strong>${safeTitle}:</strong> ` : ""}Выставлена оценка: <strong>${safeVal}</strong>.</p>`,
+          safeUrl ? { label: "Открыть оценки", safeUrl } : undefined
+        ),
+      };
+    }
+
+    case "NEW_HOMEWORK": {
+      const hwTitle = payload.title || "";
+      const dueStr = payload.dueDate || "";
+      const safeTitle = escapeHtml(hwTitle);
+      const safeDue = escapeHtml(dueStr);
+      if (lang === "uz") {
+        return {
+          subject: `${center}: Yangi uy vazifasi`,
+          text: `Salom, ${name}!\n\nYangi uy vazifasi berildi: ${hwTitle}${dueStr ? `\nMuddati: ${dueStr}` : ""}`,
+          html: wrapCenterEmailHtml(
+            safeCenter,
+            `<p>Salom, <strong>${safeName}</strong>!</p><p>Yangi uy vazifasi: <strong>${safeTitle}</strong>${safeDue ? `<br/>Muddati: ${safeDue}` : ""}</p>`,
+            safeUrl ? { label: "Vazifani ochish", safeUrl } : undefined
+          ),
+        };
+      }
+      return {
+        subject: `${center}: Новое домашнее задание`,
+        text: `Здравствуйте, ${name}!\n\nВам задано домашнее задание: ${hwTitle}${dueStr ? `\nСрок сдачи: ${dueStr}` : ""}`,
+        html: wrapCenterEmailHtml(
+          safeCenter,
+          `<p>Здравствуйте, <strong>${safeName}</strong>!</p><p>Новое домашнее задание: <strong>${safeTitle}</strong>${safeDue ? `<br/>Срок сдачи: ${safeDue}` : ""}</p>`,
+          safeUrl ? { label: "Перейти к заданию", safeUrl } : undefined
+        ),
+      };
+    }
+
+    case "SCHEDULE_CHANGE":
+    case "LESSON_CHANGE": {
+      const groupName = payload.groupName || "";
+      const dateStr = payload.date || "";
+      const detail = payload.body || payload.title || "";
+      const safeGroup = escapeHtml(groupName);
+      const safeDate = escapeHtml(dateStr);
+      const safeDetail = escapeHtml(detail);
+      if (lang === "uz") {
+        return {
+          subject: `${center}: Dars jadvalidagi o'zgarish`,
+          text: `Salom, ${name}!\n\n${groupName ? `Guruh: ${groupName}\n` : ""}${dateStr ? `Sana: ${dateStr}\n` : ""}${detail}`,
+          html: wrapCenterEmailHtml(
+            safeCenter,
+            `<p>Salom, <strong>${safeName}</strong>!</p>${safeGroup ? `<p>Guruh: <strong>${safeGroup}</strong></p>` : ""}${safeDate ? `<p>Sana: ${safeDate}</p>` : ""}${safeDetail ? `<p>${safeDetail}</p>` : ""}`,
+            safeUrl ? { label: "Jadvalni ko'rish", safeUrl } : undefined
+          ),
+        };
+      }
+      return {
+        subject: `${center}: Изменение в расписании`,
+        text: `Здравствуйте, ${name}!\n\n${groupName ? `Группа: ${groupName}\n` : ""}${dateStr ? `Дата: ${dateStr}\n` : ""}${detail}`,
+        html: wrapCenterEmailHtml(
+          safeCenter,
+          `<p>Здравствуйте, <strong>${safeName}</strong>!</p>${safeGroup ? `<p>Группа: <strong>${safeGroup}</strong></p>` : ""}${safeDate ? `<p>Дата: ${safeDate}</p>` : ""}${safeDetail ? `<p>${safeDetail}</p>` : ""}`,
+          safeUrl ? { label: "Открыть расписание", safeUrl } : undefined
+        ),
+      };
+    }
+
+    case "BROADCAST":
+    case "GENERAL":
+    default: {
+      const subjectTitle = payload.title || (lang === "uz" ? "Xabarnoma" : "Уведомление");
+      const bodyText = payload.body || "";
+      const safeSubjectTitle = escapeHtml(subjectTitle);
+      const safeBody = escapeHtml(bodyText).replace(/\n/g, "<br/>");
+      return {
+        subject: `${center}: ${subjectTitle}`,
+        text: bodyText ? `${subjectTitle}\n\n${bodyText}` : subjectTitle,
+        html: wrapCenterEmailHtml(
+          safeCenter,
+          `<p><strong>${safeSubjectTitle}</strong></p>${safeBody ? `<p>${safeBody}</p>` : ""}`,
+          safeUrl ? { label: lang === "uz" ? "Batafsil" : "Подробнее", safeUrl } : undefined
+        ),
       };
     }
   }
@@ -328,6 +603,7 @@ export async function sendEmail(
         "Content-Type": "application/json",
       },
       body: JSON.stringify(payload),
+      signal: AbortSignal.timeout(8000),
     });
 
     if (!res.ok) {
@@ -411,11 +687,45 @@ export async function sendEmailWithOutbox(
   to: string,
   subject: string,
   body: string,
-  html?: string
-): Promise<{ id?: string; queued: boolean; outboxId?: string }> {
+  html?: string,
+  deliveryMeta?: {
+    userId?: string | null;
+    centerId?: string | null;
+    type?: NotificationType;
+    eventKey?: string;
+    skipDeliveryLog?: boolean;
+  }
+): Promise<{ id?: string; queued: boolean; outboxId?: string; deliveryId?: string }> {
+  const logDelivery = async (status: "SENT" | "PENDING", providerMessageId?: string, errorMessage?: string) => {
+    if (deliveryMeta?.skipDeliveryLog) return undefined;
+    try {
+      const row = await db.notificationDelivery.create({
+        data: {
+          userId: deliveryMeta?.userId ?? null,
+          centerId: deliveryMeta?.centerId ?? null,
+          channel: "EMAIL",
+          type: deliveryMeta?.type ?? "GENERAL",
+          eventKey: deliveryMeta?.eventKey ?? null,
+          recipient: maskEmailForLog(to),
+          subject,
+          status,
+          providerMessageId: providerMessageId ?? null,
+          errorMessage: errorMessage ?? null,
+          sentAt: status === "SENT" ? new Date() : null,
+        },
+        select: { id: true },
+      });
+      return row.id;
+    } catch (err) {
+      console.error("[Email] Failed to record NotificationDelivery:", err);
+      return undefined;
+    }
+  };
+
   try {
     const res = await sendEmail(to, subject, body, html);
-    return { id: res.id, queued: false };
+    const deliveryId = await logDelivery("SENT", res.id);
+    return { id: res.id, queued: false, deliveryId };
   } catch (err: unknown) {
     const errorMessage = err instanceof Error ? err.message : String(err);
     const outbox = await enqueueEmailOutbox({
@@ -426,7 +736,8 @@ export async function sendEmailWithOutbox(
       lastError: errorMessage,
       attempts: 1,
     });
-    return { id: outbox.id, queued: true, outboxId: outbox.id };
+    const deliveryId = await logDelivery("PENDING", outbox.id, errorMessage);
+    return { id: outbox.id, queued: true, outboxId: outbox.id, deliveryId };
   }
 }
 

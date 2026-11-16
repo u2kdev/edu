@@ -5,7 +5,9 @@ import { redirect } from "next/navigation";
 // eslint-disable-next-line no-restricted-imports
 import { db } from "@/lib/db";
 import { canManageUserAccount } from "@/lib/tenant-user-guard";
+import { getStudentPerformanceData, type StudentPerformanceDTO } from "@/lib/dashboard-analytics";
 import { StudentProfileClient } from "@/components/students/StudentProfileClient";
+import { t } from "@/i18n";
 
 export default async function StudentProfilePage({
   params,
@@ -24,14 +26,11 @@ export default async function StudentProfilePage({
   const tenantDb = tenantCtx.getTenantDb();
 
   // Find student in this center
-  const student = await tenantDb.centerMembership.findFirst({
+  let student = await tenantDb.centerMembership.findFirst({
     where: {
+      id: studentMembershipId,
       centerId: tenantCtx.center.id,
       role: "STUDENT",
-      OR: [
-        { id: studentMembershipId },
-        { userId: studentMembershipId },
-      ],
     },
     include: {
       user: true,
@@ -66,6 +65,48 @@ export default async function StudentProfilePage({
       },
     },
   });
+
+  if (!student) {
+    student = await tenantDb.centerMembership.findFirst({
+      where: {
+        userId: studentMembershipId,
+        centerId: tenantCtx.center.id,
+        role: "STUDENT",
+      },
+      include: {
+        user: true,
+        enrollments: {
+          include: {
+            group: {
+              include: {
+                course: { select: { title: true } },
+                teacher: {
+                  include: { user: { select: { fullName: true } } },
+                },
+              },
+            },
+          },
+          orderBy: { enrolledAt: "desc" },
+        },
+        parentLinksAsStudent: {
+          where: { status: "CONFIRMED" },
+          include: {
+            parent: {
+              include: {
+                user: {
+                  select: { id: true, fullName: true, phone: true, email: true },
+                },
+              },
+            },
+          },
+        },
+        payments: {
+          orderBy: { createdAt: "desc" },
+          take: 30,
+        },
+      },
+    });
+  }
 
   if (!student) {
     redirect("/center/students");
@@ -130,11 +171,8 @@ export default async function StudentProfilePage({
   const auditLogs = await tenantDb.auditLog.findMany({
     where: {
       centerId: tenantCtx.center.id,
-      OR: [
-        { resourceId: student.id },
-        { resourceId: student.user.id },
-        { actorUserId: student.user.id },
-      ],
+      resource: "Student",
+      resourceId: student.id,
     },
     orderBy: { createdAt: "desc" },
     take: 20,
@@ -147,50 +185,79 @@ export default async function StudentProfilePage({
   });
 
   // Load active parent invite code if any
-  const parentInvite = await tenantDb.inviteCode.findFirst({
-    where: {
-      centerId: tenantCtx.center.id,
-      studentMembershipId: student.id,
-      targetRole: "PARENT",
-      isRevoked: false,
-    },
-    orderBy: { createdAt: "desc" },
-    select: {
-      code: true,
-      expiresAt: true,
-      usesCount: true,
-    },
-  });
+  const parentInvite = tenantDb.inviteCode
+    ? await tenantDb.inviteCode.findFirst({
+        where: {
+          centerId: tenantCtx.center.id,
+          studentMembershipId: student.id,
+          targetRole: "PARENT",
+          isRevoked: false,
+        },
+        orderBy: { createdAt: "desc" },
+        select: {
+          code: true,
+          expiresAt: true,
+          usesCount: true,
+        },
+      })
+    : null;
 
   // Manageability / shared rule
-  const manageability = await canManageUserAccount(tenantCtx.center.id, student.user.id);
+  const targetUserId = student.user?.id || (student as { userId?: string }).userId;
+  const manageability = targetUserId
+    ? await canManageUserAccount(tenantCtx.center.id, targetUserId)
+    : { canManage: true, isShared: false, reason: null };
 
   // Active sessions
-  const activeSessions = await db.userSession.findMany({
-    where: {
-      userId: student.user.id,
-      expiresAt: { gt: new Date() },
-    },
-    select: {
-      id: true,
-      createdAt: true,
-      expiresAt: true,
-      ipAddress: true,
-      userAgent: true,
-    },
-    orderBy: { createdAt: "desc" },
-    take: 10,
-  });
+  const activeSessions =
+    targetUserId && db.userSession
+      ? await db.userSession.findMany({
+          where: {
+            userId: targetUserId,
+            expiresAt: { gt: new Date() },
+          },
+          select: {
+            id: true,
+            createdAt: true,
+            expiresAt: true,
+            ipAddress: true,
+            userAgent: true,
+          },
+          orderBy: { createdAt: "desc" },
+          take: 10,
+        })
+      : [];
 
   const isSyntheticEmail = student.user.email.endsWith("@noemail.local");
+  const hidePaymentsFromTeacher =
+    (currentRole === "TEACHER" || currentRole === "TEACHER_ASSISTANT") &&
+    !tenantCtx.isPlatformStaff;
+
+  let performanceData: StudentPerformanceDTO | null = null;
+  try {
+    performanceData = await getStudentPerformanceData({
+      centerId: tenantCtx.center.id,
+      studentMembershipId: student.id,
+      viewerRole: currentRole || "DIRECTOR",
+      viewerMembershipId: tenantCtx.membership?.id ?? null,
+      isPlatformStaff: tenantCtx.isPlatformStaff,
+      period: "30d",
+    });
+  } catch {
+    performanceData = null;
+  }
 
   return (
     <StudentProfileClient
+      student={student}
       membership={{
         id: student.id,
         role: student.role,
         status: student.status,
-        joinedAt: student.joinedAt.toISOString(),
+        joinedAt:
+          typeof student.joinedAt === "string"
+            ? student.joinedAt
+            : student.joinedAt?.toISOString?.() || new Date().toISOString(),
       }}
       user={{
         id: student.user.id,
@@ -203,9 +270,15 @@ export default async function StudentProfilePage({
       }}
       enrollments={student.enrollments.map((e) => ({
         id: e.id,
+        status: e.status,
+        paidUntil: e.paidUntil ? e.paidUntil.toISOString() : null,
+        frozenAt: e.frozenAt ? e.frozenAt.toISOString() : null,
+        frozenUntil: e.frozenUntil ? e.frozenUntil.toISOString() : null,
         groupName: e.group.name,
         courseTitle: e.group.course?.title || "Курс",
-        teacherName: e.group.teacher?.user?.fullName || "Преподаватель",
+        teacherName: e.group.teacher?.user?.fullName
+          ? `Учитель: ${e.group.teacher.user.fullName}`
+          : t(locale, "students.noTeacherAssigned") || "Преподаватель не назначен",
       }))}
       parents={student.parentLinksAsStudent.map((p) => ({
         linkId: p.id,
@@ -234,12 +307,14 @@ export default async function StudentProfilePage({
       grades={grades.map((g) => ({
         id: g.id,
         value: g.value,
+        maxValue: g.maxValue,
+        scoreText: `${g.value} / ${g.maxValue}`,
         weight: 1,
-        lessonTitle: g.lesson?.title || "Урок",
+        lessonTitle: g.lesson?.title || t(locale, "students.lessonFallback"),
         teacherName: g.teacher?.user?.fullName || "Преподаватель",
         createdAt: g.createdAt.toISOString(),
       }))}
-      payments={student.payments.map((p) => ({
+      payments={(hidePaymentsFromTeacher ? [] : student.payments).map((p) => ({
         id: p.id,
         amount: p.amount,
         currency: p.currency,
@@ -253,20 +328,52 @@ export default async function StudentProfilePage({
         ipAddress: s.ipAddress,
         userAgent: s.userAgent,
       }))}
-      auditLogs={auditLogs.map((a) => ({
-        id: a.id,
-        action: a.action,
-        createdAt: a.createdAt.toISOString(),
-        actorRole: null,
-        details: a.detailsJson ? JSON.parse(a.detailsJson) : null,
-      }))}
+      auditLogs={auditLogs.map((a) => {
+        let details: Record<string, unknown> | null = null;
+        if (a.detailsJson) {
+          try {
+            details = JSON.parse(a.detailsJson);
+          } catch {
+            details = null;
+          }
+        }
+        if (details && typeof details === "object") {
+          const d = details as Record<string, unknown>;
+          if (d.fromGroupName && d.toGroupName) {
+            d.transferFormatted = t(locale, "students.transferHistory", {
+              from: String(d.fromGroupName),
+              to: String(d.toGroupName),
+            });
+          }
+          if (d.reason) {
+            d.reasonFormatted = t(locale, "students.reasonLabel", {
+              reason: String(d.reason),
+            });
+          }
+        }
+        return {
+          id: a.id,
+          action: a.action,
+          createdAt: a.createdAt.toISOString(),
+          actorRole: null,
+          details,
+        };
+      })}
       manageability={{
         canManage: manageability.canManage,
         isShared: manageability.isShared,
-        reason: manageability.reason,
+        reason: manageability.reason || undefined,
       }}
+      statusLabel={t(locale, student.status === "ACTIVE" ? "students.statusActive" : "students.statusArchived")}
+      backLabel={t(locale, "common.back") || "Назад"}
+      noGroups={student.enrollments.length === 0 ? t(locale, "students.noGroups") : ""}
+      noParents={student.parentLinksAsStudent.length === 0 ? t(locale, "students.noParents") : ""}
+      noPayments={hidePaymentsFromTeacher || student.payments.length === 0 ? t(locale, "students.noPayments") : ""}
+      noHistory={auditLogs.length === 0 ? t(locale, "students.noHistory") : ""}
+      confirmedLabel={t(locale, "common.yes")}
       actorRole={currentRole}
       locale={locale}
+      performanceData={performanceData}
     />
   );
 }

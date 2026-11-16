@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 import Link from "next/link";
 import { ArrowLeft, Printer } from "lucide-react";
+import { Alert, AlertDescription, Badge, Button, Card, CardContent, Skeleton } from "@/components/ui";
 
 interface PaymentDetails {
   id: string;
@@ -68,22 +69,22 @@ export default function InvoicePage() {
 
   if (loading) {
     return (
-      <div className="min-h-screen bg-slate-50 flex items-center justify-center">
-        <p className="text-slate-500">Загрузка печатной формы...</p>
+      <div className="mx-auto max-w-3xl space-y-4 py-8">
+        <Skeleton className="h-10 w-64" />
+        <Skeleton className="h-96 w-full rounded-lg" />
       </div>
     );
   }
 
   if (error || !payment) {
     return (
-      <div className="min-h-screen bg-slate-50 p-6 flex flex-col items-center justify-center">
-        <p className="text-rose-600 font-medium mb-4">{error || "Платёж не найден"}</p>
-        <button
-          onClick={() => router.back()}
-          className="px-4 py-2 bg-slate-200 text-slate-800 rounded-lg hover:bg-slate-300"
-        >
+      <div className="mx-auto flex max-w-md flex-col items-center justify-center gap-4 py-12">
+        <Alert variant="destructive">
+          <AlertDescription>{error || "Платёж не найден"}</AlertDescription>
+        </Alert>
+        <Button type="button" variant="outline" onClick={() => router.back()}>
           Вернуться назад
-        </button>
+        </Button>
       </div>
     );
   }
@@ -94,160 +95,159 @@ export default function InvoicePage() {
     : new Date().toLocaleDateString("ru-RU");
 
   return (
-    <div className="min-h-screen bg-slate-100 p-4 sm:p-8">
-      {/* Action Bar */}
-      <div className="max-w-3xl mx-auto mb-6 flex items-center justify-between print:hidden">
-        <Link
-          href="/platform-admin/finance/payments"
-          className="inline-flex items-center gap-2 text-sm text-slate-600 hover:text-slate-900"
-        >
-          <ArrowLeft className="w-4 h-4" />
-          Назад к платежам
-        </Link>
-        <button
-          onClick={() => window.print()}
-          className="inline-flex items-center gap-2 px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 text-sm font-medium shadow-sm"
-        >
-          <Printer className="w-4 h-4" />
-          Распечатать квитанцию
-        </button>
+    <div className="space-y-6">
+      <div className="mx-auto flex max-w-3xl items-center justify-between print:hidden">
+        <Button asChild variant="outline" size="sm">
+          <Link href="/platform-admin/finance/payments">
+            <ArrowLeft className="h-4 w-4" aria-hidden="true" />
+            <span>Назад к платежам</span>
+          </Link>
+        </Button>
+        <Button type="button" variant="primary" size="sm" onClick={() => window.print()}>
+          <Printer className="h-4 w-4" aria-hidden="true" />
+          <span>Распечатать квитанцию</span>
+        </Button>
       </div>
 
-      {/* Invoice Document Card */}
-      <div className="max-w-3xl mx-auto bg-white p-8 sm:p-12 rounded-xl shadow-md border border-slate-200 print:shadow-none print:border-none print:p-0">
-        {/* Header */}
-        <div className="flex justify-between items-start pb-8 border-b border-slate-200">
-          <div>
-            <h1 className="text-2xl font-bold tracking-tight text-slate-900">КВИТАНЦИЯ ОБ ОПЛАТЕ</h1>
-            <p className="text-sm font-mono text-indigo-600 font-semibold mt-1">{invoiceNum}</p>
-            <p className="text-xs text-slate-500 mt-1">Дата формирования: {issueDate}</p>
+      <Card className="mx-auto max-w-3xl print:border-none print:shadow-none">
+        <CardContent className="p-8 sm:p-12 print:p-0">
+          <div className="flex flex-wrap items-start justify-between gap-4 border-b border-border pb-8">
+            <div>
+              <h1 className="font-display text-2xl font-bold tracking-tight text-foreground">
+                Квитанция об оплате
+              </h1>
+              <p className="mt-1 font-mono text-sm font-semibold text-primary">{invoiceNum}</p>
+              <p className="mt-1 text-xs text-muted-foreground tabular-nums">
+                Дата формирования: {issueDate}
+              </p>
+            </div>
+            <div className="text-right">
+              <h2 className="font-display text-lg font-semibold text-foreground">e-darschi LMS</h2>
+              <p className="text-xs text-muted-foreground">Платформа управления учебными центрами</p>
+              <p className="text-xs text-muted-foreground">Ташкент, Узбекистан</p>
+              <p className="text-xs text-muted-foreground">support@e-darschi.uz</p>
+            </div>
           </div>
-          <div className="text-right">
-            <h2 className="text-lg font-bold text-slate-900">e-darschi LMS</h2>
-            <p className="text-xs text-slate-500">Платформа управления учебными центрами</p>
-            <p className="text-xs text-slate-500">Ташкент, Узбекистан</p>
-            <p className="text-xs text-slate-500">support@e-darschi.uz</p>
-          </div>
-        </div>
 
-        {/* Parties */}
-        <div className="grid grid-cols-2 gap-8 py-8 border-b border-slate-200">
-          <div>
-            <h3 className="text-xs font-semibold uppercase tracking-wider text-slate-400 mb-2">
-              Плательщик (Клиент)
-            </h3>
-            <p className="font-semibold text-slate-900">{payment.center.name}</p>
-            <p className="text-sm text-slate-600">ID: {payment.center.slug}</p>
-            {payment.center.phone && <p className="text-sm text-slate-600">Тел: {payment.center.phone}</p>}
-            {payment.center.email && <p className="text-sm text-slate-600">Email: {payment.center.email}</p>}
-            {payment.center.address && <p className="text-sm text-slate-600">Адрес: {payment.center.address}</p>}
-          </div>
-          <div>
-            <h3 className="text-xs font-semibold uppercase tracking-wider text-slate-400 mb-2">
-              Информация об оплате
-            </h3>
-            <p className="text-sm text-slate-600">
-              Способ: <span className="font-medium text-slate-900">{payment.paymentMethod}</span>
-            </p>
-            <p className="text-sm text-slate-600">
-              Статус:{" "}
-              <span
-                className={`font-semibold ${
-                  payment.status === "PAID"
-                    ? "text-emerald-700"
+          <div className="grid grid-cols-1 gap-8 border-b border-border py-8 sm:grid-cols-2">
+            <div>
+              <h3 className="mb-2 text-xs font-medium text-muted-foreground">Плательщик (клиент)</h3>
+              <p className="font-semibold text-foreground">{payment.center.name}</p>
+              <p className="text-sm text-muted-foreground">ID: {payment.center.slug}</p>
+              {payment.center.phone && (
+                <p className="text-sm text-muted-foreground tabular-nums">Тел: {payment.center.phone}</p>
+              )}
+              {payment.center.email && (
+                <p className="text-sm text-muted-foreground">Email: {payment.center.email}</p>
+              )}
+              {payment.center.address && (
+                <p className="text-sm text-muted-foreground">Адрес: {payment.center.address}</p>
+              )}
+            </div>
+            <div className="space-y-1.5">
+              <h3 className="mb-2 text-xs font-medium text-muted-foreground">Информация об оплате</h3>
+              <p className="text-sm text-muted-foreground">
+                Способ: <span className="font-medium text-foreground">{payment.paymentMethod}</span>
+              </p>
+              <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                <span>Статус:</span>
+                <Badge
+                  variant={
+                    payment.status === "PAID"
+                      ? "success"
+                      : payment.status === "REFUNDED"
+                      ? "destructive"
+                      : "warning"
+                  }
+                >
+                  {payment.status === "PAID"
+                    ? "Оплачено"
                     : payment.status === "REFUNDED"
-                    ? "text-rose-700"
-                    : "text-amber-700"
-                }`}
-              >
-                {payment.status === "PAID"
-                  ? "ОПЛАЧЕНО"
-                  : payment.status === "REFUNDED"
-                  ? "ВОЗВРАЩЕНО"
-                  : payment.status}
-              </span>
-            </p>
-            {payment.paidAt && (
-              <p className="text-sm text-slate-600">
-                Дата платежа: {new Date(payment.paidAt).toLocaleDateString("ru-RU")}
-              </p>
-            )}
-            {payment.recorder && (
-              <p className="text-xs text-slate-400 mt-2">
-                Записал: {payment.recorder.name || payment.recorder.email}
-              </p>
-            )}
-          </div>
-        </div>
-
-        {/* Table of Services */}
-        <div className="py-8 border-b border-slate-200">
-          <table className="w-full text-left text-sm">
-            <thead>
-              <tr className="border-b border-slate-200 text-xs font-semibold uppercase tracking-wider text-slate-400">
-                <th className="py-3">Наименование услуги</th>
-                <th className="py-3">Период действия</th>
-                <th className="py-3 text-right">Сумма (UZS)</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-slate-100">
-              <tr>
-                <td className="py-4">
-                  <div className="font-medium text-slate-900">
-                    Подписка на тариф {payment.plan?.name || "LMS"}
-                  </div>
-                  <div className="text-xs text-slate-500">Доступ к платформе управления обучением</div>
-                </td>
-                <td className="py-4 text-slate-600">
-                  {payment.periodStartsAt && payment.periodEndsAt ? (
-                    <>
-                      {new Date(payment.periodStartsAt).toLocaleDateString("ru-RU")} —{" "}
-                      {new Date(payment.periodEndsAt).toLocaleDateString("ru-RU")}
-                    </>
-                  ) : (
-                    "1 месяц"
-                  )}
-                </td>
-                <td className="py-4 text-right font-medium text-slate-900">
-                  {payment.amount.toLocaleString()} UZS
-                </td>
-              </tr>
-            </tbody>
-          </table>
-        </div>
-
-        {/* Totals */}
-        <div className="py-6 flex flex-col items-end">
-          <div className="w-64 space-y-2 text-sm">
-            <div className="flex justify-between text-slate-600">
-              <span>Сумма к оплате:</span>
-              <span className="font-medium">{payment.amount.toLocaleString()} UZS</span>
-            </div>
-            {payment.refundAmount ? (
-              <div className="flex justify-between text-rose-600">
-                <span>Возвращено:</span>
-                <span className="font-medium">-{payment.refundAmount.toLocaleString()} UZS</span>
+                    ? "Возвращено"
+                    : payment.status}
+                </Badge>
               </div>
-            ) : null}
-            <div className="flex justify-between border-t border-slate-200 pt-2 text-base font-bold text-slate-900">
-              <span>Итого:</span>
-              <span>{(payment.amount - (payment.refundAmount || 0)).toLocaleString()} UZS</span>
+              {payment.paidAt && (
+                <p className="text-sm text-muted-foreground tabular-nums">
+                  Дата платежа: {new Date(payment.paidAt).toLocaleDateString("ru-RU")}
+                </p>
+              )}
+              {payment.recorder && (
+                <p className="mt-2 text-xs text-muted-foreground">
+                  Записал: {payment.recorder.name || payment.recorder.email}
+                </p>
+              )}
             </div>
           </div>
-        </div>
 
-        {/* Notes & Seal */}
-        {payment.notes && (
-          <div className="p-4 bg-slate-50 rounded-lg text-xs text-slate-600 border border-slate-200 mt-4">
-            <span className="font-semibold text-slate-700">Примечание:</span> {payment.notes}
+          <div className="border-b border-border py-8">
+            <table className="w-full text-left text-sm">
+              <thead>
+                <tr className="border-b border-border text-xs font-medium text-muted-foreground">
+                  <th className="py-3">Наименование услуги</th>
+                  <th className="py-3">Период действия</th>
+                  <th className="py-3 text-right">Сумма (UZS)</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-border">
+                <tr>
+                  <td className="py-4">
+                    <div className="font-medium text-foreground">
+                      Подписка на тариф {payment.plan?.name || "LMS"}
+                    </div>
+                    <div className="text-xs text-muted-foreground">
+                      Доступ к платформе управления обучением
+                    </div>
+                  </td>
+                  <td className="py-4 text-muted-foreground tabular-nums">
+                    {payment.periodStartsAt && payment.periodEndsAt ? (
+                      <>
+                        {new Date(payment.periodStartsAt).toLocaleDateString("ru-RU")} —{" "}
+                        {new Date(payment.periodEndsAt).toLocaleDateString("ru-RU")}
+                      </>
+                    ) : (
+                      "1 месяц"
+                    )}
+                  </td>
+                  <td className="py-4 text-right font-medium text-foreground tabular-nums">
+                    {payment.amount.toLocaleString()} UZS
+                  </td>
+                </tr>
+              </tbody>
+            </table>
           </div>
-        )}
 
-        <div className="mt-12 pt-8 border-t border-dashed border-slate-200 flex justify-between items-center text-xs text-slate-400">
-          <div>Электронная квитанция сформирована в системе e-darschi LMS.</div>
-          <div>Подпись не требуется (публичная оферта)</div>
-        </div>
-      </div>
+          <div className="flex flex-col items-end py-6">
+            <div className="w-64 space-y-2 text-sm tabular-nums">
+              <div className="flex justify-between text-muted-foreground">
+                <span>Сумма к оплате:</span>
+                <span className="font-medium text-foreground">{payment.amount.toLocaleString()} UZS</span>
+              </div>
+              {payment.refundAmount ? (
+                <div className="flex justify-between text-destructive">
+                  <span>Возвращено:</span>
+                  <span className="font-medium">-{payment.refundAmount.toLocaleString()} UZS</span>
+                </div>
+              ) : null}
+              <div className="flex justify-between border-t border-border pt-2 text-base font-bold text-foreground">
+                <span>Итого:</span>
+                <span>{(payment.amount - (payment.refundAmount || 0)).toLocaleString()} UZS</span>
+              </div>
+            </div>
+          </div>
+
+          {payment.notes && (
+            <div className="mt-4 rounded-lg border border-border bg-muted/40 p-4 text-xs text-muted-foreground">
+              <span className="font-semibold text-foreground">Примечание:</span> {payment.notes}
+            </div>
+          )}
+
+          <div className="mt-12 flex flex-wrap items-center justify-between gap-2 border-t border-dashed border-border pt-8 text-xs text-muted-foreground">
+            <div>Электронная квитанция сформирована в системе e-darschi LMS.</div>
+            <div>Подпись не требуется (публичная оферта)</div>
+          </div>
+        </CardContent>
+      </Card>
     </div>
   );
 }

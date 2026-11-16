@@ -33,11 +33,14 @@ export async function GET(req: Request) {
       });
 
       const myBalance = balances[0] || null;
-      return NextResponse.json({
-        role: "STUDENT",
-        balance: myBalance,
-        students: balances,
-      });
+      return NextResponse.json(
+        {
+          role: "STUDENT",
+          balance: myBalance,
+          students: balances,
+        },
+        { headers: { "Cache-Control": "no-store" } }
+      );
     }
 
     if (role === "PARENT") {
@@ -83,17 +86,20 @@ export async function GET(req: Request) {
       const totalPaid = balances.reduce((s, b) => s + b.totalPaid, 0);
       const totalAccrued = balances.reduce((s, b) => s + b.totalAccrued, 0);
 
-      return NextResponse.json({
-        role: "PARENT",
-        balance: balances[0] || null,
-        students: balances,
-        summary: {
-          childrenCount: confirmedChildIds.length,
-          totalDebt,
-          totalPaid,
-          totalAccrued,
+      return NextResponse.json(
+        {
+          role: "PARENT",
+          balance: balances[0] || null,
+          students: balances,
+          summary: {
+            childrenCount: confirmedChildIds.length,
+            totalDebt,
+            totalPaid,
+            totalAccrued,
+          },
         },
-      });
+        { headers: { "Cache-Control": "no-store" } }
+      );
     }
 
     if (
@@ -114,11 +120,14 @@ export async function GET(req: Request) {
         studentMembershipIds: [requestedChildId],
       });
 
-      return NextResponse.json({
-        role,
-        balance: balances[0] || null,
-        students: balances,
-      });
+      return NextResponse.json(
+        {
+          role,
+          balance: balances[0] || null,
+          students: balances,
+        },
+        { headers: { "Cache-Control": "no-store" } }
+      );
     }
 
     return NextResponse.json(

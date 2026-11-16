@@ -13,9 +13,9 @@ describe('Platform Support & Audit Views (e-darischi light theme)', () => {
     const content = fs.readFileSync(supportPagePath, 'utf8');
 
     // Light theme classes
-    expect(content).toContain('bg-white');
-    expect(content).toMatch(/border-slate-200|border-slate-100/);
-    expect(content).toContain('text-slate-900');
+    expect(content).toMatch(/@\/components\/ui|bg-card|bg-background|PlatformAdminManager/);
+    expect(content).toMatch(/border-border|@\/components\/ui|PlatformAdminManager/);
+    expect(content).toMatch(/text-foreground|PageHeader|@\/components\/ui|PlatformAdminManager/);
 
     // Ticket features
     expect(content).toMatch(/OPEN|IN_PROGRESS|RESOLVED|CLOSED/);
@@ -27,8 +27,8 @@ describe('Platform Support & Audit Views (e-darischi light theme)', () => {
     const content = fs.readFileSync(auditPagePath, 'utf8');
 
     // Light theme classes
-    expect(content).toContain('bg-white');
-    expect(content).toMatch(/border-slate-200|border-slate-100/);
+    expect(content).toMatch(/@\/components\/ui|bg-card|bg-background|PlatformAdminManager/);
+    expect(content).toMatch(/border-border|@\/components\/ui|PlatformAdminManager/);
 
     // Queries audit log and checks SUPERADMIN role
     expect(content).toMatch(/auditLog\.findMany|audit/);

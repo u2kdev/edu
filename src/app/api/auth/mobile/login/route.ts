@@ -1,7 +1,7 @@
 // Reason: Exception: Auth routes operate on platform models.
 // eslint-disable-next-line no-restricted-imports
 import { db } from "@/lib/db";
-import { comparePassword, signJWT, hashJti, hashToken, generateRefreshToken, JWTPayload } from "@/lib/auth";
+import { comparePassword, signJWT, hashJti, hashToken, generateRefreshToken, JWTPayload, DUMMY_BCRYPT_HASH, signPending2faToken } from "@/lib/auth";
 import { normalizePhone } from "@/lib/phone";
 import { checkRateLimit } from "@/lib/rate-limit";
 import { getClientIp } from "@/lib/ip";
@@ -25,6 +25,14 @@ export async function POST(req: Request) {
     const rawLogin = (parsed.login || parsed.email || "").trim();
     const loginLower = rawLogin.toLowerCase();
     const normalizedPhone = normalizePhone(rawLogin);
+
+    // Account-level rate limit across all IPs (mitigates distributed IP brute-force & credential stuffing)
+    if (loginLower) {
+      const accountKey = `account_login:${loginLower}`;
+      if (!(await checkRateLimit(accountKey, 15, 15 * 60 * 1000))) {
+        return apiError("Too many login attempts for this account", "RATE_LIMITED", 429);
+      }
+    }
 
     // Find user by email, phone, or username (excluding soft-deleted)
     const user = await db.platformUser.findFirst({
@@ -126,6 +134,7 @@ export async function POST(req: Request) {
     };
 
     if (!user || !user.isActive) {
+      await comparePassword(password, DUMMY_BCRYPT_HASH);
       return await handleFailure("user_not_found_or_inactive");
     }
 
@@ -142,6 +151,47 @@ export async function POST(req: Request) {
         403,
         { email: user.email }
       );
+    }
+
+    // 2FA TOTP check
+    if (user.twoFactorEnabled && user.twoFactorSecret) {
+      if (!parsed.twoFactorCode) {
+        const twoFactorToken = signPending2faToken({
+          id: user.id,
+          email: user.email,
+          platformRole: user.platformRole,
+        });
+        return apiSuccess({
+          requiresTwoFactor: true,
+          twoFactorToken,
+          email: user.email,
+          message: "auth.twoFactorRequired",
+        });
+      }
+
+      const { decryptTwoFactorSecret } = await import("@/lib/two-factor-cipher");
+      const { verifyTotpCodeWithStep, verifyBackupCode } = await import("@/lib/totp");
+      const decryptedSecret = decryptTwoFactorSecret(user.twoFactorSecret);
+      const totpResult = verifyTotpCodeWithStep(decryptedSecret, parsed.twoFactorCode, {
+        lastStep: user.twoFactorLastStep,
+      });
+      const backupResult = verifyBackupCode(parsed.twoFactorCode, user.twoFactorBackupCodes);
+
+      if (!totpResult.valid && !backupResult.valid) {
+        return await handleFailure("invalid_2fa_code", user.id);
+      }
+
+      if (backupResult.valid && backupResult.remainingHashes) {
+        await db.platformUser.update({
+          where: { id: user.id },
+          data: { twoFactorBackupCodes: JSON.stringify(backupResult.remainingHashes) },
+        });
+      } else if (totpResult.valid && totpResult.step !== undefined) {
+        await db.platformUser.update({
+          where: { id: user.id },
+          data: { twoFactorLastStep: totpResult.step },
+        });
+      }
     }
 
     // Reset attempts upon success and record lastLoginAt
@@ -218,10 +268,16 @@ export async function POST(req: Request) {
       role: m.role,
     }));
 
+    const { getPlatformSetting } = await import("@/lib/platform-settings");
+    const require2faForStaff = await getPlatformSetting("security.require2faForStaff", false);
+    const isStaff = ["SUPERADMIN", "DEVELOPER", "PLATFORM_ADMIN"].includes(user.platformRole);
+    const requires2faSetup = Boolean(require2faForStaff && isStaff && !user.twoFactorEnabled);
+
     return apiSuccess({
       token,
       refreshToken,
       mustChangePassword: user.mustChangePassword,
+      requires2faSetup,
       user: {
         id: user.id,
         email: user.email,
@@ -232,6 +288,7 @@ export async function POST(req: Request) {
         avatarUrl: user.avatarUrl,
         emailVerified: user.emailVerified,
         mustChangePassword: user.mustChangePassword,
+        requires2faSetup,
       },
       memberships: formattedMemberships,
       activeCenterId: activeMembership?.centerId || null,

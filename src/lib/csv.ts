@@ -1,20 +1,20 @@
 /**
  * CSV Helper with CSV Formula Injection (DDE) Sanitization
  * Automatically escapes characters that can trigger formula execution in spreadsheet software:
- * '=', '+', '-', '@', '\t', '\r'
+ * '=', '+', '-', '@', '\t', '\r' (including leading whitespace)
  */
 
-export function sanitizeCsvCell(value: string | number | null | undefined): string {
+export function sanitizeCsvCell(value: unknown): string {
   if (value === null || value === undefined) return "";
   let str = String(value);
 
-  // If starts with dangerous character, prefix with single quote
-  if (/^[=+\-@\t\r]/.test(str)) {
+  // If starts with dangerous character (or preceded by whitespace/tab), prefix with single quote
+  if (/^[\s\t\r\n]*[=+\-@\t\r]/.test(str)) {
     str = `'${str}`;
   }
 
-  // If cell contains double quote, comma, or newline, escape quotes and wrap in quotes
-  if (/[",\r\n]/.test(str)) {
+  // If cell contains double quote, comma, semicolon, or newline, escape quotes and wrap in quotes
+  if (/[",\r\n;]/.test(str)) {
     str = `"${str.replace(/"/g, '""')}"`;
   }
 
@@ -23,7 +23,7 @@ export function sanitizeCsvCell(value: string | number | null | undefined): stri
 
 export function generateCsv(
   headers: string[],
-  rows: (string | number | null | undefined)[][]
+  rows: unknown[][]
 ): string {
   const headerLine = headers.map(sanitizeCsvCell).join(",");
   const rowLines = rows.map((row) => row.map(sanitizeCsvCell).join(","));

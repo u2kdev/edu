@@ -1,10 +1,13 @@
 import { NextResponse } from "next/server";
+import crypto from "crypto";
 // Reason: Exception: Invite validation requires global search before center context is known.
 // eslint-disable-next-line no-restricted-imports
 import { db } from "@/lib/db";
 import { getAuthSession } from "@/lib/auth";
-import { requireTenantAccess, logAuditEvent } from "@/lib/tenant";
-import { getTenantDb } from "@/lib/db-tenant";
+import { requireTenantAccess } from "@/lib/tenant";
+import { generateSecureInviteCode } from "@/lib/invites";
+import { checkRateLimit } from "@/lib/rate-limit";
+import { getClientIp } from "@/lib/ip";
 
 export async function POST(req: Request) {
   try {
@@ -19,7 +22,7 @@ export async function POST(req: Request) {
     if (action === "INITIATE_BY_ADMIN") {
       const tenantCtx = await requireTenantAccess(req);
       const tenantDb = tenantCtx.getTenantDb();
-      
+
       if (
         tenantCtx.role !== "DIRECTOR" &&
         tenantCtx.role !== "CENTER_ADMIN" &&
@@ -30,15 +33,19 @@ export async function POST(req: Request) {
 
       const studentMem = await tenantDb.centerMembership.findFirst({
         where: { id: studentId, role: "STUDENT" },
-        include: { user: true },
+        include: { user: { select: { fullName: true } } },
       });
 
       if (!studentMem) {
         return NextResponse.json({ error: "Ученик не найден" }, { status: 404 });
       }
 
-      // Generate a parent invite code linked to this specific student
-      const code = `PARENT-${studentMem.id.slice(0, 5).toUpperCase()}-${Math.floor(1000 + Math.random() * 9000)}`;
+      // Generate a CSPRNG parent invite code and store only its SHA-256 hash in the DB
+      const plaintextCode = `PARENT-${generateSecureInviteCode(16)}`;
+      const codeHash = crypto
+        .createHash("sha256")
+        .update(plaintextCode.toUpperCase().trim())
+        .digest("hex");
 
       let createdByMembershipId = tenantCtx.membership?.id;
       if (!createdByMembershipId) {
@@ -55,10 +62,10 @@ export async function POST(req: Request) {
       const expiresAt = new Date();
       expiresAt.setDate(expiresAt.getDate() + 30);
 
-      const parentInvite = await tenantDb.inviteCode.create({
+      await tenantDb.inviteCode.create({
         data: {
           centerId: tenantCtx.center.id,
-          code,
+          code: codeHash,
           targetRole: "PARENT",
           studentMembershipId: studentMem.id,
           maxUses: 2, // Allow up to 2 parents (e.g. mom and dad)
@@ -69,7 +76,7 @@ export async function POST(req: Request) {
 
       return NextResponse.json({
         success: true,
-        parentInviteCode: code,
+        parentInviteCode: plaintextCode,
         expiresAt,
         studentName: studentMem.user.fullName,
         studentMembershipId: studentMem.id,
@@ -78,92 +85,126 @@ export async function POST(req: Request) {
 
     // Action 2: Parent claims link using code (cross tenant, before tenantCtx exists)
     if (action === "CLAIM_PARENT_LINK") {
-      if (!inviteCode) {
+      const ip = getClientIp(req);
+      const rlKey = `parent-link-claim:${session.user.id}:${ip}`;
+      if (!(await checkRateLimit(rlKey, 8, 60000))) {
+        return NextResponse.json(
+          { error: "Слишком много попыток. Попробуйте позже." },
+          { status: 429 }
+        );
+      }
+
+      if (!inviteCode || typeof inviteCode !== "string") {
         return NextResponse.json({ error: "Введите инвайт-код родителя" }, { status: 400 });
       }
 
-      // eslint-disable-next-line no-restricted-imports
-      const codeObj = await db.inviteCode.findUnique({
-        where: { code: inviteCode.toUpperCase().trim() },
+      const cleanCode = inviteCode.toUpperCase().trim();
+      const codeHash = crypto.createHash("sha256").update(cleanCode).digest("hex");
+
+      const codeObj = await db.inviteCode.findFirst({
+        where: {
+          code: { in: [codeHash, cleanCode] },
+        },
         include: { center: true },
       });
 
-      if (!codeObj || codeObj.targetRole !== "PARENT" || codeObj.isRevoked) {
+      if (
+        !codeObj ||
+        codeObj.targetRole !== "PARENT" ||
+        codeObj.isRevoked ||
+        (codeObj.expiresAt && new Date() > codeObj.expiresAt) ||
+        (codeObj.maxUses !== null && codeObj.usesCount >= codeObj.maxUses) ||
+        !codeObj.studentMembershipId
+      ) {
         return NextResponse.json({ error: "Недействительный родительский код" }, { status: 400 });
       }
 
-      const tenantDb = getTenantDb(codeObj.centerId);
+      if (codeObj.center.status === "BLOCKED" || codeObj.center.status === "CANCELLED") {
+        return NextResponse.json(
+          { error: "Учебный центр заблокирован или деактивирован" },
+          { status: 403 }
+        );
+      }
 
-      // Ensure parent membership exists in center
-      let parentMem = await tenantDb.centerMembership.findFirst({
-        where: { userId: session.user.id, role: "PARENT" },
-      });
+      const boundStudentId = codeObj.studentMembershipId;
 
-      if (!parentMem) {
-        parentMem = await tenantDb.centerMembership.create({
-          data: {
+      const result = await db.$transaction(async (tx) => {
+        // Verify student belongs to this center and is ACTIVE
+        const studentMem = await tx.centerMembership.findFirst({
+          where: {
+            id: boundStudentId,
             centerId: codeObj.centerId,
-            userId: session.user.id,
-            role: "PARENT",
+            role: "STUDENT",
             status: "ACTIVE",
           },
         });
-      }
 
-      // Find student membership from invite code or request
-      const studentIdToLink = codeObj.studentMembershipId || studentId;
-      if (studentIdToLink) {
-        const studentMem = await tenantDb.centerMembership.findFirst({
-          where: { id: studentIdToLink, role: "STUDENT" },
+        if (!studentMem) {
+          throw new Error("INVALID_STUDENT");
+        }
+
+        // Atomic conditional increment of usesCount
+        const affected = await tx.$executeRaw`
+          UPDATE "InviteCode"
+          SET "usesCount" = "usesCount" + 1
+          WHERE "id" = ${codeObj.id}
+            AND "isRevoked" = false
+            AND ("expiresAt" IS NULL OR "expiresAt" > NOW())
+            AND ("maxUses" IS NULL OR "usesCount" < "maxUses")
+        `;
+
+        if (affected === 0) {
+          throw new Error("CODE_EXHAUSTED_OR_INVALID");
+        }
+
+        // Ensure parent membership exists in center
+        let parentMem = await tx.centerMembership.findFirst({
+          where: { centerId: codeObj.centerId, userId: session.user.id, role: "PARENT" },
         });
 
-        if (studentMem) {
-          // Use updateMany simulation for upsert
-          const existingLink = await tenantDb.parentLink.findFirst({
-             where: { parentMembershipId: parentMem.id, studentMembershipId: studentMem.id }
+        if (!parentMem) {
+          parentMem = await tx.centerMembership.create({
+            data: {
+              centerId: codeObj.centerId,
+              userId: session.user.id,
+              role: "PARENT",
+              status: "ACTIVE",
+            },
           });
-          
-          if (existingLink) {
-             await tenantDb.parentLink.updateMany({
-               where: { parentMembershipId: parentMem.id, studentMembershipId: studentMem.id },
-               data: { status: "CONFIRMED", confirmedAt: new Date(), inviteCodeUsed: inviteCode }
-             });
-          } else {
-            try {
-               await tenantDb.parentLink.create({
-                 data: {
-                   parentMembershipId: parentMem.id,
-                   studentMembershipId: studentMem.id,
-                   status: "CONFIRMED",
-                   initiatedBy: "PARENT",
-                   inviteCodeUsed: inviteCode,
-                   confirmedAt: new Date(),
-                 }
-               });
-            } catch (e: unknown) {
-              const error = e as { code?: string };
-              if (error.code === 'P2002') {
-                await tenantDb.parentLink.updateMany({
-                  where: { parentMembershipId: parentMem.id, studentMembershipId: studentMem.id },
-                  data: { status: "CONFIRMED", confirmedAt: new Date(), inviteCodeUsed: inviteCode }
-                });
-              } else {
-                throw e;
-              }
-            }
-          }
         }
-      }
 
-      // Increment usage
-      await tenantDb.inviteCode.updateMany({
-        where: { id: codeObj.id },
-        data: { usesCount: { increment: 1 } },
+        const existingLink = await tx.parentLink.findFirst({
+          where: { parentMembershipId: parentMem.id, studentMembershipId: studentMem.id },
+        });
+
+        if (existingLink) {
+          await tx.parentLink.updateMany({
+            where: { parentMembershipId: parentMem.id, studentMembershipId: studentMem.id },
+            data: {
+              status: "CONFIRMED",
+              confirmedAt: new Date(),
+              inviteCodeUsed: codeHash,
+            },
+          });
+        } else {
+          await tx.parentLink.create({
+            data: {
+              parentMembershipId: parentMem.id,
+              studentMembershipId: studentMem.id,
+              status: "CONFIRMED",
+              initiatedBy: "PARENT",
+              inviteCodeUsed: codeHash,
+              confirmedAt: new Date(),
+            },
+          });
+        }
+
+        return parentMem;
       });
 
       return NextResponse.json({
         success: true,
-        parentMembershipId: parentMem.id,
+        parentMembershipId: result.id,
         centerName: codeObj.center.name,
       });
     }
@@ -181,14 +222,17 @@ export async function POST(req: Request) {
         return NextResponse.json({ error: "Forbidden" }, { status: 403 });
       }
 
-      if (!inviteCode) {
+      if (!inviteCode || typeof inviteCode !== "string") {
         return NextResponse.json({ error: "Не указан код для отзыва" }, { status: 400 });
       }
+
+      const cleanCode = inviteCode.toUpperCase().trim();
+      const codeHash = crypto.createHash("sha256").update(cleanCode).digest("hex");
 
       await tenantDb.inviteCode.updateMany({
         where: {
           centerId: tenantCtx.center.id,
-          code: inviteCode.toUpperCase().trim(),
+          code: { in: [codeHash, cleanCode] },
         },
         data: { isRevoked: true },
       });
@@ -198,7 +242,15 @@ export async function POST(req: Request) {
 
     return NextResponse.json({ error: "Invalid action" }, { status: 400 });
   } catch (err: unknown) {
+    if (err instanceof Error) {
+      if (err.message === "CODE_EXHAUSTED_OR_INVALID" || err.message === "INVALID_STUDENT") {
+        return NextResponse.json({ error: "Недействительный родительский код" }, { status: 400 });
+      }
+    }
     const error = err as { message?: string; status?: number };
-    return NextResponse.json({ error: error.status ? error.message : "Ошибка сервера" }, { status: error.status || 500 });
+    return NextResponse.json(
+      { error: error.status ? error.message : "Ошибка сервера" },
+      { status: error.status || 500 }
+    );
   }
 }

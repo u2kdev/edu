@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { Eye, Loader2 } from "lucide-react";
+import { Button } from "@/components/ui/button";
 
 interface ImpersonateButtonProps {
   targetUserId: string;
@@ -33,7 +34,7 @@ export default function ImpersonateButton({
       } else {
         alert(data.error || "Ошибка входа от имени пользователя");
       }
-    } catch (err) {
+    } catch {
       alert("Ошибка сети");
     } finally {
       setLoading(false);
@@ -41,17 +42,19 @@ export default function ImpersonateButton({
   }
 
   return (
-    <button
+    <Button
+      type="button"
+      variant="outline"
+      size="sm"
       onClick={handleImpersonate}
       disabled={loading}
-      className="px-3 py-1.5 bg-red-500/10 hover:bg-red-500/20 text-red-400 text-xs font-semibold rounded-lg border border-red-500/20 transition-all flex items-center gap-1.5 ml-auto disabled:opacity-50"
     >
       {loading ? (
-        <Loader2 className="w-3.5 h-3.5 animate-spin" />
+        <Loader2 className="w-3.5 h-3.5 animate-spin" aria-hidden="true" />
       ) : (
-        <Eye className="w-3.5 h-3.5" />
+        <Eye className="w-3.5 h-3.5" aria-hidden="true" />
       )}
       <span>{label}</span>
-    </button>
+    </Button>
   );
 }

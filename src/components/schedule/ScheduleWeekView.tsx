@@ -2,6 +2,7 @@
 
 import { Clock, Edit2 } from "lucide-react";
 import { t } from "@/i18n";
+import { Card, CardContent } from "@/components/ui/card";
 import { DAYS_OF_WEEK, type ScheduleSlotItem } from "./schedule-utils";
 
 interface ScheduleWeekViewProps {
@@ -20,79 +21,83 @@ export function ScheduleWeekView({
   onEditSlot,
 }: ScheduleWeekViewProps) {
   return (
-    <div className="glass-panel p-5 rounded-2xl border border-slate-800">
-      <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 lg:grid-cols-7 gap-3">
-        {DAYS_OF_WEEK.map((day) => (
-          <div
-            key={day}
-            className="min-h-[140px] bg-slate-900/30 p-2.5 rounded-xl border border-slate-800/80"
-          >
+    <Card>
+      <CardContent className="p-4">
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 md:grid-cols-4 lg:grid-cols-7">
+          {DAYS_OF_WEEK.map((day) => (
             <div
-              className={`text-center text-xs font-bold uppercase tracking-wider mb-2.5 pb-1.5 border-b ${
-                day === 6 || day === 7
-                  ? "text-amber-400 border-amber-500/30"
-                  : "text-slate-400 border-slate-800"
-              }`}
+              key={day}
+              className="min-h-[140px] rounded-lg border border-border bg-muted/40 p-2.5"
             >
-              {dayNamesShort[day]}
-            </div>
+              <div
+                className={`mb-2.5 border-b pb-1.5 text-center text-xs font-semibold ${
+                  day === 6 || day === 7
+                    ? "border-warning/30 text-warning"
+                    : "border-border text-muted-foreground"
+                }`}
+              >
+                {dayNamesShort[day]}
+              </div>
 
-            <div className="space-y-2">
-              {slotsByDay[day].length === 0 ? (
-                <div className="text-center text-[10px] text-slate-700 pt-6">
-                  —
-                </div>
-              ) : (
-                slotsByDay[day].map((slot) => (
-                  <div
-                    key={slot.id}
-                    className={`p-2.5 rounded-xl border text-xs relative group transition-all ${
-                      slot.status === "CANCELLED"
-                        ? "bg-rose-500/5 border-rose-500/20 opacity-75"
-                        : "bg-slate-900/80 border-slate-800 hover:border-slate-700"
-                    }`}
-                  >
-                    <div className="flex items-center justify-between">
-                      <span className="font-bold text-white text-[11px] truncate">
-                        {slot.group.name}
-                      </span>
-                      {canManage && (
-                        <button
-                          onClick={() => onEditSlot(slot)}
-                          className="opacity-0 group-hover:opacity-100 p-0.5 text-slate-400 hover:text-white transition-opacity"
-                        >
-                          <Edit2 className="w-3 h-3" />
-                        </button>
+              <div className="space-y-2">
+                {slotsByDay[day].length === 0 ? (
+                  <div className="pt-6 text-center text-xs text-muted-foreground">—</div>
+                ) : (
+                  slotsByDay[day].map((slot) => (
+                    <div
+                      key={slot.id}
+                      className={`group relative rounded-md border p-2.5 text-xs transition-colors ${
+                        slot.status === "CANCELLED"
+                          ? "border-destructive/30 bg-destructive-subtle/40 opacity-80"
+                          : "border-border bg-card hover:border-primary/40"
+                      }`}
+                    >
+                      <div className="flex items-center justify-between gap-1">
+                        <span className="truncate font-semibold text-foreground">
+                          {slot.group.name}
+                        </span>
+                        {canManage && (
+                          <button
+                            type="button"
+                            aria-label={t(locale, "common.edit")}
+                            onClick={() => onEditSlot(slot)}
+                            className="p-0.5 text-muted-foreground opacity-0 transition-opacity hover:text-foreground group-hover:opacity-100 focus-visible:opacity-100"
+                          >
+                            <Edit2 className="h-3 w-3" aria-hidden="true" />
+                          </button>
+                        )}
+                      </div>
+
+                      <div className="mt-1 flex items-center gap-1 text-xs font-medium text-primary tabular-nums">
+                        <Clock className="h-3 w-3 shrink-0" aria-hidden="true" />
+                        <span>
+                          {slot.startTime}–{slot.endTime}
+                        </span>
+                      </div>
+
+                      <div className="mt-0.5 truncate text-xs text-muted-foreground">
+                        {slot.teacher.user.fullName}
+                      </div>
+
+                      {slot.roomName && (
+                        <div className="mt-0.5 truncate text-xs text-muted-foreground">
+                          {slot.roomName}
+                        </div>
+                      )}
+
+                      {slot.status === "CANCELLED" && (
+                        <div className="mt-1 text-xs font-medium text-destructive">
+                          {t(locale, "schedule.cancelled")}
+                        </div>
                       )}
                     </div>
-
-                    <div className="text-brand-400 font-semibold text-[10px] mt-1 flex items-center gap-1">
-                      <Clock className="w-2.5 h-2.5" />
-                      {slot.startTime}–{slot.endTime}
-                    </div>
-
-                    <div className="text-slate-400 text-[10px] truncate mt-0.5">
-                      {slot.teacher.user.fullName}
-                    </div>
-
-                    {slot.roomName && (
-                      <div className="text-slate-500 text-[9px] truncate mt-0.5">
-                        {slot.roomName}
-                      </div>
-                    )}
-
-                    {slot.status === "CANCELLED" && (
-                      <div className="text-rose-400 text-[9px] font-semibold mt-1">
-                        {t(locale, "schedule.cancelled")}
-                      </div>
-                    )}
-                  </div>
-                ))
-              )}
+                  ))
+                )}
+              </div>
             </div>
-          </div>
-        ))}
-      </div>
-    </div>
+          ))}
+        </div>
+      </CardContent>
+    </Card>
   );
 }

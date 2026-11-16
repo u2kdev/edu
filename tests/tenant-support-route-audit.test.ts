@@ -86,6 +86,11 @@ export const EXCLUDED_ROUTES_MAP: { pattern: RegExp; route: string; reason: stri
     route: "api/cron/*",
     reason: "Системные периодические задачи Vercel Cron (очистка лимитов, обработка EmailOutbox)",
   },
+  {
+    pattern: /[\\/]api[\\/]webhooks[\\/]/,
+    route: "api/webhooks/*",
+    reason: "Внешние серверные вебхуки платёжных провайдеров (Click), аутентификация по MD5-подписи, без пользовательской сессии",
+  },
 ];
 
 const EXCLUDED_PATTERNS = EXCLUDED_ROUTES_MAP.map((item) => item.pattern);
@@ -232,7 +237,7 @@ describe("TRUST-3b Item 3: Dynamic audit of all tenant write routes - PLATFORM_S
     expect(deleteRes.status).toBe(403);
   });
 
-  it("exclusion mapping explicitly documents all 11 categories with non-empty reasons", () => {
+  it("exclusion mapping explicitly documents all 12 categories with non-empty reasons", () => {
     const requiredCategories = [
       "api/auth/*",
       "api/platform/*",
@@ -245,6 +250,7 @@ describe("TRUST-3b Item 3: Dynamic audit of all tenant write routes - PLATFORM_S
       "api/health",
       "api/public/*",
       "api/cron/*",
+      "api/webhooks/*",
     ];
 
     expect(EXCLUDED_ROUTES_MAP.length).toBe(requiredCategories.length);

@@ -55,6 +55,7 @@ transmitter/
 # uploads
 /public/uploads/*
 !/public/uploads/.gitkeep
+storage/
 
 # local agent tooling (skills, reach tooling, cookies) — never publish
 .agents/

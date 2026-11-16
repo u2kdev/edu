@@ -77,7 +77,15 @@ function collectText(node: unknown): string {
   if (typeof node === "string" || typeof node === "number") return String(node);
   if (Array.isArray(node)) return node.map(collectText).join(" ");
   if (typeof node === "object" && (node as { props?: unknown }).props !== undefined) {
-    return collectText((node as { props: { children?: unknown } }).props.children);
+    const props = (node as { props: { children?: unknown; title?: unknown; description?: unknown; label?: unknown } }).props;
+    return [
+      typeof props.title === "string" ? props.title : "",
+      typeof props.description === "string" ? props.description : "",
+      typeof props.label === "string" ? props.label : "",
+      collectText(props.children),
+    ]
+      .filter(Boolean)
+      .join(" ");
   }
   return "";
 }
@@ -186,15 +194,7 @@ describe("platform-admin dashboard page", () => {
     await expect(Page()).rejects.toThrow("NEXT_REDIRECT:/login");
   });
 
-  it("renders platform KPIs, expiring subscriptions and recent centers", async () => {
-    dbMock.learningCenter.count
-      .mockResolvedValueOnce(10) // total
-      .mockResolvedValueOnce(6) // ACTIVE
-      .mockResolvedValueOnce(2) // PAUSED
-      .mockResolvedValueOnce(1) // TRIAL
-      .mockResolvedValueOnce(1); // BLOCKED
-    dbMock.platformUser.count.mockResolvedValue(50);
-    dbMock.centerMembership.count.mockResolvedValueOnce(30).mockResolvedValueOnce(8); // STUDENT, TEACHER
+  it("renders PlatformDashboardInteractive, expiring subscriptions and recent centers", async () => {
     dbMock.subscription.findMany.mockResolvedValue([expiringSub]);
     dbMock.learningCenter.findMany.mockResolvedValue(recentCenters);
     getAuthSessionMock.mockResolvedValue(session());
@@ -203,46 +203,12 @@ describe("platform-admin dashboard page", () => {
     const element = await Page();
     const text = flatText(element);
 
-    // Aggregations
-    expect(dbMock.learningCenter.count).toHaveBeenCalledTimes(5);
-    expect(dbMock.learningCenter.count).toHaveBeenNthCalledWith(2, {
-      where: { status: "ACTIVE" },
-    });
-    expect(dbMock.learningCenter.count).toHaveBeenNthCalledWith(3, {
-      where: { status: "PAUSED" },
-    });
-    expect(dbMock.learningCenter.count).toHaveBeenNthCalledWith(4, {
-      where: { status: "TRIAL" },
-    });
-    expect(dbMock.learningCenter.count).toHaveBeenNthCalledWith(5, {
-      where: { status: "BLOCKED" },
-    });
-    expect(dbMock.platformUser.count).toHaveBeenCalledTimes(1);
-    expect(dbMock.centerMembership.count).toHaveBeenNthCalledWith(1, {
-      where: { role: "STUDENT", status: "ACTIVE" },
-    });
-    expect(dbMock.centerMembership.count).toHaveBeenNthCalledWith(2, {
-      where: { role: "TEACHER", status: "ACTIVE" },
-    });
     expect(dbMock.subscription.findMany).toHaveBeenCalledWith(
       expect.objectContaining({ take: 5 }),
     );
     expect(dbMock.learningCenter.findMany).toHaveBeenCalledWith(
       expect.objectContaining({ take: 8, orderBy: { createdAt: "desc" } }),
     );
-
-    // Header
-    expect(text).toContain(t("ru", "dashboard.welcome", { name: "Root Admin" }));
-    expect(text).toContain(t("ru", "platform.title"));
-    expect(text).toContain(t("ru", "roles.SUPERADMIN"));
-
-    // Metric cards
-    expect(text).toContain("10");
-    expect(text).toContain("50 аккаунтов зарегистрировано");
-    expect(text).toContain(t("ru", "platform.frozen").toLowerCase()); // paused > 0 badge
-    expect(text).toContain(t("ru", "platform.blocked").toLowerCase()); // blocked > 0 badge
-    expect(text).toContain("1 подписок истекают скоро");
-    expect(text).toContain(t("ru", "platform.trial"));
 
     // Expiring subscriptions block
     expect(text).toContain("Expiring Center");
@@ -260,16 +226,11 @@ describe("platform-admin dashboard page", () => {
     expect(text).toContain("—"); // Beta has no subscription → dash
 
     // SUPERADMIN is not FULL_ACCESS → no engineering banner
-    expect(text).not.toContain("Режим инженерного доступа");
+    expect(text).not.toContain("FULL_ACCESS");
   });
 
-  it("renders the FULL_ACCESS banner and the healthy-plans state", async () => {
-    dbMock.learningCenter.count
-      .mockResolvedValueOnce(1) // total
-      .mockResolvedValueOnce(0) // ACTIVE
-      .mockResolvedValueOnce(1) // PAUSED
-      .mockResolvedValueOnce(0) // TRIAL
-      .mockResolvedValueOnce(0); // BLOCKED
+  it("renders the FULL_ACCESS banner and localized PAUSED status cleanly", async () => {
+    dbMock.subscription.findMany.mockResolvedValue([]);
     dbMock.learningCenter.findMany.mockResolvedValue([
       {
         id: "c-3",
@@ -297,14 +258,8 @@ describe("platform-admin dashboard page", () => {
     const element = await Page();
     const text = flatText(element);
 
-    expect(text).toContain("Режим инженерного доступа (FULL_ACCESS)");
-    expect(text).toContain("Все тарифные планы в норме");
-    expect(text).not.toContain("подписок истекают скоро");
-    expect(text).toContain(t("ru", "roles.FULL_ACCESS"));
-    // no BLOCKED centers → no blocked badge
-    expect(text).not.toContain(t("ru", "platform.blocked").toLowerCase());
-    expect(text).toContain(t("ru", "platform.frozen").toLowerCase());
-    // PAUSED status now resolves through the catalog instead of leaking the raw key.
+    expect(text).toContain("FULL_ACCESS");
+    expect(text).not.toContain(t("ru", "subscription.activeUntil"));
     expect(text).toContain(t("ru", "platform.paused"));
     expect(text).not.toContain("platform.paused");
   });

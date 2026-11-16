@@ -1,7 +1,11 @@
 "use client";
 
-import { CalendarDays, Download, Plus, Search } from "lucide-react";
+import { Download, Plus } from "lucide-react";
 import { t } from "@/i18n";
+import { Button } from "@/components/ui/button";
+import { Card, CardContent } from "@/components/ui/card";
+import { Input } from "@/components/ui/input";
+import { PageHeader } from "@/components/ui/page-header";
 import type { ScheduleGroupOption, ScheduleTeacherOption, ScheduleViewMode } from "./schedule-utils";
 
 interface ScheduleToolbarProps {
@@ -20,6 +24,9 @@ interface ScheduleToolbarProps {
   onCreateSlot: () => void;
 }
 
+const SELECT_CLS =
+  "flex h-9 rounded-md border border-input bg-card px-3 py-1.5 text-[13px] text-foreground transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-1 focus-visible:ring-offset-background";
+
 export function ScheduleToolbar({
   locale,
   canManage,
@@ -37,121 +44,90 @@ export function ScheduleToolbar({
 }: ScheduleToolbarProps) {
   return (
     <>
-      {/* Top Header & Actions */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-        <div>
-          <h2 className="text-xl font-bold text-white flex items-center gap-2">
-            <CalendarDays className="w-6 h-6 text-brand-400" />
-            {t(locale, "schedule.title")}
-          </h2>
-          <p className="text-sm text-slate-400 mt-0.5">
-            {t(locale, "schedule.subtitle")}
-          </p>
-        </div>
-
-        <div className="flex items-center gap-2 flex-wrap">
-          {/* iCal Export */}
-          <a
-            href={`/api/schedule/ical${selectedGroupId ? `?groupId=${selectedGroupId}` : ""}`}
-            download="schedule.ics"
-            className="flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-semibold bg-slate-800 text-slate-300 hover:bg-slate-700 hover:text-white transition-colors border border-slate-700"
-          >
-            <Download className="w-4 h-4 text-brand-400" />
-            {t(locale, "schedule.exportIcal")}
-          </a>
-
-          {/* Add Slot (Admin/Director) */}
-          {canManage && (
-            <button
-              onClick={onCreateSlot}
-              className="flex items-center gap-1.5 px-4 py-2 rounded-xl text-xs font-semibold bg-brand-500 text-white hover:bg-brand-600 transition-colors shadow-lg shadow-brand-500/20"
+      <PageHeader
+        title={t(locale, "schedule.title")}
+        description={t(locale, "schedule.subtitle")}
+        actions={
+          <div className="flex flex-wrap items-center gap-2">
+            <a
+              href={`/api/schedule/ical${selectedGroupId ? `?groupId=${selectedGroupId}` : ""}`}
+              download="schedule.ics"
+              className="inline-flex h-8 items-center gap-1.5 rounded-md border border-border bg-card px-3 text-[13px] font-medium text-foreground transition-colors hover:bg-muted"
             >
-              <Plus className="w-4 h-4" />
-              {t(locale, "schedule.addSlot")}
-            </button>
-          )}
-        </div>
-      </div>
+              <Download className="h-3.5 w-3.5 text-muted-foreground" aria-hidden="true" />
+              <span>{t(locale, "schedule.exportIcal")}</span>
+            </a>
 
-      {/* View Switcher & Filters */}
-      <div className="glass-panel p-4 rounded-2xl border border-slate-800 flex flex-col md:flex-row items-stretch md:items-center justify-between gap-4">
-        {/* View Mode Toggle */}
-        <div className="flex items-center bg-slate-900/80 p-1 rounded-xl border border-slate-800 shrink-0">
-          <button
-            onClick={() => onViewModeChange("day")}
-            className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-colors ${
-              viewMode === "day"
-                ? "bg-brand-500 text-white shadow"
-                : "text-slate-400 hover:text-white"
-            }`}
-          >
-            {t(locale, "schedule.dayView")}
-          </button>
-          <button
-            onClick={() => onViewModeChange("week")}
-            className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-colors ${
-              viewMode === "week"
-                ? "bg-brand-500 text-white shadow"
-                : "text-slate-400 hover:text-white"
-            }`}
-          >
-            {t(locale, "schedule.weekView")}
-          </button>
-          <button
-            onClick={() => onViewModeChange("month")}
-            className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-colors ${
-              viewMode === "month"
-                ? "bg-brand-500 text-white shadow"
-                : "text-slate-400 hover:text-white"
-            }`}
-          >
-            {t(locale, "schedule.monthView")}
-          </button>
-        </div>
+            {canManage && (
+              <Button type="button" size="sm" onClick={onCreateSlot}>
+                <Plus className="h-4 w-4" aria-hidden="true" />
+                <span>{t(locale, "schedule.addSlot")}</span>
+              </Button>
+            )}
+          </div>
+        }
+      />
 
-        {/* Filters */}
-        <div className="flex flex-1 flex-wrap items-center gap-2">
-          {/* Search */}
-          <div className="relative flex-1 min-w-[180px]">
-            <Search className="w-4 h-4 text-slate-500 absolute left-3 top-2.5" />
-            <input
-              type="text"
+      <Card>
+        <CardContent className="flex flex-col items-stretch justify-between gap-3 p-3 md:flex-row md:items-center">
+          {/* View Mode Toggle */}
+          <div className="inline-flex shrink-0 items-center rounded-md border border-border bg-muted p-0.5">
+            {(["day", "week", "month"] as const).map((mode) => (
+              <button
+                key={mode}
+                type="button"
+                onClick={() => onViewModeChange(mode)}
+                className={`rounded px-3 py-1.5 text-xs font-medium transition-colors ${
+                  viewMode === mode
+                    ? "bg-card text-foreground shadow-sm"
+                    : "text-muted-foreground hover:text-foreground"
+                }`}
+              >
+                {t(locale, `schedule.${mode}View`)}
+              </button>
+            ))}
+          </div>
+
+          {/* Filters */}
+          <div className="flex flex-1 flex-wrap items-center gap-2">
+            <Input
+              type="search"
               value={searchQuery}
               onChange={(e) => onSearchQueryChange(e.target.value)}
               placeholder={t(locale, "schedule.searchPlaceholder")}
-              className="w-full pl-9 pr-3 py-1.5 bg-slate-900 border border-slate-800 rounded-xl text-xs text-white placeholder-slate-500 focus:outline-none focus:border-brand-500"
+              className="min-w-[180px] flex-1"
             />
+
+            <select
+              aria-label={t(locale, "schedule.group")}
+              value={selectedGroupId}
+              onChange={(e) => onSelectedGroupIdChange(e.target.value)}
+              className={SELECT_CLS}
+            >
+              <option value="">{t(locale, "schedule.allGroups")}</option>
+              {groups.map((g) => (
+                <option key={g.id} value={g.id}>
+                  {g.name}
+                </option>
+              ))}
+            </select>
+
+            <select
+              aria-label={t(locale, "schedule.teacher")}
+              value={selectedTeacherId}
+              onChange={(e) => onSelectedTeacherIdChange(e.target.value)}
+              className={SELECT_CLS}
+            >
+              <option value="">{t(locale, "schedule.allTeachers")}</option>
+              {teachers.map((teach) => (
+                <option key={teach.id} value={teach.id}>
+                  {teach.user.fullName}
+                </option>
+              ))}
+            </select>
           </div>
-
-          {/* Group Filter */}
-          <select
-            value={selectedGroupId}
-            onChange={(e) => onSelectedGroupIdChange(e.target.value)}
-            className="px-3 py-1.5 bg-slate-900 border border-slate-800 rounded-xl text-xs text-white focus:outline-none focus:border-brand-500"
-          >
-            <option value="">{t(locale, "schedule.allGroups")}</option>
-            {groups.map((g) => (
-              <option key={g.id} value={g.id}>
-                {g.name}
-              </option>
-            ))}
-          </select>
-
-          {/* Teacher Filter */}
-          <select
-            value={selectedTeacherId}
-            onChange={(e) => onSelectedTeacherIdChange(e.target.value)}
-            className="px-3 py-1.5 bg-slate-900 border border-slate-800 rounded-xl text-xs text-white focus:outline-none focus:border-brand-500"
-          >
-            <option value="">{t(locale, "schedule.allTeachers")}</option>
-            {teachers.map((teach) => (
-              <option key={teach.id} value={teach.id}>
-                {teach.user.fullName}
-              </option>
-            ))}
-          </select>
-        </div>
-      </div>
+        </CardContent>
+      </Card>
     </>
   );
 }

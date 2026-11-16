@@ -20,6 +20,8 @@ export interface GroupStudent {
 
 export interface GroupEnrollment {
   id: string;
+  status?: string;
+  paidUntil?: string | null;
   student: GroupStudent;
 }
 
@@ -31,6 +33,12 @@ export interface GroupTeacher {
   };
 }
 
+export interface GroupPricingPlanItem {
+  periodMonths: number;
+  price: number;
+  isActive: boolean;
+}
+
 export interface GroupItem {
   id: string;
   name: string;
@@ -38,7 +46,9 @@ export interface GroupItem {
   course: {
     id?: string;
     title: string;
+    priceMonthly?: number;
   };
+  pricingPlans?: GroupPricingPlanItem[];
   teacher?: GroupTeacher | null;
   assistant?: GroupTeacher | null;
   enrollments: GroupEnrollment[];
@@ -47,6 +57,7 @@ export interface GroupItem {
 export interface CourseOption {
   id: string;
   title: string;
+  priceMonthly?: number;
 }
 
 export interface TeacherOption {
@@ -72,6 +83,7 @@ export interface TransferTarget {
 
 /** The student a drop (unenroll) modal is currently open for. */
 export interface DropTarget {
+  enrollmentId?: string;
   groupId: string;
   studentMembershipId: string;
   studentName: string;
@@ -92,8 +104,8 @@ export function isGroupFull(group: GroupItem): boolean {
 /** Badge colours: rose once the group is at/over capacity, slate otherwise. */
 export function capacityBadgeClass(isFull: boolean): string {
   return isFull
-    ? "bg-rose-500/10 text-rose-400 border border-rose-500/20"
-    : "bg-slate-900 border border-slate-800 text-slate-300";
+    ? "bg-destructive-subtle text-destructive-subtle-foreground border border-destructive/30"
+    : "bg-muted border border-border text-muted-foreground";
 }
 
 /** Groups a student may be transferred into: every group but the source. */

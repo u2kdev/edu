@@ -1,8 +1,17 @@
 "use client";
 
 import type { Dispatch, FormEvent, SetStateAction } from "react";
-import { AlertTriangle, X } from "lucide-react";
 import { t } from "@/i18n";
+import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
+import { Button } from "@/components/ui/button";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import { FormActions, FormField } from "@/components/ui/form-field";
+import { Input } from "@/components/ui/input";
 import {
   DAYS_OF_WEEK,
   type ScheduleFormData,
@@ -10,6 +19,9 @@ import {
   type ScheduleSlotItem,
   type ScheduleTeacherOption,
 } from "./schedule-utils";
+
+const SELECT_CLS =
+  "flex h-9 w-full rounded-md border border-input bg-card px-3 py-1.5 text-sm text-foreground transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-1 focus-visible:ring-offset-background disabled:cursor-not-allowed disabled:opacity-50";
 
 interface ScheduleSlotModalProps {
   locale: string;
@@ -41,49 +53,39 @@ export function ScheduleSlotModal({
   onSubmit,
 }: ScheduleSlotModalProps) {
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-fade-in">
-      <div className="bg-slate-900 border border-slate-800 rounded-2xl w-full max-w-lg p-6 space-y-4 shadow-2xl relative">
-        <div className="flex items-center justify-between pb-3 border-b border-slate-800">
-          <h3 className="text-lg font-bold text-white">
+    <Dialog open onOpenChange={(open) => !open && onClose()}>
+      <DialogContent className="max-w-lg">
+        <DialogHeader>
+          <DialogTitle>
             {editingSlot
               ? t(locale, "schedule.editSlot")
               : t(locale, "schedule.addSlot")}
-          </h3>
-          <button
-            onClick={onClose}
-            className="p-1 rounded-lg text-slate-400 hover:text-white hover:bg-slate-800"
-          >
-            <X className="w-5 h-5" />
-          </button>
-        </div>
+          </DialogTitle>
+        </DialogHeader>
 
         {errorMsg && (
-          <div className="p-3 rounded-xl bg-rose-500/10 border border-rose-500/20 text-rose-400 text-xs flex items-start gap-2">
-            <AlertTriangle className="w-4 h-4 shrink-0 mt-0.5" />
-            <div>
-              <div className="font-semibold">{errorMsg}</div>
-              {conflictList.length > 0 && (
-                <ul className="list-disc list-inside mt-1 space-y-0.5">
+          <Alert variant="destructive">
+            <AlertTitle>{errorMsg}</AlertTitle>
+            {conflictList.length > 0 && (
+              <AlertDescription>
+                <ul className="mt-1 list-inside list-disc space-y-0.5">
                   {conflictList.map((c, idx) => (
                     <li key={idx}>{c}</li>
                   ))}
                 </ul>
-              )}
-            </div>
-          </div>
+              </AlertDescription>
+            )}
+          </Alert>
         )}
 
-        <form onSubmit={onSubmit} className="space-y-4 text-xs">
-          {/* Group */}
-          <div>
-            <label className="block text-slate-300 font-semibold mb-1">
-              {t(locale, "schedule.group")}
-            </label>
+        <form onSubmit={onSubmit} className="space-y-4">
+          <FormField label={t(locale, "schedule.group")} htmlFor="sched-group" required>
             <select
+              id="sched-group"
               value={formData.groupId}
               onChange={(e) => setFormData({ ...formData, groupId: e.target.value })}
               required
-              className="w-full px-3 py-2 bg-slate-800/80 border border-slate-700 rounded-xl text-white focus:outline-none focus:border-brand-500"
+              className={SELECT_CLS}
             >
               {groups.map((g) => (
                 <option key={g.id} value={g.id}>
@@ -91,20 +93,17 @@ export function ScheduleSlotModal({
                 </option>
               ))}
             </select>
-          </div>
+          </FormField>
 
-          {/* Teacher */}
-          <div>
-            <label className="block text-slate-300 font-semibold mb-1">
-              {t(locale, "schedule.teacher")}
-            </label>
+          <FormField label={t(locale, "schedule.teacher")} htmlFor="sched-teacher" required>
             <select
+              id="sched-teacher"
               value={formData.teacherMembershipId}
               onChange={(e) =>
                 setFormData({ ...formData, teacherMembershipId: e.target.value })
               }
               required
-              className="w-full px-3 py-2 bg-slate-800/80 border border-slate-700 rounded-xl text-white focus:outline-none focus:border-brand-500"
+              className={SELECT_CLS}
             >
               {teachers.map((teach) => (
                 <option key={teach.id} value={teach.id}>
@@ -112,20 +111,17 @@ export function ScheduleSlotModal({
                 </option>
               ))}
             </select>
-          </div>
+          </FormField>
 
-          {/* Day of Week */}
-          <div>
-            <label className="block text-slate-300 font-semibold mb-1">
-              {t(locale, "schedule.dayOfWeek")}
-            </label>
+          <FormField label={t(locale, "schedule.dayOfWeek")} htmlFor="sched-day" required>
             <select
+              id="sched-day"
               value={formData.dayOfWeek}
               onChange={(e) =>
-                setFormData({ ...formData, dayOfWeek: parseInt(e.target.value) })
+                setFormData({ ...formData, dayOfWeek: parseInt(e.target.value, 10) })
               }
               required
-              className="w-full px-3 py-2 bg-slate-800/80 border border-slate-700 rounded-xl text-white focus:outline-none focus:border-brand-500"
+              className={SELECT_CLS}
             >
               {DAYS_OF_WEEK.map((d) => (
                 <option key={d} value={d}>
@@ -133,104 +129,78 @@ export function ScheduleSlotModal({
                 </option>
               ))}
             </select>
-          </div>
+          </FormField>
 
-          {/* Times */}
           <div className="grid grid-cols-2 gap-3">
-            <div>
-              <label className="block text-slate-300 font-semibold mb-1">
-                {t(locale, "schedule.startTime")}
-              </label>
-              <input
+            <FormField label={t(locale, "schedule.startTime")} htmlFor="sched-start" required>
+              <Input
+                id="sched-start"
                 type="time"
                 value={formData.startTime}
                 onChange={(e) => setFormData({ ...formData, startTime: e.target.value })}
                 required
-                className="w-full px-3 py-2 bg-slate-800/80 border border-slate-700 rounded-xl text-white focus:outline-none focus:border-brand-500"
               />
-            </div>
-            <div>
-              <label className="block text-slate-300 font-semibold mb-1">
-                {t(locale, "schedule.endTime")}
-              </label>
-              <input
+            </FormField>
+            <FormField label={t(locale, "schedule.endTime")} htmlFor="sched-end" required>
+              <Input
+                id="sched-end"
                 type="time"
                 value={formData.endTime}
                 onChange={(e) => setFormData({ ...formData, endTime: e.target.value })}
                 required
-                className="w-full px-3 py-2 bg-slate-800/80 border border-slate-700 rounded-xl text-white focus:outline-none focus:border-brand-500"
               />
-            </div>
+            </FormField>
           </div>
 
-          {/* Room */}
-          <div>
-            <label className="block text-slate-300 font-semibold mb-1">
-              {t(locale, "schedule.room")}
-            </label>
-            <input
+          <FormField label={t(locale, "schedule.room")} htmlFor="sched-room">
+            <Input
+              id="sched-room"
               type="text"
               value={formData.roomName}
               onChange={(e) => setFormData({ ...formData, roomName: e.target.value })}
               placeholder={t(locale, "schedule.roomPlaceholder")}
-              className="w-full px-3 py-2 bg-slate-800/80 border border-slate-700 rounded-xl text-white focus:outline-none focus:border-brand-500"
             />
-          </div>
+          </FormField>
 
-          {/* Status and Cancellation Reason (when editing) */}
           {editingSlot && (
             <>
-              <div>
-                <label className="block text-slate-300 font-semibold mb-1">
-                  {t(locale, "schedule.status")}
-                </label>
+              <FormField label={t(locale, "schedule.status")} htmlFor="sched-status">
                 <select
+                  id="sched-status"
                   value={formData.status}
                   onChange={(e) => setFormData({ ...formData, status: e.target.value })}
-                  className="w-full px-3 py-2 bg-slate-800/80 border border-slate-700 rounded-xl text-white focus:outline-none focus:border-brand-500"
+                  className={SELECT_CLS}
                 >
                   <option value="ACTIVE">{t(locale, "schedule.active")}</option>
                   <option value="CANCELLED">{t(locale, "schedule.cancelled")}</option>
                 </select>
-              </div>
+              </FormField>
 
               {formData.status === "CANCELLED" && (
-                <div>
-                  <label className="block text-slate-300 font-semibold mb-1">
-                    {t(locale, "schedule.cancelledReason")}
-                  </label>
-                  <input
+                <FormField label={t(locale, "schedule.cancelledReason")} htmlFor="sched-reason">
+                  <Input
+                    id="sched-reason"
                     type="text"
                     value={formData.cancelledReason}
                     onChange={(e) =>
                       setFormData({ ...formData, cancelledReason: e.target.value })
                     }
-                    className="w-full px-3 py-2 bg-slate-800/80 border border-slate-700 rounded-xl text-white focus:outline-none focus:border-brand-500"
                   />
-                </div>
+                </FormField>
               )}
             </>
           )}
 
-          {/* Submit Buttons */}
-          <div className="flex items-center justify-end gap-2 pt-3 border-t border-slate-800">
-            <button
-              type="button"
-              onClick={onClose}
-              className="px-4 py-2 rounded-xl text-slate-400 hover:text-white bg-slate-800 font-semibold transition-colors"
-            >
+          <FormActions>
+            <Button type="button" variant="outline" onClick={onClose}>
               {t(locale, "schedule.cancel")}
-            </button>
-            <button
-              type="submit"
-              disabled={submitting}
-              className="px-4 py-2 rounded-xl bg-brand-500 text-white font-semibold hover:bg-brand-600 transition-colors disabled:opacity-50"
-            >
+            </Button>
+            <Button type="submit" disabled={submitting}>
               {submitting ? t(locale, "schedule.loading") : t(locale, "schedule.save")}
-            </button>
-          </div>
+            </Button>
+          </FormActions>
         </form>
-      </div>
-    </div>
+      </DialogContent>
+    </Dialog>
   );
 }

@@ -4,12 +4,7 @@ import { NextResponse } from "next/server";
 import { db } from "@/lib/db";
 import { requirePlatformPermission, handlePlatformError } from "@/lib/platformAuth";
 import type { Prisma, PlatformPaymentStatus, PaymentMethod } from "@prisma/client";
-
-function escapeCsv(val: unknown): string {
-  if (val === null || val === undefined) return '""';
-  const str = String(val).replace(/"/g, '""');
-  return `"${str}"`;
-}
+import { generateCsv } from "@/lib/csv";
 
 export async function GET(req: Request) {
   try {
@@ -75,20 +70,20 @@ export async function GET(req: Request) {
     const rows = payments.map((p) => {
       const net = p.amount - (p.refundAmount || 0);
       return [
-        escapeCsv(p.invoiceNumber || ""),
-        escapeCsv(p.center.name),
-        escapeCsv(p.paidAt ? p.paidAt.toISOString().slice(0, 10) : ""),
-        escapeCsv(p.plan?.name || "—"),
-        escapeCsv(p.paymentMethod),
-        escapeCsv(p.amount),
-        escapeCsv(p.refundAmount || 0),
-        escapeCsv(net),
-        escapeCsv(p.status),
-        escapeCsv(p.notes || ""),
-      ].join(",");
+        p.invoiceNumber || "",
+        p.center.name,
+        p.paidAt ? p.paidAt.toISOString().slice(0, 10) : "",
+        p.plan?.name || "—",
+        p.paymentMethod,
+        p.amount,
+        p.refundAmount || 0,
+        net,
+        p.status,
+        p.notes || "",
+      ];
     });
 
-    const csvContent = "\uFEFF" + [headers.join(","), ...rows].join("\r\n");
+    const csvContent = generateCsv(headers, rows);
 
     return new NextResponse(csvContent, {
       status: 200,

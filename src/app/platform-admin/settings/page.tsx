@@ -2,19 +2,21 @@
 
 import React, { useState, useEffect, useCallback } from "react";
 import Link from "next/link";
+import { Clock, Globe, Mail, Phone, RefreshCw, Save, Send, Shield } from "lucide-react";
 import {
-  Sliders,
-  Shield,
-  Clock,
-  Phone,
-  Mail,
-  Send,
-  AlertTriangle,
-  CheckCircle2,
-  Save,
-  Globe,
-  RefreshCw,
-} from "lucide-react";
+  Alert,
+  AlertDescription,
+  Button,
+  Card,
+  CardContent,
+  CardHeader,
+  CardTitle,
+  FormField,
+  Input,
+  PageHeader,
+  Skeleton,
+  Textarea,
+} from "@/components/ui";
 
 export default function PlatformSettingsPage() {
   const [loading, setLoading] = useState(true);
@@ -22,7 +24,6 @@ export default function PlatformSettingsPage() {
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
 
-  // Settings form state
   const [gracePeriodDays, setGracePeriodDays] = useState(3);
   const [defaultTrialDays, setDefaultTrialDays] = useState(14);
   const [maintenanceMode, setMaintenanceMode] = useState(false);
@@ -94,7 +95,7 @@ export default function PlatformSettingsPage() {
       if (!res.ok) {
         setError(resData.error || "Ошибка сохранения настроек");
       } else {
-        setSuccess("Настройки платформы успешно сохранены");
+        setSuccess("Настройки платформы сохранены");
         setTimeout(() => setSuccess(null), 4000);
       }
     } catch {
@@ -106,212 +107,191 @@ export default function PlatformSettingsPage() {
 
   return (
     <div className="space-y-6 pb-12">
-      {/* Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
-        <div className="flex items-center gap-3">
-          <div className="p-2 bg-indigo-50 dark:bg-indigo-900/20 rounded-lg text-indigo-600 dark:text-indigo-400">
-            <Sliders className="w-6 h-6" />
-          </div>
-          <div>
-            <h1 className="text-2xl font-bold text-zinc-900 dark:text-zinc-100">
-              Глобальные настройки платформы
-            </h1>
-            <p className="text-sm text-zinc-500 dark:text-zinc-400">
-              Управление льготным периодом, триалом, контактами и режимом обслуживания
-            </p>
-          </div>
-        </div>
-
-        <div className="flex items-center gap-2">
-          <Link
-            href="/platform-admin/seo"
-            className="inline-flex items-center gap-1.5 px-3.5 py-2 text-xs font-semibold rounded-lg border border-zinc-200 dark:border-zinc-700 hover:bg-zinc-50 dark:hover:bg-zinc-800 transition"
-          >
-            <Globe className="w-4 h-4 text-zinc-400" />
-            SEO настройки &rarr;
-          </Link>
-          <button
-            onClick={fetchSettings}
-            disabled={loading}
-            className="p-2 text-zinc-500 hover:text-zinc-900 dark:hover:text-zinc-100 rounded-lg hover:bg-zinc-100 dark:hover:bg-zinc-800 transition"
-            title="Обновить"
-          >
-            <RefreshCw className={`w-4 h-4 ${loading ? "animate-spin" : ""}`} />
-          </button>
-        </div>
-      </div>
+      <PageHeader
+        title="Глобальные настройки платформы"
+        description="Управление льготным периодом, триалом, контактами и режимом обслуживания"
+        actions={
+          <>
+            <Button asChild variant="outline" size="sm">
+              <Link href="/platform-admin/seo">
+                <Globe className="h-4 w-4" aria-hidden="true" />
+                <span>SEO настройки</span>
+              </Link>
+            </Button>
+            <Button
+              type="button"
+              variant="outline"
+              size="icon"
+              onClick={fetchSettings}
+              disabled={loading}
+              aria-label="Обновить"
+            >
+              <RefreshCw className={`h-4 w-4 ${loading ? "animate-spin" : ""}`} aria-hidden="true" />
+            </Button>
+          </>
+        }
+      />
 
       {error && (
-        <div className="p-4 rounded-xl bg-red-50 dark:bg-red-900/20 text-red-700 dark:text-red-400 text-sm flex items-center gap-3">
-          <AlertTriangle className="w-5 h-5 shrink-0" />
-          {error}
-        </div>
+        <Alert variant="destructive">
+          <AlertDescription>{error}</AlertDescription>
+        </Alert>
       )}
 
       {success && (
-        <div className="p-4 rounded-xl bg-emerald-50 dark:bg-emerald-900/20 text-emerald-700 dark:text-emerald-400 text-sm flex items-center gap-3">
-          <CheckCircle2 className="w-5 h-5 shrink-0" />
-          {success}
-        </div>
+        <Alert variant="success">
+          <AlertDescription>{success}</AlertDescription>
+        </Alert>
       )}
 
       {loading ? (
-        <div className="text-center py-12 text-zinc-500">Загрузка настроек...</div>
+        <div className="space-y-4">
+          <Skeleton className="h-36 w-full rounded-lg" />
+          <Skeleton className="h-36 w-full rounded-lg" />
+        </div>
       ) : (
         <form onSubmit={handleSave} className="space-y-6">
-          {/* Section 1: Billing & Trials */}
-          <div className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-2xl p-6 shadow-sm space-y-4">
-            <h2 className="text-base font-bold text-zinc-900 dark:text-zinc-100 flex items-center gap-2">
-              <Clock className="w-5 h-5 text-indigo-600" />
-              Тарифные политики и пробный период
-            </h2>
-
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-              <div>
-                <label className="block text-xs font-semibold text-zinc-700 dark:text-zinc-300 mb-1">
-                  Срок бесплатного триала по умолчанию (в днях) *
-                </label>
-                <input
+          <Card>
+            <CardHeader className="pb-3">
+              <CardTitle className="flex items-center gap-2 text-base font-semibold">
+                <Clock className="h-4 w-4 text-primary" aria-hidden="true" />
+                <span>Тарифные политики и пробный период</span>
+              </CardTitle>
+            </CardHeader>
+            <CardContent className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+              <FormField
+                label="Срок бесплатного триала по умолчанию (в днях)"
+                htmlFor="settings-trial-days"
+                required
+                hint="Период пробного доступа для новых центров при регистрации"
+              >
+                <Input
+                  id="settings-trial-days"
                   type="number"
                   required
                   min={1}
                   max={90}
                   value={defaultTrialDays}
                   onChange={(e) => setDefaultTrialDays(parseInt(e.target.value, 10) || 14)}
-                  className="w-full px-3.5 py-2 text-sm rounded-lg border border-zinc-200 dark:border-zinc-700 bg-transparent text-zinc-900 dark:text-zinc-100 focus:outline-none focus:ring-2 focus:ring-indigo-500"
                 />
-                <p className="text-xs text-zinc-400 mt-1">
-                  Период пробного доступа, назначаемый новым центрам при регистрации
-                </p>
-              </div>
+              </FormField>
 
-              <div>
-                <label className="block text-xs font-semibold text-zinc-700 dark:text-zinc-300 mb-1">
-                  Льготный период ожидания оплаты (Grace Period в днях) *
-                </label>
-                <input
+              <FormField
+                label="Льготный период ожидания оплаты (дней)"
+                htmlFor="settings-grace-days"
+                required
+                hint="Дни после окончания подписки, пока центр остаётся активным со статусом OVERDUE"
+              >
+                <Input
+                  id="settings-grace-days"
                   type="number"
                   required
                   min={0}
                   max={30}
                   value={gracePeriodDays}
                   onChange={(e) => setGracePeriodDays(parseInt(e.target.value, 10) || 3)}
-                  className="w-full px-3.5 py-2 text-sm rounded-lg border border-zinc-200 dark:border-zinc-700 bg-transparent text-zinc-900 dark:text-zinc-100 focus:outline-none focus:ring-2 focus:ring-indigo-500"
                 />
-                <p className="text-xs text-zinc-400 mt-1">
-                  Дни после окончания подписки, в течение которых центр остаётся активным со статусом OVERDUE
-                </p>
-              </div>
-            </div>
-          </div>
+              </FormField>
+            </CardContent>
+          </Card>
 
-          {/* Section 2: Support Contacts */}
-          <div className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-2xl p-6 shadow-sm space-y-4">
-            <h2 className="text-base font-bold text-zinc-900 dark:text-zinc-100 flex items-center gap-2">
-              <Phone className="w-5 h-5 text-blue-600" />
-              Контакты службы поддержки платформы
-            </h2>
-
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-              <div>
-                <label className="block text-xs font-semibold text-zinc-700 dark:text-zinc-300 mb-1">
-                  Email поддержки
-                </label>
+          <Card>
+            <CardHeader className="pb-3">
+              <CardTitle className="flex items-center gap-2 text-base font-semibold">
+                <Phone className="h-4 w-4 text-primary" aria-hidden="true" />
+                <span>Контакты службы поддержки платформы</span>
+              </CardTitle>
+            </CardHeader>
+            <CardContent className="grid grid-cols-1 gap-4 sm:grid-cols-3">
+              <FormField label="Email поддержки" htmlFor="settings-support-email">
                 <div className="relative">
-                  <Mail className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-zinc-400" />
-                  <input
+                  <Mail className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" aria-hidden="true" />
+                  <Input
+                    id="settings-support-email"
                     type="email"
                     value={supportEmail}
                     onChange={(e) => setSupportEmail(e.target.value)}
                     placeholder="support@e-darschi.uz"
-                    className="w-full pl-9 pr-3 py-2 text-sm rounded-lg border border-zinc-200 dark:border-zinc-700 bg-transparent text-zinc-900 dark:text-zinc-100 focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                    className="pl-9"
                   />
                 </div>
-              </div>
+              </FormField>
 
-              <div>
-                <label className="block text-xs font-semibold text-zinc-700 dark:text-zinc-300 mb-1">
-                  Телефон горячей линии
-                </label>
+              <FormField label="Телефон горячей линии" htmlFor="settings-support-phone">
                 <div className="relative">
-                  <Phone className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-zinc-400" />
-                  <input
+                  <Phone className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" aria-hidden="true" />
+                  <Input
+                    id="settings-support-phone"
                     type="text"
                     value={supportPhone}
                     onChange={(e) => setSupportPhone(e.target.value)}
                     placeholder="+998 71 200 00 00"
-                    className="w-full pl-9 pr-3 py-2 text-sm rounded-lg border border-zinc-200 dark:border-zinc-700 bg-transparent text-zinc-900 dark:text-zinc-100 focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                    className="pl-9"
                   />
                 </div>
-              </div>
+              </FormField>
 
-              <div>
-                <label className="block text-xs font-semibold text-zinc-700 dark:text-zinc-300 mb-1">
-                  Telegram канал/бот
-                </label>
+              <FormField label="Telegram канал/бот" htmlFor="settings-support-tg">
                 <div className="relative">
-                  <Send className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-zinc-400" />
-                  <input
+                  <Send className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" aria-hidden="true" />
+                  <Input
+                    id="settings-support-tg"
                     type="text"
                     value={supportTelegram}
                     onChange={(e) => setSupportTelegram(e.target.value)}
                     placeholder="@edarschi_support"
-                    className="w-full pl-9 pr-3 py-2 text-sm rounded-lg border border-zinc-200 dark:border-zinc-700 bg-transparent text-zinc-900 dark:text-zinc-100 focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                    className="pl-9"
                   />
                 </div>
+              </FormField>
+            </CardContent>
+          </Card>
+
+          <Card>
+            <CardContent className="space-y-4 p-6">
+              <div className="flex items-center justify-between gap-4">
+                <div>
+                  <h2 className="flex items-center gap-2 text-base font-semibold text-foreground">
+                    <Shield className="h-4 w-4 text-destructive" aria-hidden="true" />
+                    <span>Глобальный режим обслуживания</span>
+                  </h2>
+                  <p className="mt-1 text-xs text-muted-foreground">
+                    При включении пользователи видят баннер технических работ, а изменения блокируются
+                  </p>
+                </div>
+
+                <label className="relative inline-flex cursor-pointer items-center">
+                  <input
+                    type="checkbox"
+                    aria-label="Режим обслуживания"
+                    checked={maintenanceMode}
+                    onChange={(e) => setMaintenanceMode(e.target.checked)}
+                    className="h-4 w-4 rounded border-input accent-destructive"
+                  />
+                </label>
               </div>
-            </div>
-          </div>
 
-          {/* Section 3: Global Maintenance Mode */}
-          <div className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-2xl p-6 shadow-sm space-y-4">
-            <div className="flex items-center justify-between">
-              <div>
-                <h2 className="text-base font-bold text-zinc-900 dark:text-zinc-100 flex items-center gap-2">
-                  <Shield className="w-5 h-5 text-rose-600" />
-                  Глобальный режим обслуживания (Maintenance Mode)
-                </h2>
-                <p className="text-xs text-zinc-500 mt-1">
-                  При включении все пользователи видят баннер технических работ, а модифицирующие операции блокируются
-                </p>
-              </div>
+              {maintenanceMode && (
+                <FormField
+                  label="Текст баннера технических работ для пользователей"
+                  htmlFor="settings-maintenance-text"
+                >
+                  <Textarea
+                    id="settings-maintenance-text"
+                    rows={2}
+                    value={maintenanceBannerText}
+                    onChange={(e) => setMaintenanceBannerText(e.target.value)}
+                  />
+                </FormField>
+              )}
+            </CardContent>
+          </Card>
 
-              <label className="relative inline-flex items-center cursor-pointer">
-                <input
-                  type="checkbox"
-                  checked={maintenanceMode}
-                  onChange={(e) => setMaintenanceMode(e.target.checked)}
-                  className="sr-only peer"
-                />
-                <div className="w-11 h-6 bg-zinc-200 peer-focus:outline-none rounded-full peer dark:bg-zinc-700 peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-zinc-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-rose-600"></div>
-              </label>
-            </div>
-
-            {maintenanceMode && (
-              <div className="p-3.5 rounded-xl bg-rose-50 dark:bg-rose-950/20 border border-rose-200 dark:border-rose-900/40 space-y-2">
-                <span className="text-xs font-semibold text-rose-800 dark:text-rose-300 block">
-                  Текст баннера технических работ для пользователей:
-                </span>
-                <textarea
-                  rows={2}
-                  value={maintenanceBannerText}
-                  onChange={(e) => setMaintenanceBannerText(e.target.value)}
-                  className="w-full px-3 py-2 text-xs rounded-lg border border-rose-200 dark:border-rose-900 bg-white dark:bg-zinc-900 text-zinc-900 dark:text-zinc-100 focus:outline-none focus:ring-2 focus:ring-rose-500"
-                />
-              </div>
-            )}
-          </div>
-
-          {/* Submit */}
           <div className="flex justify-end pt-2">
-            <button
-              type="submit"
-              disabled={saving}
-              className="inline-flex items-center gap-2 px-5 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white font-medium text-sm rounded-xl shadow-sm transition disabled:opacity-50"
-            >
-              <Save className="w-4 h-4" />
-              {saving ? "Сохранение..." : "Сохранить все настройки"}
-            </button>
+            <Button type="submit" variant="primary" disabled={saving}>
+              <Save className="h-4 w-4" aria-hidden="true" />
+              <span>{saving ? "Сохранение..." : "Сохранить все настройки"}</span>
+            </Button>
           </div>
         </form>
       )}

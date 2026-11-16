@@ -2,7 +2,6 @@
 
 import { useEffect, useState, type FormEvent } from "react";
 import { useRouter } from "next/navigation";
-import { t } from "@/i18n";
 import {
   filterScheduleSlots,
   groupSlotsByDay,
@@ -20,14 +19,11 @@ export interface UseScheduleArgs {
   locale: string;
 }
 
-export function useSchedule({ initialSlots, groups, teachers, locale }: UseScheduleArgs) {
+export function useSchedule({ initialSlots, groups, teachers }: UseScheduleArgs) {
   const router = useRouter();
 
   const [slots, setSlots] = useState<ScheduleSlotItem[]>(initialSlots);
 
-  // `router.refresh()` re-renders the server page with a fresh slot list. Without
-  // this sync the client kept its old array, so a newly created slot only showed
-  // up after a full page reload.
   useEffect(() => {
     setSlots(initialSlots);
   }, [initialSlots]);
@@ -38,7 +34,6 @@ export function useSchedule({ initialSlots, groups, teachers, locale }: UseSched
   const [selectedTeacherId, setSelectedTeacherId] = useState<string>("");
   const [searchQuery, setSearchQuery] = useState<string>("");
 
-  // Modal states
   const [isModalOpen, setIsModalOpen] = useState<boolean>(false);
   const [editingSlot, setEditingSlot] = useState<ScheduleSlotItem | null>(null);
   const [formData, setFormData] = useState<ScheduleFormData>({
@@ -55,7 +50,10 @@ export function useSchedule({ initialSlots, groups, teachers, locale }: UseSched
   const [conflictList, setConflictList] = useState<string[]>([]);
   const [submitting, setSubmitting] = useState<boolean>(false);
 
-  // Filter slots
+  const [deleteTargetId, setDeleteTargetId] = useState<string | null>(null);
+  const [deleting, setDeleting] = useState<boolean>(false);
+  const [deleteError, setDeleteError] = useState<string | null>(null);
+
   const filteredSlots = filterScheduleSlots(
     slots,
     selectedGroupId,
@@ -63,7 +61,6 @@ export function useSchedule({ initialSlots, groups, teachers, locale }: UseSched
     searchQuery
   );
 
-  // Group by day of week
   const slotsByDay = groupSlotsByDay(filteredSlots);
 
   const openCreateModal = () => {
@@ -102,13 +99,12 @@ export function useSchedule({ initialSlots, groups, teachers, locale }: UseSched
 
   const handleSaveSlot = async (e: FormEvent) => {
     e.preventDefault();
+    setSubmitting(true);
     setErrorMsg("");
     setConflictList([]);
-    setSubmitting(true);
 
     try {
       if (editingSlot) {
-        // Update slot
         const res = await fetch("/api/tenant/schedule", {
           method: "PATCH",
           headers: { "Content-Type": "application/json" },
@@ -133,12 +129,10 @@ export function useSchedule({ initialSlots, groups, teachers, locale }: UseSched
           return;
         }
 
-        // Update local state
         setSlots((prev) =>
           prev.map((s) => (s.id === editingSlot.id ? { ...s, ...data.slot } : s))
         );
       } else {
-        // Create slot
         const res = await fetch("/api/tenant/schedule", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
@@ -160,7 +154,6 @@ export function useSchedule({ initialSlots, groups, teachers, locale }: UseSched
           return;
         }
 
-        // Reload data from server
         router.refresh();
       }
 
@@ -173,24 +166,36 @@ export function useSchedule({ initialSlots, groups, teachers, locale }: UseSched
     }
   };
 
-  const handleDeleteSlot = async (id: string) => {
-    if (!window.confirm(t(locale, "schedule.confirmDelete"))) return;
+  const requestDeleteSlot = (id: string) => {
+    setDeleteError(null);
+    setDeleteTargetId(id);
+  };
+
+  const confirmDeleteSlot = async () => {
+    if (!deleteTargetId) return;
+    setDeleting(true);
+    setDeleteError(null);
 
     try {
       const res = await fetch("/api/tenant/schedule", {
         method: "DELETE",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ id }),
+        body: JSON.stringify({ id: deleteTargetId }),
       });
       if (res.ok) {
-        setSlots((prev) => prev.filter((s) => s.id !== id));
+        setSlots((prev) => prev.filter((s) => s.id !== deleteTargetId));
+        setDeleteTargetId(null);
       } else {
         const data = await res.json();
-        alert(data.error || "Failed to delete slot");
+        setDeleteError(data.error || "Failed to delete slot");
+        setDeleteTargetId(null);
       }
     } catch (err: unknown) {
       const error = err as { message?: string };
-      alert(error.message || "Failed to delete slot");
+      setDeleteError(error.message || "Failed to delete slot");
+      setDeleteTargetId(null);
+    } finally {
+      setDeleting(false);
     }
   };
 
@@ -215,9 +220,15 @@ export function useSchedule({ initialSlots, groups, teachers, locale }: UseSched
     errorMsg,
     conflictList,
     submitting,
+    deleteTargetId,
+    setDeleteTargetId,
+    deleting,
+    deleteError,
+    setDeleteError,
     openCreateModal,
     openEditModal,
     handleSaveSlot,
-    handleDeleteSlot,
+    handleDeleteSlot: requestDeleteSlot,
+    confirmDeleteSlot,
   };
 }

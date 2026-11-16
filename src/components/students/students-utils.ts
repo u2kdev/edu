@@ -103,8 +103,8 @@ export function studentStatusLabel(locale: string, status: string): string {
 
 export function studentStatusBadgeTone(status: string): string {
   return status === "ACTIVE"
-    ? "bg-emerald-500/10 text-emerald-400 border border-emerald-500/20"
-    : "bg-slate-700/50 text-slate-400 border border-slate-700";
+    ? "bg-success-subtle text-success-subtle-foreground border border-success/20"
+    : "bg-muted text-muted-foreground border border-border";
 }
 
 export function hasActiveFilters(search: string, groupId: string, status: string): boolean {

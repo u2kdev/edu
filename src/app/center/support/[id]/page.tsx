@@ -34,11 +34,23 @@ export default async function CenterTicketDetailPage({
 
   if (!ticket) notFound();
 
-  // Ensure this ticket belongs to the center or this user
+  // Ensure this ticket belongs to the center and the actor is authorized:
+  // - The creator of the ticket
+  // - Center administration (DIRECTOR, CENTER_ADMIN, CENTER_SUPPORT)
+  // - Platform staff
   const isCreator = ticket.creatorUserId === session.user.id;
   const isCenterTicket = ticket.centerId === centerId;
+  const isCenterStaff =
+    session.activeCenterRole === "DIRECTOR" ||
+    session.activeCenterRole === "CENTER_ADMIN" ||
+    session.activeCenterRole === "CENTER_SUPPORT";
 
-  if (!isCreator && !isCenterTicket && !tenantCtx.isPlatformStaff) {
+  const canAccessTicket =
+    isCreator ||
+    (isCenterTicket && isCenterStaff) ||
+    tenantCtx.isPlatformStaff;
+
+  if (!canAccessTicket) {
     notFound();
   }
 

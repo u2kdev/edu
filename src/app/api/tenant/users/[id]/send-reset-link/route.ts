@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 // Reason: Exception: Tenant password reset links operate on global user and token models.
 // eslint-disable-next-line no-restricted-imports
 import { db } from "@/lib/db";
-import { requireTenantAccess, logAuditEvent } from "@/lib/tenant";
+import { requireTenantAccess, logAuditEvent, TenantAccessError } from "@/lib/tenant";
 import { hasPermission } from "@/lib/permissions";
 import type { CenterRole } from "@/lib/permissions";
 import { sendPasswordSetupLink } from "@/lib/password-reset";
@@ -72,6 +72,9 @@ export async function POST(
       resetUrl: process.env.NODE_ENV !== "production" ? delivery.resetUrl : undefined,
     });
   } catch (err: unknown) {
+    if (err instanceof TenantAccessError) {
+      return NextResponse.json({ error: err.message, code: err.code }, { status: err.status });
+    }
     console.error("POST /api/tenant/users/[id]/send-reset-link error:", err);
     return NextResponse.json({ error: "Failed to send reset link" }, { status: 500 });
   }

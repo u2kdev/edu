@@ -1,18 +1,32 @@
 "use client";
 
 import React, { useState, useEffect, useCallback } from "react";
+import { BookOpen, Building, Check, CreditCard, Edit2, GraduationCap, HardDrive, Plus, Users, X } from "lucide-react";
 import {
-  CreditCard,
-  Check,
-  Plus,
-  Edit2,
-  Users,
-  GraduationCap,
-  BookOpen,
-  Building,
-  HardDrive,
-  X,
-} from "lucide-react";
+  PLAN_FEATURE_KEYS,
+  PLAN_FEATURE_LABELS,
+  PLAN_PRESETS,
+  parsePlanFeatures,
+  type PlanFeatures,
+} from "@/lib/plan-features";
+import {
+  Alert,
+  AlertDescription,
+  Badge,
+  Button,
+  Card,
+  CardContent,
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  EmptyState,
+  FormActions,
+  FormField,
+  Input,
+  PageHeader,
+  Skeleton,
+} from "@/components/ui";
 
 interface SubscriptionPlanItem {
   id: string;
@@ -23,6 +37,8 @@ interface SubscriptionPlanItem {
   maxCourses: number;
   maxBranches: number;
   maxStorage: number;
+  featuresJson?: string | null;
+  features?: PlanFeatures;
   isActive: boolean;
   _count?: { subscriptions: number };
 }
@@ -32,7 +48,6 @@ export default function PlatformPlansPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
-  // Modal state
   const [modalOpen, setModalOpen] = useState(false);
   const [editingPlan, setEditingPlan] = useState<SubscriptionPlanItem | null>(null);
   const [formData, setFormData] = useState({
@@ -45,7 +60,9 @@ export default function PlatformPlansPage() {
     maxStorage: 5120,
     isActive: true,
   });
+  const [formFeatures, setFormFeatures] = useState<PlanFeatures>({ ...PLAN_PRESETS.pro });
   const [saving, setSaving] = useState(false);
+  const [saveError, setSaveError] = useState<string | null>(null);
 
   const fetchPlans = useCallback(async () => {
     setLoading(true);
@@ -68,9 +85,10 @@ export default function PlatformPlansPage() {
 
   const openCreateModal = () => {
     setEditingPlan(null);
+    setSaveError(null);
     setFormData({
       name: "",
-      priceMonthly: 50,
+      priceMonthly: 500000,
       maxStudents: 100,
       maxTeachers: 10,
       maxCourses: 20,
@@ -78,11 +96,13 @@ export default function PlatformPlansPage() {
       maxStorage: 5120,
       isActive: true,
     });
+    setFormFeatures({ ...PLAN_PRESETS.pro });
     setModalOpen(true);
   };
 
   const openEditModal = (plan: SubscriptionPlanItem) => {
     setEditingPlan(plan);
+    setSaveError(null);
     setFormData({
       name: plan.name,
       priceMonthly: plan.priceMonthly,
@@ -93,16 +113,19 @@ export default function PlatformPlansPage() {
       maxStorage: plan.maxStorage,
       isActive: plan.isActive,
     });
+    setFormFeatures(plan.features ?? parsePlanFeatures(plan.featuresJson));
     setModalOpen(true);
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setSaving(true);
+    setSaveError(null);
     try {
       const url = "/api/platform/plans";
       const method = editingPlan ? "PATCH" : "POST";
-      const body = editingPlan ? { ...formData, id: editingPlan.id } : formData;
+      const payload = { ...formData, features: formFeatures };
+      const body = editingPlan ? { ...payload, id: editingPlan.id } : payload;
 
       const res = await fetch(url, {
         method,
@@ -118,7 +141,7 @@ export default function PlatformPlansPage() {
       setModalOpen(false);
       fetchPlans();
     } catch (err: unknown) {
-      alert(err instanceof Error ? err.message : "Ошибка сохранения");
+      setSaveError(err instanceof Error ? err.message : "Ошибка сохранения");
     } finally {
       setSaving(false);
     }
@@ -126,265 +149,326 @@ export default function PlatformPlansPage() {
 
   return (
     <div className="space-y-6">
-      {/* Page Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-        <div>
-          <h1 className="text-2xl md:text-3xl font-extrabold text-slate-900 tracking-tight">
-            Тарифные планы SaaS
-          </h1>
-          <p className="text-sm text-slate-500 mt-1">
-            Настройка подписок, ценообразования и системных лимитов для учебных центров
-          </p>
-        </div>
-        <button
-          onClick={openCreateModal}
-          className="inline-flex items-center gap-2 px-4 py-2.5 bg-blue-600 hover:bg-blue-700 active:scale-[0.98] text-white text-sm font-semibold rounded-xl shadow-sm transition-all cursor-pointer"
-        >
-          <Plus className="w-4 h-4" />
-          <span>Создать тариф</span>
-        </button>
-      </div>
+      <PageHeader
+        title="Тарифные планы"
+        description="Настройка подписок, ценообразования и системных лимитов для учебных центров"
+        actions={
+          <Button type="button" variant="primary" size="sm" onClick={openCreateModal}>
+            <Plus className="h-4 w-4" aria-hidden="true" />
+            <span>Создать тариф</span>
+          </Button>
+        }
+      />
 
       {loading ? (
-        <div className="bg-white rounded-2xl border border-slate-200 p-12 text-center text-slate-500 shadow-sm animate-pulse">
-          Загрузка тарифных планов...
+        <div className="space-y-3">
+          <p className="text-xs text-muted-foreground">Загрузка тарифных планов...</p>
+          <div className="grid grid-cols-1 gap-6 md:grid-cols-2 lg:grid-cols-3">
+            {Array.from({ length: 3 }).map((_, i) => (
+              <Skeleton key={i} className="h-80 w-full rounded-lg" />
+            ))}
+          </div>
         </div>
       ) : error ? (
-        <div className="bg-rose-50 border border-rose-200 text-rose-800 p-6 rounded-2xl text-center shadow-sm">
-          {error}
-        </div>
+        <Alert variant="destructive">
+          <AlertDescription>{error}</AlertDescription>
+        </Alert>
       ) : plans.length === 0 ? (
-        <div className="bg-white rounded-2xl border border-slate-200 p-12 text-center shadow-sm">
-          <CreditCard className="w-12 h-12 text-slate-300 mx-auto mb-3" />
-          <h3 className="text-base font-semibold text-slate-800">Тарифы еще не созданы</h3>
-          <p className="text-sm text-slate-500 mt-1">
-            Создайте первый базовый тариф для подключения учебных центров.
-          </p>
-        </div>
+        <EmptyState
+          icon={<CreditCard className="h-5 w-5" aria-hidden="true" />}
+          title="Тарифы еще не созданы"
+          description="Создайте первый базовый тариф для подключения учебных центров."
+          action={
+            <Button type="button" variant="primary" size="sm" onClick={openCreateModal}>
+              <Plus className="h-4 w-4" aria-hidden="true" />
+              <span>Создать тариф</span>
+            </Button>
+          }
+        />
       ) : (
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+        <div className="grid grid-cols-1 gap-6 md:grid-cols-2 lg:grid-cols-3">
           {plans.map((plan) => (
-            <div
-              key={plan.id}
-              className="bg-white rounded-2xl border border-slate-200/90 shadow-sm hover:shadow-md transition-shadow p-6 flex flex-col justify-between relative overflow-hidden"
-            >
-              {!plan.isActive && (
-                <div className="absolute top-4 right-4 px-2.5 py-0.5 bg-rose-50 text-rose-700 text-xs font-bold rounded-full border border-rose-200">
-                  НЕАКТИВЕН
-                </div>
-              )}
+            <Card key={plan.id} className="relative flex flex-col justify-between overflow-hidden">
+              <CardContent className="flex h-full flex-col justify-between p-6">
+                <div>
+                  <div className="mb-4 flex items-start justify-between gap-2">
+                    <div>
+                      <span className="text-xs font-medium text-primary">Тарифный план</span>
+                      <h3 className="mt-0.5 font-display text-lg font-semibold text-foreground">
+                        {plan.name}
+                      </h3>
+                    </div>
+                    {!plan.isActive && <Badge variant="destructive">НЕАКТИВЕН</Badge>}
+                  </div>
 
-              <div>
-                <div className="mb-4">
-                  <span className="text-xs font-semibold text-blue-600 uppercase tracking-wider">
-                    Тарифный план
+                  <div className="flex items-baseline gap-1.5">
+                    <span className="font-display text-3xl font-bold text-foreground tabular-nums">
+                      {Math.round(plan.priceMonthly).toLocaleString("ru-RU")}
+                    </span>
+                    <span className="text-xs font-medium text-muted-foreground">UZS / месяц</span>
+                  </div>
+
+                  <div className="mt-4 space-y-2.5 border-t border-border py-4 text-sm text-foreground">
+                    <div className="flex items-center gap-2.5">
+                      <Users className="h-4 w-4 shrink-0 text-primary" aria-hidden="true" />
+                      <span>
+                        До <strong className="tabular-nums">{plan.maxStudents}</strong> учеников
+                      </span>
+                    </div>
+                    <div className="flex items-center gap-2.5">
+                      <GraduationCap className="h-4 w-4 shrink-0 text-info" aria-hidden="true" />
+                      <span>
+                        До <strong className="tabular-nums">{plan.maxTeachers}</strong> учителей
+                      </span>
+                    </div>
+                    <div className="flex items-center gap-2.5">
+                      <BookOpen className="h-4 w-4 shrink-0 text-success" aria-hidden="true" />
+                      <span>
+                        До <strong className="tabular-nums">{plan.maxCourses}</strong> курсов
+                      </span>
+                    </div>
+                    <div className="flex items-center gap-2.5">
+                      <Building className="h-4 w-4 shrink-0 text-warning" aria-hidden="true" />
+                      <span>
+                        <strong className="tabular-nums">{plan.maxBranches}</strong> филиал(ов)
+                      </span>
+                    </div>
+                    <div className="flex items-center gap-2.5">
+                      <HardDrive className="h-4 w-4 shrink-0 text-muted-foreground" aria-hidden="true" />
+                      <span>
+                        <strong className="tabular-nums">{Math.round(plan.maxStorage / 1024)} GB</strong> хранилища
+                      </span>
+                    </div>
+                  </div>
+
+                  <div className="space-y-1.5 border-t border-border pt-3 text-xs">
+                    {PLAN_FEATURE_KEYS.map((fKey) => {
+                      const fMap = plan.features ?? parsePlanFeatures(plan.featuresJson);
+                      const on = Boolean(fMap[fKey]);
+                      return (
+                        <div key={fKey} className="flex items-center gap-2">
+                          {on ? (
+                            <Check className="h-3.5 w-3.5 shrink-0 text-success" aria-hidden="true" />
+                          ) : (
+                            <X className="h-3.5 w-3.5 shrink-0 text-muted-foreground" aria-hidden="true" />
+                          )}
+                          <span className={on ? "text-foreground" : "text-muted-foreground line-through"}>
+                            {PLAN_FEATURE_LABELS[fKey].ru}
+                          </span>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+
+                <div className="mt-4 flex items-center justify-between border-t border-border pt-4">
+                  <span className="text-xs text-muted-foreground">
+                    <strong className="font-semibold text-foreground tabular-nums">
+                      {plan._count?.subscriptions || 0}
+                    </strong>{" "}
+                    активных
                   </span>
-                  <h3 className="text-xl font-bold text-slate-900 mt-0.5">{plan.name}</h3>
-                  <div className="flex items-baseline gap-1 mt-2">
-                    <span className="text-3xl font-extrabold text-slate-900">${plan.priceMonthly}</span>
-                    <span className="text-xs font-medium text-slate-500">/ месяц</span>
-                  </div>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    onClick={() => openEditModal(plan)}
+                  >
+                    <Edit2 className="h-3.5 w-3.5" aria-hidden="true" />
+                    <span>Изменить</span>
+                  </Button>
                 </div>
-
-                <div className="space-y-3 py-4 border-t border-slate-100 text-sm">
-                  <div className="flex items-center gap-2.5 text-slate-700">
-                    <Users className="w-4 h-4 text-blue-600 shrink-0" />
-                    <span>До <strong className="font-semibold text-slate-900">{plan.maxStudents}</strong> учеников</span>
-                  </div>
-                  <div className="flex items-center gap-2.5 text-slate-700">
-                    <GraduationCap className="w-4 h-4 text-indigo-600 shrink-0" />
-                    <span>До <strong className="font-semibold text-slate-900">{plan.maxTeachers}</strong> учителей</span>
-                  </div>
-                  <div className="flex items-center gap-2.5 text-slate-700">
-                    <BookOpen className="w-4 h-4 text-emerald-600 shrink-0" />
-                    <span>До <strong className="font-semibold text-slate-900">{plan.maxCourses}</strong> курсов</span>
-                  </div>
-                  <div className="flex items-center gap-2.5 text-slate-700">
-                    <Building className="w-4 h-4 text-amber-600 shrink-0" />
-                    <span><strong className="font-semibold text-slate-900">{plan.maxBranches}</strong> филиал(ов)</span>
-                  </div>
-                  <div className="flex items-center gap-2.5 text-slate-700">
-                    <HardDrive className="w-4 h-4 text-slate-500 shrink-0" />
-                    <span><strong className="font-semibold text-slate-900">{Math.round(plan.maxStorage / 1024)} GB</strong> хранилища</span>
-                  </div>
-                </div>
-              </div>
-
-              <div className="pt-4 border-t border-slate-100 flex items-center justify-between mt-4">
-                <span className="text-xs font-medium text-slate-500">
-                  <strong className="text-slate-900 font-bold">{plan._count?.subscriptions || 0}</strong> активных
-                </span>
-                <button
-                  onClick={() => openEditModal(plan)}
-                  className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold text-blue-700 bg-blue-50 hover:bg-blue-100 rounded-lg border border-blue-200 transition-colors cursor-pointer"
-                >
-                  <Edit2 className="w-3.5 h-3.5" />
-                  <span>Изменить</span>
-                </button>
-              </div>
-            </div>
+              </CardContent>
+            </Card>
           ))}
         </div>
       )}
 
-      {/* Modal Dialog for Plan Create / Edit */}
-      {modalOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
-          <div
-            className="fixed inset-0 bg-slate-900/40 backdrop-blur-sm transition-opacity"
-            onClick={() => setModalOpen(false)}
-          />
+      <Dialog open={modalOpen} onOpenChange={setModalOpen}>
+        <DialogContent className="max-w-lg max-h-[90vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle>
+              {editingPlan ? "Редактировать тариф" : "Новый тарифный план"}
+            </DialogTitle>
+          </DialogHeader>
 
-          <div className="relative bg-white rounded-2xl border border-slate-200 shadow-2xl max-w-lg w-full p-6 z-10 space-y-4 max-h-[90vh] overflow-y-auto">
-            <div className="flex items-center justify-between border-b border-slate-100 pb-3">
-              <h3 className="text-lg font-bold text-slate-900">
-                {editingPlan ? "Редактировать тариф" : "Новый тарифный план"}
-              </h3>
-              <button
-                type="button"
-                onClick={() => setModalOpen(false)}
-                className="p-1 rounded-lg text-slate-400 hover:text-slate-700 hover:bg-slate-100"
-              >
-                <X className="w-5 h-5" />
-              </button>
+          {saveError && (
+            <Alert variant="destructive">
+              <AlertDescription>{saveError}</AlertDescription>
+            </Alert>
+          )}
+
+          <form onSubmit={handleSubmit} className="space-y-4">
+            <FormField label="Название тарифа" htmlFor="plan-name" required>
+              <Input
+                id="plan-name"
+                type="text"
+                value={formData.name}
+                onChange={(e) => setFormData({ ...formData, name: e.target.value })}
+                placeholder="Стандарт, Про, Корпоративный..."
+                required
+              />
+            </FormField>
+
+            <FormField label="Цена в месяц (UZS)" htmlFor="plan-price" required>
+              <Input
+                id="plan-price"
+                type="number"
+                min="0"
+                step="1"
+                value={formData.priceMonthly}
+                onChange={(e) =>
+                  setFormData({ ...formData, priceMonthly: parseFloat(e.target.value) || 0 })
+                }
+                required
+              />
+            </FormField>
+
+            <div className="grid grid-cols-2 gap-3">
+              <FormField label="Макс. учеников" htmlFor="plan-max-students" required>
+                <Input
+                  id="plan-max-students"
+                  type="number"
+                  min="1"
+                  value={formData.maxStudents}
+                  onChange={(e) =>
+                    setFormData({ ...formData, maxStudents: parseInt(e.target.value, 10) || 1 })
+                  }
+                  required
+                />
+              </FormField>
+              <FormField label="Макс. учителей" htmlFor="plan-max-teachers" required>
+                <Input
+                  id="plan-max-teachers"
+                  type="number"
+                  min="1"
+                  value={formData.maxTeachers}
+                  onChange={(e) =>
+                    setFormData({ ...formData, maxTeachers: parseInt(e.target.value, 10) || 1 })
+                  }
+                  required
+                />
+              </FormField>
             </div>
 
-            <form onSubmit={handleSubmit} className="space-y-4">
-              <div>
-                <label className="block text-xs font-semibold text-slate-700 uppercase mb-1">
-                  Название тарифа
-                </label>
-                <input
-                  type="text"
-                  value={formData.name}
-                  onChange={(e) => setFormData({ ...formData, name: e.target.value })}
-                  placeholder="Стандарт, Про, Корпоративный..."
-                  className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm text-slate-900"
-                  required
-                />
-              </div>
-
-              <div>
-                <label className="block text-xs font-semibold text-slate-700 uppercase mb-1">
-                  Цена в месяц (USD)
-                </label>
-                <input
+            <div className="grid grid-cols-2 gap-3">
+              <FormField label="Макс. курсов" htmlFor="plan-max-courses" required>
+                <Input
+                  id="plan-max-courses"
                   type="number"
-                  min="0"
-                  step="1"
-                  value={formData.priceMonthly}
-                  onChange={(e) => setFormData({ ...formData, priceMonthly: parseFloat(e.target.value) || 0 })}
-                  className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm text-slate-900"
+                  min="1"
+                  value={formData.maxCourses}
+                  onChange={(e) =>
+                    setFormData({ ...formData, maxCourses: parseInt(e.target.value, 10) || 1 })
+                  }
                   required
                 />
-              </div>
-
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <label className="block text-xs font-semibold text-slate-700 uppercase mb-1">
-                    Макс. учеников
-                  </label>
-                  <input
-                    type="number"
-                    min="1"
-                    value={formData.maxStudents}
-                    onChange={(e) => setFormData({ ...formData, maxStudents: parseInt(e.target.value, 10) || 1 })}
-                    className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm text-slate-900"
-                    required
-                  />
-                </div>
-                <div>
-                  <label className="block text-xs font-semibold text-slate-700 uppercase mb-1">
-                    Макс. учителей
-                  </label>
-                  <input
-                    type="number"
-                    min="1"
-                    value={formData.maxTeachers}
-                    onChange={(e) => setFormData({ ...formData, maxTeachers: parseInt(e.target.value, 10) || 1 })}
-                    className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm text-slate-900"
-                    required
-                  />
-                </div>
-              </div>
-
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <label className="block text-xs font-semibold text-slate-700 uppercase mb-1">
-                    Макс. курсов
-                  </label>
-                  <input
-                    type="number"
-                    min="1"
-                    value={formData.maxCourses}
-                    onChange={(e) => setFormData({ ...formData, maxCourses: parseInt(e.target.value, 10) || 1 })}
-                    className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm text-slate-900"
-                    required
-                  />
-                </div>
-                <div>
-                  <label className="block text-xs font-semibold text-slate-700 uppercase mb-1">
-                    Макс. филиалов
-                  </label>
-                  <input
-                    type="number"
-                    min="1"
-                    value={formData.maxBranches}
-                    onChange={(e) => setFormData({ ...formData, maxBranches: parseInt(e.target.value, 10) || 1 })}
-                    className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm text-slate-900"
-                    required
-                  />
-                </div>
-              </div>
-
-              <div>
-                <label className="block text-xs font-semibold text-slate-700 uppercase mb-1">
-                  Хранилище (MB)
-                </label>
-                <input
+              </FormField>
+              <FormField label="Макс. филиалов" htmlFor="plan-max-branches" required>
+                <Input
+                  id="plan-max-branches"
                   type="number"
-                  min="512"
-                  step="512"
-                  value={formData.maxStorage}
-                  onChange={(e) => setFormData({ ...formData, maxStorage: parseInt(e.target.value, 10) || 512 })}
-                  className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm text-slate-900"
+                  min="1"
+                  value={formData.maxBranches}
+                  onChange={(e) =>
+                    setFormData({ ...formData, maxBranches: parseInt(e.target.value, 10) || 1 })
+                  }
                   required
                 />
-              </div>
+              </FormField>
+            </div>
 
-              <div className="flex items-center gap-2 pt-2">
-                <input
-                  type="checkbox"
-                  id="isActive"
-                  checked={formData.isActive}
-                  onChange={(e) => setFormData({ ...formData, isActive: e.target.checked })}
-                  className="h-4 w-4 rounded border-slate-300 text-blue-600 focus:ring-blue-500"
-                />
-                <label htmlFor="isActive" className="text-sm font-medium text-slate-700">
-                  Активен для новых подписок
-                </label>
-              </div>
+            <FormField label="Хранилище (MB)" htmlFor="plan-max-storage" required>
+              <Input
+                id="plan-max-storage"
+                type="number"
+                min="512"
+                step="512"
+                value={formData.maxStorage}
+                onChange={(e) =>
+                  setFormData({ ...formData, maxStorage: parseInt(e.target.value, 10) || 512 })
+                }
+                required
+              />
+            </FormField>
 
-              <div className="pt-4 border-t border-slate-100 flex items-center justify-end gap-3">
-                <button
-                  type="button"
-                  onClick={() => setModalOpen(false)}
-                  className="px-4 py-2 border border-slate-200 rounded-xl text-sm font-semibold text-slate-600 hover:bg-slate-50"
-                >
-                  Отмена
-                </button>
-                <button
-                  type="submit"
-                  disabled={saving}
-                  className="px-5 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-xl text-sm font-semibold shadow-sm disabled:opacity-50"
-                >
-                  {saving ? "Сохранение..." : "Сохранить"}
-                </button>
+            <label className="flex items-center gap-2 text-sm font-medium text-foreground cursor-pointer">
+              <input
+                type="checkbox"
+                id="isActive"
+                checked={formData.isActive}
+                onChange={(e) => setFormData({ ...formData, isActive: e.target.checked })}
+                className="h-4 w-4 rounded border-input accent-primary"
+              />
+              <span>Активен для новых подписок</span>
+            </label>
+
+            <div className="space-y-2.5 border-t border-border pt-3">
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <span className="text-xs font-medium text-muted-foreground">
+                  Доступные модули тарифа
+                </span>
+                <div className="flex items-center gap-1.5">
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    onClick={() => setFormFeatures({ ...PLAN_PRESETS.start })}
+                  >
+                    Старт
+                  </Button>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    onClick={() => setFormFeatures({ ...PLAN_PRESETS.growth })}
+                  >
+                    Рост
+                  </Button>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    onClick={() => setFormFeatures({ ...PLAN_PRESETS.pro })}
+                  >
+                    Про
+                  </Button>
+                </div>
               </div>
-            </form>
-          </div>
-        </div>
-      )}
+              <div className="grid grid-cols-1 gap-1.5">
+                {PLAN_FEATURE_KEYS.map((fKey) => (
+                  <label
+                    key={fKey}
+                    className="flex cursor-pointer items-center gap-2 rounded-md p-1.5 text-xs text-foreground hover:bg-muted"
+                  >
+                    <input
+                      type="checkbox"
+                      checked={formFeatures[fKey]}
+                      onChange={(e) =>
+                        setFormFeatures((prev) => ({
+                          ...prev,
+                          [fKey]: e.target.checked,
+                        }))
+                      }
+                      className="h-4 w-4 rounded border-input accent-primary"
+                    />
+                    <span>{PLAN_FEATURE_LABELS[fKey].ru}</span>
+                  </label>
+                ))}
+              </div>
+            </div>
+
+            <FormActions>
+              <Button type="button" variant="outline" onClick={() => setModalOpen(false)}>
+                Отмена
+              </Button>
+              <Button type="submit" variant="primary" disabled={saving}>
+                {saving ? "Сохранение..." : "Сохранить"}
+              </Button>
+            </FormActions>
+          </form>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

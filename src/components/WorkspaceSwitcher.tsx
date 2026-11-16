@@ -1,8 +1,7 @@
 "use client";
 
 import { useRouter } from "next/navigation";
-import Link from "next/link";
-import { Plus } from "lucide-react";
+import { t } from "@/i18n";
 
 interface WorkspaceSwitcherProps {
   memberships: {
@@ -15,12 +14,13 @@ interface WorkspaceSwitcherProps {
   }[];
   activeCenterId?: string;
   platformRole: string;
+  locale?: string;
 }
 
 export default function WorkspaceSwitcher({
   memberships,
   activeCenterId,
-  platformRole,
+  locale = "ru",
 }: WorkspaceSwitcherProps) {
   const router = useRouter();
 
@@ -41,41 +41,32 @@ export default function WorkspaceSwitcher({
     }
   };
 
-  const isPlatformStaff = platformRole === "SUPERADMIN" || platformRole === "PLATFORM_ADMIN";
+  if (memberships.length <= 1) {
+    return null;
+  }
 
   return (
-    <div className="space-y-2">
-      <label className="block text-[11px] font-semibold text-slate-400 uppercase tracking-wider">
-        Текущий Воркспейс
+    <div className="space-y-1.5">
+      <label
+        htmlFor="edarschi-workspace-switcher"
+        className="block text-xs font-medium text-muted-foreground"
+      >
+        {t(locale, "shell.switchWorkspace")}
       </label>
 
-      {memberships.length > 0 ? (
-        <select
-          value={active?.centerId || ""}
-          onChange={(e) => handleSwitch(e.target.value)}
-          className="w-full py-2 px-3 bg-slate-900 border border-slate-700 rounded-xl text-sm font-medium text-white focus:outline-none focus:border-brand-500 transition-colors"
-        >
-          {memberships.map((m) => (
-            <option key={m.id} value={m.centerId}>
-              {m.centerName} ({m.role})
-            </option>
-          ))}
-        </select>
-      ) : (
-        <div className="p-2.5 rounded-xl bg-slate-900 border border-slate-800 text-xs text-slate-400">
-          Нет активных центров
-        </div>
-      )}
-
-      {isPlatformStaff && (
-        <Link
-          href="/dashboard/platform"
-          className="flex items-center gap-1.5 text-xs text-purple-400 hover:text-purple-300 font-medium transition-colors pt-1"
-        >
-          <Plus className="w-3.5 h-3.5" />
-          <span>+ Создать центр (Платформа)</span>
-        </Link>
-      )}
+      <select
+        id="edarschi-workspace-switcher"
+        aria-label={t(locale, "shell.switchWorkspace")}
+        value={active?.centerId || ""}
+        onChange={(e) => handleSwitch(e.target.value)}
+        className="w-full min-h-[40px] py-2 px-3 bg-background border border-input rounded-lg text-sm font-medium text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring transition-colors"
+      >
+        {memberships.map((m) => (
+          <option key={m.id} value={m.centerId}>
+            {m.centerName} ({t(locale, `roles.${m.role}`) || m.role})
+          </option>
+        ))}
+      </select>
     </div>
   );
 }

@@ -18,7 +18,46 @@ const updateSettingsSchema = z.object({
   gradingScale: z.enum(["PERCENT_100", "POINTS_5", "PASS_FAIL"]).optional(),
   organizationKind: z.enum(["LEARNING_CENTER", "KINDERGARTEN", "SCHOOL", "TRAINING_CENTER"]).optional(),
   centerType: z.enum(["ONLINE", "OFFLINE", "HYBRID"]).optional(),
+  allowAdminDiscount: z.boolean().optional(),
+  partialPaymentExtendsPeriod: z.boolean().optional(),
+  smsEnabled: z.boolean().optional(),
+  emailEnabled: z.boolean().optional(),
+  smsDailyLimit: z.number().int().min(0).max(100000).optional(),
+  paymentReminderEnabled: z.boolean().optional(),
+  paymentReminderDays: z.array(z.number().int().min(-30).max(60)).max(10).optional(),
+  quietHoursStart: z.number().int().min(0).max(23).optional(),
+  quietHoursEnd: z.number().int().min(0).max(23).optional(),
+  reminderTemplateRu: z.string().max(1000).nullable().optional(),
+  reminderTemplateUz: z.string().max(1000).nullable().optional(),
 });
+
+function parseReminderDaysJson(raw?: string | null): number[] {
+  if (!raw) return [-3, 0, 3, 7];
+  try {
+    const parsed = JSON.parse(raw);
+    if (Array.isArray(parsed)) {
+      const nums = parsed.filter((n): n is number => typeof n === "number" && Number.isInteger(n));
+      if (nums.length > 0) return nums;
+    }
+  } catch {}
+  return [-3, 0, 3, 7];
+}
+
+function stripLegacyChannelFlagsFromBranding(raw: string | Record<string, unknown> | null | undefined): string | null {
+  if (raw === null || raw === undefined) return null;
+  try {
+    const parsed = typeof raw === "string" ? JSON.parse(raw) : raw;
+    if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) {
+      return typeof raw === "string" ? raw : JSON.stringify(raw);
+    }
+    const cleaned = { ...(parsed as Record<string, unknown>) };
+    delete cleaned.enableSms;
+    delete cleaned.enableEmail;
+    return Object.keys(cleaned).length > 0 ? JSON.stringify(cleaned) : null;
+  } catch {
+    return typeof raw === "string" ? raw : null;
+  }
+}
 
 export async function GET(req: Request) {
   try {
@@ -60,6 +99,17 @@ export async function GET(req: Request) {
         defaultLanguage: center.defaultLanguage,
         timeZone: center.timeZone,
         gradingScale: center.gradingScale,
+        allowAdminDiscount: center.allowAdminDiscount,
+        partialPaymentExtendsPeriod: center.partialPaymentExtendsPeriod,
+        smsEnabled: center.smsEnabled,
+        emailEnabled: center.emailEnabled,
+        smsDailyLimit: center.smsDailyLimit,
+        paymentReminderEnabled: center.paymentReminderEnabled,
+        paymentReminderDays: parseReminderDaysJson(center.paymentReminderDaysJson),
+        quietHoursStart: center.quietHoursStart,
+        quietHoursEnd: center.quietHoursEnd,
+        reminderTemplateRu: center.reminderTemplateRu,
+        reminderTemplateUz: center.reminderTemplateUz,
         createdAt: center.createdAt,
         subscription: center.subscriptions[0]
           ? {
@@ -75,9 +125,8 @@ export async function GET(req: Request) {
     if (err instanceof TenantAccessError) {
       return NextResponse.json({ error: err.message, code: err.code }, { status: err.status });
     }
-    const message = err instanceof Error ? err.message : "Internal server error";
-    const status = message.includes("Access denied") ? 403 : 500;
-    return NextResponse.json({ error: message }, { status });
+    console.error("[GET /api/tenant/settings]", err);
+    return NextResponse.json({ error: "Internal server error" }, { status: 500 });
   }
 }
 
@@ -122,12 +171,41 @@ export async function PATCH(req: Request) {
     if (data.gradingScale !== undefined) updateData.gradingScale = data.gradingScale;
     if (data.organizationKind !== undefined) updateData.organizationKind = data.organizationKind;
     if (data.centerType !== undefined) updateData.centerType = data.centerType;
+    if (data.allowAdminDiscount !== undefined) updateData.allowAdminDiscount = data.allowAdminDiscount;
+    if (data.partialPaymentExtendsPeriod !== undefined) {
+      updateData.partialPaymentExtendsPeriod = data.partialPaymentExtendsPeriod;
+    }
+    if (data.smsEnabled !== undefined) updateData.smsEnabled = data.smsEnabled;
+    if (data.emailEnabled !== undefined) updateData.emailEnabled = data.emailEnabled;
+    if (data.smsDailyLimit !== undefined) updateData.smsDailyLimit = data.smsDailyLimit;
+    if (data.paymentReminderEnabled !== undefined) updateData.paymentReminderEnabled = data.paymentReminderEnabled;
+    if (data.paymentReminderDays !== undefined) {
+      const normalizedDays = Array.from(new Set(data.paymentReminderDays)).sort((a, b) => a - b);
+      updateData.paymentReminderDaysJson = JSON.stringify(normalizedDays);
+    }
+    if (data.quietHoursStart !== undefined) updateData.quietHoursStart = data.quietHoursStart;
+    if (data.quietHoursEnd !== undefined) updateData.quietHoursEnd = data.quietHoursEnd;
+    if (data.reminderTemplateRu !== undefined) updateData.reminderTemplateRu = data.reminderTemplateRu;
+    if (data.reminderTemplateUz !== undefined) updateData.reminderTemplateUz = data.reminderTemplateUz;
 
     if (data.brandingConfig !== undefined) {
-      updateData.brandingConfig =
-        typeof data.brandingConfig === "string"
-          ? data.brandingConfig
-          : JSON.stringify(data.brandingConfig);
+      // Preserve/migrate any legacy enableSms/enableEmail only if explicit top-level column wasn't sent
+      try {
+        const parsedCfg =
+          typeof data.brandingConfig === "string"
+            ? JSON.parse(data.brandingConfig)
+            : data.brandingConfig;
+        if (parsedCfg && typeof parsedCfg === "object") {
+          const rec = parsedCfg as Record<string, unknown>;
+          if (data.smsEnabled === undefined && typeof rec.enableSms === "boolean") {
+            updateData.smsEnabled = rec.enableSms;
+          }
+          if (data.emailEnabled === undefined && typeof rec.enableEmail === "boolean") {
+            updateData.emailEnabled = rec.enableEmail;
+          }
+        }
+      } catch {}
+      updateData.brandingConfig = stripLegacyChannelFlagsFromBranding(data.brandingConfig);
     }
 
     const updated = await tenantCtx.getTenantDb().learningCenter.update({
@@ -156,8 +234,7 @@ export async function PATCH(req: Request) {
     if (err instanceof TenantAccessError) {
       return NextResponse.json({ error: err.message, code: err.code }, { status: err.status });
     }
-    const message = err instanceof Error ? err.message : "Internal server error";
-    const status = message.includes("Access denied") ? 403 : 500;
-    return NextResponse.json({ error: message }, { status });
+    console.error("[GET /api/tenant/settings]", err);
+    return NextResponse.json({ error: "Internal server error" }, { status: 500 });
   }
 }

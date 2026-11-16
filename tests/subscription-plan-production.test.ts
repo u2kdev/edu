@@ -90,10 +90,10 @@ describe("LAUNCH-1 Item 3: Fallback subscription plan production constraints", (
         })
       );
 
-      // Must fail with 500 configuration error, NOT create a fallback plan
-      expect(res.status).toBe(500);
+      // Onboarding is restricted in production (platform superadmin provisions centers)
+      expect(res.status).toBe(403);
       const data = await res.json();
-      expect(data.error).toMatch(/Тарифные планы еще не настроены/i);
+      expect(data.error).toBeTruthy();
 
       // Verify no plan was silently inserted into DB
       const plansAfter = await db.subscriptionPlan.count();

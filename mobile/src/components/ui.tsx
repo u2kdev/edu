@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useEffect, useState } from "react";
 import {
   View,
   Text,
@@ -216,6 +216,58 @@ export function ProfileAndSettingsView({
   const router = useRouter();
   const { user, activeRole, login, logout } = useAuthStore();
   const [switchingEmail, setSwitchingEmail] = useState<string | null>(null);
+  const [tgLinked, setTgLinked] = useState(false);
+  const [tgUsername, setTgUsername] = useState<string | null>(null);
+  const [tgBusy, setTgBusy] = useState(false);
+  const [tgManualToken, setTgManualToken] = useState<string | null>(null);
+
+  useEffect(() => {
+    let active = true;
+    apiClient<{ linked?: boolean; account?: { username?: string | null } | null }>(
+      API_ENDPOINTS.TELEGRAM_ACCOUNT
+    )
+      .then((res) => {
+        if (!active) return;
+        setTgLinked(Boolean(res?.linked));
+        setTgUsername(res?.account?.username ?? null);
+      })
+      .catch(() => {});
+    return () => {
+      active = false;
+    };
+  }, []);
+
+  const handleConnectTelegram = async () => {
+    setTgBusy(true);
+    try {
+      const res = await apiClient<{ token?: string; deepLink?: string | null }>(
+        API_ENDPOINTS.TELEGRAM_ACCOUNT,
+        { method: "POST" }
+      );
+      if (res?.token) setTgManualToken(res.token);
+      if (res?.deepLink) {
+        await Linking.openURL(res.deepLink).catch(() => {});
+      }
+    } catch {
+      Alert.alert(t("common.error"));
+    } finally {
+      setTgBusy(false);
+    }
+  };
+
+  const handleDisconnectTelegram = async () => {
+    setTgBusy(true);
+    try {
+      await apiClient(API_ENDPOINTS.TELEGRAM_ACCOUNT, { method: "DELETE" });
+      setTgLinked(false);
+      setTgUsername(null);
+      setTgManualToken(null);
+    } catch {
+      Alert.alert(t("common.error"));
+    } finally {
+      setTgBusy(false);
+    }
+  };
 
   const handleQuickRoleSwitch = async (demoEmail: string, password?: string) => {
     setSwitchingEmail(demoEmail);
@@ -306,6 +358,49 @@ export function ProfileAndSettingsView({
             );
           })}
         </View>
+      </View>
+
+      {/* Telegram Bot Link */}
+      <View className="p-4 rounded-3xl bg-slate-800/70 border border-slate-700/50 mb-5">
+        <Text className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-1">
+          {t("common.telegramTitle")}
+        </Text>
+        <Text className="text-[11px] text-slate-400 mb-3">
+          {t("common.telegramHint")}
+        </Text>
+        {tgLinked ? (
+          <View className="flex-row items-center justify-between">
+            <Text className="text-xs font-bold text-emerald-400">
+              {t("common.telegramConnected")}{tgUsername ? ` (@${tgUsername})` : ""}
+            </Text>
+            <TouchableOpacity
+              disabled={tgBusy}
+              onPress={handleDisconnectTelegram}
+              className="px-3.5 py-2 rounded-xl bg-rose-500/20 border border-rose-500/40"
+            >
+              <Text className="text-xs font-bold text-rose-300">
+                {t("common.telegramDisconnect")}
+              </Text>
+            </TouchableOpacity>
+          </View>
+        ) : (
+          <View>
+            <TouchableOpacity
+              disabled={tgBusy}
+              onPress={handleConnectTelegram}
+              className="w-full py-3 rounded-2xl bg-sky-600 flex-row items-center justify-center"
+            >
+              <Text className="text-xs font-bold text-white">
+                {t("common.telegramConnect")}
+              </Text>
+            </TouchableOpacity>
+            {tgManualToken && (
+              <Text className="text-[11px] text-slate-300 mt-2 font-mono">
+                /start {tgManualToken}
+              </Text>
+            )}
+          </View>
+        )}
       </View>
 
       {__DEV__ && (

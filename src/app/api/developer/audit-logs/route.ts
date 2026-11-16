@@ -6,7 +6,7 @@ import { requirePlatformPermission, handlePlatformError } from "@/lib/platformAu
 
 export async function GET(req: Request) {
   try {
-    await requirePlatformPermission("audit.read", req);
+    await requirePlatformPermission("platform.audit.read", req);
     const { searchParams } = new URL(req.url);
     const take = Math.min(500, Math.max(1, Number(searchParams.get("limit")) || 100));
     const centerId = searchParams.get("centerId");

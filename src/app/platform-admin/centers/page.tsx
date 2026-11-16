@@ -2,18 +2,18 @@
 
 import React, { useState, useEffect, useCallback } from "react";
 import Link from "next/link";
-import {
-  Building2,
-  Search,
-  Plus,
-  Filter,
-  ExternalLink,
-  ChevronLeft,
-  ChevronRight,
-  ShieldAlert,
-  Download,
-} from "lucide-react";
+import { Building2, Download, Plus } from "lucide-react";
 import ImpersonateButton from "@/components/ImpersonateButton";
+import {
+  Badge,
+  type BadgeVariant,
+  Button,
+  DataTable,
+  type DataTableColumn,
+  FilterBar,
+  PageHeader,
+} from "@/components/ui";
+import { t } from "@/i18n";
 
 interface CenterListItem {
   id: string;
@@ -25,6 +25,21 @@ interface CenterListItem {
   organizationKind?: "LEARNING_CENTER" | "SCHOOL" | "KINDERGARTEN" | "OTHER" | null;
   owner?: { id: string; fullName: string; email: string } | null;
 }
+
+const STATUS_VARIANTS: Record<string, { variant: BadgeVariant; label?: string }> = {
+  ACTIVE: { variant: "success" },
+  TRIAL: { variant: "info" },
+  PAUSED: { variant: "warning" },
+  BLOCKED: { variant: "destructive" },
+  CANCELLED: { variant: "neutral", label: "CANCELLED" },
+};
+
+const KIND_LABELS: Record<string, { label: string; variant: BadgeVariant }> = {
+  LEARNING_CENTER: { label: "Учебный центр", variant: "primary" },
+  SCHOOL: { label: "Школа", variant: "info" },
+  KINDERGARTEN: { label: "Детский сад", variant: "success" },
+  OTHER: { label: "Другое", variant: "neutral" },
+};
 
 export default function PlatformCentersPage() {
   const [centers, setCenters] = useState<CenterListItem[]>([]);
@@ -71,214 +86,180 @@ export default function PlatformCentersPage() {
     fetchCenters();
   }, [fetchCenters]);
 
-  const statusBadges: Record<string, { bg: string; text: string; border: string; label?: string }> = {
-    ACTIVE: { bg: "bg-emerald-50", text: "text-emerald-700", border: "border-emerald-200", label: "ACTIVE" },
-    TRIAL: { bg: "bg-blue-50", text: "text-blue-700", border: "border-blue-200", label: "TRIAL" },
-    PAUSED: { bg: "bg-amber-50", text: "text-amber-700", border: "border-amber-200", label: "PAUSED" },
-    BLOCKED: { bg: "bg-rose-50", text: "text-rose-700", border: "border-rose-200", label: "BLOCKED" },
-    CANCELLED: { bg: "bg-slate-100", text: "text-slate-700", border: "border-slate-300", label: "АРХИВ" },
-  };
+  const columns: DataTableColumn<CenterListItem>[] = [
+    {
+      id: "organization",
+      header: "Организация",
+      isMobilePrimary: true,
+      sortable: true,
+      sortValue: (c) => c.name,
+      cell: (center) => {
+        const kind = center.organizationKind ? KIND_LABELS[center.organizationKind] : null;
+        return (
+          <div className="min-w-0">
+            <div className="flex flex-wrap items-center gap-2">
+              <Link
+                href={`/platform-admin/centers/${center.id}`}
+                className="font-medium text-foreground hover:text-primary transition-colors"
+              >
+                {center.name}
+              </Link>
+              {kind && <Badge variant={kind.variant}>{kind.label}</Badge>}
+            </div>
+            <div className="mt-0.5 font-mono text-xs text-muted-foreground">{center.slug}</div>
+          </div>
+        );
+      },
+    },
+    {
+      id: "contacts",
+      header: "Контакты",
+      cell: (center) => (
+        <div className="space-y-0.5 text-sm">
+          <div className="text-foreground">{center.email || "—"}</div>
+          <div className="text-xs text-muted-foreground tabular-nums">{center.phone || "—"}</div>
+        </div>
+      ),
+    },
+    {
+      id: "status",
+      header: "Статус",
+      sortable: true,
+      sortValue: (c) => c.status,
+      cell: (center) => {
+        const badge = STATUS_VARIANTS[center.status] || { variant: "neutral" as const };
+        return <Badge variant={badge.variant}>{center.status}</Badge>;
+      },
+    },
+    {
+      id: "actions",
+      header: "Действия",
+      align: "right",
+      hideable: false,
+      cell: (center) => (
+        <div className="inline-flex items-center justify-end gap-2">
+          {center.owner?.id && (
+            <ImpersonateButton targetUserId={center.owner.id} targetCenterId={center.id} />
+          )}
+          <Button asChild variant="outline" size="sm">
+            <Link href={`/platform-admin/centers/${center.id}`}>Карточка</Link>
+          </Button>
+        </div>
+      ),
+    },
+  ];
 
-  const kindBadges: Record<string, { label: string; bg: string; text: string }> = {
-    LEARNING_CENTER: { label: "Учебный центр", bg: "bg-indigo-50", text: "text-indigo-700" },
-    SCHOOL: { label: "Школа", bg: "bg-blue-50", text: "text-blue-700" },
-    KINDERGARTEN: { label: "Детский сад", bg: "bg-emerald-50", text: "text-emerald-700" },
-    OTHER: { label: "Другое", bg: "bg-slate-100", text: "text-slate-700" },
-  };
+  const hasFilters = Boolean(search || status || organizationKind);
 
   return (
     <div className="space-y-6">
-      {/* Page Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-        <div>
-          <h1 className="text-2xl md:text-3xl font-extrabold text-slate-900 tracking-tight">
-            Учебные центры
-          </h1>
-          <p className="text-sm text-slate-500 mt-1">
-            Управление организациями, статусами доступа и техническая поддержка на платформе e-darischi
-          </p>
-        </div>
-        <div className="flex items-center gap-2.5">
-          <a
-            href="/api/platform/centers/export"
-            download
-            className="inline-flex items-center gap-2 px-3.5 py-2.5 bg-white border border-slate-200 text-slate-700 hover:bg-slate-50 text-sm font-medium rounded-xl shadow-sm transition-colors"
-          >
-            <Download className="w-4 h-4 text-slate-500" />
-            <span>Экспорт CSV</span>
-          </a>
-          <Link
-            href="/platform-admin/centers/create"
-            className="inline-flex items-center gap-2 px-4 py-2.5 bg-blue-600 hover:bg-blue-700 active:scale-[0.98] text-white text-sm font-semibold rounded-xl shadow-sm transition-all shrink-0"
-          >
-            <Plus className="w-4 h-4" />
-            <span>Добавить центр</span>
-          </Link>
-        </div>
-      </div>
+      <PageHeader
+        title="Учебные центры"
+        description="Управление организациями, статусами доступа и поддержка"
+        actions={
+          <>
+            <Button asChild variant="outline" size="sm">
+              <a href="/api/platform/centers/export" download>
+                <Download className="h-4 w-4" aria-hidden="true" />
+                <span>Экспорт CSV</span>
+              </a>
+            </Button>
+            <Button asChild variant="primary" size="sm">
+              <Link href="/platform-admin/centers/create">
+                <Plus className="h-4 w-4" aria-hidden="true" />
+                <span>Добавить центр</span>
+              </Link>
+            </Button>
+          </>
+        }
+      />
 
-      {/* Search & Status Filters */}
-      <div className="bg-white p-4 rounded-2xl border border-slate-200/90 shadow-sm flex flex-col md:flex-row gap-3 items-center justify-between">
-        <div className="relative flex-1 w-full">
-          <Search className="w-4 h-4 text-slate-400 absolute left-3.5 top-1/2 -translate-y-1/2" />
-          <input
-            type="text"
-            placeholder="Поиск по названию, slug или email..."
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-            className="w-full pl-10 pr-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm text-slate-900 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-colors"
-          />
-        </div>
+      <FilterBar
+        search={search}
+        onSearchChange={setSearch}
+        searchPlaceholder="Поиск по названию, slug или email..."
+        hasActiveFilters={hasFilters}
+        onReset={() => {
+          setSearch("");
+          setStatus("");
+          setOrganizationKind("");
+          setPage(1);
+        }}
+      >
+        <select
+          aria-label="Тип организации"
+          value={organizationKind}
+          onChange={(e) => {
+            setOrganizationKind(e.target.value);
+            setPage(1);
+          }}
+          className="h-9 rounded-md border border-input bg-background px-3 text-sm text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+        >
+          <option value="">Все типы орг-ции</option>
+          <option value="LEARNING_CENTER">Учебный центр</option>
+          <option value="SCHOOL">Школа</option>
+          <option value="KINDERGARTEN">Детский сад</option>
+          <option value="OTHER">Другое</option>
+        </select>
 
-        <div className="flex flex-wrap items-center gap-2 w-full md:w-auto">
-          <select
-            value={organizationKind}
-            onChange={(e) => {
-              setOrganizationKind(e.target.value);
-              setPage(1);
-            }}
-            className="w-full sm:w-44 py-2.5 px-3 bg-slate-50 border border-slate-200 rounded-xl text-sm text-slate-700 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 cursor-pointer"
-          >
-            <option value="">Все типы орг-ции</option>
-            <option value="LEARNING_CENTER">Учебный центр</option>
-            <option value="SCHOOL">Школа</option>
-            <option value="KINDERGARTEN">Детский сад</option>
-            <option value="OTHER">Другое</option>
-          </select>
+        <select
+          aria-label="Статус центра"
+          value={status}
+          onChange={(e) => {
+            setStatus(e.target.value);
+            setPage(1);
+          }}
+          className="h-9 rounded-md border border-input bg-background px-3 text-sm text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+        >
+          <option value="">Все статусы</option>
+          <option value="ACTIVE">ACTIVE (Активные)</option>
+          <option value="TRIAL">TRIAL (Пробный)</option>
+          <option value="PAUSED">PAUSED (Замороженные)</option>
+          <option value="BLOCKED">BLOCKED (Заблокированные)</option>
+          <option value="CANCELLED">CANCELLED (Архив)</option>
+        </select>
+      </FilterBar>
 
-          <select
-            value={status}
-            onChange={(e) => {
-              setStatus(e.target.value);
-              setPage(1);
-            }}
-            className="w-full sm:w-44 py-2.5 px-3 bg-slate-50 border border-slate-200 rounded-xl text-sm text-slate-700 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 cursor-pointer"
-          >
-            <option value="">Все статусы</option>
-            <option value="ACTIVE">ACTIVE (Активные)</option>
-            <option value="TRIAL">TRIAL (Пробный)</option>
-            <option value="PAUSED">PAUSED (Замороженные)</option>
-            <option value="BLOCKED">BLOCKED (Заблокированные)</option>
-            <option value="CANCELLED">CANCELLED (Архив)</option>
-          </select>
-        </div>
-      </div>
-
-      {/* Centers Table */}
-      {loading ? (
-        <div className="bg-white rounded-2xl border border-slate-200 p-12 text-center text-slate-500 text-sm shadow-sm animate-pulse">
-          Загрузка списка учебных центров...
-        </div>
-      ) : error ? (
-        <div className="bg-rose-50 border border-rose-200 text-rose-800 p-6 rounded-2xl text-center text-sm shadow-sm">
-          {error}
-        </div>
-      ) : centers.length === 0 ? (
-        <div className="bg-white rounded-2xl border border-slate-200 p-12 text-center shadow-sm">
-          <Building2 className="w-12 h-12 text-slate-300 mx-auto mb-3" />
-          <h3 className="text-base font-semibold text-slate-800">Центры не найдены</h3>
-          <p className="text-sm text-slate-500 mt-1">
-            По вашему запросу не найдено ни одной организации. Попробуйте изменить фильтры.
-          </p>
-        </div>
-      ) : (
-        <div className="bg-white rounded-2xl border border-slate-200/90 shadow-sm overflow-hidden">
-          <div className="overflow-x-auto">
-            <table className="w-full text-sm">
-              <thead>
-                <tr className="bg-slate-50/80 text-xs font-semibold text-slate-500 uppercase tracking-wider border-b border-slate-200/70">
-                  <th className="text-left px-6 py-3.5">Организация</th>
-                  <th className="text-left px-6 py-3.5">Контакты</th>
-                  <th className="text-left px-6 py-3.5">Статус</th>
-                  <th className="text-right px-6 py-3.5">Действия</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-slate-100">
-                {centers.map((center) => {
-                  const badge = statusBadges[center.status] || {
-                    bg: "bg-slate-100",
-                    text: "text-slate-700",
-                    border: "border-slate-200",
-                  };
-                  return (
-                    <tr key={center.id} className="hover:bg-slate-50/70 transition-colors">
-                      <td className="px-6 py-4">
-                        <div className="flex items-center gap-2">
-                          <Link
-                            href={`/platform-admin/centers/${center.id}`}
-                            className="font-semibold text-slate-900 hover:text-blue-600 transition-colors"
-                          >
-                            {center.name}
-                          </Link>
-                          {center.organizationKind && kindBadges[center.organizationKind] && (
-                            <span
-                              className={`inline-flex px-2 py-0.5 rounded text-[11px] font-medium ${
-                                kindBadges[center.organizationKind].bg
-                              } ${kindBadges[center.organizationKind].text}`}
-                            >
-                              {kindBadges[center.organizationKind].label}
-                            </span>
-                          )}
-                        </div>
-                        <div className="text-xs text-slate-500 font-mono mt-0.5">{center.slug}</div>
-                      </td>
-                      <td className="px-6 py-4">
-                        <div className="text-slate-800">{center.email || "—"}</div>
-                        <div className="text-xs text-slate-500 mt-0.5">{center.phone || "—"}</div>
-                      </td>
-                      <td className="px-6 py-4">
-                        <span
-                          className={`inline-flex px-2.5 py-0.5 rounded-full text-xs font-semibold border ${badge.bg} ${badge.text} ${badge.border}`}
-                        >
-                          {center.status}
-                        </span>
-                      </td>
-                      <td className="px-6 py-4 text-right">
-                        <div className="inline-flex items-center gap-2 justify-end">
-                          {center.owner?.id && (
-                            <ImpersonateButton targetUserId={center.owner.id} targetCenterId={center.id} />
-                          )}
-                          <Link
-                            href={`/platform-admin/centers/${center.id}`}
-                            className="px-3 py-1.5 text-xs font-semibold text-slate-700 bg-slate-100 hover:bg-slate-200 rounded-lg transition-colors"
-                          >
-                            Карточка
-                          </Link>
-                        </div>
-                      </td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
+      <DataTable
+        data={centers}
+        columns={columns}
+        getRowId={(c) => c.id}
+        loading={loading}
+        loadingLabel="Загрузка списка учебных центров..."
+        error={error}
+        onRetry={fetchCenters}
+        page={page}
+        totalPages={totalPages}
+        onPageChange={setPage}
+        getRowHref={(c) => `/platform-admin/centers/${c.id}`}
+        emptyTitle="Центры не найдены"
+        emptyDescription={t("ru", "ui4.emptyCentersDesc")}
+        emptyAction={
+          <div className="flex flex-wrap items-center justify-center gap-2">
+            {hasFilters && (
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                onClick={() => {
+                  setSearch("");
+                  setStatus("");
+                  setOrganizationKind("");
+                  setPage(1);
+                }}
+              >
+                {t("ru", "ui4.resetFilters")}
+              </Button>
+            )}
+            <Button asChild variant="primary" size="sm">
+              <Link href="/platform-admin/centers/create">
+                <Building2 className="h-4 w-4" aria-hidden="true" />
+                <span>Добавить центр</span>
+              </Link>
+            </Button>
           </div>
-
-          {/* Pagination Controls */}
-          {totalPages > 1 && (
-            <div className="p-4 border-t border-slate-100 flex items-center justify-between bg-slate-50/50">
-              <button
-                onClick={() => setPage((p) => Math.max(1, p - 1))}
-                disabled={page === 1}
-                className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-slate-600 bg-white border border-slate-200 rounded-lg hover:bg-slate-50 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
-              >
-                <ChevronLeft className="w-3.5 h-3.5" />
-                <span>Назад</span>
-              </button>
-              <span className="text-xs font-medium text-slate-500">
-                Страница {page} из {totalPages}
-              </span>
-              <button
-                onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
-                disabled={page === totalPages}
-                className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-slate-600 bg-white border border-slate-200 rounded-lg hover:bg-slate-50 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
-              >
-                <span>Вперед</span>
-                <ChevronRight className="w-3.5 h-3.5" />
-              </button>
-            </div>
-          )}
-        </div>
-      )}
+        }
+      />
     </div>
   );
 }

@@ -3,7 +3,7 @@ import { z } from "zod";
 // Reason: Exception: Tenant user profile management reads and updates global PlatformUser when permissible.
 // eslint-disable-next-line no-restricted-imports
 import { db } from "@/lib/db";
-import { requireTenantAccess, logAuditEvent } from "@/lib/tenant";
+import { requireTenantAccess, logAuditEvent, TenantAccessError } from "@/lib/tenant";
 import { hasPermission } from "@/lib/permissions";
 import type { CenterRole } from "@/lib/permissions";
 import { normalizePhone, isValidUsername } from "@/lib/phone";
@@ -29,7 +29,7 @@ const updateUserSchema = z.object({
   ]).optional(),
   status: z.enum(["ACTIVE", "BLOCKED", "SUSPENDED", "ARCHIVED"]).optional(),
   reason: z.string().min(5, "Причина должна содержать минимум 5 символов").optional(),
-});
+}).strict();
 
 export async function GET(
   req: Request,
@@ -209,6 +209,9 @@ export async function GET(
       })),
     });
   } catch (err: unknown) {
+    if (err instanceof TenantAccessError) {
+      return NextResponse.json({ error: err.message, code: err.code }, { status: err.status });
+    }
     console.error("GET /api/tenant/users/[id] error:", err);
     return NextResponse.json({ error: "Failed to fetch user details" }, { status: 500 });
   }
@@ -390,6 +393,9 @@ export async function PATCH(
       },
     });
   } catch (err: unknown) {
+    if (err instanceof TenantAccessError) {
+      return NextResponse.json({ error: err.message, code: err.code }, { status: err.status });
+    }
     if (err instanceof z.ZodError) {
       return NextResponse.json({ error: err.issues[0]?.message || "Validation error" }, { status: 400 });
     }
@@ -470,6 +476,9 @@ export async function DELETE(
 
     return NextResponse.json({ success: true, message: "Пользователь успешно архивирован" });
   } catch (err: unknown) {
+    if (err instanceof TenantAccessError) {
+      return NextResponse.json({ error: err.message, code: err.code }, { status: err.status });
+    }
     console.error("DELETE /api/tenant/users/[id] error:", err);
     return NextResponse.json({ error: "Failed to archive user" }, { status: 500 });
   }

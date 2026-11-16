@@ -4,27 +4,32 @@ import { z } from "zod";
 // eslint-disable-next-line no-restricted-imports
 import { db } from "@/lib/db";
 import { getAuthSession } from "@/lib/auth";
-import { hasPermission } from "@/lib/permissions";
+import { hasPermission, canAssignPlatformRole } from "@/lib/permissions";
 import { normalizePhone, isValidUsername } from "@/lib/phone";
 import { logAuditEvent } from "@/lib/tenant";
 import { getClientIp } from "@/lib/ip";
+import { SAFE_USER_SELECT, serializeUser } from "@/lib/user-dto";
 import type { Prisma } from "@prisma/client";
 
-const patchUserSchema = z.object({
-  fullName: z.string().min(2).max(100).optional(),
-  email: z.string().email().optional(),
-  phone: z.string().optional().nullable(),
-  username: z.string().optional().nullable(),
-  preferredLanguage: z.enum(["ru", "uz-Latn"]).optional(),
-  platformRole: z
-    .enum(["NONE", "PLATFORM_ADMIN", "PLATFORM_SUPPORT", "SEO_ADMIN"])
-    .optional(),
-  reason: z.string().min(5, "Укажите причину изменения (минимум 5 символов)").optional(),
-});
+const patchUserSchema = z
+  .object({
+    fullName: z.string().min(2).max(100).optional(),
+    email: z.string().email().optional(),
+    phone: z.string().optional().nullable(),
+    username: z.string().optional().nullable(),
+    preferredLanguage: z.enum(["ru", "uz-Latn"]).optional(),
+    platformRole: z
+      .enum(["NONE", "PLATFORM_ADMIN", "PLATFORM_SUPPORT", "SEO_ADMIN"])
+      .optional(),
+    reason: z.string().min(5, "Укажите причину изменения (минимум 5 символов)").optional(),
+  })
+  .strict();
 
-const deleteUserSchema = z.object({
-  reason: z.string().min(5, "Укажите причину удаления (минимум 5 символов)"),
-});
+const deleteUserSchema = z
+  .object({
+    reason: z.string().min(5, "Укажите причину удаления (минимум 5 символов)"),
+  })
+  .strict();
 
 // GET /api/platform/users/[id]
 export async function GET(req: Request, { params }: { params: { id: string } }) {
@@ -247,7 +252,7 @@ export async function PATCH(req: Request, { params }: { params: { id: string } }
     }
 
     if (parsed.data.platformRole && parsed.data.platformRole !== targetUser.platformRole) {
-      if (session.user.platformRole !== "SUPERADMIN" && session.user.platformRole !== "DEVELOPER") {
+      if (!canAssignPlatformRole(session.user.platformRole, parsed.data.platformRole)) {
         return NextResponse.json({ error: "Только SUPERADMIN может изменять платформенные роли" }, { status: 403 });
       }
       updateData.platformRole = parsed.data.platformRole;
@@ -256,6 +261,7 @@ export async function PATCH(req: Request, { params }: { params: { id: string } }
     const updatedUser = await db.platformUser.update({
       where: { id: targetUser.id },
       data: updateData,
+      select: SAFE_USER_SELECT,
     });
 
     await logAuditEvent({
@@ -270,7 +276,7 @@ export async function PATCH(req: Request, { params }: { params: { id: string } }
       },
     });
 
-    return NextResponse.json({ success: true, user: updatedUser });
+    return NextResponse.json({ success: true, user: serializeUser(updatedUser) });
   } catch (error) {
     console.error("[PATCH /api/platform/users/[id]]", error);
     return NextResponse.json({ error: "Internal server error" }, { status: 500 });

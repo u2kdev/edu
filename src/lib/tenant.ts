@@ -2,6 +2,74 @@ import { db } from "./db";
 import { getAuthSession } from "./auth";
 import { getTenantDb } from "./db-tenant";
 
+const SENSITIVE_AUDIT_KEYS = new Set([
+  "password",
+  "passwordhash",
+  "token",
+  "refreshtoken",
+  "prevrefreshtoken",
+  "secret",
+  "twofactorsecret",
+  "twofactorpendingsecret",
+  "backupcodes",
+  "twofactorbackupcodes",
+  "reseturl",
+  "emailconfirmtoken",
+  "authorization",
+  "cookie",
+  "creditcard",
+  "cvv",
+  "phone",
+  "sms",
+  "secretkey",
+  "secret_key",
+  "encryptedsecretkey",
+  "signstring",
+  "sign_string",
+  "clicksecret",
+  "merchantsecret",
+  "webhookpayload",
+  "receiptverifycode",
+  "telegramtoken",
+  "telegrambottoken",
+  "telegramwebhooksecret",
+  "eskizpassword",
+  "expotoken",
+  "linktoken",
+]);
+
+export function sanitizeAuditDetails(obj: unknown, depth = 0): unknown {
+  if (depth > 5 || obj === null || obj === undefined) return obj;
+  if (typeof obj === "string") {
+    // Redact Bearer tokens or long jwt strings if found as standalone strings
+    if (obj.startsWith("Bearer ") || (obj.startsWith("eyJ") && obj.split(".").length === 3)) {
+      return "[REDACTED]";
+    }
+    return obj;
+  }
+  if (Array.isArray(obj)) {
+    return obj.map((item) => sanitizeAuditDetails(item, depth + 1));
+  }
+  if (typeof obj === "object") {
+    const result: Record<string, unknown> = {};
+    for (const [key, value] of Object.entries(obj as Record<string, unknown>)) {
+      const lowerKey = key.toLowerCase().replace(/[^a-z0-9]/g, "");
+      if (
+        SENSITIVE_AUDIT_KEYS.has(lowerKey) ||
+        lowerKey.includes("password") ||
+        lowerKey.includes("secret") ||
+        lowerKey.includes("token")
+      ) {
+        result[key] = "[REDACTED]";
+      } else {
+        result[key] = sanitizeAuditDetails(value, depth + 1);
+      }
+    }
+    return result;
+  }
+  return obj;
+}
+
 export async function logAuditEvent(params: {
   centerId?: string;
   actorUserId: string;
@@ -12,6 +80,7 @@ export async function logAuditEvent(params: {
   ipAddress?: string;
 }) {
   try {
+    const safeDetails = params.details ? sanitizeAuditDetails(params.details) : undefined;
     await db.auditLog.create({
       data: {
         centerId: params.centerId,
@@ -19,7 +88,7 @@ export async function logAuditEvent(params: {
         action: params.action,
         resource: params.resource,
         resourceId: params.resourceId,
-        detailsJson: params.details ? JSON.stringify(params.details) : undefined,
+        detailsJson: safeDetails ? JSON.stringify(safeDetails) : undefined,
         ipAddress: params.ipAddress,
       },
     });
@@ -200,6 +269,7 @@ export async function requireTenantAccess(
       role: platformRole,
       isPlatformStaff: true,
       isReadOnly: isSupport,
+      isImpersonating: false,
       getTenantDb: () => getTenantDb(center.id, { isReadOnly: isSupport }),
     };
   }
@@ -243,7 +313,36 @@ export async function requireTenantAccess(
     }
   }
 
-  const isReadOnly = isSuspendedAllowed;
+  const isImpersonatedSession = Boolean(session.impersonatorUserId || session.impersonatedBy);
+  if (isImpersonatedSession) {
+    if (session.isReadOnly && isWrite) {
+      throw new TenantAccessError(
+        "Forbidden: Impersonated session is read-only",
+        "IMPERSONATION_READ_ONLY",
+        403
+      );
+    }
+
+    if (isWrite) {
+      await logAuditEvent({
+        centerId: targetCenterId,
+        actorUserId: session.impersonatorUserId || session.impersonatedBy || session.user.id,
+        action: "PLATFORM_IMPERSONATION_MUTATION",
+        resource: "TenantMutation",
+        resourceId: targetCenterId,
+        details: {
+          impersonatorUserId: session.impersonatorUserId || session.impersonatedBy,
+          impersonatedUserId: session.user.id,
+          impersonatedRole: membership.role,
+          method: req.method,
+          url: req.url,
+          reason: session.impersonationReason || "Impersonation write",
+        },
+      });
+    }
+  }
+
+  const isReadOnly = isSuspendedAllowed || Boolean(session.isReadOnly);
 
   return {
     session,
@@ -252,6 +351,7 @@ export async function requireTenantAccess(
     role: membership.role,
     isPlatformStaff: false,
     isReadOnly,
+    isImpersonating: isImpersonatedSession,
     getTenantDb: () => getTenantDb(center.id, { isReadOnly }),
   };
 }

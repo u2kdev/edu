@@ -1,12 +1,13 @@
 // @vitest-environment jsdom
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
-import { render, screen, fireEvent, waitFor, cleanup } from "@testing-library/react";
+import { render, screen, fireEvent, waitFor, cleanup, within } from "@testing-library/react";
 import LanguageSwitcher from "@/components/LanguageSwitcher";
 import WorkspaceSwitcher from "@/components/WorkspaceSwitcher";
 import PlatformSidebar from "@/components/platform/PlatformSidebar";
 import ImpersonateButton from "@/components/ImpersonateButton";
 import LogoutButton from "@/components/LogoutButton";
 import { ThemeProvider, useTheme } from "@/components/landing/ThemeProvider";
+import { PanelThemeProvider } from "@/components/theme/PanelThemeProvider";
 import { AuthShell } from "@/components/auth/AuthShell";
 import { SUPPORTED_LOCALES, LOCALE_META, t } from "@/i18n";
 import { installFetchMock, jsonResponse, sentBody } from "./helpers/ui";
@@ -211,13 +212,13 @@ describe("WorkspaceSwitcher", () => {
       <WorkspaceSwitcher memberships={memberships} activeCenterId="c-2" platformRole="DIRECTOR" />,
     );
 
-    expect(screen.getByText("Текущий Воркспейс")).toBeTruthy();
+    expect(screen.getByText(t("ru", "shell.switchWorkspace"))).toBeTruthy();
     const select = container.querySelector("select") as HTMLSelectElement;
     expect(select.value).toBe("c-2");
     const options = container.querySelectorAll("option");
     expect(options).toHaveLength(2);
-    expect(options[0].textContent).toBe("Alpha Academy (DIRECTOR)");
-    expect(options[1].textContent).toBe("Beta School (TEACHER)");
+    expect(options[0].textContent).toBe(`Alpha Academy (${t("ru", "roles.DIRECTOR")})`);
+    expect(options[1].textContent).toBe(`Beta School (${t("ru", "roles.TEACHER")})`);
     expect(screen.queryByText(/Создать центр/)).toBeNull();
   });
 
@@ -265,132 +266,145 @@ describe("WorkspaceSwitcher", () => {
     expect(refreshMock).not.toHaveBeenCalled();
   });
 
-  it("shows the empty placeholder when there are no memberships", () => {
-    const { container } = render(<WorkspaceSwitcher memberships={[]} platformRole="DIRECTOR" />);
-
-    expect(screen.getByText("Нет активных центров")).toBeTruthy();
-    expect(container.querySelector("select")).toBeNull();
-  });
-
-  it("renders the create-center link for platform staff only", () => {
-    const { container, unmount } = render(
-      <WorkspaceSwitcher memberships={memberships} platformRole="SUPERADMIN" />,
+  it("renders nothing when there are 0 or 1 memberships (no dashboard duplicate link)", () => {
+    const { container: cEmpty } = render(
+      <WorkspaceSwitcher memberships={[]} platformRole="SUPERADMIN" />,
     );
-    expect(screen.getByText("+ Создать центр (Платформа)")).toBeTruthy();
-    expect(container.querySelector('a[href="/dashboard/platform"]')).toBeTruthy();
-    unmount();
+    expect(cEmpty.firstChild).toBeNull();
 
-    render(<WorkspaceSwitcher memberships={memberships} platformRole="PLATFORM_ADMIN" />);
-    expect(screen.getByText("+ Создать центр (Платформа)")).toBeTruthy();
+    const { container: cOne } = render(
+      <WorkspaceSwitcher memberships={[memberships[0]]} platformRole="SUPERADMIN" />,
+    );
+    expect(cOne.firstChild).toBeNull();
+    expect(screen.queryByText("+ Создать центр (Платформа)")).toBeNull();
   });
 });
 
 const navLabels = {
-  analytics: t("ru", "platform.analytics"),
-  centers: t("ru", "platform.centerManagement"),
-  plans: t("ru", "platform.plans"),
-  subscriptions: t("ru", "platform.subscriptions"),
-  support: t("ru", "platform.support"),
-  audit: t("ru", "platform.auditLog"),
+  analytics: t("ru", "nav.overview"),
+  centers: t("ru", "nav.platformCenters"),
+  plans: t("ru", "nav.platformPlans"),
+  subscriptions: t("ru", "nav.platformSubscriptions"),
+  support: t("ru", "nav.support"),
+  audit: t("ru", "nav.auditLog"),
 };
 
 const superadmin = { fullName: "Азиз Каримов", email: "aziz@example.uz", platformRole: "SUPERADMIN" };
 
-describe("PlatformSidebar", () => {
+function renderPlatformSidebar(
+  props: { user?: typeof superadmin & { platformRole: string }; locale?: string } = {},
+) {
+  return render(
+    <PanelThemeProvider initialTheme="light" initialResolvedTheme="light">
+      <PlatformSidebar user={props.user ?? superadmin} locale={props.locale ?? "ru"} />
+    </PanelThemeProvider>,
+  );
+}
+
+describe("PlatformSidebar (AppShell wrapper)", () => {
   it("renders every nav item for a superadmin and marks the exact analytics link active", () => {
-    render(<PlatformSidebar user={superadmin} locale="ru" />);
+    renderPlatformSidebar();
+    const nav = screen.getByRole("navigation", { name: t("ru", "shell.navigationLabel") });
 
     for (const label of Object.values(navLabels)) {
-      expect(screen.getAllByText(label).length).toBeGreaterThan(0);
+      expect(within(nav).getAllByText(label).length).toBeGreaterThan(0);
     }
 
-    const analyticsLink = screen.getByText(navLabels.analytics).closest("a")!;
+    const analyticsLink = within(nav).getByText(navLabels.analytics).closest("a")!;
     expect(analyticsLink.getAttribute("href")).toBe("/platform-admin");
-    expect(analyticsLink.className).toContain("bg-blue-50");
+    expect(analyticsLink.className).toContain("bg-accent");
+    expect(analyticsLink.getAttribute("aria-current")).toBe("page");
 
-    const centersLink = screen.getByText(navLabels.centers).closest("a")!;
+    const centersLink = within(nav).getByText(navLabels.centers).closest("a")!;
     expect(centersLink.getAttribute("href")).toBe("/platform-admin/centers");
-    expect(centersLink.className).not.toContain("bg-blue-50");
+    expect(centersLink.className).not.toContain("bg-accent");
+    expect(centersLink.getAttribute("aria-current")).toBeNull();
   });
 
   it("filters the navigation by platform role", () => {
-    const { unmount } = render(
-      <PlatformSidebar
-        user={{ ...superadmin, platformRole: "PLATFORM_SUPPORT" }}
-        locale="ru"
-      />,
-    );
-    expect(screen.getByText(navLabels.analytics)).toBeTruthy();
-    expect(screen.getByText(navLabels.support)).toBeTruthy();
-    expect(screen.queryByText(navLabels.centers)).toBeNull();
-    expect(screen.queryByText(navLabels.plans)).toBeNull();
-    expect(screen.queryByText(navLabels.audit)).toBeNull();
+    const { unmount } = renderPlatformSidebar({
+      user: { ...superadmin, platformRole: "PLATFORM_SUPPORT" },
+    });
+    const supportNav = screen.getByRole("navigation", { name: t("ru", "shell.navigationLabel") });
+    expect(within(supportNav).getByText(navLabels.analytics)).toBeTruthy();
+    expect(within(supportNav).getByText(navLabels.support)).toBeTruthy();
+    expect(within(supportNav).queryByText(navLabels.centers)).toBeNull();
+    expect(within(supportNav).queryByText(navLabels.plans)).toBeNull();
+    expect(within(supportNav).queryByText(navLabels.audit)).toBeNull();
     unmount();
 
-    render(
-      <PlatformSidebar user={{ ...superadmin, platformRole: "FULL_ACCESS" }} locale="ru" />,
-    );
-    expect(screen.getByText(navLabels.centers)).toBeTruthy();
-    expect(screen.getByText(navLabels.support)).toBeTruthy();
-    expect(screen.queryByText(navLabels.plans)).toBeNull();
+    renderPlatformSidebar({
+      user: { ...superadmin, platformRole: "FULL_ACCESS" },
+    });
+    const fullNav = screen.getByRole("navigation", { name: t("ru", "shell.navigationLabel") });
+    expect(within(fullNav).getByText(navLabels.centers)).toBeTruthy();
+    expect(within(fullNav).getByText(navLabels.support)).toBeTruthy();
+    expect(within(fullNav).queryByText(navLabels.plans)).toBeNull();
   });
 
   it("activates a non-exact item when the path is nested below it", () => {
     pathnameRef.current = "/platform-admin/centers/xyz";
-    render(<PlatformSidebar user={superadmin} locale="ru" />);
+    renderPlatformSidebar();
+    const nav = screen.getByRole("navigation", { name: t("ru", "shell.navigationLabel") });
 
-    expect(screen.getByText(navLabels.centers).closest("a")!.className).toContain("bg-blue-50");
-    expect(screen.getByText(navLabels.analytics).closest("a")!.className).not.toContain(
-      "bg-blue-50",
+    expect(within(nav).getByText(navLabels.centers).closest("a")!.className).toContain("bg-accent");
+    expect(within(nav).getByText(navLabels.centers).closest("a")!.getAttribute("aria-current")).toBe("page");
+    expect(within(nav).getByText(navLabels.analytics).closest("a")!.className).not.toContain(
+      "bg-accent",
     );
   });
 
-  it("renders the user card, the role badge, the back link and the bottom widgets", () => {
-    const { container } = render(<PlatformSidebar user={superadmin} locale="ru" />);
+  it("renders the user card, role label, back link and opens the user popover menu", async () => {
+    const { container } = renderPlatformSidebar();
 
-    expect(screen.getByText(superadmin.fullName)).toBeTruthy();
-    expect(screen.getByText(superadmin.email)).toBeTruthy();
-    expect(screen.getByText(t("ru", "roles.SUPERADMIN"))).toBeTruthy();
-    expect(screen.getByText("Вернуться в учебный центр")).toBeTruthy();
+    expect(screen.getAllByText(superadmin.fullName).length).toBeGreaterThan(0);
+    expect(screen.getAllByText(t("ru", "roles.SUPERADMIN")).length).toBeGreaterThan(0);
+    expect(screen.getByText(t("ru", "nav.returnToCenter"))).toBeTruthy();
     expect(container.querySelector('a[href="/center"]')).toBeTruthy();
-    expect(screen.getByRole("button", { name: "Change language" })).toBeTruthy();
-    expect(screen.getByText("Выйти из аккаунта")).toBeTruthy();
+
+    fireEvent.click(screen.getByRole("button", { name: t("ru", "shell.userMenuAria") }));
+    await waitFor(() => expect(screen.getByText(superadmin.email)).toBeTruthy());
+    expect(screen.getByText(t("ru", "common.logout"))).toBeTruthy();
+    expect(screen.getByText(t("ru", "account.tabProfile"))).toBeTruthy();
   });
 
-  it("opens and closes the mobile drawer and locks the body scroll", async () => {
-    const { container } = render(<PlatformSidebar user={superadmin} locale="ru" />);
+  it("opens and closes the mobile Sheet drawer", async () => {
+    renderPlatformSidebar();
 
-    expect(container.querySelector(".fixed.inset-0.z-50")).toBeNull();
+    expect(document.querySelector('[role="dialog"]')).toBeNull();
 
-    fireEvent.click(screen.getByRole("button", { name: "Открыть меню навигации" }));
-    expect(container.querySelector(".fixed.inset-0.z-50")).toBeTruthy();
-    expect(document.body.style.overflow).toBe("hidden");
+    fireEvent.click(screen.getByRole("button", { name: t("ru", "ui.openMenu") }));
+    await waitFor(() => expect(document.querySelector('[role="dialog"]')).toBeTruthy());
 
-    // the close button exists in both the drawer and the (CSS-hidden) desktop nav
-    fireEvent.click(screen.getAllByRole("button", { name: "Закрыть меню" })[0]);
-    await waitFor(() => expect(container.querySelector(".fixed.inset-0.z-50")).toBeNull());
-    await waitFor(() => expect(document.body.style.overflow).toBe(""));
+    fireEvent.click(screen.getByRole("button", { name: t("ru", "ui.closePanel") }));
+    await waitFor(() => expect(document.querySelector('[role="dialog"]')).toBeNull());
   });
 
-  it("closes the drawer when the route changes", async () => {
-    const { container, rerender } = render(<PlatformSidebar user={superadmin} locale="ru" />);
+  it("closes the mobile Sheet drawer when the route changes", async () => {
+    const { rerender } = renderPlatformSidebar();
 
-    fireEvent.click(screen.getByRole("button", { name: "Открыть меню навигации" }));
-    expect(container.querySelector(".fixed.inset-0.z-50")).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: t("ru", "ui.openMenu") }));
+    await waitFor(() => expect(document.querySelector('[role="dialog"]')).toBeTruthy());
 
     pathnameRef.current = "/platform-admin/centers";
-    rerender(<PlatformSidebar user={superadmin} locale="ru" />);
+    rerender(
+      <PanelThemeProvider initialTheme="light" initialResolvedTheme="light">
+        <PlatformSidebar user={superadmin} locale="ru" />
+      </PanelThemeProvider>,
+    );
 
-    await waitFor(() => expect(container.querySelector(".fixed.inset-0.z-50")).toBeNull());
+    await waitFor(() => expect(document.querySelector('[role="dialog"]')).toBeNull());
   });
 
   it("renders the localized navigation for the uz-Latn locale", () => {
-    render(
-      <PlatformSidebar user={{ ...superadmin, fullName: "Aziz Karimov" }} locale="uz-Latn" />,
-    );
+    renderPlatformSidebar({
+      user: { ...superadmin, fullName: "Aziz Karimov" },
+      locale: "uz-Latn",
+    });
 
-    expect(screen.getByText(t("uz-Latn", "platform.analytics"))).toBeTruthy();
-    expect(screen.getByText(t("uz-Latn", "platform.centerManagement"))).toBeTruthy();
+    const nav = screen.getByRole("navigation", { name: t("uz-Latn", "shell.navigationLabel") });
+    expect(within(nav).getByText(t("uz-Latn", "nav.overview"))).toBeTruthy();
+    expect(within(nav).getByText(t("uz-Latn", "nav.platformCenters"))).toBeTruthy();
     expect(screen.getByText(t("uz-Latn", "roles.SUPERADMIN"))).toBeTruthy();
   });
 });

@@ -1,5 +1,6 @@
 import { Prisma, PrismaClient } from "@prisma/client";
 import { db } from "./db";
+import { isSameUzsAmount } from "./money";
 
 export const TENANT_MODELS = [
   "Course",
@@ -36,6 +37,21 @@ export const TENANT_MODELS = [
   "TeacherSalaryRate",
   "PlatformPayment",
   "SubstitutionRequest",
+  "GroupPricingPlan",
+  "EnrollmentFreeze",
+  "PromoCode",
+  "PromoCodeRedemption",
+  "InvoiceCounter",
+  "Charge",
+  "ChargePaymentAllocation",
+  "CenterMerchantConfig",
+  "PaymentIntent",
+  "PaymentWebhookEvent",
+  "NotificationDelivery",
+  "PaymentReminderLog",
+  "Broadcast",
+  "BroadcastRecipient",
+  "CommunicationTemplate",
 ];
 
 const TASHKENT_OFFSET_MS = 5 * 3600 * 1000;
@@ -98,7 +114,7 @@ async function validateFinanceTransactionWrite(data: Record<string, unknown>, ce
     if (original.isReversal) {
       throw new Error("Cannot reverse a transaction that is already a reversal (storno)");
     }
-    if (amount !== original.amount) {
+    if (!isSameUzsAmount(amount, original.amount)) {
       throw new Error(
         `Reversal amount must exactly equal original transaction amount (${original.amount} UZS)`
       );

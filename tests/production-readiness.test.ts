@@ -14,6 +14,8 @@ describe("LAUNCH-1 Item 4: Production readiness and startup checks", () => {
     const validProdEnv: NodeJS.ProcessEnv = {
       NODE_ENV: "production",
       JWT_SECRET: "abcdefghijklmnopqrstuvwxyz1234567890", // >= 32 chars
+      PAYMENT_CONFIG_ENCRYPTION_KEY: "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
+      RECEIPT_VERIFY_SECRET: "fedcba9876543210fedcba9876543210fedcba9876543210",
       DATABASE_URL: "postgresql://user:pass@ep-pooler.neon.tech/db?sslmode=require",
       DIRECT_URL: "postgresql://user:pass@ep-direct.neon.tech/db?sslmode=require",
       APP_URL: "https://lms.platform.uz",
@@ -28,6 +30,52 @@ describe("LAUNCH-1 Item 4: Production readiness and startup checks", () => {
       const res = validateProductionStartupEnv(validProdEnv);
       expect(res.valid).toBe(true);
       expect(res.errors).toEqual([]);
+    });
+
+    it("fails closed when PAYMENT_CONFIG_ENCRYPTION_KEY or RECEIPT_VERIFY_SECRET is missing or reuses JWT_SECRET", () => {
+      const missingPay = validateProductionStartupEnv({
+        ...validProdEnv,
+        PAYMENT_CONFIG_ENCRYPTION_KEY: "",
+      });
+      expect(missingPay.valid).toBe(false);
+      expect(missingPay.errors.some((e) => e.includes("PAYMENT_CONFIG_ENCRYPTION_KEY"))).toBe(true);
+
+      const reusedJwtForPay = validateProductionStartupEnv({
+        ...validProdEnv,
+        PAYMENT_CONFIG_ENCRYPTION_KEY: validProdEnv.JWT_SECRET,
+      });
+      expect(reusedJwtForPay.valid).toBe(false);
+      expect(reusedJwtForPay.errors.some((e) => e.includes("distinct from JWT_SECRET"))).toBe(true);
+      expect(reusedJwtForPay.errors.join("\n")).not.toContain(validProdEnv.JWT_SECRET);
+
+      const missingReceipt = validateProductionStartupEnv({
+        ...validProdEnv,
+        RECEIPT_VERIFY_SECRET: "",
+      });
+      expect(missingReceipt.valid).toBe(false);
+      expect(missingReceipt.errors.some((e) => e.includes("RECEIPT_VERIFY_SECRET"))).toBe(true);
+
+      const reusedJwtForReceipt = validateProductionStartupEnv({
+        ...validProdEnv,
+        RECEIPT_VERIFY_SECRET: validProdEnv.JWT_SECRET,
+      });
+      expect(reusedJwtForReceipt.valid).toBe(false);
+      expect(reusedJwtForReceipt.errors.join("\n")).not.toContain(validProdEnv.JWT_SECRET);
+    });
+
+    it("validates CLICK_ALLOWED_IPS format when enabled and passes valid CIDR list", () => {
+      const okCidrs = validateProductionStartupEnv({
+        ...validProdEnv,
+        CLICK_ALLOWED_IPS: "195.158.0.0/16, 185.8.212.10",
+      });
+      expect(okCidrs.valid).toBe(true);
+
+      const badCidrs = validateProductionStartupEnv({
+        ...validProdEnv,
+        CLICK_ALLOWED_IPS: "not-an-ip, 1.2.3.4/99",
+      });
+      expect(badCidrs.valid).toBe(false);
+      expect(badCidrs.errors.some((e) => e.includes("CLICK_ALLOWED_IPS"))).toBe(true);
     });
 
     it("fails validation if JWT_SECRET is missing or shorter than 32 chars", () => {
@@ -161,7 +209,7 @@ describe("LAUNCH-1 Item 4: Production readiness and startup checks", () => {
           if (content.includes('"auth_token"') || content.includes("'auth_token'")) {
             expect(content).toMatch(/httpOnly:\s*true/);
             expect(content).toMatch(/sameSite:\s*["']lax["']/);
-            expect(content).toMatch(/secure:\s*(process\.env\.NODE_ENV\s*===|String\(process\.env\.NODE_ENV\))/);
+            expect(content).toMatch(/secure:\s*process\.env\.NODE_ENV\s*===/);
           }
         }
       }

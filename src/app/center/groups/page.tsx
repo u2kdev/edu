@@ -19,7 +19,12 @@ export default async function CenterGroupsPage() {
     tenantCtx.getTenantDb().group.findMany({
       where: scopedWhere,
       include: {
-        course: { select: { id: true, title: true } },
+        course: { select: { id: true, title: true, priceMonthly: true } },
+        pricingPlans: {
+          where: { centerId, isActive: true },
+          select: { periodMonths: true, price: true, isActive: true },
+          orderBy: { periodMonths: "asc" },
+        },
         teacher: { include: { user: { select: { fullName: true, email: true } } } },
         assistant: { include: { user: { select: { fullName: true, email: true } } } },
         enrollments: {
@@ -66,6 +71,7 @@ export default async function CenterGroupsPage() {
     name: g.name,
     maxStudents: g.maxStudents,
     course: g.course,
+    pricingPlans: g.pricingPlans,
     teacher: g.teacher,
     assistant: g.assistant,
     enrollments: g.enrollments.map((en) => {
@@ -81,6 +87,8 @@ export default async function CenterGroupsPage() {
 
       return {
         id: en.id,
+        status: en.status,
+        paidUntil: en.paidUntil ? en.paidUntil.toISOString() : null,
         student: {
           id: en.student.id,
           user: {

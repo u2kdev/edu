@@ -1,8 +1,19 @@
 "use client";
 
 import type { FormEvent } from "react";
-import { AlertCircle, CheckCircle2, Loader2, Paperclip, Send, Trash2, Upload } from "lucide-react";
+import { Loader2, Paperclip, Send, Trash2, Upload } from "lucide-react";
 import { t } from "@/i18n";
+import { Alert, AlertDescription } from "@/components/ui/alert";
+import { Button } from "@/components/ui/button";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import { FormActions, FormField } from "@/components/ui/form-field";
+import { Input } from "@/components/ui/input";
+import { Textarea } from "@/components/ui/textarea";
 import type { HomeworkAttachmentItem } from "./homework-utils";
 
 interface SubmitHomeworkModalProps {
@@ -47,89 +58,88 @@ export function SubmitHomeworkModal({
   onClose,
 }: SubmitHomeworkModalProps) {
   return (
-    <div className="fixed inset-0 z-50 bg-black/70 backdrop-blur-sm flex items-center justify-center p-4">
-      <div className="glass-panel p-6 rounded-2xl border border-slate-800 w-full max-w-lg space-y-4">
-        <h3 className="text-base font-bold text-white flex items-center gap-2">
-          <Send className="w-5 h-5 text-brand-400" />
-          <span>{t(locale, "homework.submitHomework")}</span>
-        </h3>
+    <Dialog open onOpenChange={(open) => !open && onClose()}>
+      <DialogContent className="max-w-lg">
+        <DialogHeader>
+          <DialogTitle className="flex items-center gap-2">
+            <Send className="h-4 w-4 text-primary" aria-hidden="true" />
+            <span>{t(locale, "homework.submitHomework")}</span>
+          </DialogTitle>
+        </DialogHeader>
 
         {isLockedAccepted && (
-          <div className="p-3 rounded-xl bg-emerald-500/10 border border-emerald-500/30 text-emerald-300 text-xs">
-            Задание уже проверено и принято. Изменение или удаление файлов недоступно.
-          </div>
+          <Alert variant="success">
+            <AlertDescription>
+              Задание уже проверено и принято. Изменение или удаление файлов недоступно.
+            </AlertDescription>
+          </Alert>
         )}
 
         {submitSuccess && (
-          <div className="p-3 rounded-xl bg-emerald-500/10 border border-emerald-500/30 text-emerald-400 text-xs flex items-center gap-2">
-            <CheckCircle2 className="w-4 h-4 shrink-0" />
-            <span>{submitSuccess}</span>
-          </div>
+          <Alert variant="success">
+            <AlertDescription>{submitSuccess}</AlertDescription>
+          </Alert>
         )}
 
         {submitError && (
-          <div className="p-3 rounded-xl bg-red-500/10 border border-red-500/30 text-red-400 text-xs flex items-center gap-2">
-            <AlertCircle className="w-4 h-4 shrink-0" />
-            <span>{submitError}</span>
-          </div>
+          <Alert variant="destructive">
+            <AlertDescription>{submitError}</AlertDescription>
+          </Alert>
         )}
 
         {uploadError && (
-          <div className="p-3 rounded-xl bg-red-500/10 border border-red-500/30 text-red-400 text-xs flex items-center gap-2">
-            <AlertCircle className="w-4 h-4 shrink-0" />
-            <span>{uploadError}</span>
-          </div>
+          <Alert variant="destructive">
+            <AlertDescription>{uploadError}</AlertDescription>
+          </Alert>
         )}
 
         <form onSubmit={onSubmit} className="space-y-4">
-          <div>
-            <label className="block text-xs font-semibold text-slate-400 mb-1">
-              {t(locale, "homework.submitHomework")}
-            </label>
-            <textarea
+          <FormField
+            label={t(locale, "homework.submitHomework")}
+            htmlFor="hw-submission-text"
+            required
+          >
+            <Textarea
+              id="hw-submission-text"
               value={submissionText}
               onChange={(e) => onSubmissionTextChange(e.target.value)}
               rows={4}
               required
               disabled={isLockedAccepted}
               placeholder="..."
-              className="w-full bg-slate-900 border border-slate-800 rounded-xl p-3 text-sm text-white focus:outline-none focus:border-brand-500 disabled:opacity-60"
             />
-          </div>
+          </FormField>
 
-          <div>
-            <label className="block text-xs font-semibold text-slate-400 mb-1">
+          <div className="space-y-1.5">
+            <span className="block text-[13px] font-medium text-foreground">
               {t(locale, "homework.links")} (GitHub, Google Drive, Figma)
-            </label>
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-              <input
+            </span>
+            <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+              <Input
                 type="text"
                 value={linkTitle}
                 onChange={(e) => onLinkTitleChange(e.target.value)}
                 disabled={isLockedAccepted}
                 placeholder={t(locale, "homework.linkNamePlaceholder")}
-                className="bg-slate-900 border border-slate-800 rounded-xl px-3 py-2 text-xs text-white focus:outline-none focus:border-brand-500 disabled:opacity-60"
               />
-              <input
+              <Input
                 type="url"
                 value={linkUrl}
                 onChange={(e) => onLinkUrlChange(e.target.value)}
                 disabled={isLockedAccepted}
                 placeholder="https://..."
-                className="bg-slate-900 border border-slate-800 rounded-xl px-3 py-2 text-xs text-white focus:outline-none focus:border-brand-500 disabled:opacity-60"
               />
             </div>
           </div>
 
-          {/* File Attachments */}
           <div className="space-y-2">
             <div className="flex items-center justify-between">
-              <span className="text-xs font-semibold text-slate-400">
+              <span className="text-xs font-medium text-muted-foreground">
                 Файлы и фото (PDF, DOCX, изображения, архивы)
               </span>
               {!isLockedAccepted && onUploadFiles && (
-                <label className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-xs font-semibold text-slate-200 cursor-pointer transition-colors">
-                  <Upload className="w-3.5 h-3.5" />
+                <label className="inline-flex cursor-pointer items-center gap-1.5 rounded-md border border-border bg-muted px-3 py-1.5 text-xs font-medium text-foreground transition-colors hover:bg-muted/80">
+                  <Upload className="h-3.5 w-3.5" aria-hidden="true" />
                   <span>{uploadingFile ? "Загрузка..." : "Прикрепить файл"}</span>
                   <input
                     type="file"
@@ -151,25 +161,25 @@ export function SubmitHomeworkModal({
                 {attachments.map((att, idx) => (
                   <div
                     key={idx}
-                    className="flex items-center justify-between px-3 py-2 rounded-xl bg-slate-900 border border-slate-800 text-xs"
+                    className="flex items-center justify-between rounded-md border border-border bg-muted/50 px-3 py-2 text-xs"
                   >
                     <a
                       href={att.fileUrl}
                       target="_blank"
                       rel="noopener noreferrer"
-                      className="flex items-center gap-2 text-brand-400 hover:underline truncate"
+                      className="flex items-center gap-2 truncate text-primary hover:underline"
                     >
-                      <Paperclip className="w-3.5 h-3.5 shrink-0" />
+                      <Paperclip className="h-3.5 w-3.5 shrink-0" aria-hidden="true" />
                       <span className="truncate">{att.fileName}</span>
                     </a>
                     {!isLockedAccepted && onRemoveAttachment && (
                       <button
                         type="button"
                         onClick={() => onRemoveAttachment(idx)}
-                        className="p-1 text-slate-400 hover:text-rose-400"
+                        className="p-1 text-muted-foreground hover:text-destructive"
                         title="Удалить файл"
                       >
-                        <Trash2 className="w-3.5 h-3.5" />
+                        <Trash2 className="h-3.5 w-3.5" aria-hidden="true" />
                       </button>
                     )}
                   </div>
@@ -178,31 +188,23 @@ export function SubmitHomeworkModal({
             )}
           </div>
 
-          <div className="flex items-center justify-end gap-2 pt-2">
-            <button
-              type="button"
-              onClick={onClose}
-              className="px-4 py-2 rounded-xl text-xs font-semibold border border-slate-800 hover:bg-slate-800 text-slate-400 transition-colors"
-            >
+          <FormActions>
+            <Button type="button" variant="outline" onClick={onClose}>
               {t(locale, "common.cancel")}
-            </button>
-            <button
-              type="submit"
-              disabled={isSubmitting || uploadingFile || isLockedAccepted}
-              className="px-4 py-2 rounded-xl text-xs font-semibold bg-brand-500 hover:bg-brand-600 text-white transition-colors disabled:opacity-50 flex items-center gap-1.5"
-            >
+            </Button>
+            <Button type="submit" disabled={isSubmitting || uploadingFile || isLockedAccepted}>
               {isSubmitting ? (
                 <>
-                  <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                  <Loader2 className="h-3.5 w-3.5 animate-spin" aria-hidden="true" />
                   <span>...</span>
                 </>
               ) : (
                 <span>{t(locale, "homework.submitHomework")}</span>
               )}
-            </button>
-          </div>
+            </Button>
+          </FormActions>
         </form>
-      </div>
-    </div>
+      </DialogContent>
+    </Dialog>
   );
 }

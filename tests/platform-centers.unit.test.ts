@@ -8,6 +8,7 @@ vi.mock("@/lib/db", () => {
         findMany: vi.fn(),
         count: vi.fn(),
         findUnique: vi.fn(),
+        findFirst: vi.fn().mockResolvedValue(null),
         create: vi.fn(),
         update: vi.fn(),
       },
@@ -21,7 +22,14 @@ vi.mock("@/lib/db", () => {
         findUnique: vi.fn(),
         findFirst: vi.fn(),
         update: vi.fn(),
+        count: vi.fn().mockResolvedValue(0),
         groupBy: vi.fn().mockResolvedValue([]),
+      },
+      course: {
+        count: vi.fn().mockResolvedValue(0),
+      },
+      activityLog: {
+        findFirst: vi.fn().mockResolvedValue(null),
       },
       passwordResetToken: {
         create: vi.fn(),
@@ -145,7 +153,7 @@ describe("Platform Centers API", () => {
     });
 
     it("creates a center successfully", async () => {
-      vi.mocked(db.learningCenter.findUnique).mockResolvedValueOnce(null); // slug available
+      vi.mocked(db.learningCenter.findFirst).mockResolvedValueOnce(null); // slug available
       const req = new Request("http://localhost/api/platform/centers", {
         method: "POST",
         headers: {
@@ -167,7 +175,7 @@ describe("Platform Centers API", () => {
 
   describe("GET /api/platform/centers/[id]", () => {
     it("returns center data", async () => {
-      vi.mocked(db.learningCenter.findUnique).mockResolvedValueOnce({ id: "center1", owner: {} } as never);
+      vi.mocked(db.learningCenter.findUnique).mockResolvedValueOnce({ id: "center1", owner: {}, subscriptions: [] } as never);
       const req = new Request("http://localhost/api/platform/centers/center1");
       const res = await getCenter(req, { params: { id: "center1" } });
       expect(res.status).toBe(200);

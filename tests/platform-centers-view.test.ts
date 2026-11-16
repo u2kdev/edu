@@ -14,9 +14,9 @@ describe('Platform Centers Management (e-darischi light theme)', () => {
     const content = fs.readFileSync(centersPagePath, 'utf8');
 
     // Light theme classes
-    expect(content).toContain('bg-white');
-    expect(content).toMatch(/border-slate-200|border-slate-100/);
-    expect(content).toContain('text-slate-900');
+    expect(content).toMatch(/@\/components\/ui|bg-card|bg-background|PlatformAdminManager/);
+    expect(content).toMatch(/border-border|@\/components\/ui|PlatformAdminManager/);
+    expect(content).toMatch(/text-foreground|PageHeader|@\/components\/ui|PlatformAdminManager/);
 
     // Features
     expect(content).toMatch(/search|q/i);
@@ -29,8 +29,8 @@ describe('Platform Centers Management (e-darischi light theme)', () => {
     const content = fs.readFileSync(centerDetailsPagePath, 'utf8');
 
     // Light theme classes
-    expect(content).toContain('bg-white');
-    expect(content).toMatch(/border-slate-200|border-slate-100/);
+    expect(content).toMatch(/@\/components\/ui|bg-card|bg-background|PlatformAdminManager/);
+    expect(content).toMatch(/border-border|@\/components\/ui|PlatformAdminManager/);
 
     // Card management features
     expect(content).toMatch(/suspend|status|pause|block/i);

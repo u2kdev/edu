@@ -39,11 +39,15 @@ export async function POST(req: Request) {
     const hashedPassword = await hashPassword(newPassword);
 
     await db.$transaction(async (tx) => {
-      // Mark token as used
-      await tx.passwordResetToken.update({
-        where: { id: resetToken.id },
+      // Mark token as used atomically to prevent race conditions
+      const updateResult = await tx.passwordResetToken.updateMany({
+        where: { id: resetToken.id, usedAt: null },
         data: { usedAt: new Date() },
       });
+
+      if (updateResult.count === 0) {
+        throw new Error("TOKEN_ALREADY_USED");
+      }
 
       // Update password
       const updateData: { passwordHash: string; emailVerified?: Date } = { passwordHash: hashedPassword };
@@ -75,6 +79,9 @@ export async function POST(req: Request) {
 
     return apiSuccess({ success: true });
   } catch (err: unknown) {
+    if (err instanceof Error && err.message === "TOKEN_ALREADY_USED") {
+      return apiError("auth.invalidOrExpiredToken", "BAD_REQUEST", 400);
+    }
     return handleApiError(err);
   }
 }

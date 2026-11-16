@@ -1,16 +1,29 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
-import { requireFinanceTenantAccess, logAuditEvent } from "@/lib/tenant";
+import { requireFinanceTenantAccess } from "@/lib/tenant";
 import { hasPermission } from "@/lib/permissions";
-import { syncCenterPaymentToFinance } from "@/lib/finance";
+import {
+  BillingError,
+  calculateCenterStudentBalances,
+  recordBillingPayment,
+} from "@/lib/billing";
 
-const recordDebtPaymentSchema = z.object({
-  studentMembershipId: z.string().uuid(),
-  amount: z.number().int().positive("Сумма должна быть положительной"),
-  paymentMethod: z.enum(["CASH", "ONLINE", "BANK_TRANSFER"]).default("CASH"),
-  groupId: z.string().uuid().optional().nullable(),
-  comment: z.string().trim().max(500).optional().nullable(),
-});
+const NO_STORE_HEADERS = { "Cache-Control": "no-store" } as const;
+
+const recordDebtPaymentSchema = z
+  .object({
+    studentMembershipId: z.string().uuid(),
+    amount: z.coerce.number().int().positive("Сумма должна быть положительной").optional().nullable(),
+    paymentMethod: z.enum(["CASH", "ONLINE", "BANK_TRANSFER"]).default("CASH"),
+    groupId: z.string().uuid().optional().nullable(),
+    chargeId: z.string().uuid().optional().nullable(),
+    periodMonths: z.union([z.literal(1), z.literal(2), z.literal(3)]).optional().nullable(),
+    promoCode: z.string().trim().max(64).optional().nullable(),
+    manualDiscountAmount: z.coerce.number().int().min(0).optional().default(0),
+    discountReason: z.string().trim().max(300).optional().nullable(),
+    comment: z.string().trim().max(500).optional().nullable(),
+  })
+  .strict();
 
 export async function GET(req: Request) {
   try {
@@ -21,123 +34,57 @@ export async function GET(req: Request) {
     if (!canRead) {
       return NextResponse.json(
         { error: "Forbidden: No permission to read student debts" },
-        { status: 403 }
+        { status: 403, headers: NO_STORE_HEADERS }
       );
     }
 
-    const tenantDb = tenantCtx.getTenantDb();
     const { searchParams } = new URL(req.url);
-
     const search = (searchParams.get("search") || "").trim().toLowerCase();
-    const statusFilter = searchParams.get("status"); // DEBT, PAID, OVERPAID
-    const groupId = searchParams.get("groupId");
+    const statusFilter = searchParams.get("status"); // ALL | DEBT | PAID | OVERPAID | FROZEN
+    const groupId = searchParams.get("groupId")?.trim() || null;
+    const page = Math.max(1, parseInt(searchParams.get("page") || "1", 10) || 1);
+    const limit = Math.min(200, Math.max(1, parseInt(searchParams.get("limit") || "50", 10) || 50));
 
-    const students = await tenantDb.centerMembership.findMany({
-      where: {
-        role: "STUDENT",
-        status: "ACTIVE",
-        ...(groupId
-          ? { enrollments: { some: { groupId, status: "ACTIVE" } } }
-          : {}),
-      },
-      include: {
-        user: {
-          select: {
-            id: true,
-            fullName: true,
-            phone: true,
-            email: true,
-          },
-        },
-        enrollments: {
-          where: { status: "ACTIVE" },
-          include: {
-            group: {
-              include: {
-                course: {
-                  select: { id: true, title: true, priceMonthly: true },
-                },
-              },
-            },
-          },
-        },
-        payments: {
-          where: {
-            status: { in: ["PAID", "PARTIALLY_PAID"] },
-          },
-          select: {
-            id: true,
-            amount: true,
-            createdAt: true,
-            status: true,
-          },
-        },
-      },
-      orderBy: { joinedAt: "desc" },
+    const balances = await calculateCenterStudentBalances({
+      centerId: tenantCtx.center.id,
     });
 
-    const now = new Date();
+    const mapped = balances.map((b) => ({
+      studentId: b.studentMembershipId,
+      fullName: b.fullName,
+      phone: b.phone,
+      email: b.email,
+      monthlyTuition: b.monthlyTuition,
+      totalDue: b.totalAccrued,
+      totalPaid: b.totalPaid,
+      balance: b.balance,
+      debtAmount: b.debtAmount,
+      overpaidAmount: b.balance > 0 ? b.balance : 0,
+      status: b.status,
+      paidUntil: b.earliestPaidUntil,
+      enrollments: b.enrollments.map((e) => ({
+        enrollmentId: e.enrollmentId,
+        groupId: e.groupId,
+        groupName: e.groupName,
+        courseTitle: e.courseTitle,
+        priceMonthly: e.priceMonthly,
+        paidUntil: e.paidUntil,
+        daysRemaining: e.daysRemaining,
+        status: e.status,
+      })),
+      openCharges: b.openCharges,
+      recentPaymentsCount: b.receipts.length,
+    }));
 
-    const debtItems = students.map((s) => {
-      // Monthly tuition sum
-      const monthlyTuition = s.enrollments.reduce(
-        (sum, e) => sum + (e.group.course?.priceMonthly || 0),
-        0
-      );
-
-      // Months enrolled (at least 1)
-      const joinedDate = new Date(s.joinedAt);
-      const monthsEnrolled = Math.max(
-        1,
-        (now.getFullYear() - joinedDate.getFullYear()) * 12 +
-          (now.getMonth() - joinedDate.getMonth()) +
-          1
-      );
-
-      // Expected total due
-      const totalDue = monthlyTuition * monthsEnrolled;
-
-      // Actual total paid
-      const totalPaid = s.payments.reduce((sum, p) => sum + Math.round(p.amount), 0);
-
-      // Balance = totalPaid - totalDue
-      const balance = totalPaid - totalDue;
-      const debtAmount = balance < 0 ? Math.abs(balance) : 0;
-      const overpaidAmount = balance > 0 ? balance : 0;
-
-      let status: "DEBT" | "PAID" | "OVERPAID" = "PAID";
-      if (balance < 0) status = "DEBT";
-      else if (balance > 0) status = "OVERPAID";
-
-      return {
-        studentId: s.id,
-        fullName: s.user.fullName,
-        phone: s.user.phone,
-        email: s.user.email,
-        joinedAt: s.joinedAt,
-        monthlyTuition,
-        totalDue,
-        totalPaid,
-        balance,
-        debtAmount,
-        overpaidAmount,
-        status,
-        enrollments: s.enrollments.map((e) => ({
-          groupId: e.groupId,
-          groupName: e.group.name,
-          courseTitle: e.group.course?.title,
-          priceMonthly: e.group.course?.priceMonthly || 0,
-        })),
-        recentPaymentsCount: s.payments.length,
-      };
-    });
-
-    // Apply filters
-    const filtered = debtItems.filter((item) => {
+    const filtered = mapped.filter((item) => {
+      if (groupId && !item.enrollments.some((e) => e.groupId === groupId)) {
+        return false;
+      }
       const matchesSearch =
         !search ||
         item.fullName.toLowerCase().includes(search) ||
-        (item.phone && item.phone.toLowerCase().includes(search));
+        (item.phone && item.phone.toLowerCase().includes(search)) ||
+        item.email.toLowerCase().includes(search);
 
       const matchesStatus =
         !statusFilter || statusFilter === "ALL" || item.status === statusFilter;
@@ -145,29 +92,42 @@ export async function GET(req: Request) {
       return matchesSearch && matchesStatus;
     });
 
-    // Overall metrics
-    const totalDebt = debtItems
+    const total = filtered.length;
+    const totalPages = Math.max(1, Math.ceil(total / limit));
+    const offset = (page - 1) * limit;
+    const paginated = filtered.slice(offset, offset + limit);
+
+    const totalDebt = mapped
       .filter((i) => i.status === "DEBT")
       .reduce((sum, i) => sum + i.debtAmount, 0);
-    const totalStudentsWithDebt = debtItems.filter((i) => i.status === "DEBT").length;
-    const totalMonthlyExpected = debtItems.reduce((sum, i) => sum + i.monthlyTuition, 0);
-    const totalPaidSum = debtItems.reduce((sum, i) => sum + i.totalPaid, 0);
+    const totalStudentsWithDebt = mapped.filter((i) => i.status === "DEBT").length;
+    const totalMonthlyExpected = mapped.reduce((sum, i) => sum + i.monthlyTuition, 0);
+    const totalPaidSum = mapped.reduce((sum, i) => sum + i.totalPaid, 0);
 
-    return NextResponse.json({
-      students: filtered,
-      summary: {
-        totalDebt,
-        totalStudentsWithDebt,
-        totalMonthlyExpected,
-        totalPaidSum,
-        totalStudentsCount: students.length,
+    return NextResponse.json(
+      {
+        students: paginated,
+        pagination: {
+          page,
+          limit,
+          total,
+          totalPages,
+        },
+        summary: {
+          totalDebt,
+          totalStudentsWithDebt,
+          totalMonthlyExpected,
+          totalPaidSum,
+          totalStudentsCount: mapped.length,
+        },
       },
-    });
+      { headers: NO_STORE_HEADERS }
+    );
   } catch (err: unknown) {
     const error = err as { message?: string; status?: number };
     return NextResponse.json(
-      { error: error.message || "Failed to load student debts" },
-      { status: error.status || 500 }
+      { error: error?.status ? error.message : "Failed to load student debts" },
+      { status: error?.status || 500, headers: NO_STORE_HEADERS }
     );
   }
 }
@@ -181,66 +141,60 @@ export async function POST(req: Request) {
     if (!canWrite) {
       return NextResponse.json(
         { error: "Forbidden: No permission to record debt payments" },
-        { status: 403 }
+        { status: 403, headers: NO_STORE_HEADERS }
       );
     }
 
-    const tenantDb = tenantCtx.getTenantDb();
-    const rawBody = await req.json();
-    const parsed = recordDebtPaymentSchema.safeParse(rawBody);
+    if (!tenantCtx.session.user.emailVerified) {
+      return NextResponse.json(
+        { error: "Email confirmation required for sensitive actions" },
+        { status: 403, headers: NO_STORE_HEADERS }
+      );
+    }
 
+    let rawBody: unknown;
+    try {
+      rawBody = await req.json();
+    } catch {
+      return NextResponse.json(
+        { error: "Invalid JSON payload" },
+        { status: 400, headers: NO_STORE_HEADERS }
+      );
+    }
+
+    const parsed = recordDebtPaymentSchema.safeParse(rawBody);
     if (!parsed.success) {
       return NextResponse.json(
         { error: "Invalid payment payload", details: parsed.error.flatten() },
-        { status: 400 }
+        { status: 400, headers: NO_STORE_HEADERS }
       );
     }
 
-    const { studentMembershipId, amount, paymentMethod, groupId, comment } = parsed.data;
-
-    const student = await tenantDb.centerMembership.findFirst({
-      where: { id: studentMembershipId, role: "STUDENT" },
-      include: { user: { select: { fullName: true } } },
-    });
-
-    if (!student) {
-      return NextResponse.json({ error: "Student not found" }, { status: 404 });
+    const body = parsed.data;
+    if (!body.chargeId && !(body.groupId && body.periodMonths) && !body.amount) {
+      return NextResponse.json(
+        { error: "Укажите сумму оплаты либо период и группу" },
+        { status: 400, headers: NO_STORE_HEADERS }
+      );
     }
 
-    // 1. Create CenterPayment
-    const payment = await tenantDb.centerPayment.create({
-      data: {
-        centerId: tenantCtx.center.id,
-        studentMembershipId,
-        groupId: groupId ?? null,
-        amount,
-        originalAmount: amount,
-        currency: "UZS",
-        status: "PAID",
-        paymentMethod,
-        paidAt: new Date(),
-      },
-    });
-
-    // 2. Sync to FinanceTransaction
-    await syncCenterPaymentToFinance({
+    const payment = await recordBillingPayment({
       centerId: tenantCtx.center.id,
-      paymentId: payment.id,
+      studentMembershipId: body.studentMembershipId,
+      groupId: body.groupId ?? null,
+      chargeId: body.chargeId ?? null,
+      periodMonths: body.periodMonths ?? null,
+      amount: body.amount ?? null,
+      paymentMethod: body.paymentMethod,
+      promoCode: body.promoCode ?? null,
+      manualDiscountAmount: body.manualDiscountAmount,
+      discountReason: body.discountReason ?? null,
+      note: body.comment ?? null,
       actorUserId: tenantCtx.session.user.id,
-    });
-
-    await logAuditEvent({
-      centerId: tenantCtx.center.id,
-      actorUserId: tenantCtx.session.user.id,
-      action: "STUDENT_DEBT_PAYMENT_RECORDED",
-      resource: "CenterPayment",
-      resourceId: payment.id,
-      details: {
-        studentId: studentMembershipId,
-        studentName: student.user.fullName,
-        amount,
-        paymentMethod,
-        comment,
+      actor: {
+        centerRole: tenantCtx.role ?? "NONE",
+        platformRole: tenantCtx.session.user.platformRole,
+        membershipPermissions: tenantCtx.membership?.permissions ?? null,
       },
     });
 
@@ -248,15 +202,21 @@ export async function POST(req: Request) {
       {
         success: true,
         payment,
-        message: `Оплата на сумму ${amount.toLocaleString("ru-RU")} UZS успешно зафиксирована`,
+        message: `Оплата на сумму ${payment.amount.toLocaleString("ru-RU")} UZS успешно зафиксирована`,
       },
-      { status: 201 }
+      { status: 201, headers: NO_STORE_HEADERS }
     );
   } catch (err: unknown) {
+    if (err instanceof BillingError) {
+      return NextResponse.json(
+        { error: err.message, code: err.code },
+        { status: err.status, headers: NO_STORE_HEADERS }
+      );
+    }
     const error = err as { message?: string; status?: number };
     return NextResponse.json(
-      { error: error.message || "Failed to record payment" },
-      { status: error.status || 500 }
+      { error: error?.status ? error.message : "Failed to record payment" },
+      { status: error?.status || 500, headers: NO_STORE_HEADERS }
     );
   }
 }

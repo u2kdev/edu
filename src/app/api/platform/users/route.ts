@@ -38,7 +38,7 @@ const createUserSchema = z.object({
   password: z.string().min(8).optional().nullable(),
   mustChangePassword: z.boolean().optional().default(true),
   sendNotification: z.boolean().optional().default(false),
-});
+}).strict();
 
 // GET /api/platform/users - List users with server-side filters, pagination & search
 export async function GET(req: Request) {

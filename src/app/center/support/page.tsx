@@ -35,8 +35,14 @@ export default async function CenterSupportPage() {
     <CenterSupportList
       initialTickets={tickets.map((t) => ({
         ...t,
-        createdAt: t.createdAt.toISOString(),
-        updatedAt: t.updatedAt.toISOString(),
+        createdAt:
+          typeof t.createdAt === "string"
+            ? t.createdAt
+            : t.createdAt?.toISOString?.() || new Date().toISOString(),
+        updatedAt:
+          typeof t.updatedAt === "string"
+            ? t.updatedAt
+            : t.updatedAt?.toISOString?.() || new Date().toISOString(),
       }))}
       locale={locale}
     />

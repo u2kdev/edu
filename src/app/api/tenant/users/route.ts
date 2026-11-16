@@ -4,7 +4,7 @@ import { z } from "zod";
 // eslint-disable-next-line no-restricted-imports
 import { db } from "@/lib/db";
 import { hashPassword } from "@/lib/auth";
-import { requireTenantAccess, logAuditEvent } from "@/lib/tenant";
+import { requireTenantAccess, logAuditEvent, TenantAccessError } from "@/lib/tenant";
 import { hasPermission } from "@/lib/permissions";
 import type { CenterRole } from "@/lib/permissions";
 import { checkSubscriptionLimit } from "@/lib/limits";
@@ -44,9 +44,10 @@ const createUserSchema = z.object({
     .optional()
     .nullable(),
   password: z.string().min(6).optional().nullable(),
+  generatePassword: z.boolean().optional(),
   mustChangePassword: z.boolean().optional().default(true),
   sendNotification: z.boolean().optional().default(false),
-});
+}).strict();
 
 // GET /api/tenant/users - List users in the active center with search, filters & pagination
 export async function GET(req: Request) {
@@ -212,6 +213,9 @@ export async function GET(req: Request) {
       },
     });
   } catch (err: unknown) {
+    if (err instanceof TenantAccessError) {
+      return NextResponse.json({ error: err.message, code: err.code }, { status: err.status });
+    }
     console.error("GET /api/tenant/users error:", err);
     return NextResponse.json({ error: "Failed to fetch users" }, { status: 500 });
   }
@@ -568,6 +572,9 @@ export async function POST(req: Request) {
 
     return response;
   } catch (err: unknown) {
+    if (err instanceof TenantAccessError) {
+      return NextResponse.json({ error: err.message, code: err.code }, { status: err.status });
+    }
     if (err instanceof z.ZodError) {
       return NextResponse.json({ error: err.issues[0]?.message || "Validation error" }, { status: 400 });
     }

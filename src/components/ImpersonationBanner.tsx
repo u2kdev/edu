@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { ShieldAlert, ArrowLeft, Loader2 } from "lucide-react";
+import { ShieldAlert, ArrowLeft, Loader2, Lock } from "lucide-react";
 import { t } from "@/i18n";
 
 interface ImpersonationBannerProps {
@@ -9,6 +9,7 @@ interface ImpersonationBannerProps {
   role: string;
   centerName: string;
   locale: string;
+  isReadOnly?: boolean;
 }
 
 export default function ImpersonationBanner({
@@ -16,6 +17,7 @@ export default function ImpersonationBanner({
   role,
   centerName,
   locale,
+  isReadOnly,
 }: ImpersonationBannerProps) {
   const [loading, setLoading] = useState(false);
 
@@ -29,11 +31,11 @@ export default function ImpersonationBanner({
       if (res.ok) {
         window.location.href = data.redirectUrl || "/platform-admin";
       } else {
-        alert(data.error || "Ошибка возврата в платформу");
+        alert(data.error || "Failed to return to platform");
         setLoading(false);
       }
     } catch {
-      alert("Ошибка сети");
+      alert("Network error");
       setLoading(false);
     }
   };
@@ -48,23 +50,29 @@ export default function ImpersonationBanner({
   return (
     <div
       role="alert"
-      className="sticky top-0 z-50 w-full bg-amber-400 text-amber-950 px-4 py-2.5 shadow-md flex flex-wrap items-center justify-between gap-3 border-b border-amber-500 font-sans text-xs sm:text-sm font-medium"
+      className="sticky top-0 z-50 w-full bg-warning-subtle text-warning-subtle-foreground px-4 py-2 flex flex-wrap items-center justify-between gap-2.5 border-b border-warning/40 font-sans text-xs sm:text-sm font-medium"
     >
-      <div className="flex items-center gap-2 min-w-0">
-        <ShieldAlert className="w-4 h-4 text-amber-900 shrink-0" />
+      <div className="flex items-center gap-2 min-w-0 flex-wrap">
+        <ShieldAlert className="w-4 h-4 text-warning shrink-0" aria-hidden="true" />
         <span className="truncate">{message}</span>
+        {isReadOnly && (
+          <span className="inline-flex items-center gap-1 rounded-md border border-warning/40 bg-card/80 px-2 py-0.5 text-xs font-medium text-warning-subtle-foreground shrink-0">
+            <Lock className="w-3 h-3" aria-hidden="true" />
+            <span>{t(locale, "shell.readOnlyBadge")}</span>
+          </span>
+        )}
       </div>
 
       <button
         type="button"
         disabled={loading}
         onClick={handleStop}
-        className="px-3 py-1.5 bg-amber-950 text-amber-100 hover:bg-black rounded-lg text-xs font-semibold flex items-center gap-1.5 transition-colors cursor-pointer shrink-0 disabled:opacity-50"
+        className="min-h-[36px] px-3 py-1.5 bg-warning text-warning-foreground hover:opacity-90 rounded-lg text-xs font-medium flex items-center gap-1.5 transition-opacity cursor-pointer shrink-0 disabled:opacity-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
       >
         {loading ? (
-          <Loader2 className="w-3.5 h-3.5 animate-spin" />
+          <Loader2 className="w-3.5 h-3.5 animate-spin" aria-hidden="true" />
         ) : (
-          <ArrowLeft className="w-3.5 h-3.5" />
+          <ArrowLeft className="w-3.5 h-3.5" aria-hidden="true" />
         )}
         <span>{loading ? t(locale, "platform.returningToPlatform") : t(locale, "platform.returnToPlatform")}</span>
       </button>

@@ -36,27 +36,29 @@ export interface HomeworkItem {
   submissions: HomeworkSubmission[];
 }
 
-/** Badge copy + colours for every homework submission status. */
-export const STATUS_BADGES: Record<string, { labelKey: string; color: string }> = {
+export type HomeworkBadgeVariant = "neutral" | "info" | "success" | "warning" | "destructive";
+
+/** Badge copy + semantic variants for every homework submission status. */
+export const STATUS_BADGES: Record<string, { labelKey: string; variant: HomeworkBadgeVariant }> = {
   NOT_SUBMITTED: {
     labelKey: "homework.notStarted",
-    color: "bg-slate-800 text-slate-400 border-slate-700",
+    variant: "neutral",
   },
   SUBMITTED: {
     labelKey: "homework.submitted",
-    color: "bg-blue-500/10 text-blue-400 border-blue-500/30",
+    variant: "info",
   },
   ACCEPTED: {
     labelKey: "homework.accepted",
-    color: "bg-emerald-500/10 text-emerald-400 border-emerald-500/30",
+    variant: "success",
   },
   REVISION_REQUESTED: {
     labelKey: "homework.revisionRequested",
-    color: "bg-amber-500/10 text-amber-400 border-amber-500/30",
+    variant: "warning",
   },
   OVERDUE: {
     labelKey: "homework.overdue",
-    color: "bg-red-500/10 text-red-400 border-red-500/30",
+    variant: "destructive",
   },
 };
 

@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { requireTenantAccess } from "@/lib/tenant";
+import { calculateCenterExpectedMRR } from "@/lib/billing";
 
 // GET /api/center-payments/report - Financial report & forecast
 export async function GET(req: Request) {
@@ -12,30 +13,28 @@ export async function GET(req: Request) {
 
     // Total paid revenue
     const paidSum = await tenantDb.centerPayment.aggregate({
-      where: { status: "PAID" },
+      where: { status: { in: ["PAID", "PARTIALLY_PAID"] }, deletedAt: null },
       _sum: { amount: true },
       _count: true,
     });
 
     // Total pending revenue
     const pendingSum = await tenantDb.centerPayment.aggregate({
-      where: { status: "PENDING" },
+      where: { status: "PENDING", deletedAt: null },
       _sum: { amount: true },
       _count: true,
     });
 
-    // Count active student enrollments for MRR revenue forecasting
+    // Count active student memberships
     const activeStudentsCount = await tenantDb.centerMembership.count({
       where: { role: "STUDENT", status: "ACTIVE" },
     });
 
-    // Estimate average payment amount per student from historical payments
-    const avgPayment = paidSum._count > 0 ? (paidSum._sum.amount || 0) / paidSum._count : 150000;
-    const expectedMRR = Math.round(activeStudentsCount * avgPayment);
+    const expectedMRR = await calculateCenterExpectedMRR(tenantCtx.center.id);
 
     // Debtors: students with pending payments
     const pendingPayments = await tenantDb.centerPayment.findMany({
-      where: { status: "PENDING" },
+      where: { status: { in: ["PENDING", "PARTIALLY_PAID"] }, deletedAt: null },
       include: {
         student: {
           include: {

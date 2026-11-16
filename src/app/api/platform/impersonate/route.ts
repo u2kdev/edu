@@ -50,10 +50,14 @@ export async function POST(req: Request) {
       }
     }
 
-    const { targetUserId, targetCenterId, reason } = await req.json();
+    const { targetUserId, targetCenterId, reason, allowWrite } = await req.json();
 
     if (!targetUserId) {
       return NextResponse.json({ error: "Target user ID required" }, { status: 400 });
+    }
+
+    if (targetUserId === session.user.id) {
+      return NextResponse.json({ error: "Forbidden: Cannot impersonate yourself" }, { status: 403 });
     }
 
     const targetUser = await db.platformUser.findUnique({
@@ -65,9 +69,55 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: "Target user not found" }, { status: 404 });
     }
 
+    // Nobody may impersonate platform-level roles (SUPERADMIN, DEVELOPER, PLATFORM_ADMIN, PLATFORM_SUPPORT, etc.)
+    if (targetUser.platformRole && targetUser.platformRole !== "NONE") {
+      return NextResponse.json(
+        { error: "Forbidden: Cannot impersonate platform staff users" },
+        { status: 403 }
+      );
+    }
+
     const activeMem = targetCenterId
       ? targetUser.memberships.find((m) => m.centerId === targetCenterId)
       : targetUser.memberships[0];
+
+    const actorRole = session.user.platformRole;
+
+    // PLATFORM_SUPPORT can only impersonate CENTER_SUPPORT in read-only mode
+    if (actorRole === "PLATFORM_SUPPORT") {
+      if (allowWrite === true) {
+        return NextResponse.json(
+          { error: "Forbidden: Platform support can only impersonate in read-only mode" },
+          { status: 403 }
+        );
+      }
+      if (!activeMem || activeMem.role !== "CENTER_SUPPORT") {
+        return NextResponse.json(
+          { error: "Forbidden: Platform support may only impersonate CENTER_SUPPORT role" },
+          { status: 403 }
+        );
+      }
+    }
+
+    // Write mode is restricted to SUPERADMIN / DEVELOPER and requires a non-empty reason
+    const wantsWrite = allowWrite === true;
+    if (wantsWrite) {
+      if (actorRole !== "SUPERADMIN" && actorRole !== "DEVELOPER") {
+        return NextResponse.json(
+          { error: "Forbidden: Write impersonation is restricted to SUPERADMIN" },
+          { status: 403 }
+        );
+      }
+      if (!reason || typeof reason !== "string" || reason.trim().length < 3) {
+        return NextResponse.json(
+          { error: "Reason is mandatory for write impersonation" },
+          { status: 400 }
+        );
+      }
+    }
+
+    const isReadOnly = !wantsWrite;
+    const cleanReason = typeof reason === "string" && reason.trim() ? reason.trim() : "Read-only support session";
 
     // Log impersonation event in AuditLog
     await logAuditEvent({
@@ -80,7 +130,9 @@ export async function POST(req: Request) {
         impersonatorEmail: session.user.email,
         targetEmail: targetUser.email,
         targetRole: activeMem?.role || "NONE",
-        reason: reason || "No reason provided",
+        reason: cleanReason,
+        isReadOnly,
+        allowWrite: wantsWrite,
         durationMinutes: 60,
       },
     });
@@ -90,10 +142,14 @@ export async function POST(req: Request) {
       {
         userId: targetUser.id,
         email: targetUser.email,
-        platformRole: targetUser.platformRole,
+        platformRole: "NONE",
         activeCenterId: activeMem?.centerId,
         activeCenterRole: activeMem?.role,
         impersonatorUserId: session.user.id,
+        impersonatedBy: session.user.id,
+        impersonationReason: cleanReason,
+        isReadOnly,
+        allowWrite: wantsWrite,
       },
       {
         maxAgeSeconds: IMPERSONATION_MAX_AGE_SECONDS,
@@ -149,7 +205,6 @@ export async function POST(req: Request) {
     return response;
   } catch (err: unknown) {
     console.error("Impersonation error:", err);
-    const message = err instanceof Error ? err.message : "Server error";
-    return NextResponse.json({ error: message }, { status: 500 });
+    return NextResponse.json({ error: "Internal server error" }, { status: 500 });
   }
 }

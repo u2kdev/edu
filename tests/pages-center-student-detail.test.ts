@@ -22,6 +22,9 @@ const { redirectMock, notFoundMock, getAuthSessionMock, requireTenantPageAccessM
 vi.mock("next/navigation", () => ({ redirect: redirectMock, notFound: notFoundMock }));
 vi.mock("@/lib/auth", () => ({ getAuthSession: getAuthSessionMock }));
 vi.mock("@/lib/tenant", () => ({ requireTenantPageAccess: requireTenantPageAccessMock }));
+vi.mock("@/lib/dashboard-analytics", () => ({
+  getStudentPerformanceData: vi.fn().mockResolvedValue(null),
+}));
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -73,8 +76,15 @@ function collectText(node: unknown): string {
   if (node === null || node === undefined || typeof node === "boolean") return "";
   if (typeof node === "string" || typeof node === "number") return String(node);
   if (Array.isArray(node)) return node.map(collectText).join(" ");
-  if (typeof node === "object" && (node as { props?: unknown }).props !== undefined) {
-    return collectText((node as { props: { children?: unknown } }).props.children);
+  if (typeof node === "object") {
+    const el = node as { props?: Record<string, unknown> };
+    if (el.props) {
+      if (el.props.children !== undefined) {
+        return collectText(el.props.children);
+      }
+      return Object.values(el.props).map(collectText).join(" ");
+    }
+    return Object.values(node as Record<string, unknown>).map(collectText).join(" ");
   }
   return "";
 }
@@ -407,8 +417,10 @@ describe("StudentProfilePage (server page)", () => {
     );
 
     const Page = await loadPage();
-    const text = flatText(await callPage(Page));
+    const element = await callPage(Page);
+    const text = flatText(element);
     expect(text).toContain("Anna Smith");
+    expect((element as { props: { payments?: unknown[] } }).props.payments).toEqual([]);
     expect(db.enrollment.findFirst).toHaveBeenCalledWith({
       where: {
         studentMembershipId: "sm-1",

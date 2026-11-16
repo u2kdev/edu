@@ -194,85 +194,9 @@ describe("dashboard/redirect page", () => {
 describe("dashboard/courses page", () => {
   const load = () => loadPage("courses");
 
-  it("redirects to /login when there is no session", async () => {
-    setUp(makeTenantDb(), null);
+  it("redirects to /center/courses", async () => {
     const Page = await load();
-    await expect(Page()).rejects.toThrow("NEXT_REDIRECT:/login");
-    // The auth guard must run *before* the tenant boundary; otherwise the
-    // redirect is unreachable because requireTenantAccess throws instead.
-    expect(requireTenantPageAccessMock).not.toHaveBeenCalled();
-  });
-
-  it("shows the select-center panel without querying courses when no center is active", async () => {
-    const db = makeTenantDb();
-    setUp(db, session({ activeCenterId: null }));
-
-    const Page = await load();
-    const element = await Page();
-
-    expect(flatText(element)).toContain("Выберите или создайте учебный центр для управления курсами.");
-    expect(db.course.findMany).not.toHaveBeenCalled();
-  });
-
-  it("loads courses with modules, lessons and groups and forwards role + locale", async () => {
-    const db = makeTenantDb();
-    db.course.findMany.mockResolvedValue([
-      {
-        id: "c-1",
-        title: "English",
-        modules: [
-          {
-            id: "mod-1",
-            title: "Basics",
-            orderIndex: 0,
-            lessons: [{ id: "l-1", title: "Intro" }],
-          },
-        ],
-        groups: [
-          {
-            id: "g-1",
-            name: "A1",
-            teacher: { id: "t-1", user: { fullName: "Ivan" } },
-            enrollments: [{ id: "e-1" }],
-          },
-        ],
-      },
-    ]);
-    setUp(db, session({ activeCenterRole: "CENTER_ADMIN" }));
-
-    const Page = await load();
-    const element = await Page();
-    const manager = findElementByName(element, "CourseManager");
-
-    expect(manager).not.toBeNull();
-    const courses = manager!.props.initialCourses as Array<Record<string, unknown>>;
-    expect(courses).toHaveLength(1);
-    expect((courses[0].modules as Array<Record<string, unknown>>)[0]).toMatchObject({ id: "mod-1" });
-    expect(
-      ((courses[0].groups as Array<Record<string, unknown>>)[0].teacher as {
-        user: { fullName: string };
-      }).user.fullName,
-    ).toBe("Ivan");
-    expect(manager!.props.role).toBe("CENTER_ADMIN");
-    expect(manager!.props.locale).toBe("ru");
-    expect(db.course.findMany).toHaveBeenCalledWith(
-      expect.objectContaining({
-        where: { centerId: "center-1" },
-        orderBy: { createdAt: "desc" },
-      }),
-    );
-  });
-
-  it("renders with an empty list and a fallback locale", async () => {
-    const db = makeTenantDb();
-    setUp(db, session({ user: { id: "u-1", fullName: "Ivan" } }));
-
-    const Page = await load();
-    const element = await Page();
-    const manager = findElementByName(element, "CourseManager");
-
-    expect(manager!.props.initialCourses).toEqual([]);
-    expect(manager!.props.locale).toBe("ru");
+    expect(() => Page()).toThrow("NEXT_REDIRECT:/center/courses");
   });
 });
 
@@ -283,72 +207,9 @@ describe("dashboard/courses page", () => {
 describe("dashboard/groups page", () => {
   const load = () => loadPage("groups");
 
-  it("redirects to /login when there is no session", async () => {
-    setUp(makeTenantDb(), null);
+  it("redirects to /center/groups", async () => {
     const Page = await load();
-    await expect(Page()).rejects.toThrow("NEXT_REDIRECT:/login");
-    // The auth guard must run *before* the tenant boundary; otherwise the
-    // redirect is unreachable because requireTenantAccess throws instead.
-    expect(requireTenantPageAccessMock).not.toHaveBeenCalled();
-  });
-
-  it("shows the select-center panel when no center is active", async () => {
-    const db = makeTenantDb();
-    setUp(db, session({ activeCenterId: null }));
-
-    const Page = await load();
-    const element = await Page();
-
-    expect(flatText(element)).toContain("Выберите учебный центр для управления группами.");
-    expect(db.group.findMany).not.toHaveBeenCalled();
-  });
-
-  it("loads groups, courses and teachers for GroupsManager", async () => {
-    const db = makeTenantDb();
-    db.group.findMany.mockResolvedValue([
-      {
-        id: "g-1",
-        name: "A1",
-        course: { title: "English" },
-        teacher: { id: "t-1", user: { fullName: "Ivan" } },
-        enrollments: [
-          { student: { user: { fullName: "Anna", email: "a@x.uz", phone: "+998" } } },
-        ],
-      },
-    ]);
-    db.course.findMany.mockResolvedValue([{ id: "c-1", title: "English" }]);
-    db.centerMembership.findMany.mockResolvedValue([{ id: "t-1", user: { fullName: "Ivan" } }]);
-    setUp(db, session());
-
-    const Page = await load();
-    const element = await Page();
-    const manager = findElementByName(element, "GroupsManager");
-
-    expect(manager).not.toBeNull();
-    expect((manager!.props.initialGroups as Array<Record<string, unknown>>)[0].id).toBe("g-1");
-    expect(manager!.props.courses).toEqual([{ id: "c-1", title: "English" }]);
-    expect(manager!.props.teachers).toEqual([{ id: "t-1", user: { fullName: "Ivan" } }]);
-    expect(manager!.props.role).toBe("DIRECTOR");
-    expect(db.group.findMany).toHaveBeenCalledWith(
-      expect.objectContaining({ where: { course: { centerId: "center-1" } } }),
-    );
-    expect(db.centerMembership.findMany).toHaveBeenCalledWith({
-      where: { centerId: "center-1", role: "TEACHER" },
-      include: { user: { select: { fullName: true } } },
-    });
-  });
-
-  it("survives empty groups/courses/teachers", async () => {
-    const db = makeTenantDb();
-    setUp(db, session());
-
-    const Page = await load();
-    const element = await Page();
-    const manager = findElementByName(element, "GroupsManager");
-
-    expect(manager!.props.initialGroups).toEqual([]);
-    expect(manager!.props.courses).toEqual([]);
-    expect(manager!.props.teachers).toEqual([]);
+    expect(() => Page()).toThrow("NEXT_REDIRECT:/center/groups");
   });
 });
 
@@ -359,143 +220,22 @@ describe("dashboard/groups page", () => {
 describe("dashboard/invites page", () => {
   const load = () => loadPage("invites");
 
-  it("redirects to /login when there is no session", async () => {
-    setUp(makeTenantDb(), null);
+  it("redirects to /center/invites", async () => {
     const Page = await load();
-    await expect(Page()).rejects.toThrow("NEXT_REDIRECT:/login");
-    // The auth guard must run *before* the tenant boundary; otherwise the
-    // redirect is unreachable because requireTenantAccess throws instead.
-    expect(requireTenantPageAccessMock).not.toHaveBeenCalled();
-  });
-
-  it("shows the select-center panel when no center is active", async () => {
-    const db = makeTenantDb();
-    setUp(db, session({ activeCenterId: null }));
-
-    const Page = await load();
-    const element = await Page();
-
-    expect(flatText(element)).toContain("Выберите учебный центр для управления инвайтами.");
-    expect(db.inviteCode.findMany).not.toHaveBeenCalled();
-  });
-
-  it("loads invite codes, courses and groups for InvitesManager", async () => {
-    const db = makeTenantDb();
-    db.inviteCode.findMany.mockResolvedValue([
-      { id: "inv-1", code: "ABC123", course: { title: "English" }, group: { name: "A1" } },
-    ]);
-    db.course.findMany.mockResolvedValue([{ id: "c-1", title: "English" }]);
-    db.group.findMany.mockResolvedValue([{ id: "g-1", name: "A1", courseId: "c-1" }]);
-    setUp(db, session({ activeCenterRole: "CENTER_ADMIN" }));
-
-    const Page = await load();
-    const element = await Page();
-    const manager = findElementByName(element, "InvitesManager");
-
-    expect(manager).not.toBeNull();
-    expect((manager!.props.initialInvites as Array<Record<string, unknown>>)[0]).toMatchObject({
-      id: "inv-1",
-      code: "ABC123",
-    });
-    expect(manager!.props.courses).toEqual([{ id: "c-1", title: "English" }]);
-    expect(manager!.props.groups).toEqual([{ id: "g-1", name: "A1", courseId: "c-1" }]);
-    expect(manager!.props.role).toBe("CENTER_ADMIN");
-    expect(db.inviteCode.findMany).toHaveBeenCalledWith(
-      expect.objectContaining({
-        where: { centerId: "center-1" },
-        orderBy: { createdAt: "desc" },
-      }),
-    );
-    expect(db.group.findMany).toHaveBeenCalledWith({
-      where: { course: { centerId: "center-1" } },
-      select: { id: true, name: true, courseId: true },
-    });
-  });
-
-  it("handles empty invites/courses/groups", async () => {
-    const db = makeTenantDb();
-    setUp(db, session());
-
-    const Page = await load();
-    const element = await Page();
-    const manager = findElementByName(element, "InvitesManager");
-
-    expect(manager!.props.initialInvites).toEqual([]);
-    expect(manager!.props.courses).toEqual([]);
-    expect(manager!.props.groups).toEqual([]);
+    expect(() => Page()).toThrow("NEXT_REDIRECT:/center/invites");
   });
 });
 
 // ---------------------------------------------------------------------------
-// 5. /dashboard/payments
+// 5. /dashboard/payments (Redirect to /center/payments)
 // ---------------------------------------------------------------------------
 
 describe("dashboard/payments page", () => {
   const load = () => loadPage("payments");
 
-  it("redirects to /login when there is no session", async () => {
-    setUp(makeTenantDb(), null);
+  it("redirects to /center/payments", async () => {
     const Page = await load();
-    await expect(Page()).rejects.toThrow("NEXT_REDIRECT:/login");
-    // The auth guard must run *before* the tenant boundary; otherwise the
-    // redirect is unreachable because requireTenantAccess throws instead.
-    expect(requireTenantPageAccessMock).not.toHaveBeenCalled();
-  });
-
-  it("shows the select-center panel when no center is active", async () => {
-    const db = makeTenantDb();
-    setUp(db, session({ activeCenterId: null }));
-
-    const Page = await load();
-    const element = await Page();
-
-    expect(flatText(element)).toContain("Выберите учебный центр для управления платежами.");
-    expect(db.centerPayment.findMany).not.toHaveBeenCalled();
-  });
-
-  it("loads payments and students for PaymentsManager", async () => {
-    const db = makeTenantDb();
-    db.centerPayment.findMany.mockResolvedValue([
-      {
-        id: "p-1",
-        amount: 100,
-        student: { user: { fullName: "Anna", email: "a@x.uz" } },
-        group: { name: "A1", course: { title: "English" } },
-      },
-    ]);
-    db.centerMembership.findMany.mockResolvedValue([{ id: "s-1", user: { fullName: "Anna" } }]);
-    setUp(db, session());
-
-    const Page = await load();
-    const element = await Page();
-    const manager = findElementByName(element, "PaymentsManager");
-
-    expect(manager).not.toBeNull();
-    expect((manager!.props.initialPayments as Array<Record<string, unknown>>)[0]).toMatchObject({
-      id: "p-1",
-      amount: 100,
-    });
-    expect(manager!.props.students).toEqual([{ id: "s-1", user: { fullName: "Anna" } }]);
-    expect(manager!.props.role).toBe("DIRECTOR");
-    expect(db.centerPayment.findMany).toHaveBeenCalledWith(
-      expect.objectContaining({ where: { centerId: "center-1" } }),
-    );
-    expect(db.centerMembership.findMany).toHaveBeenCalledWith(
-      expect.objectContaining({ where: { centerId: "center-1", role: "STUDENT" } }),
-    );
-  });
-
-  it("does not crash when nothing is returned", async () => {
-    const db = makeTenantDb();
-    setUp(db, session({ activeCenterRole: "STUDENT" }));
-
-    const Page = await load();
-    const element = await Page();
-    const manager = findElementByName(element, "PaymentsManager");
-
-    expect(manager!.props.initialPayments).toEqual([]);
-    expect(manager!.props.students).toEqual([]);
-    expect(manager!.props.role).toBe("STUDENT");
+    expect(() => Page()).toThrow("NEXT_REDIRECT:/center/payments");
   });
 });
 

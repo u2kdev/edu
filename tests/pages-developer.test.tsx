@@ -1,6 +1,19 @@
 // @vitest-environment jsdom
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
-import { render, screen, fireEvent, waitFor, cleanup } from "@testing-library/react";
+import { render, screen, within, fireEvent, waitFor, cleanup } from "@testing-library/react";
+
+vi.mock("next/navigation", () => ({
+  useRouter: () => ({
+    push: vi.fn(),
+    replace: vi.fn(),
+    refresh: vi.fn(),
+    back: vi.fn(),
+    prefetch: vi.fn(),
+  }),
+  usePathname: () => "/developer",
+  useSearchParams: () => new URLSearchParams(),
+}));
+
 import DeveloperDashboard from "@/app/developer/page";
 import GlobalAuditLogsPage from "@/app/developer/audit/page";
 import PlatformOwnersPage from "@/app/developer/owners/page";
@@ -116,16 +129,17 @@ describe("developer audit page", () => {
     const { container } = render(<GlobalAuditLogsPage />);
     expect(screen.getByText("Querying logs...")).toBeTruthy();
 
-    await waitFor(() => expect(screen.getByText("CREATE_CENTER")).toBeTruthy());
+    await waitFor(() => expect(screen.getAllByText("CREATE_CENTER").length).toBeGreaterThanOrEqual(1));
 
     expect(calls[0].url).toBe("/api/developer/audit-logs?limit=200");
-    expect(screen.getByText("2026-04-01 10:00:00")).toBeTruthy();
-    expect(screen.getByText("alpha")).toBeTruthy();
-    expect(screen.getByText("PLATFORM")).toBeTruthy();
-    expect(screen.getByText("admin@x.uz")).toBeTruthy();
-    expect(screen.getByText("root@x.uz")).toBeTruthy();
-    expect(screen.getByText("LOGIN")).toBeTruthy();
-    expect(screen.getByText("LearningCenter")).toBeTruthy();
+    const table = within(screen.getByRole("table"));
+    expect(table.getByText("2026-04-01 10:00:00")).toBeTruthy();
+    expect(table.getByText("alpha")).toBeTruthy();
+    expect(table.getByText("PLATFORM")).toBeTruthy();
+    expect(table.getByText("admin@x.uz")).toBeTruthy();
+    expect(table.getByText("root@x.uz")).toBeTruthy();
+    expect(table.getByText("LOGIN")).toBeTruthy();
+    expect(table.getByText("LearningCenter")).toBeTruthy();
     expect(container.textContent).toContain("c-1");
   });
 
@@ -133,20 +147,20 @@ describe("developer audit page", () => {
     installFetchMock([{ match: "/api/developer/audit-logs", reply: jsonResponse({ logs }) }]);
 
     const { container } = render(<GlobalAuditLogsPage />);
-    await waitFor(() => expect(screen.getByText("CREATE_CENTER")).toBeTruthy());
+    await waitFor(() => expect(screen.getAllByText("CREATE_CENTER").length).toBeGreaterThanOrEqual(1));
 
-    const input = container.querySelector('input[type="text"]')!;
+    const input = container.querySelector('input[type="search"]')!;
 
     fireEvent.change(input, { target: { value: "login" } });
-    expect(screen.getByText("LOGIN")).toBeTruthy();
+    expect(within(screen.getByRole("table")).getByText("LOGIN")).toBeTruthy();
     expect(screen.queryByText("CREATE_CENTER")).toBeNull();
 
     fireEvent.change(input, { target: { value: "root@x.uz" } });
-    expect(screen.getByText("LOGIN")).toBeTruthy();
+    expect(within(screen.getByRole("table")).getByText("LOGIN")).toBeTruthy();
     expect(screen.queryByText("CREATE_CENTER")).toBeNull();
 
     fireEvent.change(input, { target: { value: "learning" } });
-    expect(screen.getByText("CREATE_CENTER")).toBeTruthy();
+    expect(within(screen.getByRole("table")).getByText("CREATE_CENTER")).toBeTruthy();
     expect(screen.queryByText("LOGIN")).toBeNull();
 
     fireEvent.change(input, { target: { value: "nope" } });
@@ -221,8 +235,7 @@ describe("developer owners page", () => {
     expect(screen.getByText("SEO_ADMIN")).toBeTruthy();
     expect(screen.getAllByText("ACTIVE")).toHaveLength(2);
     expect(screen.getByText("SUSPENDED")).toBeTruthy();
-    expect(screen.getAllByText("Configure")).toHaveLength(3);
-    expect(screen.getByRole("button", { name: /Add Administrator/ })).toBeTruthy();
+    expect(screen.getAllByText("System Managed")).toHaveLength(3);
     expect(container.querySelectorAll("tbody tr")).toHaveLength(3);
   });
 

@@ -104,7 +104,6 @@ export async function POST(req: Request) {
     return response;
   } catch (err: unknown) {
     console.error("Stop impersonation error:", err);
-    const message = err instanceof Error ? err.message : "Server error";
-    return NextResponse.json({ error: message }, { status: 500 });
+    return NextResponse.json({ error: "Internal server error" }, { status: 500 });
   }
 }

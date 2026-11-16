@@ -2,6 +2,8 @@
 
 import { BookOpen, Edit2, MapPin, Trash2, UserCheck } from "lucide-react";
 import { t } from "@/i18n";
+import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
 import type { ScheduleSlotItem } from "./schedule-utils";
 
 interface ScheduleSlotCardProps {
@@ -20,51 +22,40 @@ export function ScheduleSlotCard({
   onDelete,
 }: ScheduleSlotCardProps) {
   return (
-    <div className="flex flex-col sm:flex-row sm:items-center justify-between p-4 hover:bg-slate-900/40 transition-colors gap-3">
+    <div className="flex flex-col justify-between gap-3 p-4 transition-colors hover:bg-muted/40 sm:flex-row sm:items-center">
       <div className="flex items-start gap-4">
-        <div className="text-center w-16 shrink-0">
-          <div className="text-sm font-bold text-brand-400">
-            {slot.startTime}
-          </div>
-          <div className="text-xs text-slate-500">{slot.endTime}</div>
+        <div className="w-16 shrink-0 text-center tabular-nums">
+          <div className="text-sm font-semibold text-primary">{slot.startTime}</div>
+          <div className="text-xs text-muted-foreground">{slot.endTime}</div>
         </div>
 
-        <div
-          className="w-1.5 h-12 rounded-full shrink-0"
-          style={{
-            backgroundColor: slot.group.subject?.color || "#4f6ef7",
-          }}
-        />
+        <div className="h-12 w-1 shrink-0 rounded-full bg-primary/50" aria-hidden="true" />
 
         <div>
-          <div className="flex items-center gap-2 flex-wrap">
-            <span className="text-sm font-bold text-white">
-              {slot.group.name}
-            </span>
+          <div className="flex flex-wrap items-center gap-2">
+            <span className="text-sm font-semibold text-foreground">{slot.group.name}</span>
             {slot.status === "CANCELLED" && (
-              <span className="px-2 py-0.5 rounded-full text-[10px] font-semibold bg-rose-500/10 text-rose-400 border border-rose-500/20">
-                {t(locale, "schedule.cancelled")}
-              </span>
+              <Badge variant="destructive">{t(locale, "schedule.cancelled")}</Badge>
             )}
           </div>
-          <div className="flex items-center gap-3 mt-1 text-xs text-slate-400 flex-wrap">
+          <div className="mt-1 flex flex-wrap items-center gap-3 text-xs text-muted-foreground">
             <span className="flex items-center gap-1">
-              <BookOpen className="w-3.5 h-3.5 text-slate-500" />
+              <BookOpen className="h-3.5 w-3.5" aria-hidden="true" />
               {slot.group.course.title}
             </span>
             <span className="flex items-center gap-1">
-              <UserCheck className="w-3.5 h-3.5 text-slate-500" />
+              <UserCheck className="h-3.5 w-3.5" aria-hidden="true" />
               {slot.teacher.user.fullName}
             </span>
             {slot.roomName && (
               <span className="flex items-center gap-1">
-                <MapPin className="w-3.5 h-3.5 text-slate-500" />
+                <MapPin className="h-3.5 w-3.5" aria-hidden="true" />
                 {slot.roomName}
               </span>
             )}
           </div>
           {slot.cancelledReason && (
-            <p className="text-xs text-rose-400 mt-1 italic">
+            <p className="mt-1 text-xs italic text-destructive">
               {t(locale, "schedule.cancelledReason")}: {slot.cancelledReason}
             </p>
           )}
@@ -72,19 +63,27 @@ export function ScheduleSlotCard({
       </div>
 
       {canManage && (
-        <div className="flex items-center gap-2 self-end sm:self-center">
-          <button
+        <div className="flex items-center gap-1.5 self-end sm:self-center">
+          <Button
+            type="button"
+            variant="ghost"
+            size="icon"
+            aria-label={t(locale, "common.edit")}
+            title={t(locale, "common.edit")}
             onClick={() => onEdit(slot)}
-            className="p-1.5 text-slate-400 hover:text-white rounded-lg hover:bg-slate-800 transition-colors"
           >
-            <Edit2 className="w-4 h-4" />
-          </button>
-          <button
+            <Edit2 className="h-4 w-4" aria-hidden="true" />
+          </Button>
+          <Button
+            type="button"
+            variant="ghost"
+            size="icon"
+            aria-label={t(locale, "common.delete")}
+            title={t(locale, "common.delete")}
             onClick={() => onDelete(slot.id)}
-            className="p-1.5 text-rose-400 hover:text-rose-300 rounded-lg hover:bg-rose-500/10 transition-colors"
           >
-            <Trash2 className="w-4 h-4" />
-          </button>
+            <Trash2 className="h-4 w-4 text-destructive" aria-hidden="true" />
+          </Button>
         </div>
       )}
     </div>

@@ -3,12 +3,7 @@ import { NextResponse } from "next/server";
 // eslint-disable-next-line no-restricted-imports
 import { db } from "@/lib/db";
 import { requirePlatformPermission, handlePlatformError } from "@/lib/platformAuth";
-
-function escapeCsv(val: unknown): string {
-  if (val === null || val === undefined) return '""';
-  const str = String(val).replace(/"/g, '""');
-  return `"${str}"`;
-}
+import { generateCsv } from "@/lib/csv";
 
 export async function GET(req: Request) {
   try {
@@ -67,14 +62,14 @@ export async function GET(req: Request) {
       users.forEach((u) => {
         const mem = u.memberships[0];
         rows.push([
-          escapeCsv("Пользователь"),
-          escapeCsv(u.fullName),
-          escapeCsv(u.email || "—"),
-          escapeCsv(u.phone || "—"),
-          escapeCsv(u.platformRole !== "NONE" ? u.platformRole : mem?.role || "USER"),
-          escapeCsv(mem?.center.name || "—"),
-          escapeCsv(u.emailVerified ? "Да" : "Нет"),
-          escapeCsv(u.createdAt.toISOString().slice(0, 10)),
+          "Пользователь",
+          u.fullName,
+          u.email || "—",
+          u.phone || "—",
+          u.platformRole !== "NONE" ? u.platformRole : mem?.role || "USER",
+          mem?.center.name || "—",
+          u.emailVerified ? "Да" : "Нет",
+          u.createdAt.toISOString().slice(0, 10),
         ]);
       });
     }
@@ -99,20 +94,19 @@ export async function GET(req: Request) {
 
       centers.forEach((c) => {
         rows.push([
-          escapeCsv("Учебный центр"),
-          escapeCsv(c.name),
-          escapeCsv(c.email || c.owner.email || "—"),
-          escapeCsv(c.phone || c.owner.phone || "—"),
-          escapeCsv("Владелец: " + c.owner.fullName),
-          escapeCsv(c.name),
-          escapeCsv("Да"),
-          escapeCsv(c.createdAt.toISOString().slice(0, 10)),
+          "Учебный центр",
+          c.name,
+          c.email || c.owner.email || "—",
+          c.phone || c.owner.phone || "—",
+          "Владелец: " + c.owner.fullName,
+          c.name,
+          "Да",
+          c.createdAt.toISOString().slice(0, 10),
         ]);
       });
     }
 
-    const csvContent =
-      "\uFEFF" + [headers.join(","), ...rows.map((r) => r.join(","))].join("\r\n");
+    const csvContent = generateCsv(headers, rows);
 
     return new NextResponse(csvContent, {
       status: 200,

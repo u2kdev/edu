@@ -1,25 +1,30 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
+import { t } from "@/i18n";
 
 /**
  * `src/app/center/grades/page.tsx` — plain async server component.
- * Follows the pattern of tests/pages-center-schedule.test.ts.
  */
 
-const { redirectMock, getAuthSessionMock, requireTenantPageAccessMock } = vi.hoisted(() => ({
+const {
+  redirectMock,
+  getAuthSessionMock,
+  requireTenantPageAccessMock,
+  getStudentPerformanceDataMock,
+} = vi.hoisted(() => ({
   redirectMock: vi.fn((url: string) => {
     throw new Error(`NEXT_REDIRECT:${url}`);
   }),
   getAuthSessionMock: vi.fn(),
   requireTenantPageAccessMock: vi.fn(),
+  getStudentPerformanceDataMock: vi.fn(),
 }));
 
 vi.mock("next/navigation", () => ({ redirect: redirectMock }));
 vi.mock("@/lib/auth", () => ({ getAuthSession: getAuthSessionMock }));
 vi.mock("@/lib/tenant", () => ({ requireTenantPageAccess: requireTenantPageAccessMock }));
-
-// ---------------------------------------------------------------------------
-// Helpers
-// ---------------------------------------------------------------------------
+vi.mock("@/lib/dashboard-analytics", () => ({
+  getStudentPerformanceData: getStudentPerformanceDataMock,
+}));
 
 function makeDb() {
   return {
@@ -86,12 +91,39 @@ function findElementByName(node: unknown, name: string): { props: Record<string,
   return null;
 }
 
-/** First `where` argument passed to a prisma mock method. */
 function whereOf(mock: { mock: { calls: unknown[][] } }): Record<string, unknown> {
   return (mock.mock.calls[0][0] as { where: Record<string, unknown> }).where;
 }
 
-// ---------------------------------------------------------------------------
+function mockPerformance(studentId: string) {
+  return {
+    studentMembershipId: studentId,
+    studentName: "Student",
+    studentEmail: "s@example.uz",
+    period: "30d",
+    calendarMonth: "2026-11",
+    canViewPayments: true,
+    canViewGroupAverage: true,
+    summary: {
+      attendanceRate: 90,
+      presentCount: 9,
+      lateCount: 1,
+      excusedCount: 0,
+      absentCount: 0,
+      homeworkCompletionRate: 85,
+      avgGradePercent: 88,
+      courseProgressPercent: 50,
+    },
+    attendanceDonut: [],
+    attendanceHeatmap: [],
+    homeworkWeekly: [],
+    gradesTrajectory: [],
+    courseProgress: [],
+    lessons: [],
+    payment: null,
+    attentionAlerts: [],
+  };
+}
 
 describe("CenterGradesPage (server page)", () => {
   beforeEach(() => {
@@ -99,18 +131,19 @@ describe("CenterGradesPage (server page)", () => {
     redirectMock.mockClear();
     getAuthSessionMock.mockReset();
     requireTenantPageAccessMock.mockReset();
+    getStudentPerformanceDataMock.mockReset().mockResolvedValue(null);
   });
 
   it("redirects to /login when there is no session", async () => {
     setUp(makeDb(), null);
     const Page = await loadPage();
-    await expect(Page()).rejects.toThrow("NEXT_REDIRECT:/login");
+    await expect(Page({})).rejects.toThrow("NEXT_REDIRECT:/login");
   });
 
   it("redirects to /center when there is no active center", async () => {
     setUp(makeDb(), session({ activeCenterId: null }));
     const Page = await loadPage();
-    await expect(Page()).rejects.toThrow("NEXT_REDIRECT:/center");
+    await expect(Page({})).rejects.toThrow("NEXT_REDIRECT:/center");
   });
 
   it("renders the full-center report for a DIRECTOR", async () => {
@@ -160,11 +193,10 @@ describe("CenterGradesPage (server page)", () => {
     setUp(db, session());
 
     const Page = await loadPage();
-    const element = await Page();
+    const element = await Page({});
     const text = flatText(element);
     const compact = text.replace(/\s+/g, "");
 
-    // unscoped where for staff
     expect(whereOf(db.homeworkSubmission.findMany)).toEqual({
       homework: { lesson: { module: { course: { centerId: "center-1" } } } },
       grade: { not: null },
@@ -180,7 +212,6 @@ describe("CenterGradesPage (server page)", () => {
       expect.objectContaining({ orderBy: { completedAt: "desc" }, take: 50 }),
     );
 
-    // staff -> groups loaded + gradebook rendered
     expect(db.group.findMany).toHaveBeenCalledWith({
       where: { centerId: "center-1" },
       select: { id: true, name: true },
@@ -195,17 +226,17 @@ describe("CenterGradesPage (server page)", () => {
     expect(gradebook!.props.userRole).toBe("DIRECTOR");
     expect(gradebook!.props.locale).toBe("ru");
 
-    // average of graded submissions (90 + 70) / 2 = 80
     expect(compact).toContain("80%");
     expect(text).toContain("Anna");
     expect(text).toContain("Essay");
     expect(text).toContain("Great");
-    expect(text).toContain("—"); // null feedback
+    expect(text).toContain("—");
     expect(text).toContain("Unit test");
     expect(compact).toContain("80%(8/10)");
     expect(compact).toContain("40%(4/10)");
-    expect(compact).toContain("✓Сдан");
-    expect(compact).toContain("✗Несдан");
+    expect(compact).toContain("Сдан");
+    expect(compact).toContain("Несдан");
+    expect(getStudentPerformanceDataMock).not.toHaveBeenCalled();
   });
 
   it("ignores ungraded submissions when computing the average", async () => {
@@ -217,7 +248,7 @@ describe("CenterGradesPage (server page)", () => {
     setUp(db, session({ activeCenterRole: "CENTER_ADMIN" }));
 
     const Page = await loadPage();
-    const text = flatText(await Page());
+    const text = flatText(await Page({}));
     const compact = text.replace(/\s+/g, "");
 
     expect(compact).toContain("80%");
@@ -235,7 +266,7 @@ describe("CenterGradesPage (server page)", () => {
     );
 
     const Page = await loadPage();
-    await Page();
+    await Page({});
 
     expect(whereOf(db.homeworkSubmission.findMany)).toEqual({
       homework: { lesson: { module: { course: { centerId: "center-1" } } } },
@@ -262,11 +293,10 @@ describe("CenterGradesPage (server page)", () => {
     setUp(db, session({ activeCenterRole: "TEACHER", memberships: [] }));
 
     const Page = await loadPage();
-    await Page();
+    await Page({});
 
     expect(whereOf(db.homeworkSubmission.findMany)).toEqual({ id: { in: [] } });
     expect(whereOf(db.testAttempt.findMany)).toEqual({ id: { in: [] } });
-    // no groups / gradebook without a membership
     expect(db.group.findMany).not.toHaveBeenCalled();
   });
 
@@ -281,7 +311,7 @@ describe("CenterGradesPage (server page)", () => {
     );
 
     const Page = await loadPage();
-    await Page();
+    await Page({});
 
     expect(whereOf(db.homeworkSubmission.findMany)).toEqual({
       homework: { lesson: { module: { course: { centerId: "center-1" } } } },
@@ -297,8 +327,9 @@ describe("CenterGradesPage (server page)", () => {
     });
   });
 
-  it("scopes a STUDENT to their own membership and skips loading groups", async () => {
+  it("scopes a STUDENT to their own membership and renders StudentPerformanceView", async () => {
     const db = makeDb();
+    getStudentPerformanceDataMock.mockResolvedValue(mockPerformance("m-student"));
     setUp(
       db,
       session({
@@ -308,7 +339,7 @@ describe("CenterGradesPage (server page)", () => {
     );
 
     const Page = await loadPage();
-    const element = await Page();
+    const element = await Page({ searchParams: { period: "90d" } });
 
     expect(whereOf(db.homeworkSubmission.findMany)).toEqual({
       homework: { lesson: { module: { course: { centerId: "center-1" } } } },
@@ -321,15 +352,24 @@ describe("CenterGradesPage (server page)", () => {
     });
     expect(db.group.findMany).not.toHaveBeenCalled();
     expect(findElementByName(element, "GradebookManager")).toBeNull();
-    expect(flatText(element)).toContain("Ваши оценки");
+    expect(findElementByName(element, "StudentPerformanceView")).not.toBeNull();
+    expect(getStudentPerformanceDataMock).toHaveBeenCalledWith({
+      centerId: "center-1",
+      studentMembershipId: "m-student",
+      viewerRole: "STUDENT",
+      viewerMembershipId: "m-student",
+      period: "90d",
+    });
+    expect(flatText(element)).toContain(t("ru", "grades.studentDescription"));
   });
 
-  it("scopes a PARENT to their confirmed children", async () => {
+  it("scopes a PARENT to their confirmed children and loads performance breakdown", async () => {
     const db = makeDb();
     db.parentLink.findMany.mockResolvedValue([
       { studentMembershipId: "s-1" },
       { studentMembershipId: "s-2" },
     ]);
+    getStudentPerformanceDataMock.mockResolvedValue(mockPerformance("s-1"));
     setUp(
       db,
       session({
@@ -339,7 +379,7 @@ describe("CenterGradesPage (server page)", () => {
     );
 
     const Page = await loadPage();
-    await Page();
+    const element = await Page({});
 
     expect(db.parentLink.findMany).toHaveBeenCalledWith({
       where: { parentMembershipId: "m-parent", status: "CONFIRMED" },
@@ -355,6 +395,14 @@ describe("CenterGradesPage (server page)", () => {
       studentMembershipId: { in: ["s-1", "s-2"] },
     });
     expect(db.group.findMany).not.toHaveBeenCalled();
+    expect(getStudentPerformanceDataMock).toHaveBeenCalledWith({
+      centerId: "center-1",
+      studentMembershipId: "s-1",
+      viewerRole: "PARENT",
+      viewerMembershipId: "m-parent",
+      period: "30d",
+    });
+    expect(findElementByName(element, "StudentPerformanceView")).not.toBeNull();
   });
 
   it("returns an empty scope for a PARENT without a membership (no center-wide fallback)", async () => {
@@ -362,7 +410,7 @@ describe("CenterGradesPage (server page)", () => {
     setUp(db, session({ activeCenterRole: "PARENT", memberships: [] }));
 
     const Page = await loadPage();
-    await Page();
+    await Page({});
 
     expect(db.parentLink.findMany).not.toHaveBeenCalled();
     expect(whereOf(db.homeworkSubmission.findMany)).toEqual({ id: { in: [] } });
@@ -381,7 +429,7 @@ describe("CenterGradesPage (server page)", () => {
     );
 
     const Page = await loadPage();
-    await Page();
+    await Page({});
 
     expect(whereOf(db.homeworkSubmission.findMany)).toEqual({ id: { in: [] } });
     expect(whereOf(db.testAttempt.findMany)).toEqual({ id: { in: [] } });
@@ -401,7 +449,7 @@ describe("CenterGradesPage (server page)", () => {
     );
 
     const Page = await loadPage();
-    const element = await Page();
+    const element = await Page({});
 
     expect(db.group.findMany).toHaveBeenCalled();
     const gradebook = findElementByName(element, "GradebookManager");
@@ -414,12 +462,10 @@ describe("CenterGradesPage (server page)", () => {
     setUp(db, session({ activeCenterRole: "CENTER_ADMIN" }));
 
     const Page = await loadPage();
-    const element = await Page();
+    const element = await Page({});
     const text = flatText(element);
 
-    // no gradebook because groups is empty
     expect(findElementByName(element, "GradebookManager")).toBeNull();
-    // no average badge because totalGraded === 0
     expect(text).not.toContain("Средний балл");
     expect(text).toContain("Нет данных");
     expect(text).toContain("0 записей");

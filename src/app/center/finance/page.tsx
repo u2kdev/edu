@@ -1,7 +1,15 @@
+import { Suspense } from "react";
 import { redirect } from "next/navigation";
+import Link from "next/link";
 import { requireTenantPageAccess } from "@/lib/tenant";
 import { hasPermission } from "@/lib/permissions";
+import { getCenterPlanFeatures } from "@/lib/plan-features";
 import { calculateAccountBalance } from "@/lib/finance";
+import { calculateCenterStudentBalances } from "@/lib/billing";
+import { getCenterFinanceAnalytics } from "@/lib/finance-analytics";
+import { t } from "@/i18n";
+import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
+import { Button } from "@/components/ui/button";
 import CenterFinanceManager, {
   AccountItem,
   CategoryItem,
@@ -16,6 +24,7 @@ export const dynamic = "force-dynamic";
 export default async function CenterFinancePage() {
   const tenantCtx = await requireTenantPageAccess();
   const actorRole = tenantCtx.membership?.role;
+  const locale = tenantCtx.session.user.preferredLanguage || "ru";
 
   const canRead =
     actorRole === "DIRECTOR" ||
@@ -37,7 +46,6 @@ export default async function CenterFinancePage() {
   const tenantDb = tenantCtx.getTenantDb();
   const centerId = tenantCtx.center.id;
 
-  // 1. Accounts with dynamic balances
   const rawAccounts = await tenantDb.account.findMany({
     where: { isActive: true },
     orderBy: [{ isDefault: "desc" }, { createdAt: "asc" }],
@@ -58,7 +66,6 @@ export default async function CenterFinancePage() {
     })
   );
 
-  // 2. Categories
   const rawCategories = await tenantDb.financeCategory.findMany({
     where: { isActive: true },
     orderBy: { name: "asc" },
@@ -70,7 +77,6 @@ export default async function CenterFinancePage() {
     isActive: c.isActive,
   }));
 
-  // 3. Transactions
   const rawTransactions = await tenantDb.financeTransaction.findMany({
     include: {
       account: { select: { name: true, type: true } },
@@ -99,69 +105,27 @@ export default async function CenterFinancePage() {
     category: tx.category ? { name: tx.category.name } : undefined,
   }));
 
-  // 4. Student Debts
-  const rawStudents = await tenantDb.centerMembership.findMany({
-    where: { role: "STUDENT", status: "ACTIVE" },
-    include: {
-      user: { select: { fullName: true, phone: true, email: true } },
-      enrollments: {
-        where: { status: "ACTIVE" },
-        include: {
-          group: {
-            include: {
-              course: { select: { title: true, priceMonthly: true } },
-            },
-          },
-        },
-      },
-      payments: {
-        where: { status: { in: ["PAID", "PARTIALLY_PAID"] } },
-        select: { amount: true },
-      },
-    },
-    take: 50,
-  });
+  const unifiedBalances = await calculateCenterStudentBalances({ centerId });
+  const debts: StudentDebtItem[] = unifiedBalances.slice(0, 50).map((b) => ({
+    studentId: b.studentMembershipId,
+    fullName: b.fullName,
+    phone: b.phone,
+    email: b.email,
+    monthlyTuition: b.monthlyTuition,
+    totalDue: b.totalAccrued,
+    totalPaid: b.totalPaid,
+    balance: b.balance,
+    debtAmount: b.debtAmount,
+    status: b.status,
+    paidUntil: b.earliestPaidUntil,
+    enrollments: b.enrollments.map((e) => ({
+      groupName: e.groupName,
+      courseTitle: e.courseTitle,
+      status: e.status,
+      paidUntil: e.paidUntil,
+    })),
+  }));
 
-  const now = new Date();
-  const debts: StudentDebtItem[] = rawStudents.map((s) => {
-    const monthlyTuition = s.enrollments.reduce(
-      (sum, e) => sum + (e.group.course?.priceMonthly || 0),
-      0
-    );
-    const joinedDate = new Date(s.joinedAt);
-    const monthsEnrolled = Math.max(
-      1,
-      (now.getFullYear() - joinedDate.getFullYear()) * 12 +
-        (now.getMonth() - joinedDate.getMonth()) +
-        1
-    );
-    const totalDue = monthlyTuition * monthsEnrolled;
-    const totalPaid = s.payments.reduce((sum, p) => sum + Math.round(p.amount), 0);
-    const balance = totalPaid - totalDue;
-    const debtAmount = balance < 0 ? Math.abs(balance) : 0;
-    let status: "DEBT" | "PAID" | "OVERPAID" = "PAID";
-    if (balance < 0) status = "DEBT";
-    else if (balance > 0) status = "OVERPAID";
-
-    return {
-      studentId: s.id,
-      fullName: s.user.fullName,
-      phone: s.user.phone,
-      email: s.user.email,
-      monthlyTuition,
-      totalDue,
-      totalPaid,
-      balance,
-      debtAmount,
-      status,
-      enrollments: s.enrollments.map((e) => ({
-        groupName: e.group.name,
-        courseTitle: e.group.course?.title,
-      })),
-    };
-  });
-
-  // 5. Periods
   const rawPeriods = await tenantDb.financePeriod.findMany({
     include: {
       closedBy: { select: { user: { select: { fullName: true } } } },
@@ -179,14 +143,20 @@ export default async function CenterFinancePage() {
     closedBy: p.closedBy,
   }));
 
-  // 6. Salary Rates
-  const rawSalaryRates = await tenantDb.teacherSalaryRate.findMany({
-    include: {
-      teacher: { select: { user: { select: { fullName: true, email: true } } } },
-      group: { select: { name: true } },
-    },
-    orderBy: { createdAt: "desc" },
-  });
+  const [rawSalaryRates, planCtx, financeAnalytics] = await Promise.all([
+    tenantDb.teacherSalaryRate.findMany({
+      include: {
+        teacher: { select: { user: { select: { fullName: true, email: true } } } },
+        group: { select: { name: true } },
+      },
+      orderBy: { createdAt: "desc" },
+    }),
+    getCenterPlanFeatures(centerId),
+    getCenterFinanceAnalytics({ centerId, period: "30d" }),
+  ]);
+
+  const financeLocked = !planCtx.features.financeAccounting;
+  const canExportCsv = Boolean(planCtx.features.advancedReports);
   const salaryRates: SalaryRateItem[] = rawSalaryRates.map((r) => ({
     id: r.id,
     rateType: r.rateType,
@@ -196,17 +166,33 @@ export default async function CenterFinancePage() {
   }));
 
   return (
-    <div className="p-6 max-w-7xl mx-auto">
-      <CenterFinanceManager
-        initialAccounts={accounts}
-        initialCategories={categories}
-        initialTransactions={transactions}
-        initialDebts={debts}
-        initialPeriods={periods}
-        initialSalaryRates={salaryRates}
-        canWrite={canWrite}
-        isDirector={isDirector}
-      />
+    <div className="space-y-4">
+      {financeLocked && (
+        <Alert variant="warning">
+          <AlertTitle>{t(locale, "finance.title")}</AlertTitle>
+          <AlertDescription className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+            <span>{t(locale, "nav.upgradePlan")}</span>
+            <Button asChild size="sm" variant="outline">
+              <Link href="/center/upgrade">{t(locale, "nav.upgradePlan")}</Link>
+            </Button>
+          </AlertDescription>
+        </Alert>
+      )}
+      <Suspense fallback={null}>
+        <CenterFinanceManager
+          initialAccounts={accounts}
+          initialCategories={categories}
+          initialTransactions={transactions}
+          initialDebts={debts}
+          initialPeriods={periods}
+          initialSalaryRates={salaryRates}
+          initialAnalytics={financeAnalytics}
+          canExport={canExportCsv}
+          canWrite={canWrite && !financeLocked}
+          isDirector={isDirector}
+          locale={locale}
+        />
+      </Suspense>
     </div>
   );
 }

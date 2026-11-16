@@ -51,6 +51,7 @@ export const API_ENDPOINTS = {
   REFRESH: "/api/auth/mobile/refresh",
   REGISTER_PUSH_TOKEN: "/api/mobile/push-token/register",
   UNREGISTER_PUSH_TOKEN: "/api/mobile/push-token/unregister",
+  TELEGRAM_ACCOUNT: "/api/account/telegram",
   STUDENT_DASHBOARD: "/api/mobile/student/dashboard",
   PARENT_DASHBOARD: "/api/mobile/parent/dashboard",
   TEACHER_DASHBOARD: "/api/mobile/teacher/dashboard",

@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
-import { render, screen, fireEvent, waitFor, cleanup } from "@testing-library/react";
+import { render, screen, fireEvent, waitFor, cleanup, within } from "@testing-library/react";
 import type { ComponentProps } from "react";
 import ScheduleManager, {
   type ScheduleSlotItem,
@@ -109,11 +109,11 @@ function renderManager(overrides: Partial<ManagerProps> = {}) {
   );
 }
 
-/** The day-view edit/delete icon buttons (their classes are unique enough). */
+/** The day-view edit/delete icon buttons. */
 const dayEditButtons = (c: HTMLElement) =>
-  c.querySelectorAll('button[class*="hover:bg-slate-800"]');
+  c.querySelectorAll('button[aria-label="Редактировать"]');
 const dayDeleteButtons = (c: HTMLElement) =>
-  c.querySelectorAll('button[class*="hover:bg-rose-500"]');
+  c.querySelectorAll('button[aria-label="Удалить"]');
 
 describe("ScheduleManager (UI)", () => {
   beforeEach(() => {
@@ -288,19 +288,20 @@ describe("ScheduleManager (UI)", () => {
 
   it("opens the create modal with defaults and cancels without any request", () => {
     const { calls } = installFetchMock([]);
-    const { container } = renderManager();
+    renderManager();
 
     fireEvent.click(screen.getByRole("button", { name: /Добавить занятие/ }));
 
     // Modal title duplicates the header button label.
     expect(screen.getAllByText("Добавить занятие").length).toBe(2);
 
-    // Header has 2 selects; the modal adds group / teacher / dayOfWeek.
-    const selects = container.querySelectorAll("select") as NodeListOf<HTMLSelectElement>;
-    expect(selects).toHaveLength(5);
-    expect(selects[2].value).toBe("g-1");
-    expect(selects[3].value).toBe("t-1");
-    expect(selects[4].value).toBe("1");
+    // Modal form has group / teacher / dayOfWeek selects.
+    const form = document.querySelector("form")!;
+    const selects = form.querySelectorAll("select") as NodeListOf<HTMLSelectElement>;
+    expect(selects).toHaveLength(3);
+    expect(selects[0].value).toBe("g-1");
+    expect(selects[1].value).toBe("t-1");
+    expect(selects[2].value).toBe("1");
 
     fireEvent.click(screen.getByRole("button", { name: "Отмена" }));
 
@@ -312,22 +313,23 @@ describe("ScheduleManager (UI)", () => {
     const { calls } = installFetchMock([
       { match: "/api/tenant/schedule", method: "POST", reply: jsonResponse({ slot: { id: "new" } }, 201) },
     ]);
-    const { container } = renderManager();
+    renderManager();
 
     fireEvent.click(screen.getByRole("button", { name: /Добавить занятие/ }));
 
-    fireEvent.change(container.querySelector('input[placeholder="например, Аудитория 101"]')!, {
+    const form = document.querySelector("form")!;
+    fireEvent.change(form.querySelector('input[placeholder="например, Аудитория 101"]')!, {
       target: { value: "202" },
     });
 
-    const selects = container.querySelectorAll("select") as NodeListOf<HTMLSelectElement>;
-    fireEvent.change(selects[4], { target: { value: "3" } }); // dayOfWeek
+    const selects = form.querySelectorAll("select") as NodeListOf<HTMLSelectElement>;
+    fireEvent.change(selects[2], { target: { value: "3" } }); // dayOfWeek
 
-    const times = container.querySelectorAll('input[type="time"]');
+    const times = form.querySelectorAll('input[type="time"]');
     fireEvent.change(times[0], { target: { value: "08:00" } });
     fireEvent.change(times[1], { target: { value: "09:30" } });
 
-    fireEvent.submit(container.querySelector("form")!);
+    fireEvent.submit(form);
 
     await waitFor(() => expect(refresh).toHaveBeenCalledTimes(1));
 
@@ -355,26 +357,26 @@ describe("ScheduleManager (UI)", () => {
         ),
       },
     ]);
-    const { container } = renderManager();
+    renderManager();
 
     fireEvent.click(screen.getByRole("button", { name: /Добавить занятие/ }));
-    fireEvent.submit(container.querySelector("form")!);
+    fireEvent.submit(document.querySelector("form")!);
 
     expect(await screen.findByText("Конфликт расписания")).toBeTruthy();
     expect(screen.getByText("Аудитория занята")).toBeTruthy();
     expect(screen.getByText("Преподаватель занят")).toBeTruthy();
 
     // Modal stays open and the submit button is re-enabled.
-    expect(container.querySelector("form")).toBeTruthy();
+    expect(document.querySelector("form")).toBeTruthy();
     expect(screen.getByRole("button", { name: "Сохранить" })).toBeTruthy();
   });
 
   it("reports a network failure while creating a slot", async () => {
     installFetchMock([]); // any request throws inside the mock
-    const { container } = renderManager();
+    renderManager();
 
     fireEvent.click(screen.getByRole("button", { name: /Добавить занятие/ }));
-    fireEvent.submit(container.querySelector("form")!);
+    fireEvent.submit(document.querySelector("form")!);
 
     expect(await screen.findByText(/Unhandled fetch: POST \/api\/tenant\/schedule/)).toBeTruthy();
   });
@@ -397,24 +399,24 @@ describe("ScheduleManager (UI)", () => {
 
     expect(screen.getByText("Редактировать занятие")).toBeTruthy();
 
-    // Header 2 + modal group/teacher/dayOfWeek/status.
-    const selects = container.querySelectorAll("select") as NodeListOf<HTMLSelectElement>;
-    expect(selects).toHaveLength(6);
-    expect(selects[2].value).toBe("g-1");
-    expect(selects[4].value).toBe("1");
-    expect(selects[5].value).toBe("ACTIVE");
+    const form = document.querySelector("form")!;
+    const selects = form.querySelectorAll("select") as NodeListOf<HTMLSelectElement>;
+    expect(selects).toHaveLength(4);
+    expect(selects[0].value).toBe("g-1");
+    expect(selects[2].value).toBe("1");
+    expect(selects[3].value).toBe("ACTIVE");
 
     // Selecting CANCELLED reveals the reason input.
-    fireEvent.change(selects[5], { target: { value: "CANCELLED" } });
+    fireEvent.change(selects[3], { target: { value: "CANCELLED" } });
     const reasonLabel = screen.getByText("Причина отмены");
     const reasonInput = reasonLabel.parentElement!.querySelector("input")!;
     fireEvent.change(reasonInput, { target: { value: "Болезнь" } });
 
-    fireEvent.change(container.querySelector('input[placeholder="например, Аудитория 101"]')!, {
+    fireEvent.change(form.querySelector('input[placeholder="например, Аудитория 101"]')!, {
       target: { value: "303" },
     });
 
-    fireEvent.submit(container.querySelector("form")!);
+    fireEvent.submit(form);
 
     await waitFor(() => expect(screen.queryByText("Редактировать занятие")).toBeNull());
 
@@ -449,7 +451,7 @@ describe("ScheduleManager (UI)", () => {
 
     fireEvent.click(screen.getByRole("button", { name: "День" }));
     fireEvent.click(dayEditButtons(container)[0]);
-    fireEvent.submit(container.querySelector("form")!);
+    fireEvent.submit(document.querySelector("form")!);
 
     expect(await screen.findByText("Слот не найден")).toBeTruthy();
     expect(screen.getByText("Дубликат")).toBeTruthy();
@@ -465,28 +467,32 @@ describe("ScheduleManager (UI)", () => {
     fireEvent.click(screen.getByRole("button", { name: "День" }));
     fireEvent.click(dayDeleteButtons(container)[0]);
 
+    const dialog = await screen.findByRole("dialog");
+    fireEvent.click(within(dialog).getByRole("button", { name: "Удалить" }));
+
     await waitFor(() => expect(calls).toHaveLength(1));
     expect(sentBody(calls[0])).toEqual({ id: "slot-1" });
-    expect(window.confirm).toHaveBeenCalledTimes(1);
+    expect(window.confirm).not.toHaveBeenCalled();
 
     await waitFor(() => expect(screen.queryByText("Алгебра-1")).toBeNull());
     expect(screen.getByText("Нет занятий")).toBeTruthy();
   });
 
-  it("does not send a delete request when the confirmation is declined", () => {
+  it("does not send a delete request when the confirmation is declined", async () => {
     const { calls } = installFetchMock([]);
     const { container } = renderManager();
 
-    vi.mocked(window.confirm).mockReturnValue(false);
-
     fireEvent.click(screen.getByRole("button", { name: "День" }));
     fireEvent.click(dayDeleteButtons(container)[0]);
+
+    const dialog = await screen.findByRole("dialog");
+    fireEvent.click(within(dialog).getByRole("button", { name: "Отмена" }));
 
     expect(calls).toHaveLength(0);
     expect(screen.getByText("Алгебра-1")).toBeTruthy();
   });
 
-  it("alerts with the API message when deleting fails", async () => {
+  it("alerts inline with the API message when deleting fails", async () => {
     installFetchMock([
       {
         match: "/api/tenant/schedule",
@@ -498,23 +504,25 @@ describe("ScheduleManager (UI)", () => {
 
     fireEvent.click(screen.getByRole("button", { name: "День" }));
     fireEvent.click(dayDeleteButtons(container)[0]);
+    const dialog = await screen.findByRole("dialog");
+    fireEvent.click(within(dialog).getByRole("button", { name: "Удалить" }));
 
-    await waitFor(() => expect(window.alert).toHaveBeenCalledWith("Нельзя удалить"));
+    expect(await screen.findByText("Нельзя удалить")).toBeTruthy();
+    expect(window.alert).not.toHaveBeenCalled();
     expect(screen.getByText("Алгебра-1")).toBeTruthy();
   });
 
-  it("reports a delete network failure with the raw error message", async () => {
+  it("reports a delete network failure inline with the raw error message", async () => {
     installFetchMock([]); // delete request throws inside the mock
     const { container } = renderManager();
 
     fireEvent.click(screen.getByRole("button", { name: "День" }));
     fireEvent.click(dayDeleteButtons(container)[0]);
+    const dialog = await screen.findByRole("dialog");
+    fireEvent.click(within(dialog).getByRole("button", { name: "Удалить" }));
 
-    await waitFor(() =>
-      expect(window.alert).toHaveBeenCalledWith(
-        expect.stringContaining("Unhandled fetch: DELETE"),
-      ),
-    );
+    expect(await screen.findByText(/Unhandled fetch: DELETE/)).toBeTruthy();
+    expect(window.alert).not.toHaveBeenCalled();
     expect(screen.getByText("Алгебра-1")).toBeTruthy();
   });
 

@@ -289,13 +289,13 @@ describe("Stage D4: Director Dashboard, Settings, Audit & Security", () => {
           "Content-Type": "application/json",
           Authorization: `Bearer ${directorAToken}`,
         },
-        body: JSON.stringify({ secret, code: validCode }),
+        body: JSON.stringify({ secret, code: validCode, password: "Password123!" }),
       });
       const verifyRes = await post2fa(verifyReq);
       expect(verifyRes.status).toBe(200);
       const verifyData = await verifyRes.json();
       expect(verifyData.enabled).toBe(true);
-      expect(verifyData.backupCodes).toHaveLength(8);
+      expect(verifyData.backupCodes).toHaveLength(10);
 
       // 3. User attempts login without 2FA code
       const dirA = await db.platformUser.findUnique({ where: { id: directorAUserId } });

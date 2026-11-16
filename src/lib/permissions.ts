@@ -87,6 +87,7 @@ export type Permission =
   // Payments
   | "payments.read"
   | "payments.manage"
+  | "payments.discount"
   | "payments.refund"
   // Finance Accounting
   | "finance.read"
@@ -201,7 +202,7 @@ const PLATFORM_ROLE_PERMISSIONS: Record<PlatformRole, Permission[]> = {
     "groups.read", "groups.create", "groups.manage",
     "courses.read", "courses.create", "courses.manage",
     "schedule.read", "schedule.create", "schedule.manage",
-    "payments.read", "payments.manage", "payments.refund",
+    "payments.read", "payments.manage", "payments.discount", "payments.refund",
     "finance.read", "finance.write", "finance.storno", "finance.period.close", "finance.export",
     "reports.read", "reports.export",
     "users.read", "users.create", "users.update", "users.reset_password", "users.manage", "users.block",
@@ -305,7 +306,7 @@ const CENTER_ROLE_PERMISSIONS: Record<CenterRole, Permission[]> = {
     "groups.read", "groups.create", "groups.manage",
     "courses.read", "courses.create", "courses.manage",
     "schedule.read", "schedule.create", "schedule.manage",
-    "payments.read", "payments.manage", "payments.refund",
+    "payments.read", "payments.manage", "payments.discount", "payments.refund",
     "finance.read", "finance.write", "finance.storno", "finance.period.close", "finance.export",
     "reports.read", "reports.export",
     "users.read", "users.create", "users.update", "users.reset_password", "users.manage", "users.block",
@@ -326,7 +327,7 @@ const CENTER_ROLE_PERMISSIONS: Record<CenterRole, Permission[]> = {
     "groups.read", "groups.create", "groups.manage",
     "courses.read", "courses.create", "courses.manage",
     "schedule.read", "schedule.create", "schedule.manage",
-    "payments.read", "payments.manage",
+    "payments.read", "payments.manage", "payments.discount",
     "finance.read", "finance.write",
     "reports.read", "reports.export",
     "users.read", "users.create", "users.update", "users.reset_password", "users.manage",
@@ -460,7 +461,7 @@ export const CENTER_PERMISSIONS = [
   "groups.read", "groups.create", "groups.manage",
   "courses.read", "courses.create", "courses.manage",
   "schedule.read", "schedule.create", "schedule.manage",
-  "payments.read", "payments.manage", "payments.refund",
+  "payments.read", "payments.manage", "payments.discount", "payments.refund",
   "finance.read", "finance.write", "finance.storno", "finance.period.close", "finance.export",
   "reports.read", "reports.export",
   "users.read", "users.create", "users.manage", "users.block",
@@ -544,4 +545,68 @@ export function hasResourcePermission(
   if (!mappedPermission) return false;
   return hasPermission(mappedPermission, platformRole, centerRole);
 }
+
+// -----------------------------------------------------------------------
+// Unified Role Assignment Matrix (S1.2 / R3)
+// -----------------------------------------------------------------------
+export const VALID_CENTER_ROLES: CenterRole[] = [
+  "DIRECTOR",
+  "CENTER_ADMIN",
+  "ACCOUNTANT",
+  "TEACHER",
+  "TEACHER_ASSISTANT",
+  "CENTER_SUPPORT",
+  "STUDENT",
+  "PARENT",
+];
+
+export const ASSIGNABLE_CENTER_ROLES: Record<string, CenterRole[]> = {
+  DEVELOPER: [...VALID_CENTER_ROLES],
+  SUPERADMIN: [...VALID_CENTER_ROLES],
+  DIRECTOR: [...VALID_CENTER_ROLES],
+  CENTER_ADMIN: ["TEACHER", "TEACHER_ASSISTANT", "CENTER_SUPPORT", "STUDENT", "PARENT"],
+  ACCOUNTANT: [],
+  TEACHER: [],
+  TEACHER_ASSISTANT: [],
+  CENTER_SUPPORT: [],
+  STUDENT: [],
+  PARENT: [],
+};
+
+export const ASSIGNABLE_PLATFORM_ROLES: Record<string, PlatformRole[]> = {
+  DEVELOPER: ["DEVELOPER", "SUPERADMIN", "PLATFORM_ADMIN", "FULL_ACCESS", "PLATFORM_SUPPORT", "SEO_ADMIN", "NONE"],
+  SUPERADMIN: ["PLATFORM_ADMIN", "PLATFORM_SUPPORT", "SEO_ADMIN", "NONE"],
+  PLATFORM_ADMIN: ["NONE"],
+  FULL_ACCESS: [],
+  PLATFORM_SUPPORT: [],
+  SEO_ADMIN: [],
+  NONE: [],
+};
+
+export function canAssignCenterRole(
+  actorPlatformRole: PlatformRole | string = "NONE",
+  actorCenterRole: CenterRole | string | undefined,
+  targetRole: string
+): boolean {
+  if (!VALID_CENTER_ROLES.includes(targetRole as CenterRole)) {
+    return false;
+  }
+
+  if (actorPlatformRole === "DEVELOPER" || actorPlatformRole === "SUPERADMIN") {
+    return true;
+  }
+
+  if (!actorCenterRole) return false;
+  const allowed = ASSIGNABLE_CENTER_ROLES[actorCenterRole] || [];
+  return allowed.includes(targetRole as CenterRole);
+}
+
+export function canAssignPlatformRole(
+  actorPlatformRole: PlatformRole | string = "NONE",
+  targetPlatformRole: string
+): boolean {
+  const allowed = ASSIGNABLE_PLATFORM_ROLES[actorPlatformRole] || [];
+  return allowed.includes(targetPlatformRole as PlatformRole);
+}
+
 

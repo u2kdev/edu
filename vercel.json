@@ -5,12 +5,20 @@
       "schedule": "*/5 * * * *"
     },
     {
+      "path": "/api/cron/click-reconcile",
+      "schedule": "*/15 * * * *"
+    },
+    {
       "path": "/api/cron/cleanup",
       "schedule": "0 4 * * *"
     },
     {
       "path": "/api/cron/subscriptions",
       "schedule": "0 3 * * *"
+    },
+    {
+      "path": "/api/cron/payment-reminders",
+      "schedule": "0 * * * *"
     }
   ]
 }

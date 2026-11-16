@@ -150,9 +150,9 @@ describe("ACC-1 Item 2: CenterPayment <-> FinanceTransaction Idempotent Sync & R
       }),
     ]);
 
-    const nonNull = results.filter(Boolean);
+    const nonNull = results.filter((r): r is NonNullable<typeof r> => Boolean(r));
     expect(nonNull.length).toBe(5);
-    const uniqueTxIds = new Set(nonNull.map((r) => r!.id));
+    const uniqueTxIds = new Set(nonNull.map((r) => r.id));
     expect(uniqueTxIds.size).toBe(1);
 
     const txsInDb = await tenantDb.financeTransaction.findMany({
@@ -204,9 +204,9 @@ describe("ACC-1 Item 2: CenterPayment <-> FinanceTransaction Idempotent Sync & R
       }),
     ]);
 
-    const nonNull = refundResults.filter(Boolean);
+    const nonNull = refundResults.filter((r): r is NonNullable<typeof r> => Boolean(r));
     expect(nonNull.length).toBe(3);
-    const uniqueReversalIds = new Set(nonNull.map((r) => r!.id));
+    const uniqueReversalIds = new Set(nonNull.map((r) => r.id));
     expect(uniqueReversalIds.size).toBe(1);
 
     const reversals = await tenantDb.financeTransaction.findMany({

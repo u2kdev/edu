@@ -5,9 +5,22 @@ import {
   FinanceTransactionType,
   MembershipRole,
   PaymentMethod,
+  Prisma,
 } from "@prisma/client";
 import { db } from "./db";
 import { getTenantDb } from "./db-tenant";
+import { invalidateFinanceReportCache } from "./finance-reports-cache";
+import { calculateStudentDebtsSummary } from "./billing";
+import { roundUzs } from "./money";
+
+type TenantFinanceClient = ReturnType<typeof getTenantDb>;
+
+function resolveFinanceClient(centerId: string, tx?: Prisma.TransactionClient): TenantFinanceClient {
+  if (tx) {
+    return tx as unknown as TenantFinanceClient;
+  }
+  return getTenantDb(centerId);
+}
 
 export const TASHKENT_OFFSET_MS = 5 * 3600 * 1000;
 
@@ -46,10 +59,14 @@ export function getTashkentMonthBounds(year: number, month: number): {
 /**
  * Checks whether the given date falls into a CLOSED FinancePeriod for the center.
  */
-export async function isDateInClosedPeriod(centerId: string, date: Date): Promise<boolean> {
-  const tenantDb = getTenantDb(centerId);
+export async function isDateInClosedPeriod(
+  centerId: string,
+  date: Date,
+  tx?: Prisma.TransactionClient
+): Promise<boolean> {
+  const client = resolveFinanceClient(centerId, tx);
   const { year, month } = getTashkentYearMonth(date);
-  const closed = await tenantDb.financePeriod.findFirst({
+  const closed = await client.financePeriod.findFirst({
     where: {
       centerId,
       status: "CLOSED",
@@ -156,16 +173,16 @@ export async function calculateAccountBalance(
     }),
   ]);
 
-  const inc = (incomeNormal._sum.amount ?? 0) - (incomeReversed._sum.amount ?? 0);
-  const exp = (expenseNormal._sum.amount ?? 0) - (expenseReversed._sum.amount ?? 0);
+  const inc = roundUzs(incomeNormal._sum.amount) - roundUzs(incomeReversed._sum.amount);
+  const exp = roundUzs(expenseNormal._sum.amount) - roundUzs(expenseReversed._sum.amount);
   const trOut =
-    (transferOutLegNormal._sum.amount ?? 0) -
-    (transferOutLegReversed._sum.amount ?? 0) +
-    ((transferLegacyOutNormal._sum.amount ?? 0) - (transferLegacyOutReversed._sum.amount ?? 0));
+    roundUzs(transferOutLegNormal._sum.amount) -
+    roundUzs(transferOutLegReversed._sum.amount) +
+    (roundUzs(transferLegacyOutNormal._sum.amount) - roundUzs(transferLegacyOutReversed._sum.amount));
   const trIn =
-    (transferInLegNormal._sum.amount ?? 0) -
-    (transferInLegReversed._sum.amount ?? 0) +
-    ((transferLegacyInNormal._sum.amount ?? 0) - (transferLegacyInReversed._sum.amount ?? 0));
+    roundUzs(transferInLegNormal._sum.amount) -
+    roundUzs(transferInLegReversed._sum.amount) +
+    (roundUzs(transferLegacyInNormal._sum.amount) - roundUzs(transferLegacyInReversed._sum.amount));
 
   return inc - exp - trOut + trIn;
 }
@@ -310,8 +327,10 @@ export interface RecordFinanceTransactionInput {
   courseId?: string | null;
   branchId?: string | null;
   centerPaymentId?: string | null;
+  refundPaymentId?: string | null;
   lessonId?: string | null;
   createdBy: string;
+  tx?: Prisma.TransactionClient;
 }
 
 /**
@@ -324,14 +343,14 @@ export async function recordFinanceTransaction(input: RecordFinanceTransactionIn
   }
 
   const txDate = input.date ?? new Date();
-  if (await isDateInClosedPeriod(input.centerId, txDate)) {
+  if (await isDateInClosedPeriod(input.centerId, txDate, input.tx)) {
     throw new Error("Cannot record transaction in a closed finance period");
   }
 
-  const tenantDb = getTenantDb(input.centerId);
+  const client = resolveFinanceClient(input.centerId, input.tx);
 
-  const sourceAccount = await tenantDb.account.findFirst({
-    where: { id: input.accountId, isActive: true },
+  const sourceAccount = await client.account.findFirst({
+    where: { id: input.accountId, centerId: input.centerId, isActive: true },
   });
   if (!sourceAccount) {
     throw new Error("Source account not found or inactive in this center");
@@ -352,10 +371,11 @@ export async function recordFinanceTransaction(input: RecordFinanceTransactionIn
       branchId: input.branchId,
       createdBy: input.createdBy,
     });
+    invalidateFinanceReportCache(input.centerId);
     return transferResult.outTransaction;
   } else if (input.categoryId) {
-    const category = await tenantDb.financeCategory.findFirst({
-      where: { id: input.categoryId, isActive: true },
+    const category = await client.financeCategory.findFirst({
+      where: { id: input.categoryId, centerId: input.centerId, isActive: true },
     });
     if (!category) {
       throw new Error("Finance category not found or inactive in this center");
@@ -365,7 +385,7 @@ export async function recordFinanceTransaction(input: RecordFinanceTransactionIn
     }
   }
 
-  const created = await tenantDb.financeTransaction.create({
+  const created = await client.financeTransaction.create({
     data: {
       centerId: input.centerId,
       type: input.type,
@@ -382,13 +402,14 @@ export async function recordFinanceTransaction(input: RecordFinanceTransactionIn
       courseId: input.courseId ?? null,
       branchId: input.branchId ?? null,
       centerPaymentId: input.centerPaymentId ?? null,
+      refundPaymentId: input.refundPaymentId ?? null,
       lessonId: input.lessonId ?? null,
       isReversal: false,
       createdBy: input.createdBy,
     },
   });
 
-  await tenantDb.auditLog.create({
+  await client.auditLog.create({
     data: {
       centerId: input.centerId,
       actorUserId: input.createdBy,
@@ -403,10 +424,12 @@ export async function recordFinanceTransaction(input: RecordFinanceTransactionIn
         targetAccountId: created.targetAccountId,
         categoryId: created.categoryId,
         centerPaymentId: created.centerPaymentId,
+        refundPaymentId: created.refundPaymentId,
       }),
     },
   });
 
+  invalidateFinanceReportCache(input.centerId);
   return created;
 }
 
@@ -416,6 +439,7 @@ export interface ReverseFinanceTransactionInput {
   reason: string;
   actorUserId: string;
   date?: Date;
+  tx?: Prisma.TransactionClient;
 }
 
 /**
@@ -428,9 +452,9 @@ export async function reverseFinanceTransaction(input: ReverseFinanceTransaction
     throw new Error("Reversal reason is required (minimum 3 characters)");
   }
 
-  const tenantDb = getTenantDb(input.centerId);
-  const original = await tenantDb.financeTransaction.findFirst({
-    where: { id: input.transactionId },
+  const client = resolveFinanceClient(input.centerId, input.tx);
+  const original = await client.financeTransaction.findFirst({
+    where: { id: input.transactionId, centerId: input.centerId },
   });
 
   if (!original) {
@@ -440,26 +464,27 @@ export async function reverseFinanceTransaction(input: ReverseFinanceTransaction
     throw new Error("Cannot reverse a transaction that is already a reversal (storno)");
   }
 
-  const existingReversal = await tenantDb.financeTransaction.findFirst({
-    where: { reversalOfId: original.id },
+  const existingReversal = await client.financeTransaction.findFirst({
+    where: { centerId: input.centerId, reversalOfId: original.id },
   });
   if (existingReversal) {
     throw new Error("Transaction has already been reversed (already reversed)");
   }
 
   const reversalDate = input.date ?? new Date();
-  if (await isDateInClosedPeriod(input.centerId, original.date)) {
+  if (await isDateInClosedPeriod(input.centerId, original.date, input.tx)) {
     throw new Error("Cannot reverse transaction belonging to a closed finance period");
   }
-  if (await isDateInClosedPeriod(input.centerId, reversalDate)) {
+  if (await isDateInClosedPeriod(input.centerId, reversalDate, input.tx)) {
     throw new Error("Cannot record reversal in a closed finance period");
   }
 
   let reversal;
   try {
     if (original.type === "TRANSFER" && original.transferGroupId) {
-      const sibling = await tenantDb.financeTransaction.findFirst({
+      const sibling = await client.financeTransaction.findFirst({
         where: {
+          centerId: input.centerId,
           transferGroupId: original.transferGroupId,
           id: { not: original.id },
           isReversal: false,
@@ -467,12 +492,12 @@ export async function reverseFinanceTransaction(input: ReverseFinanceTransaction
       });
       const reversalGroupId = crypto.randomUUID();
 
-      reversal = await db.$transaction(async (tx) => {
-        const revPrimary = await tx.financeTransaction.create({
-          data: {
-            centerId: input.centerId,
-            type: original.type,
-            amount: original.amount,
+      const createPair = async (txClient: Prisma.TransactionClient) => {
+      const revPrimary = await txClient.financeTransaction.create({
+        data: {
+          centerId: input.centerId,
+          type: original.type,
+          amount: roundUzs(original.amount),
             currency: original.currency,
             accountId: original.accountId,
             targetAccountId: original.targetAccountId,
@@ -490,11 +515,11 @@ export async function reverseFinanceTransaction(input: ReverseFinanceTransaction
         });
 
         if (sibling) {
-          await tx.financeTransaction.create({
+          await txClient.financeTransaction.create({
             data: {
               centerId: input.centerId,
               type: sibling.type,
-              amount: sibling.amount,
+              amount: roundUzs(sibling.amount),
               currency: sibling.currency,
               accountId: sibling.accountId,
               targetAccountId: sibling.targetAccountId,
@@ -513,13 +538,15 @@ export async function reverseFinanceTransaction(input: ReverseFinanceTransaction
         }
 
         return revPrimary;
-      });
+      };
+
+      reversal = input.tx ? await createPair(input.tx) : await db.$transaction(createPair);
     } else {
-      reversal = await tenantDb.financeTransaction.create({
+      reversal = await client.financeTransaction.create({
         data: {
           centerId: input.centerId,
           type: original.type,
-          amount: original.amount,
+          amount: roundUzs(original.amount),
           currency: original.currency,
           accountId: original.accountId,
           targetAccountId: original.targetAccountId,
@@ -548,7 +575,7 @@ export async function reverseFinanceTransaction(input: ReverseFinanceTransaction
     throw err;
   }
 
-  await tenantDb.auditLog.create({
+  await client.auditLog.create({
     data: {
       centerId: input.centerId,
       actorUserId: input.actorUserId,
@@ -564,6 +591,7 @@ export async function reverseFinanceTransaction(input: ReverseFinanceTransaction
     },
   });
 
+  invalidateFinanceReportCache(input.centerId);
   return reversal;
 }
 
@@ -644,9 +672,10 @@ export async function closeFinancePeriod(input: CloseFinancePeriodInput) {
  */
 export async function ensureDefaultPaymentAccountAndCategory(
   centerId: string,
-  method?: PaymentMethod | null
+  method?: PaymentMethod | null,
+  tx?: Prisma.TransactionClient
 ): Promise<{ accountId: string; categoryId: string }> {
-  const tenantDb = getTenantDb(centerId);
+  const client = resolveFinanceClient(centerId, tx);
 
   const targetAccountType: AccountType =
     method === "BANK_TRANSFER" ? "BANK" : method === "ONLINE" ? "CARD" : "CASH";
@@ -658,54 +687,54 @@ export async function ensureDefaultPaymentAccountAndCategory(
         ? "Терминал / Онлайн (Карта)"
         : "Основная касса (Наличные)";
 
-  let account = await tenantDb.account.findFirst({
-    where: { type: targetAccountType, isActive: true },
+  let account = await client.account.findFirst({
+    where: { centerId, type: targetAccountType, isActive: true },
     orderBy: [{ isDefault: "desc" }, { createdAt: "asc" }],
   });
 
   if (!account) {
-    try {
-      account = await tenantDb.account.create({
-        data: {
+    await client.account.createMany({
+      data: [
+        {
           centerId,
           name: defaultAccountName,
           type: targetAccountType,
           currency: Currency.UZS,
           isDefault: true,
         },
-      });
-    } catch {
-      account = await tenantDb.account.findFirst({
-        where: { name: defaultAccountName },
-      });
-    }
+      ],
+      skipDuplicates: true,
+    });
+    account = await client.account.findFirst({
+      where: { centerId, name: defaultAccountName },
+    });
   }
 
-  let category = await tenantDb.financeCategory.findFirst({
-    where: { type: "INCOME", isActive: true, code: "TUITION" },
+  let category = await client.financeCategory.findFirst({
+    where: { centerId, type: "INCOME", isActive: true, code: "TUITION" },
   });
 
   if (!category) {
-    category = await tenantDb.financeCategory.findFirst({
-      where: { type: "INCOME", name: "Оплата за обучение" },
+    category = await client.financeCategory.findFirst({
+      where: { centerId, type: "INCOME", name: "Оплата за обучение" },
     });
   }
 
   if (!category) {
-    try {
-      category = await tenantDb.financeCategory.create({
-        data: {
+    await client.financeCategory.createMany({
+      data: [
+        {
           centerId,
           name: "Оплата за обучение",
           type: "INCOME",
           code: "TUITION",
         },
-      });
-    } catch {
-      category = await tenantDb.financeCategory.findFirst({
-        where: { type: "INCOME", name: "Оплата за обучение" },
-      });
-    }
+      ],
+      skipDuplicates: true,
+    });
+    category = await client.financeCategory.findFirst({
+      where: { centerId, type: "INCOME", name: "Оплата за обучение" },
+    });
   }
 
   if (!account || !category) {
@@ -715,12 +744,48 @@ export async function ensureDefaultPaymentAccountAndCategory(
   return { accountId: account.id, categoryId: category.id };
 }
 
+export async function ensureDefaultRefundCategory(
+  centerId: string,
+  tx?: Prisma.TransactionClient
+): Promise<string> {
+  const client = resolveFinanceClient(centerId, tx);
+  let category = await client.financeCategory.findFirst({
+    where: { centerId, type: "EXPENSE", isActive: true, code: "REFUND" },
+  });
+  if (!category) {
+    category = await client.financeCategory.findFirst({
+      where: { centerId, type: "EXPENSE", name: "Возвраты ученикам" },
+    });
+  }
+  if (!category) {
+    await client.financeCategory.createMany({
+      data: [
+        {
+          centerId,
+          name: "Возвраты ученикам",
+          type: "EXPENSE",
+          code: "REFUND",
+        },
+      ],
+      skipDuplicates: true,
+    });
+    category = await client.financeCategory.findFirst({
+      where: { centerId, type: "EXPENSE", name: "Возвраты ученикам" },
+    });
+  }
+  if (!category) {
+    throw new Error("Failed to resolve refund category for center");
+  }
+  return category.id;
+}
+
 export interface SyncCenterPaymentInput {
   centerId: string;
   paymentId: string;
   actorUserId: string;
   accountId?: string;
   categoryId?: string;
+  tx?: Prisma.TransactionClient;
 }
 
 /**
@@ -728,17 +793,17 @@ export interface SyncCenterPaymentInput {
  * Protected against race conditions (Promise.all) by the unique constraint @@unique([centerPaymentId, isReversal]).
  */
 export async function syncCenterPaymentToFinance(input: SyncCenterPaymentInput) {
-  const tenantDb = getTenantDb(input.centerId);
+  const client = resolveFinanceClient(input.centerId, input.tx);
 
-  const existing = await tenantDb.financeTransaction.findFirst({
-    where: { centerPaymentId: input.paymentId, isReversal: false },
+  const existing = await client.financeTransaction.findFirst({
+    where: { centerId: input.centerId, centerPaymentId: input.paymentId, isReversal: false },
   });
   if (existing) {
     return existing;
   }
 
-  const payment = await tenantDb.centerPayment.findFirst({
-    where: { id: input.paymentId },
+  const payment = await client.centerPayment.findFirst({
+    where: { id: input.paymentId, centerId: input.centerId },
     include: {
       student: {
         include: { user: { select: { fullName: true } } },
@@ -757,12 +822,16 @@ export async function syncCenterPaymentToFinance(input: SyncCenterPaymentInput) 
     return null;
   }
 
-  const intAmount = Math.round(payment.amount);
+  const intAmount = roundUzs(payment.amount);
   if (intAmount <= 0) {
     return null;
   }
 
-  const defaults = await ensureDefaultPaymentAccountAndCategory(input.centerId, payment.paymentMethod);
+  const defaults = await ensureDefaultPaymentAccountAndCategory(
+    input.centerId,
+    payment.paymentMethod,
+    input.tx
+  );
   const accountId = input.accountId ?? defaults.accountId;
   const categoryId = input.categoryId ?? defaults.categoryId;
 
@@ -782,13 +851,16 @@ export async function syncCenterPaymentToFinance(input: SyncCenterPaymentInput) 
       branchId: payment.group?.branchId ?? null,
       centerPaymentId: payment.id,
       createdBy: input.actorUserId,
+      tx: input.tx,
     });
   } catch (err: unknown) {
-    const raced = await tenantDb.financeTransaction.findFirst({
-      where: { centerPaymentId: input.paymentId, isReversal: false },
-    });
-    if (raced) {
-      return raced;
+    if (!input.tx) {
+      const raced = await client.financeTransaction.findFirst({
+        where: { centerId: input.centerId, centerPaymentId: input.paymentId, isReversal: false },
+      });
+      if (raced) {
+        return raced;
+      }
     }
     throw err;
   }
@@ -799,23 +871,24 @@ export interface SyncCenterPaymentRefundInput {
   paymentId: string;
   actorUserId: string;
   reason?: string;
+  tx?: Prisma.TransactionClient;
 }
 
 /**
  * Idempotently creates a reversal (storno) FinanceTransaction when a CenterPayment is REFUNDED.
  */
 export async function syncCenterPaymentRefundToFinance(input: SyncCenterPaymentRefundInput) {
-  const tenantDb = getTenantDb(input.centerId);
+  const client = resolveFinanceClient(input.centerId, input.tx);
 
-  const existingReversal = await tenantDb.financeTransaction.findFirst({
-    where: { centerPaymentId: input.paymentId, isReversal: true },
+  const existingReversal = await client.financeTransaction.findFirst({
+    where: { centerId: input.centerId, centerPaymentId: input.paymentId, isReversal: true },
   });
   if (existingReversal) {
     return existingReversal;
   }
 
-  const originalIncome = await tenantDb.financeTransaction.findFirst({
-    where: { centerPaymentId: input.paymentId, isReversal: false },
+  const originalIncome = await client.financeTransaction.findFirst({
+    where: { centerId: input.centerId, centerPaymentId: input.paymentId, isReversal: false },
   });
   if (!originalIncome) {
     return null;
@@ -827,13 +900,16 @@ export async function syncCenterPaymentRefundToFinance(input: SyncCenterPaymentR
       transactionId: originalIncome.id,
       reason: input.reason?.trim() || "Возврат оплаты студенту",
       actorUserId: input.actorUserId,
+      tx: input.tx,
     });
   } catch (err: unknown) {
-    const raced = await tenantDb.financeTransaction.findFirst({
-      where: { centerPaymentId: input.paymentId, isReversal: true },
-    });
-    if (raced) {
-      return raced;
+    if (!input.tx) {
+      const raced = await client.financeTransaction.findFirst({
+        where: { centerId: input.centerId, centerPaymentId: input.paymentId, isReversal: true },
+      });
+      if (raced) {
+        return raced;
+      }
     }
     throw err;
   }
@@ -931,7 +1007,7 @@ export async function disburseTeacherSalaries(input: DisburseTeacherSalariesInpu
       if (paidLessonIds.has(lesson.id)) continue;
 
       const durationMin = lesson.durationMinutes || 60;
-      const lessonAmount = Math.round((durationMin * rate.amount) / 60);
+      const lessonAmount = roundUzs((durationMin * rate.amount) / 60);
       if (lessonAmount <= 0) continue;
 
       try {
@@ -979,108 +1055,6 @@ export interface StudentDebtSummary {
   totalStudents: number;
 }
 
-export async function calculateStudentDebts(centerId: string): Promise<{
-  debts: Array<{
-    studentId: string;
-    fullName: string;
-    phone: string | null;
-    email: string;
-    monthlyTuition: number;
-    totalDue: number;
-    totalPaid: number;
-    balance: number;
-    debtAmount: number;
-    status: "DEBT" | "PAID" | "OVERPAID";
-  }>;
-  summary: StudentDebtSummary;
-}> {
-  const tenantDb = getTenantDb(centerId);
-  const students = await tenantDb.centerMembership.findMany({
-    where: {
-      centerId,
-      role: "STUDENT",
-      status: "ACTIVE",
-    },
-    include: {
-      user: {
-        select: {
-          id: true,
-          fullName: true,
-          phone: true,
-          email: true,
-        },
-      },
-      enrollments: {
-        where: { status: "ACTIVE" },
-        include: {
-          group: {
-            include: {
-              course: {
-                select: { id: true, title: true, priceMonthly: true },
-              },
-            },
-          },
-        },
-      },
-      payments: {
-        where: {
-          status: { in: ["PAID", "PARTIALLY_PAID"] },
-        },
-        select: {
-          amount: true,
-        },
-      },
-    },
-  });
-
-  const now = new Date();
-
-  const debts = students.map((s) => {
-    const monthlyTuition = s.enrollments.reduce(
-      (sum, e) => sum + (e.group.course?.priceMonthly || 0),
-      0
-    );
-
-    const joinedDate = new Date(s.joinedAt);
-    const monthsEnrolled = Math.max(
-      1,
-      (now.getFullYear() - joinedDate.getFullYear()) * 12 +
-        (now.getMonth() - joinedDate.getMonth()) +
-        1
-    );
-
-    const totalDue = monthlyTuition * monthsEnrolled;
-    const totalPaid = s.payments.reduce((sum, p) => sum + Math.round(p.amount), 0);
-    const balance = totalPaid - totalDue;
-    const debtAmount = balance < 0 ? Math.abs(balance) : 0;
-
-    let status: "DEBT" | "PAID" | "OVERPAID" = "PAID";
-    if (balance < 0) status = "DEBT";
-    else if (balance > 0) status = "OVERPAID";
-
-    return {
-      studentId: s.id,
-      fullName: s.user.fullName,
-      phone: s.user.phone,
-      email: s.user.email,
-      monthlyTuition,
-      totalDue,
-      totalPaid,
-      balance,
-      debtAmount,
-      status,
-    };
-  });
-
-  const debtItems = debts.filter((d) => d.status === "DEBT");
-  const totalDebt = debtItems.reduce((sum, d) => sum + d.debtAmount, 0);
-
-  return {
-    debts,
-    summary: {
-      totalDebt,
-      debtorsCount: debtItems.length,
-      totalStudents: students.length,
-    },
-  };
+export async function calculateStudentDebts(centerId: string) {
+  return calculateStudentDebtsSummary(centerId);
 }

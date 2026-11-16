@@ -12,6 +12,15 @@ export default async function CenterInvitesPage() {
   const centerId = session.activeCenterId;
   if (!centerId) redirect("/center");
 
+  const canManageInvites =
+    tenantCtx.isPlatformStaff ||
+    session.activeCenterRole === "DIRECTOR" ||
+    session.activeCenterRole === "CENTER_ADMIN";
+
+  if (!canManageInvites) {
+    redirect("/center");
+  }
+
   const invites = await tenantCtx.getTenantDb().inviteCode.findMany({
     where: { centerId },
     include: {

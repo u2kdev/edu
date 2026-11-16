@@ -1,19 +1,21 @@
 "use client";
 
 import React, { useState, useEffect, useCallback } from "react";
-import Link from "next/link";
+import { Laptop, Lock, LogOut, RefreshCw, Unlock } from "lucide-react";
 import {
-  ShieldAlert,
-  Users,
-  Activity,
-  Lock,
-  Unlock,
-  AlertTriangle,
-  RefreshCw,
-  LogOut,
-  Laptop,
-  CheckCircle2,
-} from "lucide-react";
+  Alert,
+  AlertDescription,
+  Badge,
+  Button,
+  ConfirmDialog,
+  DataTable,
+  type DataTableColumn,
+  PageHeader,
+  StatCard,
+  Tabs,
+  TabsList,
+  TabsTrigger,
+} from "@/components/ui";
 
 interface SecurityStats {
   activeSessionsCount: number;
@@ -67,8 +69,10 @@ export default function PlatformSecurityPage() {
   const [blockedAccounts, setBlockedAccounts] = useState<BlockedAccountItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [actionError, setActionError] = useState<string | null>(null);
   const [activeTab, setActiveTab] = useState<"sessions" | "attempts" | "blocked">("sessions");
 
+  const [pendingRevokeId, setPendingRevokeId] = useState<string | null>(null);
   const [revokingId, setRevokingId] = useState<string | null>(null);
   const [resettingId, setResettingId] = useState<string | null>(null);
 
@@ -97,28 +101,31 @@ export default function PlatformSecurityPage() {
     fetchSecurityData();
   }, [fetchSecurityData]);
 
-  const handleRevokeSession = async (sessionId: string) => {
-    if (!confirm("Принудительно завершить эту сессию пользователя?")) return;
-    setRevokingId(sessionId);
+  const confirmRevokeSession = async () => {
+    if (!pendingRevokeId) return;
+    setRevokingId(pendingRevokeId);
+    setActionError(null);
     try {
-      const res = await fetch(`/api/platform/security/sessions/${sessionId}/revoke`, {
+      const res = await fetch(`/api/platform/security/sessions/${pendingRevokeId}/revoke`, {
         method: "POST",
       });
       if (res.ok) {
         fetchSecurityData();
       } else {
         const d = await res.json();
-        alert(d.error || "Ошибка завершения сессии");
+        setActionError(d.error || "Ошибка завершения сессии");
       }
     } catch {
-      alert("Ошибка сети");
+      setActionError("Ошибка сети");
     } finally {
       setRevokingId(null);
+      setPendingRevokeId(null);
     }
   };
 
   const handleResetLockout = async (id: string) => {
     setResettingId(id);
+    setActionError(null);
     try {
       const res = await fetch("/api/platform/security/reset-lockout", {
         method: "POST",
@@ -129,337 +136,280 @@ export default function PlatformSecurityPage() {
         fetchSecurityData();
       } else {
         const d = await res.json();
-        alert(d.error || "Ошибка сброса блокировки");
+        setActionError(d.error || "Ошибка сброса блокировки");
       }
     } catch {
-      alert("Ошибка сети");
+      setActionError("Ошибка сети");
     } finally {
       setResettingId(null);
     }
   };
 
+  const sessionColumns: DataTableColumn<ActiveSessionItem>[] = [
+    {
+      id: "user",
+      header: "Пользователь",
+      isMobilePrimary: true,
+      cell: (s) => (
+        <div>
+          <div className="font-medium text-foreground">{s.user.fullName}</div>
+          <div className="text-xs text-muted-foreground">{s.user.email}</div>
+        </div>
+      ),
+    },
+    {
+      id: "ip",
+      header: "IP-адрес",
+      cell: (s) => <span className="font-mono text-xs text-muted-foreground">{s.ipAddress || "—"}</span>,
+    },
+    {
+      id: "agent",
+      header: "Устройство / Браузер",
+      hideOnMobile: true,
+      cell: (s) => (
+        <span className="inline-flex max-w-xs items-center gap-1.5 truncate text-xs text-muted-foreground">
+          <Laptop className="h-3.5 w-3.5 shrink-0" aria-hidden="true" />
+          <span className="truncate">{s.userAgent || "—"}</span>
+        </span>
+      ),
+    },
+    {
+      id: "lastSeen",
+      header: "Последняя активность",
+      cell: (s) => (
+        <span className="font-mono text-xs text-muted-foreground tabular-nums">
+          {new Date(s.lastSeenAt).toLocaleString("ru-RU")}
+        </span>
+      ),
+    },
+    {
+      id: "actions",
+      header: "Действие",
+      align: "right",
+      hideable: false,
+      cell: (s) => (
+        <Button
+          type="button"
+          variant="destructive"
+          size="sm"
+          onClick={() => setPendingRevokeId(s.id)}
+          disabled={revokingId === s.id}
+        >
+          <LogOut className="h-3.5 w-3.5" aria-hidden="true" />
+          <span>{revokingId === s.id ? "Выход..." : "Завершить"}</span>
+        </Button>
+      ),
+    },
+  ];
+
+  const attemptColumns: DataTableColumn<FailedLoginItem>[] = [
+    {
+      id: "email",
+      header: "Email",
+      isMobilePrimary: true,
+      cell: (item) => <span className="font-medium text-foreground">{item.email}</span>,
+    },
+    {
+      id: "ip",
+      header: "IP-адрес",
+      cell: (item) => <span className="font-mono text-xs text-muted-foreground">{item.ip}</span>,
+    },
+    {
+      id: "attempts",
+      header: "Ошибок",
+      cell: (item) => (
+        <Badge variant={item.attempts >= 5 ? "destructive" : "warning"}>{item.attempts}</Badge>
+      ),
+    },
+    {
+      id: "status",
+      header: "Статус блокировки",
+      cell: (item) => {
+        const isLocked = item.lockoutUntil && new Date(item.lockoutUntil) > new Date();
+        return isLocked ? (
+          <Badge variant="destructive">
+            <Lock className="h-3 w-3" aria-hidden="true" />
+            <span>Заблокирован до {new Date(item.lockoutUntil!).toLocaleTimeString("ru-RU")}</span>
+          </Badge>
+        ) : (
+          <span className="text-xs text-muted-foreground">Активен</span>
+        );
+      },
+    },
+    {
+      id: "updatedAt",
+      header: "Последняя попытка",
+      hideOnMobile: true,
+      cell: (item) => (
+        <span className="font-mono text-xs text-muted-foreground tabular-nums">
+          {new Date(item.updatedAt).toLocaleString("ru-RU")}
+        </span>
+      ),
+    },
+    {
+      id: "actions",
+      header: "Действие",
+      align: "right",
+      hideable: false,
+      cell: (item) => (
+        <Button
+          type="button"
+          variant="outline"
+          size="sm"
+          onClick={() => handleResetLockout(item.id)}
+          disabled={resettingId === item.id}
+        >
+          <Unlock className="h-3.5 w-3.5" aria-hidden="true" />
+          <span>{resettingId === item.id ? "Сброс..." : "Сбросить"}</span>
+        </Button>
+      ),
+    },
+  ];
+
+  const blockedColumns: DataTableColumn<BlockedAccountItem>[] = [
+    {
+      id: "user",
+      header: "Пользователь",
+      isMobilePrimary: true,
+      cell: (acc) => (
+        <div>
+          <div className="font-medium text-foreground">{acc.fullName}</div>
+          <div className="text-xs text-muted-foreground">{acc.email}</div>
+        </div>
+      ),
+    },
+    {
+      id: "phone",
+      header: "Телефон",
+      cell: (acc) => <span className="font-mono text-xs text-muted-foreground">{acc.phone || "—"}</span>,
+    },
+    {
+      id: "role",
+      header: "Роль платформы",
+      cell: (acc) => <span className="text-xs text-muted-foreground">{acc.platformRole}</span>,
+    },
+    {
+      id: "status",
+      header: "Статус",
+      cell: (acc) =>
+        acc.deletedAt ? (
+          <Badge variant="neutral">Удалён</Badge>
+        ) : (
+          <Badge variant="destructive">Заблокирован</Badge>
+        ),
+    },
+    {
+      id: "reason",
+      header: "Причина блокировки / удаления",
+      cell: (acc) => (
+        <span className="text-xs text-muted-foreground">{acc.deletedReason || "Не указана"}</span>
+      ),
+    },
+  ];
+
   return (
     <div className="space-y-6 pb-12">
-      {/* Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
-        <div className="flex items-center gap-3">
-          <div className="p-2 bg-rose-50 dark:bg-rose-900/20 rounded-lg text-rose-600 dark:text-rose-400">
-            <ShieldAlert className="w-6 h-6" />
-          </div>
-          <div>
-            <h1 className="text-2xl font-bold text-zinc-900 dark:text-zinc-100">
-              Мониторинг безопасности и сессий
-            </h1>
-            <p className="text-sm text-zinc-500 dark:text-zinc-400">
-              Контроль активных авторизаций, неудачных попыток входа и блокировок
-            </p>
-          </div>
-        </div>
-
-        <button
-          onClick={fetchSecurityData}
-          disabled={loading}
-          className="inline-flex items-center gap-2 px-3.5 py-2 text-xs font-semibold rounded-lg border border-zinc-200 dark:border-zinc-700 hover:bg-zinc-50 dark:hover:bg-zinc-800 transition"
-        >
-          <RefreshCw className={`w-3.5 h-3.5 ${loading ? "animate-spin" : ""}`} />
-          Обновить
-        </button>
-      </div>
+      <PageHeader
+        title="Мониторинг безопасности и сессий"
+        description="Контроль активных авторизаций, неудачных попыток входа и блокировок"
+        actions={
+          <Button type="button" variant="outline" size="sm" onClick={fetchSecurityData} disabled={loading}>
+            <RefreshCw className={`h-3.5 w-3.5 ${loading ? "animate-spin" : ""}`} aria-hidden="true" />
+            <span>Обновить</span>
+          </Button>
+        }
+      />
 
       {error && (
-        <div className="p-4 rounded-xl bg-red-50 dark:bg-red-900/20 text-red-700 dark:text-red-400 text-sm flex items-center gap-3">
-          <AlertTriangle className="w-5 h-5 shrink-0" />
-          {error}
-        </div>
+        <Alert variant="destructive">
+          <AlertDescription>{error}</AlertDescription>
+        </Alert>
       )}
 
-      {/* KPI Cards */}
+      {actionError && (
+        <Alert variant="destructive">
+          <AlertDescription>{actionError}</AlertDescription>
+        </Alert>
+      )}
+
       {stats && (
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-          <div className="bg-white dark:bg-zinc-900 p-5 rounded-2xl border border-zinc-200 dark:border-zinc-800 shadow-sm">
-            <div className="flex items-center justify-between">
-              <span className="text-xs font-semibold text-zinc-500 uppercase tracking-wider">
-                Активных сессий
-              </span>
-              <Activity className="w-5 h-5 text-emerald-600" />
-            </div>
-            <div className="text-2xl font-bold text-zinc-900 dark:text-zinc-100 mt-2">
-              {stats.activeSessionsCount}
-            </div>
-            <div className="text-xs text-zinc-400 mt-1">Авторизованные браузеры и приложения</div>
-          </div>
-
-          <div className="bg-white dark:bg-zinc-900 p-5 rounded-2xl border border-zinc-200 dark:border-zinc-800 shadow-sm">
-            <div className="flex items-center justify-between">
-              <span className="text-xs font-semibold text-zinc-500 uppercase tracking-wider">
-                Неудачных логинов
-              </span>
-              <AlertTriangle className="w-5 h-5 text-amber-600" />
-            </div>
-            <div className="text-2xl font-bold text-amber-600 mt-2">
-              {stats.failedAttemptsCount}
-            </div>
-            <div className="text-xs text-zinc-400 mt-1">Зафиксировано в журнале попыток</div>
-          </div>
-
-          <div className="bg-white dark:bg-zinc-900 p-5 rounded-2xl border border-zinc-200 dark:border-zinc-800 shadow-sm">
-            <div className="flex items-center justify-between">
-              <span className="text-xs font-semibold text-zinc-500 uppercase tracking-wider">
-                Временных блокировок IP
-              </span>
-              <Lock className="w-5 h-5 text-rose-600" />
-            </div>
-            <div className="text-2xl font-bold text-rose-600 mt-2">
-              {stats.lockedIpsCount}
-            </div>
-            <div className="text-xs text-zinc-400 mt-1">Превышен лимит 5 ошибок за 15 мин</div>
-          </div>
-
-          <div className="bg-white dark:bg-zinc-900 p-5 rounded-2xl border border-zinc-200 dark:border-zinc-800 shadow-sm">
-            <div className="flex items-center justify-between">
-              <span className="text-xs font-semibold text-zinc-500 uppercase tracking-wider">
-                Заблокировано аккаунтов
-              </span>
-              <Users className="w-5 h-5 text-zinc-500" />
-            </div>
-            <div className="text-2xl font-bold text-zinc-900 dark:text-zinc-100 mt-2">
-              {stats.blockedUsersCount}
-            </div>
-            <div className="text-xs text-zinc-400 mt-1">Деактивировано или удалено</div>
-          </div>
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
+          <StatCard
+            label="Активных сессий"
+            value={stats.activeSessionsCount}
+            hint="Авторизованные браузеры и приложения"
+          />
+          <StatCard
+            label="Неудачных логинов"
+            value={stats.failedAttemptsCount}
+            hint="Зафиксировано в журнале попыток"
+          />
+          <StatCard
+            label="Временных блокировок IP"
+            value={stats.lockedIpsCount}
+            hint="Превышен лимит 5 ошибок за 15 мин"
+          />
+          <StatCard
+            label="Заблокировано аккаунтов"
+            value={stats.blockedUsersCount}
+            hint="Деактивировано или удалено"
+          />
         </div>
       )}
 
-      {/* Tabs */}
-      <div className="flex items-center gap-2 border-b border-zinc-200 dark:border-zinc-800 pb-2">
-        <button
-          onClick={() => setActiveTab("sessions")}
-          className={`px-4 py-2 text-xs font-semibold rounded-lg transition ${
-            activeTab === "sessions"
-              ? "bg-indigo-600 text-white shadow-sm"
-              : "text-zinc-600 dark:text-zinc-400 hover:bg-zinc-100 dark:hover:bg-zinc-800"
-          }`}
-        >
-          Активные сессии ({activeSessions.length})
-        </button>
-        <button
-          onClick={() => setActiveTab("attempts")}
-          className={`px-4 py-2 text-xs font-semibold rounded-lg transition ${
-            activeTab === "attempts"
-              ? "bg-indigo-600 text-white shadow-sm"
-              : "text-zinc-600 dark:text-zinc-400 hover:bg-zinc-100 dark:hover:bg-zinc-800"
-          }`}
-        >
-          Попытки входа и блокировки ({failedLogins.length})
-        </button>
-        <button
-          onClick={() => setActiveTab("blocked")}
-          className={`px-4 py-2 text-xs font-semibold rounded-lg transition ${
-            activeTab === "blocked"
-              ? "bg-indigo-600 text-white shadow-sm"
-              : "text-zinc-600 dark:text-zinc-400 hover:bg-zinc-100 dark:hover:bg-zinc-800"
-          }`}
-        >
-          Заблокированные аккаунты ({blockedAccounts.length})
-        </button>
-      </div>
+      <Tabs value={activeTab} onValueChange={(v) => setActiveTab(v as "sessions" | "attempts" | "blocked")}>
+        <TabsList>
+          <TabsTrigger value="sessions">
+            Активные сессии ({activeSessions.length})
+          </TabsTrigger>
+          <TabsTrigger value="attempts">
+            Попытки входа и блокировки ({failedLogins.length})
+          </TabsTrigger>
+          <TabsTrigger value="blocked">
+            Заблокированные аккаунты ({blockedAccounts.length})
+          </TabsTrigger>
+        </TabsList>
+      </Tabs>
 
-      {/* TAB 1: SESSIONS */}
       {activeTab === "sessions" && (
-        <div className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl overflow-hidden shadow-sm">
-          <div className="overflow-x-auto">
-            <table className="w-full text-xs text-left">
-              <thead className="bg-zinc-50 dark:bg-zinc-800/50 uppercase font-semibold text-zinc-500 border-b border-zinc-200 dark:border-zinc-700">
-                <tr>
-                  <th className="px-4 py-3">Пользователь</th>
-                  <th className="px-4 py-3">IP-адрес</th>
-                  <th className="px-4 py-3">Устройство / Браузер</th>
-                  <th className="px-4 py-3">Последняя активность</th>
-                  <th className="px-4 py-3 text-right">Действие</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-zinc-100 dark:divide-zinc-800">
-                {activeSessions.length === 0 ? (
-                  <tr>
-                    <td colSpan={5} className="px-4 py-8 text-center text-zinc-400">
-                      Нет активных сессий
-                    </td>
-                  </tr>
-                ) : (
-                  activeSessions.map((s) => (
-                    <tr key={s.id} className="hover:bg-zinc-50 dark:hover:bg-zinc-800/40 transition">
-                      <td className="px-4 py-3">
-                        <div className="font-semibold text-zinc-900 dark:text-zinc-100">
-                          {s.user.fullName}
-                        </div>
-                        <div className="text-zinc-400 text-[11px]">{s.user.email}</div>
-                      </td>
-                      <td className="px-4 py-3 font-mono text-zinc-600 dark:text-zinc-400">
-                        {s.ipAddress || "—"}
-                      </td>
-                      <td className="px-4 py-3 text-zinc-600 dark:text-zinc-400 max-w-xs truncate">
-                        <span className="inline-flex items-center gap-1.5">
-                          <Laptop className="w-3.5 h-3.5 text-zinc-400 shrink-0" />
-                          {s.userAgent || "—"}
-                        </span>
-                      </td>
-                      <td className="px-4 py-3 text-zinc-500 font-mono">
-                        {new Date(s.lastSeenAt).toLocaleString("ru-RU")}
-                      </td>
-                      <td className="px-4 py-3 text-right">
-                        <button
-                          onClick={() => handleRevokeSession(s.id)}
-                          disabled={revokingId === s.id}
-                          className="inline-flex items-center gap-1 px-2.5 py-1 text-[11px] font-medium text-rose-700 bg-rose-50 hover:bg-rose-100 dark:bg-rose-950/30 dark:text-rose-400 rounded-lg transition disabled:opacity-50"
-                        >
-                          <LogOut className="w-3 h-3" />
-                          {revokingId === s.id ? "Выход..." : "Завершить"}
-                        </button>
-                      </td>
-                    </tr>
-                  ))
-                )}
-              </tbody>
-            </table>
-          </div>
-        </div>
+        <DataTable
+          data={activeSessions}
+          columns={sessionColumns}
+          getRowId={(s) => s.id}
+          loading={loading}
+          emptyTitle="Нет активных сессий"
+        />
       )}
 
-      {/* TAB 2: FAILED ATTEMPTS & LOCKOUTS */}
       {activeTab === "attempts" && (
-        <div className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl overflow-hidden shadow-sm">
-          <div className="overflow-x-auto">
-            <table className="w-full text-xs text-left">
-              <thead className="bg-zinc-50 dark:bg-zinc-800/50 uppercase font-semibold text-zinc-500 border-b border-zinc-200 dark:border-zinc-700">
-                <tr>
-                  <th className="px-4 py-3">Email</th>
-                  <th className="px-4 py-3">IP-адрес</th>
-                  <th className="px-4 py-3">Число ошибок</th>
-                  <th className="px-4 py-3">Статус блокировки</th>
-                  <th className="px-4 py-3">Время последней попытки</th>
-                  <th className="px-4 py-3 text-right">Действие</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-zinc-100 dark:divide-zinc-800">
-                {failedLogins.length === 0 ? (
-                  <tr>
-                    <td colSpan={6} className="px-4 py-8 text-center text-zinc-400">
-                      Неудачных попыток входа не зафиксировано
-                    </td>
-                  </tr>
-                ) : (
-                  failedLogins.map((item) => {
-                    const isLocked = item.lockoutUntil && new Date(item.lockoutUntil) > new Date();
-                    return (
-                      <tr key={item.id} className="hover:bg-zinc-50 dark:hover:bg-zinc-800/40 transition">
-                        <td className="px-4 py-3 font-semibold text-zinc-900 dark:text-zinc-100">
-                          {item.email}
-                        </td>
-                        <td className="px-4 py-3 font-mono text-zinc-600 dark:text-zinc-400">
-                          {item.ip}
-                        </td>
-                        <td className="px-4 py-3">
-                          <span
-                            className={`inline-flex px-2 py-0.5 rounded font-semibold ${
-                              item.attempts >= 5
-                                ? "bg-rose-100 text-rose-800 dark:bg-rose-950/40 dark:text-rose-400"
-                                : "bg-amber-100 text-amber-800 dark:bg-amber-950/40 dark:text-amber-400"
-                            }`}
-                          >
-                            {item.attempts}
-                          </span>
-                        </td>
-                        <td className="px-4 py-3">
-                          {isLocked ? (
-                            <span className="inline-flex items-center gap-1 text-rose-600 font-semibold">
-                              <Lock className="w-3 h-3" /> Заблокирован до{" "}
-                              {new Date(item.lockoutUntil!).toLocaleTimeString("ru-RU")}
-                            </span>
-                          ) : (
-                            <span className="text-zinc-400">Активен</span>
-                          )}
-                        </td>
-                        <td className="px-4 py-3 text-zinc-500 font-mono">
-                          {new Date(item.updatedAt).toLocaleString("ru-RU")}
-                        </td>
-                        <td className="px-4 py-3 text-right">
-                          <button
-                            onClick={() => handleResetLockout(item.id)}
-                            disabled={resettingId === item.id}
-                            className="inline-flex items-center gap-1 px-2.5 py-1 text-[11px] font-medium text-indigo-700 bg-indigo-50 hover:bg-indigo-100 dark:bg-indigo-950/30 dark:text-indigo-400 rounded-lg transition disabled:opacity-50"
-                          >
-                            <Unlock className="w-3 h-3" />
-                            {resettingId === item.id ? "Сброс..." : "Сбросить"}
-                          </button>
-                        </td>
-                      </tr>
-                    );
-                  })
-                )}
-              </tbody>
-            </table>
-          </div>
-        </div>
+        <DataTable
+          data={failedLogins}
+          columns={attemptColumns}
+          getRowId={(a) => a.id}
+          loading={loading}
+          emptyTitle="Неудачных попыток входа не зафиксировано"
+        />
       )}
 
-      {/* TAB 3: BLOCKED ACCOUNTS */}
       {activeTab === "blocked" && (
-        <div className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl overflow-hidden shadow-sm">
-          <div className="overflow-x-auto">
-            <table className="w-full text-xs text-left">
-              <thead className="bg-zinc-50 dark:bg-zinc-800/50 uppercase font-semibold text-zinc-500 border-b border-zinc-200 dark:border-zinc-700">
-                <tr>
-                  <th className="px-4 py-3">Пользователь</th>
-                  <th className="px-4 py-3">Телефон</th>
-                  <th className="px-4 py-3">Роль платформы</th>
-                  <th className="px-4 py-3">Статус</th>
-                  <th className="px-4 py-3">Причина блокировки / удаления</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-zinc-100 dark:divide-zinc-800">
-                {blockedAccounts.length === 0 ? (
-                  <tr>
-                    <td colSpan={5} className="px-4 py-8 text-center text-zinc-400">
-                      Заблокированных аккаунтов нет
-                    </td>
-                  </tr>
-                ) : (
-                  blockedAccounts.map((acc) => (
-                    <tr key={acc.id} className="hover:bg-zinc-50 dark:hover:bg-zinc-800/40 transition">
-                      <td className="px-4 py-3">
-                        <div className="font-semibold text-zinc-900 dark:text-zinc-100">
-                          {acc.fullName}
-                        </div>
-                        <div className="text-zinc-400 text-[11px]">{acc.email}</div>
-                      </td>
-                      <td className="px-4 py-3 font-mono text-zinc-600 dark:text-zinc-400">
-                        {acc.phone || "—"}
-                      </td>
-                      <td className="px-4 py-3 text-zinc-600 dark:text-zinc-400">
-                        {acc.platformRole}
-                      </td>
-                      <td className="px-4 py-3">
-                        {acc.deletedAt ? (
-                          <span className="px-2 py-0.5 rounded bg-zinc-100 text-zinc-700 dark:bg-zinc-800 dark:text-zinc-300 font-semibold text-[10px]">
-                            УДАЛЁН
-                          </span>
-                        ) : (
-                          <span className="px-2 py-0.5 rounded bg-rose-100 text-rose-800 dark:bg-rose-950/40 dark:text-rose-400 font-semibold text-[10px]">
-                            ЗАБЛОКИРОВАН
-                          </span>
-                        )}
-                      </td>
-                      <td className="px-4 py-3 text-zinc-500">
-                        {acc.deletedReason || "Не указана"}
-                      </td>
-                    </tr>
-                  ))
-                )}
-              </tbody>
-            </table>
-          </div>
-        </div>
+        <DataTable
+          data={blockedAccounts}
+          columns={blockedColumns}
+          getRowId={(b) => b.id}
+          loading={loading}
+          emptyTitle="Заблокированных аккаунтов нет"
+        />
       )}
+
+      <ConfirmDialog
+        open={Boolean(pendingRevokeId)}
+        onOpenChange={(next) => !next && setPendingRevokeId(null)}
+        title="Завершить сессию"
+        description="Принудительно завершить эту сессию пользователя?"
+        variant="destructive"
+        loading={Boolean(revokingId)}
+        onConfirm={confirmRevokeSession}
+      />
     </div>
   );
 }

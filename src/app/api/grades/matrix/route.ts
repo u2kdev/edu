@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { requireTenantAccess } from "@/lib/tenant";
+import { assertGroupAccess, TenantAccessError } from "@/lib/tenant-access";
 
 interface GradeItem {
   id: string;
@@ -74,6 +75,14 @@ export async function GET(req: Request) {
   try {
     const tenantCtx = await requireTenantAccess(req);
     const tenantDb = tenantCtx.getTenantDb();
+
+    if (tenantCtx.role === "ACCOUNTANT" || tenantCtx.role === "CENTER_SUPPORT") {
+      return NextResponse.json(
+        { error: "Forbidden: No permission to access grade matrix" },
+        { status: 403 }
+      );
+    }
+
     const { searchParams } = new URL(req.url);
     const groupId = searchParams.get("groupId");
 
@@ -81,22 +90,7 @@ export async function GET(req: Request) {
       return NextResponse.json({ error: "groupId is required" }, { status: 400 });
     }
 
-    const group = await tenantDb.group.findFirst({
-      where: { id: groupId },
-    });
-    if (!group) {
-      return NextResponse.json({ error: "Group not found" }, { status: 404 });
-    }
-
-    // Role checks
-    if (tenantCtx.role === "TEACHER" && tenantCtx.membership) {
-      if (group.teacherMembershipId !== tenantCtx.membership.id) {
-        return NextResponse.json(
-          { error: "Forbidden: You do not teach this group" },
-          { status: 403 }
-        );
-      }
-    }
+    const group = await assertGroupAccess(tenantCtx, groupId, "read");
 
     // Fetch enrollments
     const enrollments = await tenantDb.enrollment.findMany({

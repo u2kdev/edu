@@ -4,7 +4,7 @@ import { z } from "zod";
 // eslint-disable-next-line no-restricted-imports
 import { db } from "@/lib/db";
 import { hashPassword } from "@/lib/auth";
-import { requireTenantAccess, logAuditEvent } from "@/lib/tenant";
+import { requireTenantAccess, logAuditEvent, TenantAccessError } from "@/lib/tenant";
 import { hasPermission } from "@/lib/permissions";
 import type { CenterRole } from "@/lib/permissions";
 import { generateSecurePassword } from "@/lib/generatePassword";
@@ -141,6 +141,9 @@ export async function POST(
       }
     );
   } catch (err: unknown) {
+    if (err instanceof TenantAccessError) {
+      return NextResponse.json({ error: err.message, code: err.code }, { status: err.status });
+    }
     console.error("POST /api/tenant/users/[id]/reset-password error:", err);
     return NextResponse.json({ error: "Failed to reset password" }, { status: 500 });
   }

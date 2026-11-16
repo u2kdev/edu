@@ -8,6 +8,7 @@ import { apiError, apiSuccess, handleApiError } from "@/lib/api-response";
 import { passwordResetRequestSchema } from "@/lib/validation/auth";
 import { renderEmailTemplate, sendEmailWithOutbox } from "@/lib/email";
 import { toEmailLang } from "@/lib/language";
+import { verifyTurnstileToken } from "@/lib/turnstile";
 import crypto from "crypto";
 
 export async function POST(req: Request) {
@@ -20,8 +21,25 @@ export async function POST(req: Request) {
     }
 
     const body = await req.json();
+
+    // Turnstile bot protection check (when configured)
+    const turnstileToken = (body as { turnstileToken?: string }).turnstileToken ||
+      req.headers.get("cf-turnstile-response") ||
+      req.headers.get("x-turnstile-token") || undefined;
+    if (!(await verifyTurnstileToken(turnstileToken, ip))) {
+      return apiError("Captcha verification failed", "CAPTCHA_FAILED", 400);
+    }
+
     const parsed = passwordResetRequestSchema.parse(body);
     const email = parsed.email.toLowerCase().trim();
+
+    // Recipient rate limit across rotating IPs (prevents email inbox flooding / bombing)
+    if (email) {
+      const recipientKey = `pwd_forgot_recipient:${email}`;
+      if (!(await checkRateLimit(recipientKey, 5, 60 * 60 * 1000))) {
+        return apiError("auth.rate_limited", "RATE_LIMITED", 429);
+      }
+    }
 
     // Constant-time-ish delay mitigation for email existence check
     const start = Date.now();

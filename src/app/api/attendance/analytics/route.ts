@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { requireTenantAccess } from "@/lib/tenant";
+import { assertGroupAccess, TenantAccessError } from "@/lib/tenant-access";
 import { Prisma } from "@prisma/client";
 
 export async function GET(req: Request) {
@@ -7,10 +8,21 @@ export async function GET(req: Request) {
     const tenantCtx = await requireTenantAccess(req);
     const tenantDb = tenantCtx.getTenantDb();
 
+    if (tenantCtx.role === "ACCOUNTANT" || tenantCtx.role === "CENTER_SUPPORT") {
+      return NextResponse.json(
+        { error: "Forbidden: No permission to access attendance analytics" },
+        { status: 403 }
+      );
+    }
+
     const { searchParams } = new URL(req.url);
     const groupId = searchParams.get("groupId");
     const thresholdParam = searchParams.get("threshold");
     const threshold = thresholdParam ? parseInt(thresholdParam, 10) : 80;
+
+    if (groupId) {
+      await assertGroupAccess(tenantCtx, groupId, "read");
+    }
 
     // Base where condition for attendance
     const whereCondition: Prisma.AttendanceWhereInput = {
@@ -45,6 +57,19 @@ export async function GET(req: Request) {
         enrollments: {
           some: {
             groupId: { in: teacherGroups.map((g) => g.id) },
+            status: "ACTIVE",
+          },
+        },
+      };
+    } else if (tenantCtx.role === "TEACHER_ASSISTANT" && tenantCtx.membership) {
+      const assistantGroups = await tenantDb.group.findMany({
+        where: { assistantMembershipId: tenantCtx.membership.id },
+        select: { id: true },
+      });
+      whereCondition.student = {
+        enrollments: {
+          some: {
+            groupId: { in: assistantGroups.map((g) => g.id) },
             status: "ACTIVE",
           },
         },

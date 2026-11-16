@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { requireTenantAccess } from "@/lib/tenant";
+import { calculateStudentBalances } from "@/lib/student-balance";
 
 export async function GET(req: Request) {
   try {
@@ -159,37 +160,67 @@ export async function GET(req: Request) {
     const sumScores = grades.reduce((acc, g) => acc + g.value, 0);
     const averageScore = grades.length > 0 ? Math.round((sumScores / grades.length) * 10) / 10 : null;
 
-    return NextResponse.json({
-      success: true,
-      student: {
-        membershipId: studentMembershipId,
-        fullName: tenantCtx.session.user.fullName,
-        email: tenantCtx.session.user.email,
-        centerName: tenantCtx.center.name,
+    const studentBalances = studentMembershipId
+      ? await calculateStudentBalances({
+          centerId: tenantCtx.center.id,
+          studentMembershipIds: [studentMembershipId],
+        }).catch(() => [])
+      : [];
+    const billing = studentBalances[0] ?? null;
+
+    return NextResponse.json(
+      {
+        success: true,
+        student: {
+          membershipId: studentMembershipId,
+          fullName: tenantCtx.session.user.fullName,
+          email: tenantCtx.session.user.email,
+          centerName: tenantCtx.center.name,
+        },
+        groups: enrollments.map((e) => ({
+          id: e.group.id,
+          name: e.group.name,
+          courseTitle: e.group.course?.title || null,
+        })),
+        upcomingSchedule,
+        activeHomework: formattedHomework,
+        metrics: {
+          attendancePercent,
+          totalClasses,
+          presentCount,
+          missedCount: totalClasses - presentCount,
+          averageScore,
+        },
+        recentGrades: grades.map((g) => ({
+          id: g.id,
+          score: g.value,
+          maxScore: g.maxValue,
+          lessonTitle: g.lesson?.title || null,
+          comment: g.comment,
+          createdAt: g.createdAt,
+        })),
+        billing: billing
+          ? {
+              status: billing.status,
+              debtAmount: billing.debtAmount,
+              totalPaid: billing.totalPaid,
+              earliestPaidUntil: billing.earliestPaidUntil,
+              nextPayment: billing.nextPayment,
+              enrollments: billing.enrollments.map((en) => ({
+                enrollmentId: en.enrollmentId,
+                groupId: en.groupId,
+                groupName: en.groupName,
+                status: en.status,
+                paidUntil: en.paidUntil,
+                daysRemaining: en.daysRemaining,
+                isOverdue: en.isOverdue,
+              })),
+              receipts: billing.payments.slice(0, 10),
+            }
+          : null,
       },
-      groups: enrollments.map((e) => ({
-        id: e.group.id,
-        name: e.group.name,
-        courseTitle: e.group.course?.title || null,
-      })),
-      upcomingSchedule,
-      activeHomework: formattedHomework,
-      metrics: {
-        attendancePercent,
-        totalClasses,
-        presentCount,
-        missedCount: totalClasses - presentCount,
-        averageScore,
-      },
-      recentGrades: grades.map((g) => ({
-        id: g.id,
-        score: g.value,
-        maxScore: g.maxValue,
-        lessonTitle: g.lesson?.title || null,
-        comment: g.comment,
-        createdAt: g.createdAt,
-      })),
-    });
+      { headers: { "Cache-Control": "no-store" } }
+    );
   } catch (err: unknown) {
     const error = err as { message?: string; status?: number };
     return NextResponse.json(

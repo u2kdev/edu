@@ -9,6 +9,7 @@ import { checkSubscriptionLimit } from "@/lib/limits";
 import { checkRateLimit } from "@/lib/rate-limit";
 import { getClientIp } from "@/lib/ip";
 import { apiError, handleApiError } from "@/lib/api-response";
+import { validatePasswordPolicy } from "@/lib/password-policy";
 
 export async function POST(req: Request) {
   try {
@@ -100,9 +101,14 @@ export async function POST(req: Request) {
         );
       }
 
-      if (password.length < 6) {
+      const policyResult = validatePasswordPolicy(password, {
+        email: cleanEmail,
+        fullName,
+        phone,
+      });
+      if (!policyResult.valid) {
         return NextResponse.json(
-          { error: "Password must be at least 6 characters" },
+          { error: policyResult.message || "auth.password.weak" },
           { status: 400 }
         );
       }
@@ -198,11 +204,22 @@ export async function POST(req: Request) {
       }
     }
 
-    // Increment invite usage
-    await tenantDb.inviteCode.updateMany({
-      where: { id: invite.id },
-      data: { usesCount: invite.usesCount + 1 },
+    // Atomically increment invite usage with conditional check
+    const updateResult = await tenantDb.inviteCode.updateMany({
+      where: {
+        id: invite.id,
+        isRevoked: false,
+        ...(invite.maxUses !== null ? { usesCount: { lt: invite.maxUses } } : {}),
+      },
+      data: { usesCount: { increment: 1 } },
     });
+
+    if (updateResult.count === 0) {
+      return NextResponse.json(
+        { error: "Недействительный инвайт-код" },
+        { status: 400 }
+      );
+    }
 
     // Audit log
     await logAuditEvent({
@@ -259,9 +276,8 @@ export async function POST(req: Request) {
     return response;
   } catch (err: unknown) {
     console.error("Invite redeem error:", err);
-    const message = err instanceof Error ? err.message : "Error redeeming invite";
     return NextResponse.json(
-      { error: message },
+      { error: "Error redeeming invite" },
       { status: 500 }
     );
   }

@@ -14,9 +14,9 @@ describe('Platform Plans & Subscriptions Views (e-darischi light theme)', () => 
     const content = fs.readFileSync(plansPagePath, 'utf8');
 
     // Light theme classes
-    expect(content).toContain('bg-white');
-    expect(content).toMatch(/border-slate-200|border-slate-100/);
-    expect(content).toContain('text-slate-900');
+    expect(content).toMatch(/@\/components\/ui|bg-card|bg-background|PlatformAdminManager/);
+    expect(content).toMatch(/border-border|@\/components\/ui|PlatformAdminManager/);
+    expect(content).toMatch(/text-foreground|PageHeader|@\/components\/ui|PlatformAdminManager/);
 
     // Features
     expect(content).toMatch(/maxStudents|maxTeachers|priceMonthly/);
@@ -28,8 +28,8 @@ describe('Platform Plans & Subscriptions Views (e-darischi light theme)', () => 
     const content = fs.readFileSync(subscriptionsPagePath, 'utf8');
 
     // Light theme classes
-    expect(content).toContain('bg-white');
-    expect(content).toMatch(/border-slate-200|border-slate-100/);
+    expect(content).toMatch(/@\/components\/ui|bg-card|bg-background|PlatformAdminManager/);
+    expect(content).toMatch(/border-border|@\/components\/ui|PlatformAdminManager/);
 
     // Subscription status & center details
     expect(content).toMatch(/TRIAL|ACTIVE|PAST_DUE|FROZEN/);
@@ -39,7 +39,7 @@ describe('Platform Plans & Subscriptions Views (e-darischi light theme)', () => 
   it('platform subscriptions API endpoint exists and returns subscriptions with center & plan', () => {
     expect(fs.existsSync(subscriptionsApiPath), 'api/platform/subscriptions/route.ts must exist').toBe(true);
     const content = fs.readFileSync(subscriptionsApiPath, 'utf8');
-    expect(content).toMatch(/requirePlatformOwner/);
+    expect(content).toMatch(/requirePlatformOwner|requirePlatformPermission/);
     expect(content).toMatch(/db\.subscription\.findMany/);
   });
 

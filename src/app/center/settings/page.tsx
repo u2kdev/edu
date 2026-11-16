@@ -2,6 +2,7 @@ import { requireTenantPageAccess } from "@/lib/tenant";
 import { getAuthSession } from "@/lib/auth";
 import { redirect } from "next/navigation";
 import { hasPermission } from "@/lib/permissions";
+import { parsePlanFeatures } from "@/lib/plan-features";
 import { CenterSettingsManager } from "@/components/settings/CenterSettingsManager";
 
 export default async function CenterSettingsPage() {
@@ -29,6 +30,20 @@ export default async function CenterSettingsPage() {
   const activeRole = userMembership?.role || "STUDENT";
   const canManage = hasPermission("settings.manage", session.user.platformRole, activeRole);
 
+  let parsedReminderDays = [-3, 0, 3, 7];
+  if (center.paymentReminderDaysJson) {
+    try {
+      const arr = JSON.parse(center.paymentReminderDaysJson);
+      if (Array.isArray(arr) && arr.length > 0) {
+        parsedReminderDays = arr.filter((n): n is number => typeof n === "number");
+      }
+    } catch {}
+  }
+
+  const planFeatures = center.subscriptions[0]?.plan
+    ? parsePlanFeatures(center.subscriptions[0].plan.featuresJson)
+    : parsePlanFeatures(null);
+
   const formattedCenter = {
     id: center.id,
     name: center.name,
@@ -47,6 +62,17 @@ export default async function CenterSettingsPage() {
     defaultLanguage: center.defaultLanguage as "ru" | "uz-Latn" | "uz-Cyrl",
     timeZone: center.timeZone,
     gradingScale: center.gradingScale as "PERCENT_100" | "POINTS_5" | "PASS_FAIL",
+    allowAdminDiscount: center.allowAdminDiscount,
+    partialPaymentExtendsPeriod: center.partialPaymentExtendsPeriod,
+    smsEnabled: center.smsEnabled,
+    emailEnabled: center.emailEnabled,
+    smsDailyLimit: center.smsDailyLimit,
+    paymentReminderEnabled: center.paymentReminderEnabled,
+    paymentReminderDays: parsedReminderDays,
+    quietHoursStart: center.quietHoursStart,
+    quietHoursEnd: center.quietHoursEnd,
+    reminderTemplateRu: center.reminderTemplateRu,
+    reminderTemplateUz: center.reminderTemplateUz,
     createdAt: center.createdAt.toISOString(),
     subscription: center.subscriptions[0]
       ? {
@@ -64,6 +90,9 @@ export default async function CenterSettingsPage() {
         initialCenter={formattedCenter}
         locale={locale}
         canManage={canManage}
+        isDirector={activeRole === "DIRECTOR"}
+        isImpersonating={Boolean(tenantCtx.isImpersonating)}
+        clickFeatureEnabled={planFeatures.onlinePaymentsClick}
       />
     </div>
   );

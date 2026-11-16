@@ -1,11 +1,26 @@
 "use client";
 
-import React, { useState, useEffect, useCallback } from "react";
-import {
-  Activity, Users, ShieldAlert, LogOut, Search,
-  RefreshCw, Laptop, Smartphone, Globe, Clock, CheckCircle2, AlertTriangle, X
-} from "lucide-react";
+import React, { useState, useEffect, useCallback, useMemo } from "react";
+import { ShieldAlert, LogOut, RefreshCw, Laptop, Smartphone } from "lucide-react";
 import { formatDateLocalized } from "@/i18n";
+import { Alert, AlertDescription } from "@/components/ui/alert";
+import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
+import { DataTable, type DataTableColumn } from "@/components/ui/data-table";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import { FilterBar } from "@/components/ui/filter-bar";
+import { FormActions, FormField } from "@/components/ui/form-field";
+import { PageHeader } from "@/components/ui/page-header";
+import { StatCard } from "@/components/ui/stat-card";
+import { Textarea } from "@/components/ui/textarea";
+
+const SELECT_CLS =
+  "flex h-9 rounded-md border border-input bg-card px-3 py-1.5 text-[13px] text-foreground transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-1 focus-visible:ring-offset-background";
 
 interface SessionItem {
   id: string;
@@ -42,6 +57,7 @@ interface ActivitySummary {
 }
 
 export function CenterActivityManager({ locale = "ru" }: { locale?: string }) {
+  const isUz = locale === "uz" || locale === "uz-Latn";
   const [users, setUsers] = useState<MemberActivityItem[]>([]);
   const [summary, setSummary] = useState<ActivitySummary>({
     totalMembers: 0,
@@ -51,13 +67,12 @@ export function CenterActivityManager({ locale = "ru" }: { locale?: string }) {
     inactiveOver7Days: 0,
   });
   const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState<string | null>(null);
 
-  // Filters
   const [search, setSearch] = useState("");
   const [roleFilter, setRoleFilter] = useState("ALL");
   const [statusFilter, setStatusFilter] = useState("ALL");
 
-  // Revocation modal state
   const [terminatingUser, setTerminatingUser] = useState<MemberActivityItem | null>(null);
   const [revokeReason, setRevokeReason] = useState("");
   const [submitting, setSubmitting] = useState(false);
@@ -66,6 +81,7 @@ export function CenterActivityManager({ locale = "ru" }: { locale?: string }) {
 
   const fetchActivity = useCallback(async () => {
     setLoading(true);
+    setLoadError(null);
     try {
       const params = new URLSearchParams();
       if (search) params.append("search", search);
@@ -73,29 +89,29 @@ export function CenterActivityManager({ locale = "ru" }: { locale?: string }) {
       if (statusFilter !== "ALL") params.append("status", statusFilter);
 
       const res = await fetch(`/api/tenant/activity?${params.toString()}`);
-      if (!res.ok) throw new Error("Failed to load activity");
+      if (!res.ok) throw new Error(isUz ? "Maʼlumot yuklab boʻlmadi" : "Не удалось загрузить активность");
       const data = await res.json();
       setUsers(data.users || []);
       if (data.summary) {
         setSummary(data.summary);
       }
     } catch (err) {
-      console.error(err);
+      setLoadError(err instanceof Error ? err.message : "Ошибка загрузки");
     } finally {
       setLoading(false);
     }
-  }, [search, roleFilter, statusFilter]);
+  }, [search, roleFilter, statusFilter, isUz]);
 
   useEffect(() => {
-    fetchActivity();
+    void fetchActivity();
   }, [fetchActivity]);
 
   const handleRevokeSessions = async () => {
     if (!terminatingUser) return;
     if (revokeReason.trim().length < 5) {
       setActionError(
-        locale === "uz"
-          ? "Sabab kamida 5 ta belgidan iborat bo'lishi kerak"
+        isUz
+          ? "Sabab kamida 5 ta belgidan iborat boʻlishi kerak"
           : "Причина должна содержать минимум 5 символов"
       );
       return;
@@ -117,13 +133,12 @@ export function CenterActivityManager({ locale = "ru" }: { locale?: string }) {
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || "Failed to terminate sessions");
 
-      setActionSuccess(data.message || "Sessions terminated");
+      setActionSuccess(data.message || "Сессии завершены");
       setTerminatingUser(null);
       setRevokeReason("");
-      fetchActivity();
+      await fetchActivity();
     } catch (err: unknown) {
-      const msg = err instanceof Error ? err.message : "Error terminating sessions";
-      setActionError(msg);
+      setActionError(err instanceof Error ? err.message : "Ошибка завершения сессий");
     } finally {
       setSubmitting(false);
     }
@@ -132,309 +147,347 @@ export function CenterActivityManager({ locale = "ru" }: { locale?: string }) {
   const getDeviceIcon = (userAgent?: string | null) => {
     const ua = (userAgent || "").toLowerCase();
     if (ua.includes("mobile") || ua.includes("android") || ua.includes("iphone")) {
-      return <Smartphone className="w-3.5 h-3.5 text-blue-400" />;
+      return <Smartphone className="h-3.5 w-3.5 text-info" aria-hidden="true" />;
     }
-    return <Laptop className="w-3.5 h-3.5 text-purple-400" />;
+    return <Laptop className="h-3.5 w-3.5 text-primary" aria-hidden="true" />;
   };
+
+  const columns = useMemo<DataTableColumn<MemberActivityItem>[]>(
+    () => [
+      {
+        id: "user",
+        header: isUz ? "Foydalanuvchi" : "Пользователь",
+        sortable: true,
+        sortValue: (item) => item.fullName,
+        cell: (item) => (
+          <div className="flex items-center gap-3">
+            <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full border border-border bg-muted text-xs font-semibold text-foreground">
+              {item.fullName.slice(0, 2).toUpperCase()}
+            </div>
+            <div>
+              <div className="flex items-center gap-1.5">
+                <span className="text-xs font-medium text-foreground">{item.fullName}</span>
+                {item.isOnline && (
+                  <span className="h-2 w-2 rounded-full bg-success" title="Online" />
+                )}
+              </div>
+              <p className="text-xs text-muted-foreground">
+                {item.email} {item.phone ? `· ${item.phone}` : ""}
+              </p>
+            </div>
+          </div>
+        ),
+      },
+      {
+        id: "role",
+        header: isUz ? "Rol" : "Роль",
+        cell: (item) => <Badge variant="neutral">{item.role}</Badge>,
+      },
+      {
+        id: "lastLoginAt",
+        header: isUz ? "Oxirgi kirish" : "Последний вход",
+        cell: (item) =>
+          item.lastLoginAt ? (
+            <div className="whitespace-nowrap text-xs text-muted-foreground tabular-nums">
+              <div>{formatDateLocalized(item.lastLoginAt, locale)}</div>
+              <div>
+                {new Date(item.lastLoginAt).toLocaleTimeString([], {
+                  hour: "2-digit",
+                  minute: "2-digit",
+                })}
+              </div>
+            </div>
+          ) : (
+            <span className="text-xs italic text-muted-foreground">
+              {isUz ? "Hech kirmagan" : "Никогда"}
+            </span>
+          ),
+      },
+      {
+        id: "sessions",
+        header: isUz ? "Faol qurilmalar" : "Сессии и устройства",
+        cell: (item) =>
+          item.sessions.length > 0 ? (
+            <div className="space-y-1">
+              <Badge variant="primary" className="tabular-nums">
+                {item.sessions.length} {isUz ? "ta qurilma" : "активных сессий"}
+              </Badge>
+              <div className="space-y-0.5">
+                {item.sessions.slice(0, 2).map((s) => (
+                  <div
+                    key={s.id}
+                    className="flex items-center gap-1.5 font-mono text-xs text-muted-foreground tabular-nums"
+                  >
+                    {getDeviceIcon(s.userAgent)}
+                    <span>{s.ipAddress || "local"}</span>
+                    <span>
+                      (
+                      {new Date(s.lastSeenAt).toLocaleTimeString([], {
+                        hour: "2-digit",
+                        minute: "2-digit",
+                      })}
+                      )
+                    </span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          ) : (
+            <span className="text-xs text-muted-foreground">—</span>
+          ),
+      },
+      {
+        id: "actions",
+        header: isUz ? "Amallar" : "Действия",
+        align: "right",
+        cell: (item) =>
+          item.activeSessionsCount > 0 ? (
+            <Button
+              type="button"
+              variant="destructive"
+              size="sm"
+              onClick={() => {
+                setActionError(null);
+                setTerminatingUser(item);
+                setRevokeReason("Завершено директором центра в целях безопасности");
+              }}
+            >
+              <LogOut className="h-3.5 w-3.5" aria-hidden="true" />
+              <span>{isUz ? "Sessiyalarni yopish" : "Завершить сессии"}</span>
+            </Button>
+          ) : (
+            <span className="text-xs text-muted-foreground">—</span>
+          ),
+      },
+    ],
+    [isUz, locale]
+  );
 
   return (
     <div className="space-y-6">
-      {/* Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
-        <div>
-          <h1 className="text-2xl font-black text-white flex items-center gap-2">
-            <Activity className="w-7 h-7 text-brand-400" />
-            {locale === "uz" ? "Foydalanuvchilar faolligi va sessiyalar" : "Активность людей и сессии"}
-          </h1>
-          <p className="text-sm text-slate-400 mt-1">
-            {locale === "uz"
-              ? "Tizimga kirish tarixi, faol qurilmalar va xavfsiz sessiyalarni boshqarish"
-              : "История входов, мониторинг активных устройств и принудительное завершение сессий"}
-          </p>
-        </div>
-
-        <button
-          onClick={() => fetchActivity()}
-          className="p-2.5 rounded-xl bg-slate-900 border border-slate-800 text-slate-400 hover:text-white transition-colors self-start sm:self-auto"
-          title="Refresh"
-        >
-          <RefreshCw className={`w-4 h-4 ${loading ? "animate-spin text-brand-400" : ""}`} />
-        </button>
-      </div>
+      <PageHeader
+        title={isUz ? "Foydalanuvchilar faolligi va sessiyalar" : "Активность людей и сессии"}
+        description={
+          isUz
+            ? "Tizimga kirish tarixi, faol qurilmalar va xavfsiz sessiyalarni boshqarish"
+            : "История входов, мониторинг активных устройств и принудительное завершение сессий"
+        }
+        actions={
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            onClick={() => void fetchActivity()}
+            title="Обновить"
+          >
+            <RefreshCw
+              className={`h-3.5 w-3.5 ${loading ? "animate-spin text-primary" : ""}`}
+              aria-hidden="true"
+            />
+            <span>{isUz ? "Yangilash" : "Обновить"}</span>
+          </Button>
+        }
+      />
 
       {actionSuccess && (
-        <div className="p-4 rounded-xl bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 text-xs flex items-center justify-between">
-          <span>{actionSuccess}</span>
-          <button onClick={() => setActionSuccess(null)} className="text-emerald-500 hover:text-emerald-400">
-            <X className="w-4 h-4" />
-          </button>
-        </div>
+        <Alert variant="success">
+          <AlertDescription className="flex items-center justify-between gap-2">
+            <span>{actionSuccess}</span>
+            <Button
+              type="button"
+              variant="ghost"
+              size="sm"
+              onClick={() => setActionSuccess(null)}
+            >
+              Закрыть
+            </Button>
+          </AlertDescription>
+        </Alert>
       )}
 
-      {/* Summary KPI Badges */}
-      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3">
-        <div className="glass-panel p-4 rounded-xl border border-slate-800">
-          <span className="text-[11px] font-semibold text-slate-400 uppercase tracking-wider">
-            {locale === "uz" ? "Jami a'zolar" : "Всего пользователей"}
-          </span>
-          <div className="text-2xl font-bold text-white mt-1">{summary.totalMembers}</div>
-        </div>
-
-        <div className="glass-panel p-4 rounded-xl border border-slate-800">
-          <span className="text-[11px] font-semibold text-slate-400 uppercase tracking-wider">
-            {locale === "uz" ? "Hozir tarmoqda" : "Сейчас онлайн"}
-          </span>
-          <div className="text-2xl font-bold text-emerald-400 mt-1 flex items-center gap-1.5">
-            <span className="w-2.5 h-2.5 rounded-full bg-emerald-500 animate-pulse" />
-            {summary.onlineNow}
-          </div>
-        </div>
-
-        <div className="glass-panel p-4 rounded-xl border border-slate-800">
-          <span className="text-[11px] font-semibold text-slate-400 uppercase tracking-wider">
-            {locale === "uz" ? "Faol sessiyalar" : "Активные сессии"}
-          </span>
-          <div className="text-2xl font-bold text-brand-400 mt-1">{summary.hasActiveSessions}</div>
-        </div>
-
-        <div className="glass-panel p-4 rounded-xl border border-slate-800">
-          <span className="text-[11px] font-semibold text-slate-400 uppercase tracking-wider">
-            {locale === "uz" ? "7 kundan beri kirmagan" : "Не заходили > 7 дн."}
-          </span>
-          <div className="text-2xl font-bold text-amber-400 mt-1">{summary.inactiveOver7Days}</div>
-        </div>
-
-        <div className="glass-panel p-4 rounded-xl border border-slate-800">
-          <span className="text-[11px] font-semibold text-slate-400 uppercase tracking-wider">
-            {locale === "uz" ? "Hech kirmagan" : "Никогда не входили"}
-          </span>
-          <div className="text-2xl font-bold text-rose-400 mt-1">{summary.neverLoggedIn}</div>
-        </div>
+      <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-5">
+        <StatCard
+          label={isUz ? "Jami aʼzolar" : "Всего пользователей"}
+          value={summary.totalMembers}
+        />
+        <StatCard
+          label={isUz ? "Hozir tarmoqda" : "Сейчас онлайн"}
+          value={summary.onlineNow}
+        />
+        <StatCard
+          label={isUz ? "Faol sessiyalar" : "Активные сессии"}
+          value={summary.hasActiveSessions}
+        />
+        <StatCard
+          label={isUz ? "7 kundan beri kirmagan" : "Не заходили > 7 дн."}
+          value={summary.inactiveOver7Days}
+        />
+        <StatCard
+          label={isUz ? "Hech kirmagan" : "Никогда не входили"}
+          value={summary.neverLoggedIn}
+        />
       </div>
 
-      {/* Filter Bar */}
-      <div className="glass-panel p-4 rounded-2xl border border-slate-800 space-y-3">
-        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-          <div className="relative">
-            <Search className="w-4 h-4 text-slate-500 absolute left-3 top-1/2 -translate-y-1/2" />
-            <input
-              type="text"
-              value={search}
-              onChange={(e) => setSearch(e.target.value)}
-              placeholder={locale === "uz" ? "Ism, email yoki telefon bo'yicha..." : "Поиск по имени, email, телефону..."}
-              className="w-full pl-9 pr-3 py-2 bg-slate-900/80 border border-slate-800 rounded-xl text-xs text-white focus:outline-none focus:border-brand-500"
-            />
-          </div>
+      <FilterBar
+        locale={locale}
+        search={search}
+        onSearchChange={setSearch}
+        searchPlaceholder={
+          isUz ? "Ism, email yoki telefon boʻyicha..." : "Поиск по имени, email, телефону..."
+        }
+        hasActiveFilters={Boolean(search || roleFilter !== "ALL" || statusFilter !== "ALL")}
+        onReset={() => {
+          setSearch("");
+          setRoleFilter("ALL");
+          setStatusFilter("ALL");
+        }}
+      >
+        <select
+          aria-label={isUz ? "Rol" : "Роль"}
+          value={roleFilter}
+          onChange={(e) => setRoleFilter(e.target.value)}
+          className={SELECT_CLS}
+        >
+          <option value="ALL">{isUz ? "Barcha rollar" : "Все роли"}</option>
+          <option value="DIRECTOR">{isUz ? "Direktor" : "Директор"}</option>
+          <option value="CENTER_ADMIN">{isUz ? "Administrator" : "Администратор"}</option>
+          <option value="TEACHER">{isUz ? "Oʻqituvchi" : "Учитель"}</option>
+          <option value="STUDENT">{isUz ? "Oʻquvchi" : "Ученик"}</option>
+          <option value="PARENT">{isUz ? "Ota-ona" : "Родитель"}</option>
+        </select>
 
-          <div>
-            <select
-              value={roleFilter}
-              onChange={(e) => setRoleFilter(e.target.value)}
-              className="w-full px-3 py-2 bg-slate-900/80 border border-slate-800 rounded-xl text-xs text-white focus:outline-none focus:border-brand-500"
-            >
-              <option value="ALL">{locale === "uz" ? "Barcha rollar" : "Все роли"}</option>
-              <option value="DIRECTOR">{locale === "uz" ? "Direktor" : "Директор"}</option>
-              <option value="CENTER_ADMIN">{locale === "uz" ? "Administrator" : "Администратор"}</option>
-              <option value="TEACHER">{locale === "uz" ? "O'qituvchi" : "Учитель"}</option>
-              <option value="STUDENT">{locale === "uz" ? "O'quvchi" : "Ученик"}</option>
-              <option value="PARENT">{locale === "uz" ? "Ota-ona" : "Родитель"}</option>
-            </select>
-          </div>
+        <select
+          aria-label={isUz ? "Holat" : "Статус"}
+          value={statusFilter}
+          onChange={(e) => setStatusFilter(e.target.value)}
+          className={SELECT_CLS}
+        >
+          <option value="ALL">{isUz ? "Barcha statuslar" : "Все статусы"}</option>
+          <option value="ONLINE">{isUz ? "Faqat faol sessiyalar" : "Только с активными сессиями"}</option>
+          <option value="INACTIVE_7D">{isUz ? "7 kundan ortiq nofaol" : "Не заходили более 7 дней"}</option>
+          <option value="NEVER">{isUz ? "Hech qachon kirmagan" : "Никогда не входили"}</option>
+        </select>
+      </FilterBar>
 
-          <div>
-            <select
-              value={statusFilter}
-              onChange={(e) => setStatusFilter(e.target.value)}
-              className="w-full px-3 py-2 bg-slate-900/80 border border-slate-800 rounded-xl text-xs text-white focus:outline-none focus:border-brand-500"
-            >
-              <option value="ALL">{locale === "uz" ? "Barcha statuslar" : "Все статусы"}</option>
-              <option value="ONLINE">{locale === "uz" ? "Faqat faol sessiyalar" : "Только с активными сессиями"}</option>
-              <option value="INACTIVE_7D">{locale === "uz" ? "7 kundan ortiq nofaol" : "Не заходили более 7 дней"}</option>
-              <option value="NEVER">{locale === "uz" ? "Hech qachon kirmagan" : "Никогда не входили"}</option>
-            </select>
-          </div>
-        </div>
-      </div>
-
-      {/* Users & Sessions List */}
-      <div className="glass-panel rounded-2xl border border-slate-800 overflow-hidden">
-        <div className="overflow-x-auto">
-          <table className="w-full text-left text-xs">
-            <thead className="bg-slate-950/60 text-slate-400 border-b border-slate-800 uppercase font-semibold">
-              <tr>
-                <th className="px-4 py-3">{locale === "uz" ? "Foydalanuvchi" : "Пользователь"}</th>
-                <th className="px-4 py-3">{locale === "uz" ? "Rol" : "Роль"}</th>
-                <th className="px-4 py-3">{locale === "uz" ? "Oxirgi kirish" : "Последний вход"}</th>
-                <th className="px-4 py-3">{locale === "uz" ? "Faol qurilmalar" : "Сессии и устройства"}</th>
-                <th className="px-4 py-3 text-right">{locale === "uz" ? "Amallar" : "Действия"}</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-slate-800/60">
-              {loading ? (
-                <tr>
-                  <td colSpan={5} className="px-4 py-12 text-center text-slate-500">
-                    <RefreshCw className="w-6 h-6 animate-spin mx-auto text-brand-500 mb-2" />
-                    {locale === "uz" ? "Faollik yuklanmoqda..." : "Загрузка журнала активности..."}
-                  </td>
-                </tr>
-              ) : users.length === 0 ? (
-                <tr>
-                  <td colSpan={5} className="px-4 py-12 text-center text-slate-500">
-                    {locale === "uz" ? "Foydalanuvchilar topilmadi" : "Пользователи не найдены"}
-                  </td>
-                </tr>
-              ) : (
-                users.map((item) => (
-                  <tr key={item.id} className="hover:bg-slate-900/40 transition-colors">
-                    <td className="px-4 py-3">
-                      <div className="flex items-center gap-3">
-                        <div className="w-8 h-8 rounded-full bg-slate-800 border border-slate-700 flex items-center justify-center font-bold text-slate-300">
-                          {item.fullName.slice(0, 2).toUpperCase()}
-                        </div>
-                        <div>
-                          <div className="flex items-center gap-1.5">
-                            <span className="font-semibold text-white">{item.fullName}</span>
-                            {item.isOnline && (
-                              <span className="w-2 h-2 rounded-full bg-emerald-500" title="Online" />
-                            )}
-                          </div>
-                          <p className="text-[11px] text-slate-500">{item.email} {item.phone ? `• ${item.phone}` : ""}</p>
-                        </div>
-                      </div>
-                    </td>
-
-                    <td className="px-4 py-3">
-                      <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-slate-800 text-slate-300 border border-slate-700">
-                        {item.role}
-                      </span>
-                    </td>
-
-                    <td className="px-4 py-3 text-slate-400 whitespace-nowrap">
-                      {item.lastLoginAt ? (
-                        <div>
-                          <span>{formatDateLocalized(item.lastLoginAt, locale)}</span>
-                          <span className="block text-[10px] text-slate-500">
-                            {new Date(item.lastLoginAt).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
-                          </span>
-                        </div>
-                      ) : (
-                        <span className="text-slate-600 italic">
-                          {locale === "uz" ? "Hech kirmagan" : "Никогда"}
-                        </span>
-                      )}
-                    </td>
-
-                    <td className="px-4 py-3">
-                      {item.sessions.length > 0 ? (
-                        <div className="space-y-1">
-                          <span className="px-2 py-0.5 rounded-md text-[10px] font-bold bg-brand-500/10 text-brand-400 border border-brand-500/20 inline-block mb-1">
-                            {item.sessions.length} {locale === "uz" ? "ta qurilma" : "активных сессий"}
-                          </span>
-                          <div className="space-y-0.5">
-                            {item.sessions.slice(0, 2).map((s) => (
-                              <div key={s.id} className="flex items-center gap-1.5 text-[11px] text-slate-400 font-mono">
-                                {getDeviceIcon(s.userAgent)}
-                                <span>{s.ipAddress || "local"}</span>
-                                <span className="text-slate-600 text-[10px]">
-                                  ({new Date(s.lastSeenAt).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })})
-                                </span>
-                              </div>
-                            ))}
-                          </div>
-                        </div>
-                      ) : (
-                        <span className="text-slate-600 text-xs">—</span>
-                      )}
-                    </td>
-
-                    <td className="px-4 py-3 text-right">
-                      {item.activeSessionsCount > 0 ? (
-                        <button
-                          onClick={() => {
-                            setTerminatingUser(item);
-                            setRevokeReason("Завершено директором центра в целях безопасности");
-                          }}
-                          className="px-3 py-1.5 rounded-xl bg-rose-500/10 hover:bg-rose-500/20 text-rose-400 font-semibold text-xs border border-rose-500/20 transition-all flex items-center gap-1.5 ml-auto"
-                        >
-                          <LogOut className="w-3.5 h-3.5" />
-                          <span>{locale === "uz" ? "Sessiyalarni yopish" : "Завершить сессии"}</span>
-                        </button>
-                      ) : (
-                        <span className="text-slate-600 text-xs">—</span>
-                      )}
-                    </td>
-                  </tr>
-                ))
-              )}
-            </tbody>
-          </table>
-        </div>
-      </div>
-
-      {/* Revocation Confirmation Modal */}
-      {terminatingUser && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-sm p-4">
-          <div className="glass-panel w-full max-w-md rounded-2xl border border-slate-800 bg-slate-950 p-6 space-y-4 shadow-2xl animate-in fade-in zoom-in-95">
-            <div className="flex items-center justify-between border-b border-slate-800 pb-3">
-              <h3 className="text-base font-bold text-white flex items-center gap-2">
-                <ShieldAlert className="w-5 h-5 text-rose-400" />
-                {locale === "uz" ? "Sessiyalarni yakunlash" : "Завершение сессий пользователя"}
-              </h3>
-              <button
-                onClick={() => setTerminatingUser(null)}
-                className="p-1 rounded-lg text-slate-400 hover:text-white hover:bg-slate-800"
-              >
-                <X className="w-5 h-5" />
-              </button>
-            </div>
-
-            <p className="text-xs text-slate-300">
-              {locale === "uz"
-                ? `Haqiqatan ham ${terminatingUser.fullName} foydalanuvchisining barcha faol qurilmalaridagi sessiyalarini yakunlamoqchimisiz? Foydalanuvchi tizimdan chiqarib yuboriladi.`
-                : `Вы действительно хотите принудительно завершить все ${terminatingUser.activeSessionsCount} активных сессий пользователя ${terminatingUser.fullName}? Все открытые вкладки и приложения будут деавторизованы.`}
-            </p>
-
-            <div className="space-y-1.5">
-              <label className="text-xs font-semibold text-slate-400">
-                {locale === "uz" ? "Majburiy sabab (kamida 5 belgi)" : "Причина действия (мин. 5 символов)"}:
-              </label>
-              <textarea
-                value={revokeReason}
-                onChange={(e) => setRevokeReason(e.target.value)}
-                rows={3}
-                className="w-full p-2.5 bg-slate-900 border border-slate-800 rounded-xl text-xs text-white placeholder-slate-500 focus:outline-none focus:border-rose-500"
-                placeholder={locale === "uz" ? "Sababni kiriting..." : "Укажите причину для журнала аудита..."}
-              />
-            </div>
-
-            {actionError && (
-              <div className="p-3 rounded-xl bg-rose-500/10 border border-rose-500/20 text-rose-400 text-xs">
-                {actionError}
+      <DataTable
+        data={users}
+        columns={columns}
+        getRowId={(item) => item.id}
+        locale={locale}
+        loading={loading && users.length === 0}
+        error={loadError}
+        onRetry={() => void fetchActivity()}
+        emptyTitle={isUz ? "Foydalanuvchilar topilmadi" : "Пользователи не найдены"}
+        mobileCardRender={(item) => (
+          <div className="space-y-2 text-xs">
+            <div className="flex items-start justify-between gap-2">
+              <div>
+                <div className="font-medium text-foreground">{item.fullName}</div>
+                <div className="text-muted-foreground">{item.email}</div>
               </div>
-            )}
-
-            <div className="flex justify-end gap-2 pt-2 border-t border-slate-800">
-              <button
-                type="button"
-                onClick={() => setTerminatingUser(null)}
-                className="px-4 py-2 bg-slate-900 hover:bg-slate-800 text-slate-300 rounded-xl font-semibold text-xs border border-slate-800"
-              >
-                {locale === "uz" ? "Bekor qilish" : "Отмена"}
-              </button>
-              <button
-                type="button"
-                disabled={submitting}
-                onClick={handleRevokeSessions}
-                className="px-4 py-2 bg-rose-600 hover:bg-rose-500 text-white rounded-xl font-semibold text-xs transition-all shadow-lg shadow-rose-950/20 disabled:opacity-50"
-              >
-                {submitting
-                  ? (locale === "uz" ? "Bajarilmoqda..." : "Завершение...")
-                  : (locale === "uz" ? "Sessiyalarni yopish" : "Завершить сессии")}
-              </button>
+              <Badge variant="neutral">{item.role}</Badge>
             </div>
+            <div className="flex items-center justify-between gap-2 text-muted-foreground tabular-nums">
+              <span>
+                {item.lastLoginAt ? formatDateLocalized(item.lastLoginAt, locale) : "Никогда"}
+              </span>
+              {item.sessions.length > 0 && (
+                <Badge variant="primary">{item.sessions.length} сессий</Badge>
+              )}
+            </div>
+            {item.activeSessionsCount > 0 && (
+              <Button
+                type="button"
+                variant="destructive"
+                size="sm"
+                onClick={() => {
+                  setActionError(null);
+                  setTerminatingUser(item);
+                  setRevokeReason("Завершено директором центра в целях безопасности");
+                }}
+              >
+                <LogOut className="h-3.5 w-3.5" aria-hidden="true" />
+                <span>{isUz ? "Sessiyalarni yopish" : "Завершить сессии"}</span>
+              </Button>
+            )}
           </div>
-        </div>
-      )}
+        )}
+      />
+
+      <Dialog
+        open={Boolean(terminatingUser)}
+        onOpenChange={(open) => !open && setTerminatingUser(null)}
+      >
+        <DialogContent className="max-w-md">
+          {terminatingUser && (
+            <>
+              <DialogHeader>
+                <DialogTitle className="flex items-center gap-2">
+                  <ShieldAlert className="h-4 w-4 text-destructive" aria-hidden="true" />
+                  <span>
+                    {isUz ? "Sessiyalarni yakunlash" : "Завершение сессий пользователя"}
+                  </span>
+                </DialogTitle>
+              </DialogHeader>
+
+              <p className="text-xs text-muted-foreground">
+                {isUz
+                  ? `Haqiqatan ham ${terminatingUser.fullName} foydalanuvchisining barcha faol qurilmalaridagi sessiyalarini yakunlamoqchimisiz?`
+                  : `Вы действительно хотите принудительно завершить все ${terminatingUser.activeSessionsCount} активных сессий пользователя ${terminatingUser.fullName}? Все открытые вкладки и приложения будут деавторизованы.`}
+              </p>
+
+              {actionError && (
+                <Alert variant="destructive">
+                  <AlertDescription>{actionError}</AlertDescription>
+                </Alert>
+              )}
+
+              <FormField
+                label={
+                  isUz
+                    ? "Majburiy sabab (kamida 5 belgi)"
+                    : "Причина действия (мин. 5 символов)"
+                }
+                htmlFor="revoke-reason"
+                required
+              >
+                <Textarea
+                  id="revoke-reason"
+                  value={revokeReason}
+                  onChange={(e) => setRevokeReason(e.target.value)}
+                  rows={3}
+                  placeholder={isUz ? "Sababni kiriting..." : "Укажите причину для журнала аудита..."}
+                />
+              </FormField>
+
+              <FormActions>
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={() => setTerminatingUser(null)}
+                  disabled={submitting}
+                >
+                  {isUz ? "Bekor qilish" : "Отмена"}
+                </Button>
+                <Button
+                  type="button"
+                  variant="destructive"
+                  disabled={submitting}
+                  onClick={handleRevokeSessions}
+                >
+                  {submitting
+                    ? isUz
+                      ? "Bajarilmoqda..."
+                      : "Завершение..."
+                    : isUz
+                    ? "Sessiyalarni yopish"
+                    : "Завершить сессии"}
+                </Button>
+              </FormActions>
+            </>
+          )}
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

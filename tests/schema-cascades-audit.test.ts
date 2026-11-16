@@ -59,6 +59,7 @@ describe("TRUST-3b Item 4: Audit Cascade Foreign Keys to CenterMembership", () =
       "TestAttempt",
       "PerformanceSnapshot",
       "ActivityLog",
+      "PaymentReminderLog",
     ];
 
     for (const rel of cascadeRelations) {

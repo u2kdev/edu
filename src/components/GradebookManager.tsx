@@ -1,17 +1,21 @@
 "use client";
 
 import { useState, useEffect, useRef } from "react";
-import {
-  GraduationCap,
-  Award,
-  Download,
-  Lock,
-  CheckCircle2,
-  AlertCircle,
-  Loader2,
-  Users,
-} from "lucide-react";
+import { GraduationCap, Download, Lock, Loader2 } from "lucide-react";
 import { t } from "@/i18n";
+import { Alert, AlertDescription } from "@/components/ui/alert";
+import { Badge, type BadgeVariant } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Skeleton } from "@/components/ui/skeleton";
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table";
 
 interface GroupOption {
   id: string;
@@ -50,18 +54,21 @@ interface GradebookManagerProps {
   userRole: string;
 }
 
-function getGradeBadgeColor(letter: string): string {
+const SELECT_CLS =
+  "flex h-9 w-full rounded-md border border-input bg-card px-3 py-1.5 text-sm text-foreground transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-1 focus-visible:ring-offset-background disabled:cursor-not-allowed disabled:opacity-50";
+
+function getGradeBadgeVariant(letter: string): BadgeVariant {
   switch (letter) {
     case "A":
-      return "bg-emerald-500/10 text-emerald-400 border-emerald-500/30";
+      return "success";
     case "B":
-      return "bg-blue-500/10 text-blue-400 border-blue-500/30";
+      return "info";
     case "C":
-      return "bg-amber-500/10 text-amber-400 border-amber-500/30";
+      return "warning";
     case "D":
-      return "bg-orange-500/10 text-orange-400 border-orange-500/30";
+      return "neutral";
     default:
-      return "bg-red-500/10 text-red-400 border-red-500/30";
+      return "destructive";
   }
 }
 
@@ -103,8 +110,7 @@ export default function GradebookManager({
     }
 
     let isSubscribed = true;
-    // Drop the previous group's matrix immediately: the select switches instantly,
-    // so keeping stale rows visible until the new response arrives mixes two groups.
+    // Drop the previous group's matrix immediately when the select changes.
     setMatrixData(null);
     async function loadMatrix() {
       setLoading(true);
@@ -148,7 +154,6 @@ export default function GradebookManager({
 
       if (res.ok) {
         setFinalizeSuccess(true);
-        // Refresh matrix
         const refreshRes = await fetch(
           `/api/grades/matrix?groupId=${selectedGroupId}`
         );
@@ -174,237 +179,215 @@ export default function GradebookManager({
   return (
     <div className="space-y-6">
       {/* Controls Bar */}
-      <div className="glass-panel p-4 sm:p-6 rounded-2xl border border-slate-800 flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-4">
-        {/* Group Selector */}
-        <div className="w-full sm:w-64">
-          <label className="block text-xs font-semibold text-slate-400 mb-1">
-            {t(locale, "grades.selectGroup")}
-          </label>
-          <select
-            value={selectedGroupId}
-            onChange={(e) => setSelectedGroupId(e.target.value)}
-            className="w-full bg-slate-900 border border-slate-700 rounded-xl px-3 py-2 text-sm text-white focus:outline-none focus:border-brand-500"
-          >
-            {groups.map((g) => (
-              <option key={g.id} value={g.id}>
-                {g.name}
-              </option>
-            ))}
-          </select>
-        </div>
-
-        {/* Action Buttons */}
-        <div className="flex flex-wrap items-center gap-2">
-          {/* Export CSV Button */}
-          {canExport && (
-            <a
-              href={`/api/grades/export?groupId=${selectedGroupId}`}
-              download
-              className="inline-flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-medium border border-slate-700 bg-slate-800/80 hover:bg-slate-700 text-slate-200 transition-colors"
+      <Card>
+        <CardContent className="flex flex-col items-stretch justify-between gap-4 p-4 sm:flex-row sm:items-end sm:p-5">
+          <div className="w-full sm:w-64">
+            <label
+              htmlFor="gradebook-group-select"
+              className="mb-1.5 block text-[13px] font-medium text-foreground"
             >
-              <Download className="w-4 h-4 text-slate-400" />
-              <span>{t(locale, "grades.exportCsv")}</span>
-            </a>
-          )}
-
-          {/* Finalize Button */}
-          {canFinalize && (
-            <button
-              type="button"
-              onClick={handleFinalize}
-              disabled={finalizing || loading || !selectedGroupId}
-              className="inline-flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-semibold bg-amber-500/20 border border-amber-500/40 text-amber-300 hover:bg-amber-500/30 transition-colors disabled:opacity-50"
+              {t(locale, "grades.selectGroup")}
+            </label>
+            <select
+              id="gradebook-group-select"
+              value={selectedGroupId}
+              onChange={(e) => setSelectedGroupId(e.target.value)}
+              className={SELECT_CLS}
             >
-              {finalizing ? (
-                <>
-                  <Loader2 className="w-3.5 h-3.5 animate-spin" />
-                  <span>...</span>
-                </>
-              ) : (
-                <>
-                  <Lock className="w-3.5 h-3.5" />
-                  <span>{t(locale, "grades.finalizePeriod")}</span>
-                </>
-              )}
-            </button>
-          )}
-        </div>
-      </div>
+              {groups.map((g) => (
+                <option key={g.id} value={g.id}>
+                  {g.name}
+                </option>
+              ))}
+            </select>
+          </div>
+
+          <div className="flex flex-wrap items-center gap-2">
+            {canExport && (
+              <a
+                href={`/api/grades/export?groupId=${selectedGroupId}`}
+                download
+                className="inline-flex h-8 items-center gap-1.5 rounded-md border border-border bg-card px-3 text-[13px] font-medium text-foreground transition-colors hover:bg-muted"
+              >
+                <Download className="h-3.5 w-3.5 text-muted-foreground" aria-hidden="true" />
+                <span>{t(locale, "grades.exportCsv")}</span>
+              </a>
+            )}
+
+            {canFinalize && (
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                onClick={handleFinalize}
+                disabled={finalizing || loading || !selectedGroupId}
+              >
+                {finalizing ? (
+                  <>
+                    <Loader2 className="h-3.5 w-3.5 animate-spin" aria-hidden="true" />
+                    <span>...</span>
+                  </>
+                ) : (
+                  <>
+                    <Lock className="h-3.5 w-3.5" aria-hidden="true" />
+                    <span>{t(locale, "grades.finalizePeriod")}</span>
+                  </>
+                )}
+              </Button>
+            )}
+          </div>
+        </CardContent>
+      </Card>
 
       {finalizeSuccess && (
-        <div className="p-3 rounded-xl bg-emerald-500/10 border border-emerald-500/30 text-emerald-400 text-xs flex items-center gap-2">
-          <CheckCircle2 className="w-4 h-4 shrink-0" />
-          <span>{t(locale, "grades.finalizedSuccess")}</span>
-        </div>
+        <Alert variant="success">
+          <AlertDescription>{t(locale, "grades.finalizedSuccess")}</AlertDescription>
+        </Alert>
       )}
 
       {finalizeError && (
-        <div className="p-3 rounded-xl bg-red-500/10 border border-red-500/30 text-red-400 text-xs flex items-center gap-2">
-          <AlertCircle className="w-4 h-4 shrink-0" />
-          <span>{finalizeError}</span>
-        </div>
+        <Alert variant="destructive">
+          <AlertDescription>{finalizeError}</AlertDescription>
+        </Alert>
       )}
 
       {error && (
-        <div className="p-4 rounded-xl bg-red-500/10 border border-red-500/30 text-red-400 text-sm">
-          {error}
-        </div>
+        <Alert variant="destructive">
+          <AlertDescription>{error}</AlertDescription>
+        </Alert>
       )}
 
       {/* Gradebook Matrix Content */}
-      <div className="glass-panel rounded-2xl border border-slate-800 overflow-hidden">
-        <div className="p-4 border-b border-slate-800 flex items-center justify-between bg-slate-900/60">
-          <div className="flex items-center gap-2">
-            <GraduationCap className="w-4 h-4 text-brand-400" />
-            <span className="text-sm font-semibold text-white">
-              {matrixData?.groupName || t(locale, "grades.gradebookMatrix")}
-            </span>
-          </div>
-          <span className="text-xs text-slate-400">
+      <Card>
+        <CardHeader className="flex flex-row items-center justify-between border-b border-border py-3.5">
+          <CardTitle className="flex items-center gap-2 text-sm">
+            <GraduationCap className="h-4 w-4 text-primary" aria-hidden="true" />
+            <span>{matrixData?.groupName || t(locale, "grades.gradebookMatrix")}</span>
+          </CardTitle>
+          <span className="text-xs text-muted-foreground tabular-nums">
             {students.length} {t(locale, "nav.students")}
           </span>
-        </div>
+        </CardHeader>
 
         {loading ? (
-          <div className="p-12 text-center text-slate-400 flex items-center justify-center gap-2">
-            <Loader2 className="w-5 h-5 animate-spin text-brand-400" />
-            <span>...</span>
-          </div>
+          <CardContent className="space-y-3 p-6">
+            <div className="flex items-center justify-center gap-2 text-sm text-muted-foreground">
+              <Loader2 className="h-4 w-4 animate-spin text-primary" aria-hidden="true" />
+              <span>...</span>
+            </div>
+            <Skeleton className="h-8 w-full" />
+            <Skeleton className="h-8 w-full" />
+          </CardContent>
         ) : students.length === 0 ? (
-          <div className="p-8 text-center text-slate-500 text-sm">
+          <CardContent className="p-8 text-center text-sm text-muted-foreground">
             {t(locale, "grades.noGrades")}
-          </div>
+          </CardContent>
         ) : (
           <>
             {/* Desktop Table */}
-            <div className="hidden md:block overflow-x-auto">
-              <table className="w-full text-left text-sm text-slate-300">
-                <thead className="bg-slate-900/80 text-xs font-semibold uppercase text-slate-400 border-b border-slate-800">
-                  <tr>
-                    <th className="p-4">{t(locale, "nav.students")}</th>
-                    <th className="p-4">{t(locale, "grades.title")}</th>
-                    <th className="p-4 text-center">
+            <div className="hidden md:block">
+              <Table wrapperClassName="border-0 rounded-none">
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>{t(locale, "nav.students")}</TableHead>
+                    <TableHead>{t(locale, "grades.title")}</TableHead>
+                    <TableHead className="text-center">
                       {t(locale, "grades.weightedScore")}
-                    </th>
-                    <th className="p-4 text-center">
+                    </TableHead>
+                    <TableHead className="text-center">
                       {t(locale, "grades.letterGrade")}
-                    </th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-slate-800/80">
-                  {students.map((s) => {
-                    const badgeColor = getGradeBadgeColor(s.letterGrade);
-                    return (
-                      <tr
-                        key={s.studentMembershipId}
-                        className="hover:bg-slate-900/40 transition-colors"
-                      >
-                        <td className="p-4">
-                          <div className="font-semibold text-white">
-                            {s.studentName}
+                    </TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {students.map((s) => (
+                    <TableRow key={s.studentMembershipId}>
+                      <TableCell>
+                        <div className="font-medium text-foreground">{s.studentName}</div>
+                        <div className="text-xs text-muted-foreground">{s.studentEmail}</div>
+                      </TableCell>
+                      <TableCell>
+                        {s.grades.length === 0 ? (
+                          <span className="text-xs text-muted-foreground">—</span>
+                        ) : (
+                          <div className="flex flex-wrap gap-1.5">
+                            {s.grades.map((g) => (
+                              <Badge
+                                key={g.id}
+                                variant={g.lifecycle === "FINAL" ? "neutral" : "primary"}
+                                title={`${g.gradeType}: ${g.value}/${g.maxValue}${
+                                  g.comment ? ` (${g.comment})` : ""
+                                }${g.lifecycle === "FINAL" ? " [LOCKED]" : ""}`}
+                                className="font-mono"
+                              >
+                                {g.lifecycle === "FINAL" && (
+                                  <Lock className="h-3 w-3" aria-hidden="true" />
+                                )}
+                                <span>{g.value}</span>
+                              </Badge>
+                            ))}
                           </div>
-                          <div className="text-xs text-slate-400">
-                            {s.studentEmail}
-                          </div>
-                        </td>
-                        <td className="p-4">
-                          {s.grades.length === 0 ? (
-                            <span className="text-xs text-slate-500">—</span>
-                          ) : (
-                            <div className="flex flex-wrap gap-1.5">
-                              {s.grades.map((g) => (
-                                <span
-                                  key={g.id}
-                                  title={`${g.gradeType}: ${g.value}/${g.maxValue}${
-                                    g.comment ? ` (${g.comment})` : ""
-                                  }${g.lifecycle === "FINAL" ? " [LOCKED]" : ""}`}
-                                  className={`inline-flex items-center gap-1 px-2 py-0.5 rounded text-xs font-mono border ${
-                                    g.lifecycle === "FINAL"
-                                      ? "bg-slate-800 text-slate-300 border-slate-700"
-                                      : "bg-brand-500/10 text-brand-300 border-brand-500/20"
-                                  }`}
-                                >
-                                  {g.lifecycle === "FINAL" && (
-                                    <Lock className="w-2.5 h-2.5 text-slate-400" />
-                                  )}
-                                  <span>{g.value}</span>
-                                </span>
-                              ))}
-                            </div>
-                          )}
-                        </td>
-                        <td className="p-4 text-center font-bold text-white">
-                          {s.weightedScore}%
-                        </td>
-                        <td className="p-4 text-center">
-                          <span
-                            className={`px-2.5 py-1 rounded-full text-xs font-bold border ${badgeColor}`}
-                          >
-                            {s.letterGrade}
-                          </span>
-                        </td>
-                      </tr>
-                    );
-                  })}
-                </tbody>
-              </table>
+                        )}
+                      </TableCell>
+                      <TableCell className="text-center font-semibold text-foreground tabular-nums">
+                        {s.weightedScore}%
+                      </TableCell>
+                      <TableCell className="text-center">
+                        <Badge variant={getGradeBadgeVariant(s.letterGrade)}>
+                          {s.letterGrade}
+                        </Badge>
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
             </div>
 
-            {/* Mobile Cards (360px viewport friendly) */}
-            <div className="md:hidden divide-y divide-slate-800">
-              {students.map((s) => {
-                const badgeColor = getGradeBadgeColor(s.letterGrade);
-                return (
-                  <div key={s.studentMembershipId} className="p-4 space-y-3">
-                    <div className="flex items-start justify-between gap-2">
-                      <div>
-                        <div className="font-semibold text-white text-sm">
-                          {s.studentName}
-                        </div>
-                        <div className="text-xs text-slate-400">
-                          {s.studentEmail}
-                        </div>
+            {/* Mobile Cards */}
+            <div className="divide-y divide-border md:hidden">
+              {students.map((s) => (
+                <div key={s.studentMembershipId} className="space-y-3 p-4">
+                  <div className="flex items-start justify-between gap-2">
+                    <div>
+                      <div className="text-sm font-medium text-foreground">
+                        {s.studentName}
                       </div>
-                      <div className="flex items-center gap-2">
-                        <span className="text-xs font-bold text-white">
-                          {s.weightedScore}%
-                        </span>
-                        <span
-                          className={`px-2 py-0.5 rounded-full text-xs font-bold border ${badgeColor}`}
-                        >
-                          {s.letterGrade}
-                        </span>
-                      </div>
+                      <div className="text-xs text-muted-foreground">{s.studentEmail}</div>
                     </div>
-
-                    {s.grades.length > 0 && (
-                      <div className="flex flex-wrap gap-1.5 pt-1">
-                        {s.grades.map((g) => (
-                          <span
-                            key={g.id}
-                            className={`inline-flex items-center gap-1 px-2 py-0.5 rounded text-xs font-mono border ${
-                              g.lifecycle === "FINAL"
-                                ? "bg-slate-800 text-slate-300 border-slate-700"
-                                : "bg-brand-500/10 text-brand-300 border-brand-500/20"
-                            }`}
-                          >
-                            {g.lifecycle === "FINAL" && (
-                              <Lock className="w-2.5 h-2.5 text-slate-400" />
-                            )}
-                            <span>
-                              {g.gradeType.slice(0, 3)}: {g.value}
-                            </span>
-                          </span>
-                        ))}
-                      </div>
-                    )}
+                    <div className="flex items-center gap-2 tabular-nums">
+                      <span className="text-xs font-semibold text-foreground">
+                        {s.weightedScore}%
+                      </span>
+                      <Badge variant={getGradeBadgeVariant(s.letterGrade)}>
+                        {s.letterGrade}
+                      </Badge>
+                    </div>
                   </div>
-                );
-              })}
+
+                  {s.grades.length > 0 && (
+                    <div className="flex flex-wrap gap-1.5 pt-1">
+                      {s.grades.map((g) => (
+                        <Badge
+                          key={g.id}
+                          variant={g.lifecycle === "FINAL" ? "neutral" : "primary"}
+                          className="font-mono"
+                        >
+                          {g.lifecycle === "FINAL" && (
+                            <Lock className="h-3 w-3" aria-hidden="true" />
+                          )}
+                          <span>
+                            {g.gradeType.slice(0, 3)}: {g.value}
+                          </span>
+                        </Badge>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              ))}
             </div>
           </>
         )}
-      </div>
+      </Card>
     </div>
   );
 }

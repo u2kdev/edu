@@ -10,6 +10,11 @@ import {
   MAX_FINANCE_EXPORT_PAGE_SIZE,
   type FinanceExportRow,
 } from "@/lib/finance-export";
+import {
+  requirePlanFeature,
+  PlanFeatureLockedError,
+  formatPlanFeatureLockedPayload,
+} from "@/lib/plan-features";
 
 const MAX_EXPORT_RANGE_MS = 366 * 24 * 3600 * 1000;
 
@@ -32,6 +37,8 @@ export async function GET(req: Request) {
         { status: 403 }
       );
     }
+
+    await requirePlanFeature(tenantCtx.center.id, "advancedReports");
 
     const ip = getClientIp(req);
     const allowed = await checkRateLimit(`finance_export:${tenantCtx.session.user.id}:${ip}`, 30, 60_000);
@@ -204,6 +211,9 @@ export async function GET(req: Request) {
       },
     });
   } catch (err: unknown) {
+    if (err instanceof PlanFeatureLockedError) {
+      return NextResponse.json(formatPlanFeatureLockedPayload(err), { status: 403 });
+    }
     const error = err as { message?: string; status?: number; code?: string };
     return NextResponse.json(
       { error: error.message || "Failed to export financial data", code: error.code },

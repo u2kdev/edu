@@ -1,20 +1,21 @@
 import { notFound } from "next/navigation";
+import { PanelThemeProvider } from "@/components/theme/PanelThemeProvider";
+import { DevUiKitShowcase } from "@/components/dev/DevUiKitShowcase";
 
 export const dynamic = "force-dynamic";
 
-export default function DevUiKitPage() {
+export default function DevUiKitPage(props: {
+  searchParams?: { theme?: string };
+}) {
   if (process.env.NODE_ENV === "production") {
     notFound();
   }
 
+  const initialTheme = props?.searchParams?.theme === "dark" ? "dark" : "light";
+
   return (
-    <div className="min-h-screen bg-slate-900 text-white p-8">
-      <div className="max-w-4xl mx-auto">
-        <h1 className="text-3xl font-bold mb-4">Dev UI Kit</h1>
-        <p className="text-slate-400">
-          Internal development component showroom. Inaccessible in production.
-        </p>
-      </div>
-    </div>
+    <PanelThemeProvider initialTheme={initialTheme} initialResolvedTheme={initialTheme}>
+      <DevUiKitShowcase initialTheme={initialTheme} />
+    </PanelThemeProvider>
   );
 }

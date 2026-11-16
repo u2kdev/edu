@@ -1,21 +1,23 @@
 import { NextResponse } from "next/server";
+import crypto from "crypto";
 // Reason: Exception: Invite validation requires global search before center context is known.
 // eslint-disable-next-line no-restricted-imports
 import { db } from "@/lib/db";
 import { getAuthSession, createSessionToken } from "@/lib/auth";
-import { getTenantDb } from "@/lib/db-tenant";
 import { checkRateLimit } from "@/lib/rate-limit";
 import { getClientIp } from "@/lib/ip";
-import { apiError, handleApiError } from "@/lib/api-response";
+import { apiError } from "@/lib/api-response";
 
 export async function POST(req: Request) {
   try {
     const ip = getClientIp(req);
-    if (!(await checkRateLimit(ip))) {
+    const session = await getAuthSession(req);
+
+    const rlKey = session ? `invite-accept:${session.user.id}:${ip}` : `invite-accept:${ip}`;
+    if (!(await checkRateLimit(rlKey, 10, 60000))) {
       return apiError("Too many attempts", "RATE_LIMITED", 429);
     }
 
-    const session = await getAuthSession(req);
     if (!session) {
       return NextResponse.json({ error: "Для погашения инвайта войдите в аккаунт" }, { status: 401 });
     }
@@ -25,126 +27,141 @@ export async function POST(req: Request) {
     }
 
     const { code } = await req.json();
-    if (!code) {
+    if (!code || typeof code !== "string") {
       return NextResponse.json({ error: "Введите инвайт-код" }, { status: 400 });
     }
 
     const cleanCode = code.toUpperCase().trim();
+    const codeHash = crypto.createHash("sha256").update(cleanCode).digest("hex");
 
-    const invite = await db.inviteCode.findUnique({
-      where: { code: cleanCode },
+    const invite = await db.inviteCode.findFirst({
+      where: {
+        code: { in: [cleanCode, codeHash] },
+      },
       include: {
         center: true,
       },
     });
 
     if (
-      !invite || 
-      invite.isRevoked || 
-      (invite.expiresAt && new Date() > invite.expiresAt) || 
+      !invite ||
+      invite.isRevoked ||
+      (invite.expiresAt && new Date() > invite.expiresAt) ||
       (invite.maxUses !== null && invite.usesCount >= invite.maxUses)
     ) {
       // Neutral message to prevent leaking if code exists
       return NextResponse.json({ error: "Недействительный инвайт-код" }, { status: 400 });
     }
 
-    const tenantDb = getTenantDb(invite.centerId);
+    if (invite.center.status === "BLOCKED" || invite.center.status === "CANCELLED") {
+      return NextResponse.json(
+        { error: "Учебный центр заблокирован или деактивирован" },
+        { status: 403 }
+      );
+    }
 
-    // Check if user is already a member with this role
-    let membership = await tenantDb.centerMembership.findFirst({
-      where: {
-        userId: session.user.id,
-        role: invite.targetRole,
-      },
-    });
+    await db.$transaction(async (tx) => {
+      // Atomic conditional increment to prevent TOCTOU race conditions
+      const affected = await tx.$executeRaw`
+        UPDATE "InviteCode"
+        SET "usesCount" = "usesCount" + 1
+        WHERE "id" = ${invite.id}
+          AND "isRevoked" = false
+          AND ("expiresAt" IS NULL OR "expiresAt" > NOW())
+          AND ("maxUses" IS NULL OR "usesCount" < "maxUses")
+      `;
 
-    if (!membership) {
-      membership = await tenantDb.centerMembership.create({
-        data: {
-          userId: session.user.id,
+      if (affected === 0) {
+        throw new Error("INVITE_EXHAUSTED_OR_INVALID");
+      }
+
+      // Check if user is already a member with this role
+      let membership = await tx.centerMembership.findFirst({
+        where: {
           centerId: invite.centerId,
+          userId: session.user.id,
           role: invite.targetRole,
         },
       });
-    }
 
-    // If invite is linked to a group, verify capacity and enroll student
-    if (invite.groupId && invite.targetRole === "STUDENT") {
-      const group = await tenantDb.group.findUnique({
-        where: { id: invite.groupId },
-        include: { _count: { select: { enrollments: true } } },
-      });
-
-      if (group) {
-        const currentCount = group._count.enrollments;
-        const existingEnrollment = await tenantDb.enrollment.findFirst({
-          where: {
-            studentMembershipId: membership.id,
-            groupId: invite.groupId,
+      if (!membership) {
+        membership = await tx.centerMembership.create({
+          data: {
+            userId: session.user.id,
+            centerId: invite.centerId,
+            role: invite.targetRole,
           },
         });
+      }
 
-        if (!existingEnrollment) {
-          if (currentCount >= group.maxStudents) {
-            return NextResponse.json(
-              { error: `Группа «${group.name}» заполнена (лимит: ${group.maxStudents} учеников).` },
-              { status: 400 }
-            );
-          }
+      // If invite is linked to a group, verify capacity and enroll student
+      if (invite.groupId && invite.targetRole === "STUDENT") {
+        const group = await tx.group.findFirst({
+          where: { id: invite.groupId, centerId: invite.centerId },
+          include: { _count: { select: { enrollments: true } } },
+        });
 
-          await tenantDb.enrollment.create({
-            data: {
+        if (group) {
+          const currentCount = group._count.enrollments;
+          const existingEnrollment = await tx.enrollment.findFirst({
+            where: {
               centerId: invite.centerId,
               studentMembershipId: membership.id,
               groupId: invite.groupId,
-              status: "ACTIVE",
+            },
+          });
+
+          if (!existingEnrollment) {
+            if (currentCount >= group.maxStudents) {
+              throw new Error(`GROUP_FULL:Группа «${group.name}» заполнена (лимит: ${group.maxStudents} учеников).`);
+            }
+
+            await tx.enrollment.create({
+              data: {
+                centerId: invite.centerId,
+                studentMembershipId: membership.id,
+                groupId: invite.groupId,
+                status: "ACTIVE",
+              },
+            });
+          }
+        }
+      }
+
+      // If invite is for PARENT and carries a studentMembershipId, establish confirmed ParentLink
+      if (invite.targetRole === "PARENT" && invite.studentMembershipId) {
+        const existingLink = await tx.parentLink.findFirst({
+          where: {
+            parentMembershipId: membership.id,
+            studentMembershipId: invite.studentMembershipId,
+          },
+        });
+
+        if (!existingLink) {
+          await tx.parentLink.create({
+            data: {
+              parentMembershipId: membership.id,
+              studentMembershipId: invite.studentMembershipId,
+              status: "CONFIRMED",
+              initiatedBy: "PARENT",
+              inviteCodeUsed: codeHash,
+              confirmedAt: new Date(),
+            },
+          });
+        } else if (existingLink.status !== "CONFIRMED") {
+          await tx.parentLink.updateMany({
+            where: {
+              parentMembershipId: membership.id,
+              studentMembershipId: invite.studentMembershipId,
+            },
+            data: {
+              status: "CONFIRMED",
+              confirmedAt: new Date(),
+              inviteCodeUsed: codeHash,
             },
           });
         }
       }
-    }
-
-    // If invite is for PARENT and carries a studentMembershipId, establish confirmed ParentLink
-    if (invite.targetRole === "PARENT" && invite.studentMembershipId) {
-      const existingLink = await tenantDb.parentLink.findFirst({
-        where: {
-          parentMembershipId: membership.id,
-          studentMembershipId: invite.studentMembershipId,
-        },
-      });
-
-      if (!existingLink) {
-        await tenantDb.parentLink.create({
-          data: {
-            parentMembershipId: membership.id,
-            studentMembershipId: invite.studentMembershipId,
-            status: "CONFIRMED",
-            initiatedBy: "PARENT",
-            inviteCodeUsed: invite.code,
-            confirmedAt: new Date(),
-          },
-        });
-      } else if (existingLink.status !== "CONFIRMED") {
-        await tenantDb.parentLink.updateMany({
-          where: {
-            parentMembershipId: membership.id,
-            studentMembershipId: invite.studentMembershipId,
-          },
-          data: {
-            status: "CONFIRMED",
-            confirmedAt: new Date(),
-            inviteCodeUsed: invite.code,
-          },
-        });
-      }
-    }
-
-    // Increment invite usage
-    await tenantDb.inviteCode.updateMany({
-      where: { id: invite.id },
-      data: {
-        usesCount: invite.usesCount + 1,
-      },
     });
 
     // Update active session token to switch to this center (persisted, revocable, with jti)
@@ -183,6 +200,14 @@ export async function POST(req: Request) {
 
     return response;
   } catch (err: unknown) {
+    if (err instanceof Error) {
+      if (err.message === "INVITE_EXHAUSTED_OR_INVALID") {
+        return NextResponse.json({ error: "Недействительный инвайт-код" }, { status: 400 });
+      }
+      if (err.message.startsWith("GROUP_FULL:")) {
+        return NextResponse.json({ error: err.message.slice("GROUP_FULL:".length) }, { status: 400 });
+      }
+    }
     console.error("Accept invite error:", err);
     return NextResponse.json({ error: "Ошибка при активации инвайта" }, { status: 500 });
   }

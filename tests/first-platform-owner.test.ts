@@ -40,11 +40,20 @@ describe("LAUNCH-1 Item 5: First platform owner setup", () => {
       await db.learningCenter.deleteMany({
         where: { ownerId: { in: createdUserIds } },
       });
+      await db.platformAnnouncementRead.deleteMany({
+        where: { userId: { in: createdUserIds } },
+      });
+      await db.platformAnnouncement.deleteMany({
+        where: { createdBy: { in: createdUserIds } },
+      });
       await db.userSession.deleteMany({
         where: { userId: { in: createdUserIds } },
       });
       await db.auditLog.deleteMany({
         where: { actorUserId: { in: createdUserIds } },
+      });
+      await db.platformExpense.deleteMany({
+        where: { createdBy: { in: createdUserIds } },
       });
       await db.platformUser.deleteMany({
         where: { id: { in: createdUserIds } },
@@ -58,11 +67,20 @@ describe("LAUNCH-1 Item 5: First platform owner setup", () => {
       await db.learningCenter.deleteMany({
         where: { ownerId: { in: createdUserIds } },
       });
+      await db.platformAnnouncementRead.deleteMany({
+        where: { userId: { in: createdUserIds } },
+      });
+      await db.platformAnnouncement.deleteMany({
+        where: { createdBy: { in: createdUserIds } },
+      });
       await db.userSession.deleteMany({
         where: { userId: { in: createdUserIds } },
       });
       await db.auditLog.deleteMany({
         where: { actorUserId: { in: createdUserIds } },
+      });
+      await db.platformExpense.deleteMany({
+        where: { createdBy: { in: createdUserIds } },
       });
       await db.platformUser.deleteMany({
         where: { id: { in: createdUserIds } },

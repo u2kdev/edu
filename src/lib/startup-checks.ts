@@ -1,3 +1,5 @@
+import { getRawClickAllowlistEnv, parseClickIpAllowlist } from "./click-ip";
+
 export interface StartupEnvCheckResult {
   valid: boolean;
   errors: string[];
@@ -7,6 +9,9 @@ export interface StartupEnvCheckResult {
  * Validates required environment variables for production execution.
  * Required variables in production:
  * - JWT_SECRET (>= 32 chars)
+ * - PAYMENT_CONFIG_ENCRYPTION_KEY (>= 32 chars, distinct from JWT_SECRET & RECEIPT_VERIFY_SECRET)
+ * - RECEIPT_VERIFY_SECRET (>= 32 chars, distinct from JWT_SECRET & PAYMENT_CONFIG_ENCRYPTION_KEY)
+ * - CLICK_ALLOWED_IPS / CLICK_IP_ALLOWLIST (optional; when set, all entries must be valid IPs/CIDRs)
  * - DATABASE_URL (non-empty)
  * - DIRECT_URL (non-empty)
  * - APP_URL (valid http/https URL)
@@ -73,6 +78,52 @@ export function validateProductionStartupEnv(
   // 9. CRON_SECRET
   if (!env.CRON_SECRET || env.CRON_SECRET.length < 16) {
     errors.push("CRON_SECRET must be set and at least 16 characters long");
+  }
+
+  // 10. PAYMENT_CONFIG_ENCRYPTION_KEY (distinct secret for encrypting Click merchant credentials)
+  const payKey = env.PAYMENT_CONFIG_ENCRYPTION_KEY?.trim() ?? "";
+  if (payKey.length < 32) {
+    errors.push("PAYMENT_CONFIG_ENCRYPTION_KEY must be set and at least 32 characters long");
+  } else if (env.JWT_SECRET && payKey === env.JWT_SECRET.trim()) {
+    errors.push("PAYMENT_CONFIG_ENCRYPTION_KEY must be distinct from JWT_SECRET");
+  }
+
+  // 11. RECEIPT_VERIFY_SECRET (distinct HMAC secret for receipt QR verification)
+  const receiptSecret = env.RECEIPT_VERIFY_SECRET?.trim() ?? "";
+  if (receiptSecret.length < 32) {
+    errors.push("RECEIPT_VERIFY_SECRET must be set and at least 32 characters long");
+  } else {
+    if (env.JWT_SECRET && receiptSecret === env.JWT_SECRET.trim()) {
+      errors.push("RECEIPT_VERIFY_SECRET must be distinct from JWT_SECRET");
+    }
+    if (payKey && receiptSecret === payKey) {
+      errors.push("RECEIPT_VERIFY_SECRET must be distinct from PAYMENT_CONFIG_ENCRYPTION_KEY");
+    }
+  }
+
+  // 12. CLICK_ALLOWED_IPS / CLICK_IP_ALLOWLIST (when configured, validate every IP/CIDR entry)
+  const rawClickAllowlist = getRawClickAllowlistEnv(env);
+  if (rawClickAllowlist) {
+    const parsed = parseClickIpAllowlist(rawClickAllowlist);
+    if (parsed.invalidEntries.length > 0 || parsed.entries.length === 0) {
+      errors.push(
+        "CLICK_ALLOWED_IPS contains invalid IP/CIDR entries (expected comma-separated IPv4/IPv6 or CIDR)"
+      );
+    }
+  }
+
+  // 13. Telegram Bot & Webhook fail-closed configuration when TELEGRAM_BOT_TOKEN is set
+  const rawTgToken = env.TELEGRAM_BOT_TOKEN?.trim() ?? "";
+  if (rawTgToken) {
+    if (!/^\d+:[A-Za-z0-9_-]{20,}$/.test(rawTgToken)) {
+      errors.push("TELEGRAM_BOT_TOKEN has an invalid format");
+    }
+    const tgSecret = env.TELEGRAM_WEBHOOK_SECRET?.trim() ?? "";
+    if (tgSecret.length < 16) {
+      errors.push(
+        "TELEGRAM_WEBHOOK_SECRET must be set and at least 16 characters long when TELEGRAM_BOT_TOKEN is configured"
+      );
+    }
   }
 
   return {

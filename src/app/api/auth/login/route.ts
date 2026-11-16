@@ -2,9 +2,9 @@ import { z } from "zod";
 // Reason: Exception: Auth routes operate on platform models.
 // eslint-disable-next-line no-restricted-imports
 import { db } from "@/lib/db";
-import { comparePassword, signJWT, JWTPayload } from "@/lib/auth";
+import { comparePassword, signJWT, JWTPayload, DUMMY_BCRYPT_HASH, signPending2faToken } from "@/lib/auth";
 import { normalizePhone } from "@/lib/phone";
-import { checkRateLimit } from "@/lib/rate-limit";
+import { checkRateLimit, clearRateLimit } from "@/lib/rate-limit";
 import { getClientIp } from "@/lib/ip";
 import { sendEmail, enqueueEmailOutbox } from '@/lib/email';
 import { apiError, apiSuccess, handleApiError } from "@/lib/api-response";
@@ -29,6 +29,23 @@ export async function POST(req: Request) {
     const rawLogin = (parsed.login || parsed.email || "").trim();
     const loginLower = rawLogin.toLowerCase();
     const normalizedPhone = normalizePhone(rawLogin);
+
+    // Account-level rate limit across all IPs (mitigates distributed IP brute-force & credential stuffing)
+    if (loginLower) {
+      const accountKey = `account_login:${loginLower}`;
+      if (!(await checkRateLimit(accountKey, 20, 15 * 60 * 1000))) {
+        return new Response(
+          JSON.stringify({ error: { message: "auth.rate_limited", code: "RATE_LIMITED" } }),
+          {
+            status: 429,
+            headers: {
+              "Content-Type": "application/json",
+              "Retry-After": "900",
+            },
+          }
+        );
+      }
+    }
 
     // Find user by email, phone, or username (excluding soft-deleted)
     const user = await db.platformUser.findFirst({
@@ -140,6 +157,7 @@ export async function POST(req: Request) {
     };
 
     if (!user || !user.isActive) {
+      await comparePassword(password, DUMMY_BCRYPT_HASH);
       return await handleFailure("user_not_found_or_inactive");
     }
 
@@ -162,17 +180,41 @@ export async function POST(req: Request) {
     // 2FA TOTP check
     if (user.twoFactorEnabled && user.twoFactorSecret) {
       if (!parsed.twoFactorCode) {
+        const twoFactorToken = signPending2faToken({
+          id: user.id,
+          email: user.email,
+          platformRole: user.platformRole,
+        });
         return apiSuccess({
           requiresTwoFactor: true,
+          twoFactorToken,
           email: user.email,
           message: "auth.twoFactorRequired",
         });
       }
 
-      const { verifyTotpCode } = await import("@/lib/totp");
-      const is2faValid = verifyTotpCode(user.twoFactorSecret, parsed.twoFactorCode);
-      if (!is2faValid) {
-        return apiError("auth.invalid2faCode", "UNAUTHORIZED", 401);
+      const { decryptTwoFactorSecret } = await import("@/lib/two-factor-cipher");
+      const { verifyTotpCodeWithStep, verifyBackupCode } = await import("@/lib/totp");
+      const decryptedSecret = decryptTwoFactorSecret(user.twoFactorSecret);
+      const totpResult = verifyTotpCodeWithStep(decryptedSecret, parsed.twoFactorCode, {
+        lastStep: user.twoFactorLastStep,
+      });
+      const backupResult = verifyBackupCode(parsed.twoFactorCode, user.twoFactorBackupCodes);
+
+      if (!totpResult.valid && !backupResult.valid) {
+        return await handleFailure("invalid_2fa_code", user.id);
+      }
+
+      if (backupResult.valid && backupResult.remainingHashes) {
+        await db.platformUser.update({
+          where: { id: user.id },
+          data: { twoFactorBackupCodes: JSON.stringify(backupResult.remainingHashes) },
+        });
+      } else if (totpResult.valid && totpResult.step !== undefined) {
+        await db.platformUser.update({
+          where: { id: user.id },
+          data: { twoFactorLastStep: totpResult.step },
+        });
       }
     }
 
@@ -185,6 +227,8 @@ export async function POST(req: Request) {
         where: { id: user.id },
         data: { lastLoginAt: new Date() },
       }),
+      clearRateLimit(`account_login:${loginLower}`),
+      ...(email !== loginLower ? [clearRateLimit(`account_login:${email.toLowerCase()}`)] : []),
     ]);
 
     const jti = uuidv4();
@@ -237,8 +281,14 @@ export async function POST(req: Request) {
       // Outside request context (e.g. unit tests)
     }
 
+    const { getPlatformSetting } = await import("@/lib/platform-settings");
+    const require2faForStaff = await getPlatformSetting("security.require2faForStaff", false);
+    const isStaff = ["SUPERADMIN", "DEVELOPER", "PLATFORM_ADMIN"].includes(user.platformRole);
+    const requires2faSetup = Boolean(require2faForStaff && isStaff && !user.twoFactorEnabled);
+
     return apiSuccess({
       mustChangePassword: user.mustChangePassword,
+      requires2faSetup,
       user: {
         id: user.id,
         email: user.email,
@@ -246,6 +296,7 @@ export async function POST(req: Request) {
         username: user.username,
         role: user.platformRole,
         mustChangePassword: user.mustChangePassword,
+        requires2faSetup,
       }
     });
   } catch (error: unknown) {

@@ -1,6 +1,8 @@
 import { NextResponse } from "next/server";
 import { requireTenantAccess } from "@/lib/tenant";
 import { withKeyedLock } from "@/lib/async-lock";
+import { hasPermission } from "@/lib/permissions";
+import { calculateDroppedRemaining, refundBillingPayment } from "@/lib/billing";
 
 export async function POST(
   req: Request,
@@ -137,7 +139,7 @@ export async function DELETE(
       return NextResponse.json({ error: "Forbidden" }, { status: 403 });
     }
 
-    const { studentMembershipId, reason } = await req.json();
+    const { studentMembershipId, reason, refundAction } = await req.json();
 
     if (!studentMembershipId) {
       return NextResponse.json(
@@ -162,6 +164,44 @@ export async function DELETE(
       );
     }
 
+    const droppedCalculation = await calculateDroppedRemaining(
+      tenantCtx.center.id,
+      enrollment.id
+    ).catch(() => null);
+
+    let refundResult: { paymentId: string; refundAmount: number } | null = null;
+    if (
+      refundAction === "refund" &&
+      droppedCalculation &&
+      droppedCalculation.remainingAmount > 0 &&
+      droppedCalculation.latestPaymentId
+    ) {
+      if (
+        !tenantCtx.isPlatformStaff &&
+        !hasPermission("payments.refund", tenantCtx.session.user.platformRole, tenantCtx.role)
+      ) {
+        return NextResponse.json(
+          { error: "Forbidden: Нет прав на оформление возврата при отчислении" },
+          { status: 403 }
+        );
+      }
+
+      const res = await refundBillingPayment({
+        centerId: tenantCtx.center.id,
+        paymentId: droppedCalculation.latestPaymentId,
+        refundAmount: droppedCalculation.remainingAmount,
+        reason:
+          typeof reason === "string" && reason.trim()
+            ? `Отчисление: ${reason.trim()}`
+            : "Возврат остатка при отчислении из группы",
+        actorUserId: tenantCtx.session.user.id,
+      });
+      refundResult = {
+        paymentId: res.id,
+        refundAmount: droppedCalculation.remainingAmount,
+      };
+    }
+
     const updated = await tenantDb.enrollment.update({
       where: { id: enrollment.id },
       data: { status: "DROPPED" },
@@ -179,11 +219,18 @@ export async function DELETE(
           groupId,
           groupName: enrollment.group.name,
           reason: reason || "Отчислен администратором",
+          refundAction: refundAction ?? "none",
+          refundAmount: refundResult?.refundAmount ?? 0,
         }),
       },
     });
 
-    return NextResponse.json({ success: true, enrollment: updated });
+    return NextResponse.json({
+      success: true,
+      enrollment: updated,
+      droppedCalculation,
+      refundResult,
+    });
   } catch (err: unknown) {
     const error = err as { message?: string; status?: number };
     return NextResponse.json(

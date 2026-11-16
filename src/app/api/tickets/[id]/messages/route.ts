@@ -4,6 +4,7 @@ import { z } from "zod";
 // eslint-disable-next-line no-restricted-imports
 import { db } from "@/lib/db";
 import { getAuthSession } from "@/lib/auth";
+import { hasPermission } from "@/lib/permissions";
 import { logAuditEvent } from "@/lib/tenant";
 import { apiError, apiSuccess, handleApiError } from "@/lib/api-response";
 import { checkRateLimit } from "@/lib/rate-limit";
@@ -35,10 +36,7 @@ export async function POST(
 
     if (!ticket) return apiError("Тикет не найден", "NOT_FOUND", 404);
 
-    const isPlatformStaff =
-      session.user.platformRole === "SUPERADMIN" ||
-      session.user.platformRole === "PLATFORM_ADMIN" ||
-      session.user.platformRole === "PLATFORM_SUPPORT";
+    const isPlatformStaff = hasPermission("platform.support", session.user.platformRole);
 
     const isCreator = ticket.creatorUserId === session.user.id;
     const isTenantAdmin =

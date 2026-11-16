@@ -66,8 +66,8 @@ export async function GET(req: Request) {
 
     return NextResponse.json({ items, centers: items, total });
   } catch (err: unknown) {
-    const message = err instanceof Error ? err.message : "Internal Error";
-    return NextResponse.json({ error: message }, { status: 500 });
+    console.error("[GET /api/platform/centers]", err);
+    return NextResponse.json({ error: "Internal Error" }, { status: 500 });
   }
 }
 
@@ -261,7 +261,7 @@ export async function POST(req: Request) {
       resetUrl: isSuperadmin ? result.resetUrl : undefined,
     });
   } catch (err: unknown) {
-    const message = err instanceof Error ? err.message : "Internal error";
-    return NextResponse.json({ error: message }, { status: 500 });
+    console.error("[POST /api/platform/centers]", err);
+    return NextResponse.json({ error: "Internal Error" }, { status: 500 });
   }
 }

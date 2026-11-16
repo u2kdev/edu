@@ -5,7 +5,7 @@ import { db } from "@/lib/db";
 
 export async function POST(req: Request) {
   try {
-    const session = await getAuthSession();
+    const session = await getAuthSession(req);
     if (!session) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
@@ -15,8 +15,22 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: "Center ID is required" }, { status: 400 });
     }
 
+    const center = await db.learningCenter.findUnique({
+      where: { id: centerId },
+      select: { id: true, status: true },
+    });
+
+    if (!center) {
+      return NextResponse.json({ error: "Center not found" }, { status: 404 });
+    }
+
+    const isPlatformOwner =
+      session.user.platformRole === "SUPERADMIN" ||
+      session.user.platformRole === "DEVELOPER";
+
     const targetMembership = session.memberships.find((m) => m.centerId === centerId);
-    if (!targetMembership && session.user.platformRole === "NONE") {
+
+    if (!targetMembership && !isPlatformOwner) {
       const existingMem = await db.centerMembership.findFirst({
         where: { userId: session.user.id, centerId },
       });
@@ -26,8 +40,20 @@ export async function POST(req: Request) {
           { status: 403 }
         );
       }
-      return NextResponse.json({ error: "Forbidden: You are not a member of this center" }, { status: 403 });
+      return NextResponse.json(
+        { error: "Forbidden: You are not a member of this center" },
+        { status: 403 }
+      );
     }
+
+    if ((center.status === "BLOCKED" || center.status === "CANCELLED") && !isPlatformOwner) {
+      return NextResponse.json(
+        { error: "Forbidden: Center is inactive or blocked", code: "CENTER_INACTIVE" },
+        { status: 403 }
+      );
+    }
+
+    const activeCenterRole = targetMembership?.role || (isPlatformOwner ? "DIRECTOR" : undefined);
 
     const token = await createSessionToken(
       {
@@ -35,7 +61,7 @@ export async function POST(req: Request) {
         email: session.user.email,
         platformRole: session.user.platformRole,
         activeCenterId: centerId,
-        activeCenterRole: targetMembership?.role,
+        activeCenterRole,
       },
       {
         maxAgeSeconds: 7 * 24 * 60 * 60,
@@ -47,7 +73,7 @@ export async function POST(req: Request) {
     const response = NextResponse.json({
       success: true,
       activeCenterId: centerId,
-      activeCenterRole: targetMembership?.role,
+      activeCenterRole,
     });
 
     response.cookies.set("auth_token", token, {

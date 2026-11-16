@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { requireTenantAccess } from "@/lib/tenant";
+import { calculateStudentBalances } from "@/lib/student-balance";
 
 export async function GET(req: Request) {
   try {
@@ -166,52 +167,82 @@ export async function GET(req: Request) {
         })
       : [];
 
-    // 6. Child's recent payments
-    const payments = await tenantDb.centerPayment.findMany({
-      where: { studentMembershipId: targetStudentId, deletedAt: null },
-      orderBy: { createdAt: "desc" },
-      take: 5,
-    });
+    // 6. Child's recent payments & unified billing balance
+    const [payments, childBalances] = await Promise.all([
+      tenantDb.centerPayment.findMany({
+        where: { studentMembershipId: targetStudentId, deletedAt: null },
+        orderBy: { createdAt: "desc" },
+        take: 10,
+      }),
+      calculateStudentBalances({
+        centerId: tenantCtx.center.id,
+        studentMembershipIds: [targetStudentId],
+      }).catch(() => []),
+    ]);
+    const billing = childBalances[0] ?? null;
 
-    return NextResponse.json({
-      success: true,
-      children: childrenList,
-      activeChild: {
-        ...activeChildItem,
-        todayStatus: todayAttendanceRecord ? todayAttendanceRecord.status : "NO_LESSON_TODAY",
-        metrics: {
-          attendancePercent,
-          totalClasses,
-          presentCount,
-          averageScore,
+    return NextResponse.json(
+      {
+        success: true,
+        children: childrenList,
+        activeChild: {
+          ...activeChildItem,
+          todayStatus: todayAttendanceRecord ? todayAttendanceRecord.status : "NO_LESSON_TODAY",
+          metrics: {
+            attendancePercent,
+            totalClasses,
+            presentCount,
+            averageScore,
+          },
+          recentGrades: grades.map((g) => ({
+            id: g.id,
+            score: g.value,
+            maxScore: g.maxValue,
+            lessonTitle: g.lesson?.title || null,
+            comment: g.comment,
+            createdAt: g.createdAt,
+          })),
+          upcomingSchedule: scheduleSlots.map((slot) => ({
+            id: slot.id,
+            groupName: slot.group.name,
+            teacherName: slot.teacher.user.fullName,
+            dayOfWeek: slot.dayOfWeek,
+            startTime: slot.startTime,
+            endTime: slot.endTime,
+            roomName: slot.roomName || "Аудитория",
+          })),
+          payments: payments.map((p) => ({
+            id: p.id,
+            receiptNumber: p.receiptNumber,
+            amount: p.amount,
+            refundedAmount: p.refundedAmount,
+            currency: p.currency,
+            status: p.status,
+            paidAt: p.paidAt,
+            createdAt: p.createdAt,
+          })),
+          billing: billing
+            ? {
+                status: billing.status,
+                debtAmount: billing.debtAmount,
+                totalPaid: billing.totalPaid,
+                earliestPaidUntil: billing.earliestPaidUntil,
+                nextPayment: billing.nextPayment,
+                enrollments: billing.enrollments.map((en) => ({
+                  enrollmentId: en.enrollmentId,
+                  groupId: en.groupId,
+                  groupName: en.groupName,
+                  status: en.status,
+                  paidUntil: en.paidUntil,
+                  daysRemaining: en.daysRemaining,
+                  isOverdue: en.isOverdue,
+                })),
+              }
+            : null,
         },
-        recentGrades: grades.map((g) => ({
-          id: g.id,
-          score: g.value,
-          maxScore: g.maxValue,
-          lessonTitle: g.lesson?.title || null,
-          comment: g.comment,
-          createdAt: g.createdAt,
-        })),
-        upcomingSchedule: scheduleSlots.map((slot) => ({
-          id: slot.id,
-          groupName: slot.group.name,
-          teacherName: slot.teacher.user.fullName,
-          dayOfWeek: slot.dayOfWeek,
-          startTime: slot.startTime,
-          endTime: slot.endTime,
-          roomName: slot.roomName || "Аудитория",
-        })),
-        payments: payments.map((p) => ({
-          id: p.id,
-          amount: p.amount,
-          currency: p.currency,
-          status: p.status,
-          paidAt: p.paidAt,
-          createdAt: p.createdAt,
-        })),
       },
-    });
+      { headers: { "Cache-Control": "no-store" } }
+    );
   } catch (err: unknown) {
     const error = err as { message?: string; status?: number };
     return NextResponse.json(

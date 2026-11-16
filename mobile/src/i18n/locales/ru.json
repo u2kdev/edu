@@ -133,6 +133,11 @@
     "switchCenter": "Учебный центр",
     "switchRole": "Быстрая смена демо-роли",
     "language": "Язык приложения",
-    "pullToRefresh": "Потяните вниз для обновления"
+    "pullToRefresh": "Потяните вниз для обновления",
+    "telegramTitle": "Telegram-бот",
+    "telegramConnect": "Подключить Telegram",
+    "telegramDisconnect": "Отключить Telegram",
+    "telegramConnected": "Подключён",
+    "telegramHint": "Получайте напоминания об оплате, расписание и баланс в Telegram."
   }
 }

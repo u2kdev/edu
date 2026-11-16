@@ -5,6 +5,15 @@ import { db } from "@/lib/db";
 import { requirePlatformPermission, handlePlatformError } from "@/lib/platformAuth";
 import { calculatePlatformMRR } from "@/lib/platform-finance";
 import { isEmailConfigured } from "@/lib/email";
+import { buildPlatformAnalyticsExtension, resolvePlatformPeriodDays } from "@/lib/platform-dashboard-analytics";
+
+interface DashboardCacheEntry {
+  data: Record<string, unknown>;
+  expiresAt: number;
+}
+
+const dashboardCache = new Map<string, DashboardCacheEntry>();
+const DASHBOARD_CACHE_TTL_MS = 60 * 1000; // 60 seconds TTL
 
 export async function GET(req: Request) {
   try {
@@ -12,12 +21,16 @@ export async function GET(req: Request) {
 
     const { searchParams } = new URL(req.url);
     const period = searchParams.get("period") || "30d";
+    const bypassCache = searchParams.get("refresh") === "true";
+
+    const cacheKey = `dashboard:${period}`;
+    const cached = dashboardCache.get(cacheKey);
+    if (!bypassCache && cached && cached.expiresAt > Date.now()) {
+      return NextResponse.json(cached.data);
+    }
 
     const now = new Date();
-    let periodDays = 30;
-    if (period === "7d") periodDays = 7;
-    else if (period === "90d") periodDays = 90;
-    else if (period === "year") periodDays = 365;
+    const periodDays = resolvePlatformPeriodDays(period);
 
     const periodStart = new Date(now.getTime() - periodDays * 24 * 60 * 60 * 1000);
     const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
@@ -539,7 +552,9 @@ export async function GET(req: Request) {
       },
     };
 
-    return NextResponse.json({
+    const analyticsExt = await buildPlatformAnalyticsExtension(period, now);
+
+    const payload = {
       success: true,
       period,
       finance,
@@ -548,7 +563,15 @@ export async function GET(req: Request) {
       attentionItems,
       events,
       health,
+      ...analyticsExt,
+    };
+
+    dashboardCache.set(cacheKey, {
+      data: payload,
+      expiresAt: Date.now() + DASHBOARD_CACHE_TTL_MS,
     });
+
+    return NextResponse.json(payload, { headers: { "Cache-Control": "no-store" } });
   } catch (err: unknown) {
     return handlePlatformError(err);
   }

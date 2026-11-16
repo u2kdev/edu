@@ -1,7 +1,13 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { Database, Search } from "lucide-react";
+import {
+  Badge,
+  DataTable,
+  type DataTableColumn,
+  FilterBar,
+  PageHeader,
+} from "@/components/ui";
 
 interface AuditLogItem {
   id: string;
@@ -33,81 +39,91 @@ export default function GlobalAuditLogsPage() {
       log.resource.toLowerCase().includes(search.toLowerCase())
   );
 
+  const columns: DataTableColumn<AuditLogItem>[] = [
+    {
+      id: "timestamp",
+      header: "Timestamp",
+      sortable: true,
+      sortValue: (log) => log.createdAt,
+      cell: (log) => (
+        <span className="whitespace-nowrap font-mono text-xs text-muted-foreground tabular-nums">
+          {new Date(log.createdAt).toISOString().replace("T", " ").substring(0, 19)}
+        </span>
+      ),
+    },
+    {
+      id: "tenant",
+      header: "Tenant",
+      sortable: true,
+      sortValue: (log) => log.center?.slug ?? "PLATFORM",
+      cell: (log) => (
+        <Badge variant={log.center ? "info" : "neutral"}>
+          {log.center ? log.center.slug : "PLATFORM"}
+        </Badge>
+      ),
+    },
+    {
+      id: "actor",
+      header: "Actor",
+      isMobilePrimary: true,
+      sortable: true,
+      sortValue: (log) => log.actor.email,
+      cell: (log) => <span className="font-mono text-xs text-foreground">{log.actor.email}</span>,
+    },
+    {
+      id: "action",
+      header: "Action",
+      sortable: true,
+      sortValue: (log) => log.action,
+      cell: (log) => (
+        <span className="font-mono text-xs font-semibold text-warning">{log.action}</span>
+      ),
+    },
+    {
+      id: "resource",
+      header: "Resource",
+      sortable: true,
+      sortValue: (log) => log.resource,
+      cell: (log) => (
+        <span className="font-mono text-xs text-primary">{log.resource}</span>
+      ),
+    },
+    {
+      id: "resourceId",
+      header: "ID",
+      hideOnMobile: true,
+      cell: (log) => (
+        <span className="block max-w-[140px] truncate font-mono text-xs text-muted-foreground">
+          {log.resourceId || "—"}
+        </span>
+      ),
+    },
+  ];
+
   return (
     <div className="space-y-6">
-      <div className="mb-8">
-        <h1 className="text-2xl font-bold text-zinc-100 flex items-center gap-3">
-          <Database className="w-6 h-6 text-emerald-400" />
-          Global Audit Logs
-        </h1>
-        <p className="text-zinc-500 mt-1">Unrestricted view of all platform and tenant activities</p>
-      </div>
+      <PageHeader
+        title="Global Audit Logs"
+        description="Unrestricted view of all platform and tenant activities"
+      />
 
-      <div className="bg-zinc-900 border border-zinc-800 rounded p-4">
-        <div className="relative mb-4">
-          <Search className="w-5 h-5 text-zinc-600 absolute left-3 top-1/2 -translate-y-1/2" />
-          <input
-            type="text"
-            placeholder="Grep logs by action, actor email, or resource..."
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-            className="w-full bg-black border border-zinc-800 text-zinc-300 rounded pl-10 pr-4 py-2 text-sm focus:outline-none focus:border-emerald-500 font-mono"
-          />
-        </div>
+      <FilterBar
+        search={search}
+        onSearchChange={setSearch}
+        searchPlaceholder="Grep logs by action, actor email, or resource..."
+        hasActiveFilters={Boolean(search)}
+        onReset={() => setSearch("")}
+      />
 
-        <div className="overflow-x-auto">
-          <table className="w-full text-left border-collapse font-mono text-xs">
-            <thead>
-              <tr className="border-b border-zinc-800 text-zinc-500">
-                <th className="py-2 pr-4 font-normal">TIMESTAMP</th>
-                <th className="py-2 pr-4 font-normal">TENANT</th>
-                <th className="py-2 pr-4 font-normal">ACTOR</th>
-                <th className="py-2 pr-4 font-normal">ACTION</th>
-                <th className="py-2 pr-4 font-normal">RESOURCE</th>
-                <th className="py-2 font-normal">ID</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-zinc-800/50">
-              {loading ? (
-                <tr>
-                  <td colSpan={6} className="py-8 text-center text-zinc-600">
-                    Querying logs...
-                  </td>
-                </tr>
-              ) : filteredLogs.length === 0 ? (
-                <tr>
-                  <td colSpan={6} className="py-8 text-center text-zinc-600">
-                    0 matches
-                  </td>
-                </tr>
-              ) : (
-                filteredLogs.map((log) => (
-                  <tr key={log.id} className="hover:bg-zinc-800/30 text-zinc-300">
-                    <td className="py-2 pr-4 whitespace-nowrap text-zinc-500">
-                      {new Date(log.createdAt).toISOString().replace("T", " ").substring(0, 19)}
-                    </td>
-                    <td className="py-2 pr-4 text-emerald-400">
-                      {log.center ? log.center.slug : "PLATFORM"}
-                    </td>
-                    <td className="py-2 pr-4">
-                      {log.actor.email}
-                    </td>
-                    <td className="py-2 pr-4 text-amber-300 font-bold">
-                      {log.action}
-                    </td>
-                    <td className="py-2 pr-4 text-blue-400">
-                      {log.resource}
-                    </td>
-                    <td className="py-2 text-zinc-500 truncate max-w-[120px]">
-                      {log.resourceId}
-                    </td>
-                  </tr>
-                ))
-              )}
-            </tbody>
-          </table>
-        </div>
-      </div>
+      <DataTable
+        data={filteredLogs}
+        columns={columns}
+        getRowId={(row) => row.id}
+        loading={loading}
+        loadingLabel="Querying logs..."
+        emptyTitle="0 matches"
+        defaultDensity="compact"
+      />
     </div>
   );
 }

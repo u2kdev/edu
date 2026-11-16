@@ -2,6 +2,9 @@
 
 import { CalendarDays } from "lucide-react";
 import { t } from "@/i18n";
+import { Alert, AlertDescription } from "@/components/ui/alert";
+import { ConfirmDialog } from "@/components/ui/confirm-dialog";
+import { EmptyState } from "@/components/ui/empty-state";
 import {
   buildDayNamesFull,
   buildDayNamesShort,
@@ -56,10 +59,15 @@ export default function ScheduleManager({
     errorMsg,
     conflictList,
     submitting,
+    deleteTargetId,
+    setDeleteTargetId,
+    deleting,
+    deleteError,
     openCreateModal,
     openEditModal,
     handleSaveSlot,
     handleDeleteSlot,
+    confirmDeleteSlot,
   } = useSchedule({ initialSlots, groups, teachers, locale });
 
   const canManage = userRole === "DIRECTOR" || userRole === "CENTER_ADMIN";
@@ -85,20 +93,21 @@ export default function ScheduleManager({
         onCreateSlot={openCreateModal}
       />
 
+      {deleteError && (
+        <Alert variant="destructive">
+          <AlertDescription>{deleteError}</AlertDescription>
+        </Alert>
+      )}
+
       {/* Main Calendar View Area */}
       {filteredSlots.length === 0 ? (
-        <div className="glass-panel p-16 rounded-2xl border border-slate-800 text-center">
-          <CalendarDays className="w-12 h-12 text-slate-700 mx-auto mb-4" />
-          <h3 className="text-lg font-semibold text-slate-300 mb-1">
-            {t(locale, "schedule.emptyTitle")}
-          </h3>
-          <p className="text-sm text-slate-500">
-            {t(locale, "schedule.emptySubtitle")}
-          </p>
-        </div>
+        <EmptyState
+          icon={<CalendarDays className="h-6 w-6 text-muted-foreground" aria-hidden="true" />}
+          title={t(locale, "schedule.emptyTitle")}
+          description={t(locale, "schedule.emptySubtitle")}
+        />
       ) : (
         <>
-          {/* DAY VIEW */}
           {viewMode === "day" && (
             <ScheduleDayView
               locale={locale}
@@ -112,7 +121,6 @@ export default function ScheduleManager({
             />
           )}
 
-          {/* WEEK VIEW */}
           {viewMode === "week" && (
             <ScheduleWeekView
               locale={locale}
@@ -123,19 +131,16 @@ export default function ScheduleManager({
             />
           )}
 
-          {/* MONTH VIEW */}
           {viewMode === "month" && (
             <ScheduleMonthView slotsByDay={slotsByDay} dayNamesShort={dayNamesShort} />
           )}
         </>
       )}
 
-      {/* UPCOMING ONE-TIME LESSONS (if any) */}
       {upcomingLessons.length > 0 && (
         <UpcomingLessons lessons={upcomingLessons} locale={locale} />
       )}
 
-      {/* CREATE / EDIT SLOT MODAL */}
       {isModalOpen && (
         <ScheduleSlotModal
           locale={locale}
@@ -152,6 +157,18 @@ export default function ScheduleManager({
           onSubmit={handleSaveSlot}
         />
       )}
+
+      <ConfirmDialog
+        open={Boolean(deleteTargetId)}
+        onOpenChange={(open) => !open && setDeleteTargetId(null)}
+        title={t(locale, "common.delete")}
+        description={t(locale, "schedule.confirmDelete")}
+        confirmLabel={t(locale, "common.delete")}
+        cancelLabel={t(locale, "common.cancel")}
+        variant="destructive"
+        loading={deleting}
+        onConfirm={confirmDeleteSlot}
+      />
     </div>
   );
 }

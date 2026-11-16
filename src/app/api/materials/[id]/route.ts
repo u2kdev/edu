@@ -87,8 +87,34 @@ export async function PATCH(
       );
     }
 
-    if (!canManageAll && existing.groupId) {
-      await assertGroupAccess(tenantCtx, existing.groupId, "read");
+    if (!canManageAll) {
+      if (existing.groupId) {
+        await assertGroupAccess(tenantCtx, existing.groupId, "write");
+      } else if (existing.courseId) {
+        if (!tenantCtx.membership?.id) {
+          return NextResponse.json({ error: "Forbidden: Active membership required" }, { status: 403 });
+        }
+        const group = await tenantDb.group.findFirst({
+          where: {
+            centerId: center.id,
+            courseId: existing.courseId,
+            ...(role === "TEACHER"
+              ? { teacherMembershipId: tenantCtx.membership.id }
+              : { assistantMembershipId: tenantCtx.membership.id }),
+          },
+        });
+        if (!group) {
+          return NextResponse.json(
+            { error: "Forbidden: You are not assigned to this course" },
+            { status: 403 }
+          );
+        }
+      } else {
+        return NextResponse.json(
+          { error: "Forbidden: Only center administrators can modify center-wide materials" },
+          { status: 403 }
+        );
+      }
     }
 
     const body = await req.json();
@@ -164,8 +190,34 @@ export async function DELETE(
       );
     }
 
-    if (!canManageAll && existing.groupId) {
-      await assertGroupAccess(tenantCtx, existing.groupId, "read");
+    if (!canManageAll) {
+      if (existing.groupId) {
+        await assertGroupAccess(tenantCtx, existing.groupId, "write");
+      } else if (existing.courseId) {
+        if (!tenantCtx.membership?.id) {
+          return NextResponse.json({ error: "Forbidden: Active membership required" }, { status: 403 });
+        }
+        const group = await tenantDb.group.findFirst({
+          where: {
+            centerId: center.id,
+            courseId: existing.courseId,
+            ...(role === "TEACHER"
+              ? { teacherMembershipId: tenantCtx.membership.id }
+              : { assistantMembershipId: tenantCtx.membership.id }),
+          },
+        });
+        if (!group) {
+          return NextResponse.json(
+            { error: "Forbidden: You are not assigned to this course" },
+            { status: 403 }
+          );
+        }
+      } else {
+        return NextResponse.json(
+          { error: "Forbidden: Only center administrators can delete center-wide materials" },
+          { status: 403 }
+        );
+      }
     }
 
     await tenantDb.material.update({

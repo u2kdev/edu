@@ -79,75 +79,80 @@ export default function LanguageSwitcher({
     }
   }
 
+  const currentCode = currentLocale === "uz-Latn" ? "UZ" : "RU";
+
   return (
     <div className="relative" ref={dropdownRef}>
       <button
+        type="button"
         onClick={() => setIsOpen(!isOpen)}
         disabled={saving}
         className={`
-          flex items-center gap-2 px-3 py-2 rounded-xl
-          text-sm font-medium text-slate-300 
-          bg-slate-900/60 border border-slate-700/60
-          hover:bg-slate-800/80 hover:border-slate-600/60 hover:text-white
-          transition-all duration-200
+          flex items-center gap-2 px-3 py-2 rounded-lg
+          text-sm font-medium text-foreground
+          bg-card border border-border
+          hover:bg-muted transition-colors
+          focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring
           disabled:opacity-50 disabled:cursor-not-allowed
           ${compact ? "px-2.5" : ""}
         `}
         aria-label="Change language"
+        aria-expanded={isOpen}
         title="Change language"
       >
-        <Globe className="w-4 h-4 text-brand-400" />
+        <Globe className="w-4 h-4 text-primary shrink-0" />
         {!compact && (
           <>
-            <span>{currentMeta.flag}</span>
+            <span className="text-xs font-semibold text-muted-foreground">{currentCode}</span>
             <span className="hidden sm:inline">{currentMeta.nativeLabel}</span>
           </>
         )}
         {saving && (
-          <span className="w-3 h-3 border-2 border-brand-400 border-t-transparent rounded-full animate-spin" />
+          <span className="w-3 h-3 border-2 border-primary border-t-transparent rounded-full animate-spin" />
         )}
       </button>
 
       {isOpen && (
         <div
           className="
-            absolute right-0 top-full mt-2 z-50
-            min-w-[200px] py-1.5
-            glass-panel rounded-xl border border-slate-700/80
-            shadow-xl shadow-black/30
-            animate-in fade-in slide-in-from-top-1
+            absolute right-0 top-full mt-1.5 z-50
+            min-w-[200px] py-1
+            bg-popover text-popover-foreground rounded-lg border border-border
+            shadow-sm
           "
         >
           {SUPPORTED_LOCALES.map((locale) => {
             const meta = LOCALE_META[locale];
             const isActive = locale === currentLocale;
+            const code = locale === "uz-Latn" ? "UZ" : "RU";
 
             return (
               <button
                 key={locale}
+                type="button"
                 onClick={() => handleSelect(locale)}
                 className={`
-                  w-full flex items-center gap-3 px-4 py-2.5
+                  w-full flex items-center gap-2.5 px-3 py-2
                   text-sm font-medium text-left
-                  transition-colors duration-150
+                  transition-colors
                   ${
                     isActive
-                      ? "text-brand-400 bg-brand-500/10"
-                      : "text-slate-300 hover:text-white hover:bg-slate-800/60"
+                      ? "text-accent-foreground bg-accent"
+                      : "text-popover-foreground hover:bg-muted"
                   }
                 `}
               >
-                <span className="text-lg">{meta.flag}</span>
+                <span className="w-6 text-xs font-semibold text-muted-foreground">{code}</span>
                 <div className="flex flex-col">
                   <span>{meta.nativeLabel}</span>
                   {meta.label !== meta.nativeLabel && (
-                    <span className="text-[10px] text-slate-500">
+                    <span className="text-xs text-muted-foreground">
                       {meta.label}
                     </span>
                   )}
                 </div>
                 {isActive && (
-                  <span className="ml-auto w-2 h-2 rounded-full bg-brand-400" />
+                  <span className="ml-auto w-2 h-2 rounded-full bg-primary" />
                 )}
               </button>
             );

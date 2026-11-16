@@ -74,6 +74,10 @@ export class BoundedMemoryRateLimiter {
     }
   }
 
+  public delete(key: string): boolean {
+    return this.store.delete(key);
+  }
+
   public size(): number {
     return this.store.size;
   }
@@ -82,6 +86,20 @@ export class BoundedMemoryRateLimiter {
     this.store.clear();
   }
 }
+
+/**
+ * Shared in-memory sliding window pre-filter layer.
+ * Intercepts high-frequency abuse in O(1) time without consuming database connections.
+ */
+export const processMemoryLimiter = new BoundedMemoryRateLimiter(10000);
+
+// Global hooks for database synchronization when tests or workers delete records directly
+(globalThis as unknown as { __onRateLimitCleared?: () => void }).__onRateLimitCleared = () => {
+  processMemoryLimiter.clear();
+};
+(globalThis as unknown as { __onRateLimitDeleted?: (k: string) => void }).__onRateLimitDeleted = (key: string) => {
+  processMemoryLimiter.delete(key);
+};
 
 /**
  * Generates an isolated rate-limiting key for the client request:
@@ -108,6 +126,13 @@ export async function checkRateLimit(
   windowMs: number = WINDOW_MS,
   consume: boolean = true
 ): Promise<boolean> {
+  // 1. Layer 1: In-memory sliding window pre-filter.
+  // If memory already tracks that this key has exhausted its limit, short-circuit immediately
+  // without sending queries to PostgreSQL, mitigating connection pool DoS.
+  if (!processMemoryLimiter.check(key, maxAttempts, windowMs, false)) {
+    return false;
+  }
+
   const now = new Date();
 
   try {
@@ -131,12 +156,15 @@ export async function checkRateLimit(
             expiresAt,
           },
         });
+        processMemoryLimiter.check(key, maxAttempts, windowMs, true);
       }
       return true; // allowed
     }
 
     // Active window exists and limit reached
     if (existing.count >= maxAttempts) {
+      // Synchronize in-memory blocker so next attempts short-circuit
+      processMemoryLimiter.check(key, maxAttempts, windowMs, true);
       return false; // blocked
     }
 
@@ -147,6 +175,7 @@ export async function checkRateLimit(
           count: { increment: 1 },
         },
       });
+      processMemoryLimiter.check(key, maxAttempts, windowMs, true);
     }
 
     return true; // allowed
@@ -168,6 +197,7 @@ export async function cleanupExpiredRateLimits(): Promise<number> {
 }
 
 export async function clearRateLimit(key: string): Promise<void> {
+  processMemoryLimiter.delete(key);
   try {
     await db.rateLimitRecord.deleteMany({
       where: { key },
@@ -178,6 +208,7 @@ export async function clearRateLimit(key: string): Promise<void> {
 }
 
 export async function clearAllRateLimits(): Promise<void> {
+  processMemoryLimiter.clear();
   try {
     await db.rateLimitRecord.deleteMany();
   } catch {}

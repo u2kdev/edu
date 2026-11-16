@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
-import { requireTenantAccess, logAuditEvent } from "@/lib/tenant";
+import { requireTenantAccess, logAuditEvent, TenantAccessError } from "@/lib/tenant";
 import { hasPermission } from "@/lib/permissions";
 import type { CenterRole } from "@/lib/permissions";
 
@@ -101,6 +101,9 @@ export async function GET(
       },
     });
   } catch (err: unknown) {
+    if (err instanceof TenantAccessError) {
+      return NextResponse.json({ error: err.message, code: err.code }, { status: err.status });
+    }
     console.error("GET /api/courses/[id] error:", err);
     return NextResponse.json({ error: "Не удалось загрузить курс" }, { status: 500 });
   }
@@ -182,6 +185,9 @@ export async function PATCH(
 
     return NextResponse.json({ success: true, course: updated });
   } catch (err: unknown) {
+    if (err instanceof TenantAccessError) {
+      return NextResponse.json({ error: err.message, code: err.code }, { status: err.status });
+    }
     if (err instanceof z.ZodError) {
       return NextResponse.json({ error: err.issues[0]?.message || "Validation error" }, { status: 400 });
     }
@@ -247,6 +253,9 @@ export async function DELETE(
 
     return NextResponse.json({ success: true, message: "Курс архивирован" });
   } catch (err: unknown) {
+    if (err instanceof TenantAccessError) {
+      return NextResponse.json({ error: err.message, code: err.code }, { status: err.status });
+    }
     console.error("DELETE /api/courses/[id] error:", err);
     return NextResponse.json({ error: "Не удалось удалить курс" }, { status: 500 });
   }

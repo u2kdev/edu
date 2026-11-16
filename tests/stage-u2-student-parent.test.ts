@@ -492,7 +492,7 @@ describe("Stage U2: Student & Parent (Balance, Materials, Homework Files, Tests,
       expect(data.balance.debtAmount).toBe(350000);
       expect(data.balance.nextPayment).not.toBeNull();
       expect(data.balance.payments.length).toBeGreaterThanOrEqual(1);
-      expect(data.balance.payments[0].receiptNumber).toMatch(/^INV-/);
+      expect(data.balance.payments[0].receiptNumber).toMatch(/^(INV|RCP)-/);
     });
 
     it("rejects STUDENT trying to view another student's balance with 403", async () => {

@@ -48,8 +48,8 @@ export async function GET(req: Request) {
 
     return NextResponse.json({ notifications, total, page, pageSize, unreadCount });
   } catch (err: unknown) {
-    const message = err instanceof Error ? err.message : "Server error";
-    return NextResponse.json({ error: message }, { status: 500 });
+    console.error("[GET /api/notifications]", err);
+    return NextResponse.json({ error: "Internal server error" }, { status: 500 });
   }
 }
 
@@ -93,7 +93,7 @@ export async function PATCH(req: Request) {
 
     return NextResponse.json({ error: "Provide notificationId or markAllRead: true" }, { status: 400 });
   } catch (err: unknown) {
-    const message = err instanceof Error ? err.message : "Server error";
-    return NextResponse.json({ error: message }, { status: 500 });
+    console.error("[PATCH /api/notifications]", err);
+    return NextResponse.json({ error: "Internal server error" }, { status: 500 });
   }
 }

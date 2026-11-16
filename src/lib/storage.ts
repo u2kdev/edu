@@ -55,7 +55,6 @@ const CATEGORY_LIMITS: Record<StorageCategory, { maxBytes: number; allowedTypes:
       "image/jpeg",
       "image/png",
       "image/webp",
-      "image/svg+xml",
       "application/pdf",
       "application/msword",
       "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
@@ -91,6 +90,16 @@ const DANGEROUS_EXTENSIONS = new Set([
   "msi",
   "jar",
   "scr",
+  "svg",
+  "svgz",
+  "html",
+  "htm",
+  "xhtml",
+  "shtml",
+  "xml",
+  "jsp",
+  "asp",
+  "aspx",
 ]);
 
 export function validateFileUpload(options: FileValidationOptions): FileValidationResult {
@@ -227,6 +236,104 @@ export interface SavedFileResult {
   fileName: string;
 }
 
+export function getStorageDir(): string {
+  if (process.env.UPLOAD_DIR) {
+    return path.resolve(process.env.UPLOAD_DIR);
+  }
+  return path.resolve(process.cwd(), "storage", "uploads");
+}
+
+export function getLegacyStorageDir(): string {
+  return path.resolve(process.cwd(), "public", "uploads");
+}
+
+/**
+ * Safely resolves a relative path within a base directory, preventing Path Traversal.
+ * Returns the canonical absolute path if safe, or null if traversal is attempted or path is invalid.
+ */
+export function safeResolvePath(baseDir: string, relativePath: string): string | null {
+  try {
+    const cleaned = relativePath.replace(/^[/\\]+/, "");
+    const resolvedBase = path.resolve(baseDir);
+    const resolvedTarget = path.resolve(resolvedBase, cleaned);
+
+    const basePrefix = resolvedBase.endsWith(path.sep) ? resolvedBase : resolvedBase + path.sep;
+    if (resolvedTarget !== resolvedBase && !resolvedTarget.startsWith(basePrefix)) {
+      return null;
+    }
+
+    return resolvedTarget;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Validates binary buffer signatures (magic bytes) against declared MIME type.
+ * Detects disguised files, polyglots, and embedded scripts.
+ */
+export function validateFileBufferSignature(buffer: Buffer, declaredMime: string): void {
+  if (!buffer || buffer.length === 0) {
+    throw new StorageValidationError("Uploaded file is empty");
+  }
+
+  const mime = declaredMime.toLowerCase();
+
+  // 1. Script / XML / HTML detection in headers
+  const headerSample = buffer.subarray(0, Math.min(buffer.length, 4096)).toString("latin1");
+  if (
+    /<script[\s>]/i.test(headerSample) ||
+    /<\?xml/i.test(headerSample) ||
+    /<svg[\s>]/i.test(headerSample) ||
+    /<!doctype\s+html/i.test(headerSample) ||
+    /<html[\s>]/i.test(headerSample)
+  ) {
+    throw new StorageValidationError("Файл содержит недопустимые скрипты или разметку");
+  }
+
+  // 2. Binary signatures for common formats
+  if (mime === "image/jpeg" || mime === "image/jpg") {
+    if (buffer.length < 3 || buffer[0] !== 0xff || buffer[1] !== 0xd8 || buffer[2] !== 0xff) {
+      throw new StorageValidationError("Содержимое файла не соответствует формату JPEG");
+    }
+  } else if (mime === "image/png") {
+    const pngMagic = [0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a];
+    if (buffer.length < 8 || !pngMagic.every((b, i) => buffer[i] === b)) {
+      throw new StorageValidationError("Содержимое файла не соответствует формату PNG");
+    }
+  } else if (mime === "image/gif") {
+    if (buffer.length < 4 || buffer.subarray(0, 4).toString("ascii") !== "GIF8") {
+      throw new StorageValidationError("Содержимое файла не соответствует формату GIF");
+    }
+  } else if (mime === "image/webp") {
+    if (
+      buffer.length < 12 ||
+      buffer.subarray(0, 4).toString("ascii") !== "RIFF" ||
+      buffer.subarray(8, 12).toString("ascii") !== "WEBP"
+    ) {
+      throw new StorageValidationError("Содержимое файла не соответствует формату WEBP");
+    }
+  } else if (mime === "application/pdf") {
+    if (buffer.length < 4 || buffer.subarray(0, 4).toString("ascii") !== "%PDF") {
+      throw new StorageValidationError("Содержимое файла не соответствует формату PDF");
+    }
+  } else if (
+    mime === "application/zip" ||
+    mime === "application/x-zip-compressed" ||
+    mime.includes("officedocument") ||
+    mime.includes("vnd.openxmlformats")
+  ) {
+    if (
+      buffer.length < 4 ||
+      buffer[0] !== 0x50 ||
+      buffer[1] !== 0x4b ||
+      (buffer[2] !== 0x03 && buffer[2] !== 0x05 && buffer[2] !== 0x07)
+    ) {
+      throw new StorageValidationError("Содержимое файла не соответствует формату архива или документа");
+    }
+  }
+}
+
 export async function saveFile(options: SaveFileOptions): Promise<SavedFileResult> {
   const { centerId, category, fileName, contentType, buffer } = options;
   const sizeBytes = buffer.length;
@@ -239,7 +346,10 @@ export async function saveFile(options: SaveFileOptions): Promise<SavedFileResul
     category,
   });
 
-  // 2. Validate quota
+  // 2. Validate magic bytes / signatures
+  validateFileBufferSignature(buffer, contentType);
+
+  // 3. Validate quota
   const quota = await checkStorageQuota(centerId, sizeBytes);
   if (!quota.allowed) {
     throw new StorageValidationError(quota.reason || "Storage quota exceeded");
@@ -270,8 +380,9 @@ export async function saveFile(options: SaveFileOptions): Promise<SavedFileResul
     }
   }
 
-  // Default driver: Local file system in public/uploads
-  const uploadDir = path.join(process.cwd(), "public", "uploads", centerId, category.toLowerCase());
+  // Default driver: Local file system in private storage directory
+  const storageDir = getStorageDir();
+  const uploadDir = path.join(storageDir, centerId, category.toLowerCase());
   await fs.promises.mkdir(uploadDir, { recursive: true });
 
   const filePath = path.join(uploadDir, safeName);
@@ -289,11 +400,23 @@ export async function saveFile(options: SaveFileOptions): Promise<SavedFileResul
 
 export async function deleteStoredFile(fileUrl: string): Promise<boolean> {
   try {
-    if (fileUrl.startsWith("/uploads/")) {
-      const relativePart = fileUrl.replace(/^\/uploads\//, "");
-      const fullPath = path.join(process.cwd(), "public", "uploads", relativePart);
-      if (fs.existsSync(fullPath)) {
-        await fs.promises.unlink(fullPath);
+    if (!fileUrl) return false;
+    if (fileUrl.includes("..")) return false;
+
+    if (fileUrl.startsWith("/uploads/") || fileUrl.startsWith("/api/files/")) {
+      const relativePart = fileUrl.replace(/^\/(uploads|api\/files)\//, "");
+
+      // Try resolving in primary storage directory
+      const primaryPath = safeResolvePath(getStorageDir(), relativePart);
+      if (primaryPath && fs.existsSync(primaryPath)) {
+        await fs.promises.unlink(primaryPath);
+        return true;
+      }
+
+      // Try resolving in legacy directory
+      const legacyPath = safeResolvePath(getLegacyStorageDir(), relativePart);
+      if (legacyPath && fs.existsSync(legacyPath)) {
+        await fs.promises.unlink(legacyPath);
         return true;
       }
     }

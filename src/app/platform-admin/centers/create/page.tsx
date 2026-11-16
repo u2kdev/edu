@@ -4,7 +4,19 @@ import React, { useState } from "react";
 import { useRouter } from "next/navigation";
 import { z } from "zod";
 import Link from "next/link";
-import { ArrowLeft, Building2, CheckCircle2, Copy, Check, AlertTriangle } from "lucide-react";
+import { ArrowLeft, Check, CheckCircle2, Copy, ShieldAlert } from "lucide-react";
+import {
+  Alert,
+  AlertDescription,
+  Badge,
+  Button,
+  Card,
+  CardContent,
+  FormField,
+  Input,
+  PageHeader,
+} from "@/components/ui";
+import { t } from "@/i18n";
 
 const schemaStep1 = z.object({
   name: z.string().min(2, "Название должно содержать не менее 2 символов"),
@@ -124,405 +136,388 @@ export default function CreateCenterPage() {
 
   if (createdInfo) {
     return (
-      <div className="max-w-2xl mx-auto space-y-6">
-        <div className="bg-white p-6 sm:p-8 rounded-2xl border border-slate-200 shadow-sm text-center space-y-6">
-          <div className="w-12 h-12 bg-emerald-50 border border-emerald-200 text-emerald-600 rounded-2xl flex items-center justify-center mx-auto">
-            <CheckCircle2 className="w-6 h-6" />
-          </div>
-          <div>
-            <h2 className="text-xl font-bold text-slate-900">Учебный центр успешно создан!</h2>
-            <p className="text-sm text-slate-500 mt-1">
-              Организация <strong>{createdInfo.name}</strong> зарегистрирована в системе.
-            </p>
-          </div>
-
-          {createdInfo.resetUrl && (
-            <div className="p-4 bg-amber-50 border border-amber-200 rounded-xl text-left space-y-3">
-              <div className="flex items-center gap-2 text-amber-800 text-xs font-semibold">
-                <AlertTriangle className="w-4 h-4 text-amber-600 shrink-0" />
-                <span>Ссылка для первичного входа директора (показывается один раз!)</span>
-              </div>
-              <div className="flex items-center gap-2">
-                <input
-                  type="text"
-                  readOnly
-                  value={createdInfo.resetUrl}
-                  className="flex-1 p-2 bg-white border border-amber-300 rounded-lg text-xs font-mono text-slate-800 select-all"
-                />
-                <button
-                  type="button"
-                  onClick={() => {
-                    navigator.clipboard.writeText(createdInfo.resetUrl || "");
-                    setCopied(true);
-                    setTimeout(() => setCopied(false), 3000);
-                  }}
-                  className="px-3 py-2 bg-amber-600 hover:bg-amber-700 text-white rounded-lg text-xs font-semibold flex items-center gap-1.5 transition-colors cursor-pointer shrink-0"
-                >
-                  {copied ? <Check className="w-3.5 h-3.5" /> : <Copy className="w-3.5 h-3.5" />}
-                  <span>{copied ? "Скопировано!" : "Копировать"}</span>
-                </button>
-              </div>
-              <p className="text-[11px] text-amber-700 leading-relaxed">
-                Скопируйте эту ссылку и передайте директору ({createdInfo.directorEmail}). Ссылка действует 72 часа для установки собственного пароля.
+      <div className="mx-auto max-w-2xl space-y-6">
+        <Card>
+          <CardContent className="space-y-6 p-6 text-center sm:p-8">
+            <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-lg border border-success/30 bg-success-subtle text-success">
+              <CheckCircle2 className="h-6 w-6" aria-hidden="true" />
+            </div>
+            <div>
+              <h2 className="font-display text-xl font-semibold text-foreground">
+                Учебный центр создан
+              </h2>
+              <p className="mt-1 text-sm text-muted-foreground">
+                Организация <strong>{createdInfo.name}</strong> зарегистрирована в системе.
               </p>
             </div>
-          )}
 
-          <div className="pt-2">
-            <button
+            {createdInfo.resetUrl && (
+              <Alert variant="warning" className="text-left">
+                <div className="space-y-3">
+                  <div className="flex items-center gap-2 text-xs font-semibold">
+                    <ShieldAlert className="h-4 w-4 shrink-0" aria-hidden="true" />
+                    <span>{t("ru", "ui4.oneTimeSecretWarn")}</span>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <Input
+                      type="text"
+                      readOnly
+                      value={createdInfo.resetUrl}
+                      className="flex-1 font-mono text-xs select-all"
+                    />
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      onClick={() => {
+                        navigator.clipboard.writeText(createdInfo.resetUrl || "");
+                        setCopied(true);
+                        setTimeout(() => setCopied(false), 3000);
+                      }}
+                    >
+                      {copied ? <Check className="h-3.5 w-3.5 text-success" /> : <Copy className="h-3.5 w-3.5" />}
+                      <span>{copied ? t("ru", "ui4.copied") : t("ru", "ui4.copyCredentials")}</span>
+                    </Button>
+                  </div>
+                  <p className="text-xs text-muted-foreground leading-relaxed">
+                    Передайте ссылку директору ({createdInfo.directorEmail}). Ссылка действует 72 часа для установки пароля.
+                  </p>
+                </div>
+              </Alert>
+            )}
+
+            <Button
               type="button"
+              variant="primary"
+              className="w-full"
               onClick={() => router.push(`/platform-admin/centers/${createdInfo.centerId}`)}
-              className="w-full py-3 bg-blue-600 hover:bg-blue-700 text-white rounded-xl text-sm font-semibold shadow-sm transition-all"
             >
               Перейти в карточку центра
-            </button>
-          </div>
-        </div>
+            </Button>
+          </CardContent>
+        </Card>
       </div>
     );
   }
 
   return (
-    <div className="max-w-3xl mx-auto space-y-6">
-      {/* Top Header */}
-      <div className="flex items-center justify-between">
-        <div className="flex items-center gap-3">
-          <Link
-            href="/platform-admin/centers"
-            className="p-2 bg-white hover:bg-slate-50 border border-slate-200 rounded-xl text-slate-600 transition-colors shadow-sm"
-          >
-            <ArrowLeft className="w-5 h-5" />
+    <div className="mx-auto max-w-3xl space-y-6">
+      <div className="flex items-center gap-3">
+        <Button asChild variant="outline" size="icon" aria-label={t("ru", "common.back")}>
+          <Link href="/platform-admin/centers">
+            <ArrowLeft className="h-4 w-4" aria-hidden="true" />
           </Link>
-          <div>
-            <h1 className="text-2xl font-bold text-slate-900">Создание учебного центра</h1>
-            <p className="text-xs text-slate-500 mt-0.5">Пошаговая регистрация новой организации в e-darischi</p>
-          </div>
-        </div>
+        </Button>
+        <PageHeader
+          title="Создание учебного центра"
+          description="Пошаговая регистрация новой организации"
+        />
       </div>
 
-      {/* Stepper Wizard Bar */}
-      <div className="bg-white p-4 rounded-2xl border border-slate-200 shadow-sm flex items-center justify-between">
-        {[
-          { num: 1, label: "Данные центра" },
-          { num: 2, label: "Статус доступа" },
-          { num: 3, label: "Директор" },
-          { num: 4, label: "Подтверждение" },
-        ].map((s) => (
-          <div key={s.num} className="flex items-center gap-2">
-            <div
-              className={`w-8 h-8 rounded-full flex items-center justify-center font-bold text-xs ${
-                step >= s.num ? "bg-blue-600 text-white" : "bg-slate-100 text-slate-500 border border-slate-200"
-              }`}
-            >
-              {s.num}
-            </div>
-            <span
-              className={`text-xs font-semibold hidden sm:inline ${
-                step >= s.num ? "text-slate-900" : "text-slate-400"
-              }`}
-            >
-              {s.label}
-            </span>
-          </div>
-        ))}
-      </div>
-
-      {/* Step Contents */}
-      <div className="bg-white p-6 sm:p-8 rounded-2xl border border-slate-200 shadow-sm space-y-6">
-        {step === 1 && (
-          <div className="space-y-4">
-            <h2 className="text-lg font-bold text-slate-900">Шаг 1: Основные реквизиты центра</h2>
-
-            <div>
-              <label className="block text-xs font-semibold text-slate-700 uppercase mb-2">Тип организации</label>
-              <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5">
-                {[
-                  { value: "LEARNING_CENTER", label: "Учебный центр" },
-                  { value: "SCHOOL", label: "Школа" },
-                  { value: "KINDERGARTEN", label: "Детский сад" },
-                  { value: "OTHER", label: "Другое" },
-                ].map((kind) => {
-                  const selected = formData.organizationKind === kind.value;
-                  return (
-                    <button
-                      key={kind.value}
-                      type="button"
-                      onClick={() => setFormData({ ...formData, organizationKind: kind.value })}
-                      className={`p-3 rounded-xl border text-xs font-semibold text-center transition-all ${
-                        selected
-                          ? "bg-blue-50 border-blue-500 text-blue-700 shadow-sm"
-                          : "bg-white border-slate-200 text-slate-600 hover:bg-slate-50"
-                      }`}
-                    >
-                      {kind.label}
-                    </button>
-                  );
-                })}
+      <Card>
+        <CardContent className="flex items-center justify-between p-4">
+          {[
+            { num: 1, label: "Данные центра" },
+            { num: 2, label: "Статус доступа" },
+            { num: 3, label: "Директор" },
+            { num: 4, label: "Подтверждение" },
+          ].map((s) => (
+            <div key={s.num} className="flex items-center gap-2">
+              <div
+                className={`flex h-7 w-7 items-center justify-center rounded-full text-xs font-semibold tabular-nums ${
+                  step >= s.num
+                    ? "bg-primary text-primary-foreground"
+                    : "border border-border bg-muted text-muted-foreground"
+                }`}
+              >
+                {s.num}
               </div>
-            </div>
-
-            <div>
-              <label className="block text-xs font-semibold text-slate-700 uppercase mb-1">Название центра</label>
-              <input
-                type="text"
-                name="name"
-                value={formData.name}
-                onChange={handleChange}
-                placeholder="Например: Al-Beruniy Academy"
-                className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm text-slate-900"
-              />
-              {errors.name && <p className="text-rose-600 text-xs mt-1">{errors.name}</p>}
-            </div>
-            <div>
-              <label className="block text-xs font-semibold text-slate-700 uppercase mb-1">
-                Поддомен / Slug (только латиница и дефисы)
-              </label>
-              <input
-                type="text"
-                name="slug"
-                value={formData.slug}
-                onChange={handleChange}
-                placeholder="al-beruniy"
-                className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm text-slate-900 font-mono"
-              />
-              {errors.slug && <p className="text-rose-600 text-xs mt-1">{errors.slug}</p>}
-            </div>
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-              <div>
-                <label className="block text-xs font-semibold text-slate-700 uppercase mb-1">Телефон организации</label>
-                <input
-                  type="text"
-                  name="phone"
-                  value={formData.phone}
-                  onChange={handleChange}
-                  placeholder="+998 90 123 45 67"
-                  className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm text-slate-900"
-                />
-                {errors.phone && <p className="text-rose-600 text-xs mt-1">{errors.phone}</p>}
-              </div>
-              <div>
-                <label className="block text-xs font-semibold text-slate-700 uppercase mb-1">Email организации</label>
-                <input
-                  type="email"
-                  name="email"
-                  value={formData.email}
-                  onChange={handleChange}
-                  placeholder="info@center.uz"
-                  className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm text-slate-900"
-                />
-                {errors.email && <p className="text-rose-600 text-xs mt-1">{errors.email}</p>}
-              </div>
-            </div>
-
-            <div className="pt-2 border-t border-slate-100 space-y-4">
-              <span className="text-xs font-bold text-slate-500 uppercase tracking-wider block">
-                Юридические реквизиты (необязательно)
+              <span
+                className={`hidden text-xs font-medium sm:inline ${
+                  step >= s.num ? "text-foreground" : "text-muted-foreground"
+                }`}
+              >
+                {s.label}
               </span>
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                <div>
-                  <label className="block text-xs font-semibold text-slate-700 uppercase mb-1">Юр. наименование</label>
-                  <input
-                    type="text"
-                    name="legalName"
-                    value={formData.legalName}
-                    onChange={handleChange}
-                    placeholder="OOO 'AL-BERUNIY EDUCATION'"
-                    className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm text-slate-900"
-                  />
-                </div>
-                <div>
-                  <label className="block text-xs font-semibold text-slate-700 uppercase mb-1">ИНН</label>
-                  <input
-                    type="text"
-                    name="inn"
-                    value={formData.inn}
-                    onChange={handleChange}
-                    placeholder="123456789"
-                    className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm text-slate-900"
-                  />
-                </div>
-              </div>
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                <div>
-                  <label className="block text-xs font-semibold text-slate-700 uppercase mb-1">Контактное лицо</label>
-                  <input
-                    type="text"
-                    name="contactPerson"
-                    value={formData.contactPerson}
-                    onChange={handleChange}
-                    placeholder="Иван Иванов"
-                    className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm text-slate-900"
-                  />
-                </div>
-                <div>
-                  <label className="block text-xs font-semibold text-slate-700 uppercase mb-1">Фактический адрес</label>
-                  <input
-                    type="text"
-                    name="address"
-                    value={formData.address}
-                    onChange={handleChange}
-                    placeholder="г. Ташкент, ул. Навои, 10"
-                    className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm text-slate-900"
-                  />
-                </div>
-              </div>
             </div>
+          ))}
+        </CardContent>
+      </Card>
 
-            <div>
-              <label className="block text-xs font-semibold text-slate-700 uppercase mb-1">Часовой пояс</label>
-              <select
-                name="timeZone"
-                value={formData.timeZone}
-                onChange={handleChange}
-                className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm text-slate-900"
-              >
-                <option value="Asia/Tashkent">Asia/Tashkent (Узбекистан, UTC+5)</option>
-                <option value="Asia/Samarkand">Asia/Samarkand (UTC+5)</option>
-                <option value="Europe/Moscow">Europe/Moscow (UTC+3)</option>
-              </select>
-            </div>
-          </div>
-        )}
+      <Card>
+        <CardContent className="space-y-6 p-6 sm:p-8">
+          {step === 1 && (
+            <div className="space-y-4">
+              <h2 className="font-display text-lg font-semibold text-foreground">
+                Шаг 1: Основные реквизиты центра
+              </h2>
 
-        {step === 2 && (
-          <div className="space-y-4">
-            <h2 className="text-lg font-bold text-slate-900">Шаг 2: Начальный статус доступа</h2>
-            <div>
-              <label className="block text-xs font-semibold text-slate-700 uppercase mb-1">Статус подписки</label>
-              <select
-                name="status"
-                value={formData.status}
-                onChange={handleChange}
-                className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm text-slate-900"
-              >
-                <option value="TRIAL">TRIAL (Пробный период)</option>
-                <option value="ACTIVE">ACTIVE (Активный платный)</option>
-              </select>
-            </div>
-            {formData.status === "TRIAL" && (
-              <div>
-                <label className="block text-xs font-semibold text-slate-700 uppercase mb-1">
-                  Дата окончания пробного периода
-                </label>
-                <input
-                  type="date"
-                  name="trialEndsAt"
-                  value={formData.trialEndsAt}
+              <FormField label="Тип организации">
+                <div className="grid grid-cols-2 gap-2.5 sm:grid-cols-4">
+                  {[
+                    { value: "LEARNING_CENTER", label: "Учебный центр" },
+                    { value: "SCHOOL", label: "Школа" },
+                    { value: "KINDERGARTEN", label: "Детский сад" },
+                    { value: "OTHER", label: "Другое" },
+                  ].map((kind) => {
+                    const selected = formData.organizationKind === kind.value;
+                    return (
+                      <Button
+                        key={kind.value}
+                        type="button"
+                        variant={selected ? "primary" : "outline"}
+                        size="sm"
+                        onClick={() => setFormData({ ...formData, organizationKind: kind.value })}
+                      >
+                        {kind.label}
+                      </Button>
+                    );
+                  })}
+                </div>
+              </FormField>
+
+              <FormField label="Название центра" htmlFor="center-name" required error={errors.name}>
+                <Input
+                  id="center-name"
+                  type="text"
+                  name="name"
+                  value={formData.name}
                   onChange={handleChange}
-                  className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm text-slate-900"
+                  placeholder="Например: Al-Beruniy Academy"
                 />
-              </div>
-            )}
-          </div>
-        )}
+              </FormField>
 
-        {step === 3 && (
-          <div className="space-y-4">
-            <h2 className="text-lg font-bold text-slate-900">Шаг 3: Директор учебного центра</h2>
-            <div>
-              <label className="block text-xs font-semibold text-slate-700 uppercase mb-1">ФИО директора</label>
-              <input
-                type="text"
-                name="directorFullName"
-                value={formData.directorFullName}
-                onChange={handleChange}
-                placeholder="Иван Иванов"
-                className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm text-slate-900"
-              />
-              {errors.directorFullName && (
-                <p className="text-rose-600 text-xs mt-1">{errors.directorFullName}</p>
+              <FormField
+                label="Поддомен / Slug (только латиница и дефисы)"
+                htmlFor="center-slug"
+                required
+                error={errors.slug}
+              >
+                <Input
+                  id="center-slug"
+                  type="text"
+                  name="slug"
+                  value={formData.slug}
+                  onChange={handleChange}
+                  placeholder="al-beruniy"
+                  className="font-mono"
+                />
+              </FormField>
+
+              <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+                <FormField label="Телефон организации" htmlFor="center-phone" required error={errors.phone}>
+                  <Input
+                    id="center-phone"
+                    type="text"
+                    name="phone"
+                    value={formData.phone}
+                    onChange={handleChange}
+                    placeholder="+998 90 123 45 67"
+                  />
+                </FormField>
+                <FormField label="Email организации" htmlFor="center-email" required error={errors.email}>
+                  <Input
+                    id="center-email"
+                    type="email"
+                    name="email"
+                    value={formData.email}
+                    onChange={handleChange}
+                    placeholder="info@center.uz"
+                  />
+                </FormField>
+              </div>
+
+              <div className="space-y-4 border-t border-border pt-4">
+                <span className="block text-xs font-medium text-muted-foreground">
+                  Юридические реквизиты (необязательно)
+                </span>
+                <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+                  <FormField label="Юр. наименование" htmlFor="center-legal-name">
+                    <Input
+                      id="center-legal-name"
+                      type="text"
+                      name="legalName"
+                      value={formData.legalName}
+                      onChange={handleChange}
+                      placeholder="OOO 'AL-BERUNIY EDUCATION'"
+                    />
+                  </FormField>
+                  <FormField label="ИНН" htmlFor="center-inn">
+                    <Input
+                      id="center-inn"
+                      type="text"
+                      name="inn"
+                      value={formData.inn}
+                      onChange={handleChange}
+                      placeholder="123456789"
+                    />
+                  </FormField>
+                </div>
+                <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+                  <FormField label="Контактное лицо" htmlFor="center-contact-person">
+                    <Input
+                      id="center-contact-person"
+                      type="text"
+                      name="contactPerson"
+                      value={formData.contactPerson}
+                      onChange={handleChange}
+                      placeholder="Иван Иванов"
+                    />
+                  </FormField>
+                  <FormField label="Фактический адрес" htmlFor="center-address">
+                    <Input
+                      id="center-address"
+                      type="text"
+                      name="address"
+                      value={formData.address}
+                      onChange={handleChange}
+                      placeholder="г. Ташкент, ул. Навои, 10"
+                    />
+                  </FormField>
+                </div>
+              </div>
+
+              <FormField label="Часовой пояс" htmlFor="center-tz">
+                <select
+                  id="center-tz"
+                  name="timeZone"
+                  value={formData.timeZone}
+                  onChange={handleChange}
+                  className="h-9 w-full rounded-md border border-input bg-background px-3 text-sm text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                >
+                  <option value="Asia/Tashkent">Asia/Tashkent (Узбекистан, UTC+5)</option>
+                  <option value="Asia/Samarkand">Asia/Samarkand (UTC+5)</option>
+                  <option value="Europe/Moscow">Europe/Moscow (UTC+3)</option>
+                </select>
+              </FormField>
+            </div>
+          )}
+
+          {step === 2 && (
+            <div className="space-y-4">
+              <h2 className="font-display text-lg font-semibold text-foreground">
+                Шаг 2: Начальный статус доступа
+              </h2>
+              <FormField label="Статус подписки" htmlFor="center-status">
+                <select
+                  id="center-status"
+                  name="status"
+                  value={formData.status}
+                  onChange={handleChange}
+                  className="h-9 w-full rounded-md border border-input bg-background px-3 text-sm text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                >
+                  <option value="TRIAL">TRIAL (Пробный период)</option>
+                  <option value="ACTIVE">ACTIVE (Активный платный)</option>
+                </select>
+              </FormField>
+              {formData.status === "TRIAL" && (
+                <FormField label="Дата окончания пробного периода" htmlFor="center-trial-ends">
+                  <Input
+                    id="center-trial-ends"
+                    type="date"
+                    name="trialEndsAt"
+                    value={formData.trialEndsAt}
+                    onChange={handleChange}
+                  />
+                </FormField>
               )}
             </div>
-            <div>
-              <label className="block text-xs font-semibold text-slate-700 uppercase mb-1">Email директора</label>
-              <input
-                type="email"
-                name="directorEmail"
-                value={formData.directorEmail}
-                onChange={handleChange}
-                placeholder="director@center.uz"
-                className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm text-slate-900"
-              />
-              {errors.directorEmail && <p className="text-rose-600 text-xs mt-1">{errors.directorEmail}</p>}
-            </div>
-            <div>
-              <label className="block text-xs font-semibold text-slate-700 uppercase mb-1">Телефон директора</label>
-              <input
-                type="text"
-                name="directorPhone"
-                value={formData.directorPhone}
-                onChange={handleChange}
-                placeholder="+998 90 987 65 43"
-                className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm text-slate-900"
-              />
-              {errors.directorPhone && <p className="text-rose-600 text-xs mt-1">{errors.directorPhone}</p>}
-            </div>
-          </div>
-        )}
+          )}
 
-        {step === 4 && (
-          <div className="space-y-4">
-            <h2 className="text-lg font-bold text-slate-900">Шаг 4: Проверка и создание</h2>
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 p-4 rounded-xl bg-slate-50 border border-slate-100 text-sm">
-              <div>
-                <span className="text-xs text-slate-500 block">Организация:</span>
-                <span className="font-semibold text-slate-900">{formData.name}</span>
-              </div>
-              <div>
-                <span className="text-xs text-slate-500 block">Slug:</span>
-                <span className="font-mono font-semibold text-slate-900">{formData.slug}</span>
-              </div>
-              <div>
-                <span className="text-xs text-slate-500 block">Статус:</span>
-                <span className="font-semibold text-blue-600">{formData.status}</span>
-              </div>
-              <div>
-                <span className="text-xs text-slate-500 block">Директор:</span>
-                <span className="font-semibold text-slate-900">
-                  {formData.directorFullName} ({formData.directorEmail})
-                </span>
-              </div>
+          {step === 3 && (
+            <div className="space-y-4">
+              <h2 className="font-display text-lg font-semibold text-foreground">
+                Шаг 3: Директор учебного центра
+              </h2>
+              <FormField label="ФИО директора" htmlFor="director-full-name" required error={errors.directorFullName}>
+                <Input
+                  id="director-full-name"
+                  type="text"
+                  name="directorFullName"
+                  value={formData.directorFullName}
+                  onChange={handleChange}
+                  placeholder="Иван Иванов"
+                />
+              </FormField>
+              <FormField label="Email директора" htmlFor="director-email" required error={errors.directorEmail}>
+                <Input
+                  id="director-email"
+                  type="email"
+                  name="directorEmail"
+                  value={formData.directorEmail}
+                  onChange={handleChange}
+                  placeholder="director@center.uz"
+                />
+              </FormField>
+              <FormField label="Телефон директора" htmlFor="director-phone" required error={errors.directorPhone}>
+                <Input
+                  id="director-phone"
+                  type="text"
+                  name="directorPhone"
+                  value={formData.directorPhone}
+                  onChange={handleChange}
+                  placeholder="+998 90 987 65 43"
+                />
+              </FormField>
             </div>
-            {submitError && (
-              <div className="p-3 bg-rose-50 border border-rose-200 text-rose-700 text-sm rounded-xl">
-                {submitError}
+          )}
+
+          {step === 4 && (
+            <div className="space-y-4">
+              <h2 className="font-display text-lg font-semibold text-foreground">
+                Шаг 4: Проверка и создание
+              </h2>
+              <div className="grid grid-cols-1 gap-4 rounded-lg border border-border bg-muted/40 p-4 text-sm sm:grid-cols-2">
+                <div>
+                  <span className="block text-xs text-muted-foreground">Организация:</span>
+                  <span className="font-medium text-foreground">{formData.name}</span>
+                </div>
+                <div>
+                  <span className="block text-xs text-muted-foreground">Slug:</span>
+                  <span className="font-mono font-medium text-foreground">{formData.slug}</span>
+                </div>
+                <div>
+                  <span className="block text-xs text-muted-foreground">Статус:</span>
+                  <Badge variant="info">{formData.status}</Badge>
+                </div>
+                <div>
+                  <span className="block text-xs text-muted-foreground">Директор:</span>
+                  <span className="font-medium text-foreground">
+                    {formData.directorFullName} ({formData.directorEmail})
+                  </span>
+                </div>
               </div>
+              {submitError && (
+                <Alert variant="destructive">
+                  <AlertDescription>{submitError}</AlertDescription>
+                </Alert>
+              )}
+            </div>
+          )}
+
+          <div className="flex items-center justify-between border-t border-border pt-4">
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => setStep((s) => Math.max(1, s - 1))}
+              disabled={step === 1 || isSubmitting}
+            >
+              Назад
+            </Button>
+
+            {step < 4 ? (
+              <Button type="button" variant="primary" onClick={handleNext}>
+                Далее
+              </Button>
+            ) : (
+              <Button type="button" variant="primary" onClick={handleSubmit} disabled={isSubmitting}>
+                <CheckCircle2 className="h-4 w-4" aria-hidden="true" />
+                <span>{isSubmitting ? "Создание..." : "Завершить и создать"}</span>
+              </Button>
             )}
           </div>
-        )}
-
-        {/* Buttons Bar */}
-        <div className="pt-4 border-t border-slate-100 flex items-center justify-between">
-          <button
-            type="button"
-            onClick={() => setStep((s) => Math.max(1, s - 1))}
-            disabled={step === 1 || isSubmitting}
-            className="px-4 py-2 border border-slate-200 rounded-xl text-sm font-semibold text-slate-600 hover:bg-slate-50 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
-          >
-            Назад
-          </button>
-
-          {step < 4 ? (
-            <button
-              type="button"
-              onClick={handleNext}
-              className="px-5 py-2.5 bg-blue-600 hover:bg-blue-700 active:scale-[0.98] text-white text-sm font-semibold rounded-xl shadow-sm transition-all"
-            >
-              Далее
-            </button>
-          ) : (
-            <button
-              type="button"
-              onClick={handleSubmit}
-              disabled={isSubmitting}
-              className="px-6 py-2.5 bg-emerald-600 hover:bg-emerald-700 active:scale-[0.98] text-white text-sm font-semibold rounded-xl shadow-sm disabled:opacity-50 transition-all flex items-center gap-2"
-            >
-              <CheckCircle2 className="w-4 h-4" />
-              <span>{isSubmitting ? "Создание..." : "Завершить и создать"}</span>
-            </button>
-          )}
-        </div>
-      </div>
+        </CardContent>
+      </Card>
     </div>
   );
 }

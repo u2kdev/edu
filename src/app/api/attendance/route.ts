@@ -161,7 +161,7 @@ export async function POST(req: Request) {
     }
     const markerId = tenantCtx.membership.id;
 
-    // Check if any student in records is ARCHIVED
+    // Check if any student in records is ARCHIVED or has a FROZEN enrollment for this lesson
     const targetStudents = await tenantDb.centerMembership.findMany({
       where: {
         id: { in: attendanceRecords.map((r) => r.studentMembershipId) },
@@ -173,6 +173,37 @@ export async function POST(req: Request) {
     if (archivedStudent) {
       return NextResponse.json(
         { error: "Cannot mark attendance for archived student" },
+        { status: 400 }
+      );
+    }
+
+    const lessonWithModule = await tenantDb.lesson.findFirst({
+      where: { id: lessonId },
+      include: {
+        module: { select: { courseId: true } },
+        scheduleSlot: { select: { groupId: true } },
+      },
+    });
+    const resolvedGroupIds = attendanceRecords
+      .map((r) => r.groupId || lessonWithModule?.scheduleSlot?.groupId || null)
+      .filter((id): id is string => Boolean(id));
+
+    const frozenCheckWhere: Record<string, unknown> = {
+      studentMembershipId: { in: attendanceRecords.map((r) => r.studentMembershipId) },
+      status: "FROZEN",
+    };
+    if (resolvedGroupIds.length > 0) {
+      frozenCheckWhere.groupId = { in: resolvedGroupIds };
+    } else if (lessonWithModule?.module?.courseId) {
+      frozenCheckWhere.group = { courseId: lessonWithModule.module.courseId };
+    }
+    const frozenEnrollment = await tenantDb.enrollment.findFirst({
+      where: frozenCheckWhere,
+      select: { id: true, studentMembershipId: true },
+    });
+    if (frozenEnrollment) {
+      return NextResponse.json(
+        { error: "Нельзя отметить посещаемость: зачисление ученика заморожено" },
         { status: 400 }
       );
     }

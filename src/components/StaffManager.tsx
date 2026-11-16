@@ -4,10 +4,41 @@ import { useState, useEffect } from "react";
 import type { ComponentType } from "react";
 import Link from "next/link";
 import {
-  UserPlus, Shield, GraduationCap, HeadphonesIcon,
-  CheckCircle2, XCircle, Mail, Phone,
-  Loader2, AlertTriangle, Archive, Trash2, Clock, Search, ExternalLink, Key
+  Archive,
+  CheckCircle2,
+  Clock,
+  ExternalLink,
+  GraduationCap,
+  HeadphonesIcon,
+  Key,
+  Loader2,
+  Mail,
+  Phone,
+  Shield,
+  Trash2,
+  UserPlus,
+  X,
+  XCircle,
 } from "lucide-react";
+import {
+  Alert,
+  AlertDescription,
+  Badge,
+  type BadgeVariant,
+  Button,
+  ConfirmDialog,
+  DataTable,
+  type DataTableColumn,
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  FilterBar,
+  FormActions,
+  FormField,
+  Input,
+  PageHeader,
+} from "@/components/ui";
 import { CredentialsModal, type CredentialsData } from "@/components/CredentialsModal";
 
 interface StaffMember {
@@ -32,50 +63,56 @@ interface StaffManagerProps {
   currentRole: string;
 }
 
-const ROLE_CONFIG: Record<string, { label: string; labelUz: string; icon: ComponentType<{ className?: string }>; color: string }> = {
+const ROLE_CONFIG: Record<
+  string,
+  { label: string; labelUz: string; icon: ComponentType<{ className?: string }>; variant: BadgeVariant }
+> = {
   DIRECTOR: {
     label: "Директор",
     labelUz: "Direktor",
     icon: Shield,
-    color: "text-amber-400 bg-amber-500/10 border-amber-500/20",
+    variant: "warning",
   },
   CENTER_ADMIN: {
     label: "Админ центра",
     labelUz: "Markaz admini",
     icon: Shield,
-    color: "text-blue-400 bg-blue-500/10 border-blue-500/20",
+    variant: "primary",
   },
   ACCOUNTANT: {
     label: "Бухгалтер",
     labelUz: "Hisobchi",
     icon: Shield,
-    color: "text-amber-400 bg-amber-500/10 border-amber-500/20",
+    variant: "warning",
   },
   TEACHER: {
     label: "Преподаватель",
     labelUz: "Oʻqituvchi",
     icon: GraduationCap,
-    color: "text-emerald-400 bg-emerald-500/10 border-emerald-500/20",
+    variant: "success",
   },
   TEACHER_ASSISTANT: {
     label: "Помощник преподавателя",
     labelUz: "Oʻqituvchi yordamchisi",
     icon: GraduationCap,
-    color: "text-teal-400 bg-teal-500/10 border-teal-500/20",
+    variant: "info",
   },
   CENTER_SUPPORT: {
     label: "Саппорт центра",
     labelUz: "Markaz qoʻllab-quvvatlashi",
     icon: HeadphonesIcon,
-    color: "text-purple-400 bg-purple-500/10 border-purple-500/20",
+    variant: "neutral",
   },
   STUDENT: {
     label: "Ученик",
     labelUz: "Oʻquvchi",
     icon: GraduationCap,
-    color: "text-sky-400 bg-sky-500/10 border-sky-500/20",
+    variant: "info",
   },
 };
+
+const selectClassName =
+  "flex h-9 w-full rounded-md border border-input bg-card px-3 py-1.5 text-sm text-foreground transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-1 focus-visible:ring-offset-background";
 
 export default function StaffManager({ locale, currentRole }: StaffManagerProps) {
   const [staff, setStaff] = useState<StaffMember[]>([]);
@@ -84,15 +121,14 @@ export default function StaffManager({ locale, currentRole }: StaffManagerProps)
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
+  const [formError, setFormError] = useState<string | null>(null);
 
-  // Search and filter
   const [search, setSearch] = useState("");
   const [filterNeverLoggedIn, setFilterNeverLoggedIn] = useState(false);
 
-  // Single-display credentials
   const [credentials, setCredentials] = useState<CredentialsData | null>(null);
+  const [deleteTarget, setDeleteTarget] = useState<StaffMember | null>(null);
 
-  // Form fields
   const [newEmail, setNewEmail] = useState("");
   const [newName, setNewName] = useState("");
   const [newPhone, setNewPhone] = useState("");
@@ -122,10 +158,12 @@ export default function StaffManager({ locale, currentRole }: StaffManagerProps)
     e.preventDefault();
     setSaving(true);
     setError(null);
+    setFormError(null);
     setSuccess(null);
 
     if (!newEmail && !newPhone) {
-      setError(isUz ? "Email yoki telefon kiritilishi shart" : "Необходимо указать email или телефон");
+      const msg = isUz ? "Email yoki telefon kiritilishi shart" : "Необходимо указать email или телефон";
+      setFormError(msg);
       setSaving(false);
       return;
     }
@@ -146,7 +184,8 @@ export default function StaffManager({ locale, currentRole }: StaffManagerProps)
       const data = await res.json();
 
       if (!res.ok) {
-        setError(data.error || "Error adding staff member");
+        const msg = data.error || "Error adding staff member";
+        setFormError(msg);
         setSaving(false);
         return;
       }
@@ -155,11 +194,7 @@ export default function StaffManager({ locale, currentRole }: StaffManagerProps)
         setCredentials(data.credentials);
       }
 
-      setSuccess(
-        isUz
-          ? `${newName} muvaffaqiyatli qoʻshildi!`
-          : `${newName} успешно добавлен(а)!`
-      );
+      setSuccess(isUz ? `${newName} muvaffaqiyatli qoʻshildi` : `${newName} успешно добавлен(а)`);
       setNewEmail("");
       setNewName("");
       setNewPhone("");
@@ -169,7 +204,7 @@ export default function StaffManager({ locale, currentRole }: StaffManagerProps)
       setShowAddForm(false);
       await loadStaff();
     } catch {
-      setError("Network error");
+      setFormError("Network error");
     }
     setSaving(false);
   }
@@ -190,11 +225,7 @@ export default function StaffManager({ locale, currentRole }: StaffManagerProps)
       }
 
       await loadStaff();
-      setSuccess(
-        isUz
-          ? `Xodim holati oʻzgartirildi`
-          : `Статус сотрудника изменён`
-      );
+      setSuccess(isUz ? "Xodim holati oʻzgartirildi" : "Статус сотрудника изменён");
     } catch {
       setError("Network error");
     }
@@ -215,15 +246,16 @@ export default function StaffManager({ locale, currentRole }: StaffManagerProps)
       }
 
       await loadStaff();
-      setSuccess(
-        isUz ? "Aʼzo muvaffaqiyatli arxivlandi" : "Пользователь успешно архивирован"
-      );
+      setSuccess(isUz ? "Aʼzo muvaffaqiyatli arxivlandi" : "Пользователь успешно архивирован");
     } catch {
       setError("Network error");
     }
   }
 
-  async function handleDelete(membershipId: string) {
+  async function confirmDelete() {
+    if (!deleteTarget) return;
+    const membershipId = deleteTarget.id;
+    setDeleteTarget(null);
     try {
       const res = await fetch(`/api/tenant/staff?membershipId=${membershipId}`, {
         method: "DELETE",
@@ -244,15 +276,12 @@ export default function StaffManager({ locale, currentRole }: StaffManagerProps)
       }
 
       await loadStaff();
-      setSuccess(
-        isUz ? "Aʼzo muvaffaqiyatli oʻchirildi" : "Пользователь успешно удалён"
-      );
+      setSuccess(isUz ? "Aʼzo muvaffaqiyatli oʻchirildi" : "Пользователь успешно удалён");
     } catch {
       setError("Network error");
     }
   }
 
-  // Available roles that current user can assign
   const assignableRoles =
     currentRole === "DIRECTOR"
       ? ["CENTER_ADMIN", "ACCOUNTANT", "TEACHER", "TEACHER_ASSISTANT", "CENTER_SUPPORT"]
@@ -274,350 +303,400 @@ export default function StaffManager({ locale, currentRole }: StaffManagerProps)
 
   if (loading) {
     return (
-      <div className="flex items-center justify-center py-12">
-        <Loader2 className="w-6 h-6 text-brand-400 animate-spin" />
+      <div className="flex items-center justify-center py-12" role="status" aria-label={isUz ? "Yuklanmoqda..." : "Загрузка..."}>
+        <Loader2 className="h-6 w-6 animate-spin text-primary" aria-hidden="true" />
       </div>
     );
   }
 
-  return (
-    <div className="space-y-6">
-      {/* Header */}
-      <div className="flex items-center justify-between">
-        <div>
-          <h2 className="text-xl font-bold text-white">
-            {isUz ? "Markaz xodimlari" : "Сотрудники центра"}
-          </h2>
-          <p className="text-sm text-slate-400 mt-0.5">
-            {isUz
-              ? `Jami ${staff.length} xodim`
-              : `Всего ${staff.length} сотрудников`}
-          </p>
-        </div>
-        <button
-          onClick={() => setShowAddForm(!showAddForm)}
-          className="flex items-center gap-2 px-4 py-2.5 bg-brand-600 hover:bg-brand-500 text-white font-semibold rounded-xl transition-all text-sm shadow-lg shadow-brand-600/20"
-        >
-          <UserPlus className="w-4 h-4" />
-          {isUz ? "Xodim qoʻshish" : "Добавить сотрудника"}
-        </button>
-      </div>
-
-      {/* Alerts */}
-      {error && (
-        <div className="p-3 rounded-xl bg-red-500/10 border border-red-500/30 text-red-400 text-sm flex items-center gap-2">
-          <AlertTriangle className="w-4 h-4 shrink-0" />
-          {error}
-          <button onClick={() => setError(null)} className="ml-auto text-red-300 hover:text-white">✕</button>
-        </div>
-      )}
-      {success && (
-        <div className="p-3 rounded-xl bg-emerald-500/10 border border-emerald-500/30 text-emerald-400 text-sm flex items-center gap-2">
-          <CheckCircle2 className="w-4 h-4 shrink-0" />
-          {success}
-          <button onClick={() => setSuccess(null)} className="ml-auto text-emerald-300 hover:text-white">✕</button>
-        </div>
-      )}
-
-      {/* Add Staff Form */}
-      {showAddForm && (
-        <form
-          onSubmit={handleAddStaff}
-          className="glass-panel p-6 rounded-2xl border border-slate-800 space-y-4"
-        >
-          <h3 className="text-base font-bold text-white">
-            {isUz ? "Yangi xodim qoʻshish" : "Добавить нового сотрудника"}
-          </h3>
-
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <div>
-              <label className="block text-xs font-semibold text-slate-400 uppercase tracking-wider mb-1.5">
-                {isUz ? "FISh *" : "ФИО *"}
-              </label>
-              <input
-                type="text"
-                value={newName}
-                onChange={(e) => setNewName(e.target.value)}
-                required
-                placeholder={isUz ? "Ism Familiya" : "Иван Петров"}
-                className="w-full px-4 py-2.5 bg-slate-900/80 border border-slate-700 rounded-xl text-white text-sm placeholder:text-slate-500 focus:outline-none focus:border-brand-500 transition-colors"
-              />
+  const columns: DataTableColumn<StaffMember>[] = [
+    {
+      id: "member",
+      header: isUz ? "Xodim" : "Сотрудник",
+      isMobilePrimary: true,
+      sortable: true,
+      sortValue: (m) => m.user.fullName,
+      cell: (member) => {
+        const isInactive = member.status !== "ACTIVE";
+        return (
+          <div className={`flex items-center gap-3 min-w-0 ${isInactive ? "opacity-60" : ""}`}>
+            <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-primary/10 text-xs font-semibold text-primary">
+              {member.user.fullName.charAt(0).toUpperCase()}
             </div>
-            <div>
-              <label className="block text-xs font-semibold text-slate-400 uppercase tracking-wider mb-1.5">
-                Email
-              </label>
-              <input
-                type="email"
-                value={newEmail}
-                onChange={(e) => setNewEmail(e.target.value)}
-                placeholder="staff@example.com"
-                className="w-full px-4 py-2.5 bg-slate-900/80 border border-slate-700 rounded-xl text-white text-sm placeholder:text-slate-500 focus:outline-none focus:border-brand-500 transition-colors"
-              />
-            </div>
-            <div>
-              <label className="block text-xs font-semibold text-slate-400 uppercase tracking-wider mb-1.5">
-                {isUz ? "Telefon" : "Телефон"}
-              </label>
-              <input
-                type="tel"
-                value={newPhone}
-                onChange={(e) => setNewPhone(e.target.value)}
-                placeholder="+998 90 123 45 67"
-                className="w-full px-4 py-2.5 bg-slate-900/80 border border-slate-700 rounded-xl text-white text-sm placeholder:text-slate-500 focus:outline-none focus:border-brand-500 transition-colors"
-              />
-            </div>
-            <div>
-              <label className="block text-xs font-semibold text-slate-400 uppercase tracking-wider mb-1.5">
-                {isUz ? "Rol" : "Роль"} *
-              </label>
-              <select
-                value={newRole}
-                onChange={(e) => setNewRole(e.target.value)}
-                className="w-full px-4 py-2.5 bg-slate-900/80 border border-slate-700 rounded-xl text-white text-sm focus:outline-none focus:border-brand-500 transition-colors"
+            <div className="min-w-0">
+              <Link
+                href={`/center/staff/${member.id}`}
+                onClick={(e) => e.stopPropagation()}
+                className="inline-flex items-center gap-1.5 font-medium text-foreground hover:text-primary transition-colors truncate"
               >
-                {assignableRoles.map((r) => (
-                  <option key={r} value={r}>
-                    {isUz
-                      ? ROLE_CONFIG[r]?.labelUz || r
-                      : ROLE_CONFIG[r]?.label || r}
-                  </option>
-                ))}
-              </select>
-            </div>
-          </div>
-
-          {/* Access Credentials Options */}
-          <div className="pt-2 border-t border-slate-800 space-y-3">
-            <div className="flex items-center gap-4 text-xs text-slate-300">
-              <label className="flex items-center gap-2 cursor-pointer">
-                <input
-                  type="radio"
-                  name="passwordMode"
-                  checked={!isManualPassword}
-                  onChange={() => setIsManualPassword(false)}
-                  className="text-brand-500 focus:ring-brand-500"
-                />
-                <span>Сгенерировать безопасный пароль автоматически</span>
-              </label>
-              <label className="flex items-center gap-2 cursor-pointer">
-                <input
-                  type="radio"
-                  name="passwordMode"
-                  checked={isManualPassword}
-                  onChange={() => setIsManualPassword(true)}
-                  className="text-brand-500 focus:ring-brand-500"
-                />
-                <span>Задать пароль вручную</span>
-              </label>
-            </div>
-
-            {isManualPassword && (
-              <div className="max-w-md">
-                <input
-                  type="password"
-                  value={manualPassword}
-                  onChange={(e) => setManualPassword(e.target.value)}
-                  placeholder="Минимум 6 символов"
-                  className="w-full px-4 py-2 bg-slate-900 border border-slate-700 rounded-xl text-white text-xs"
-                />
-              </div>
-            )}
-          </div>
-
-          <div className="flex items-center gap-3 pt-2">
-            <button
-              type="submit"
-              disabled={saving}
-              className="px-6 py-2.5 bg-brand-600 hover:bg-brand-500 text-white font-semibold rounded-xl transition-all text-sm disabled:opacity-50 flex items-center gap-2"
-            >
-              {saving && <Loader2 className="w-4 h-4 animate-spin" />}
-              {isUz ? "Qoʻshish" : "Добавить"}
-            </button>
-            <button
-              type="button"
-              onClick={() => setShowAddForm(false)}
-              className="px-6 py-2.5 bg-slate-800 hover:bg-slate-700 text-slate-300 font-medium rounded-xl transition-all text-sm"
-            >
-              {isUz ? "Bekor qilish" : "Отмена"}
-            </button>
-          </div>
-        </form>
-      )}
-
-      {/* Toolbar */}
-      <div className="glass-panel p-4 rounded-2xl border border-slate-800 flex flex-col sm:flex-row items-center gap-3">
-        <div className="relative flex-1 w-full">
-          <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-slate-500" />
-          <input
-            type="text"
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-            placeholder="Поиск сотрудника по имени, email, телефону..."
-            className="w-full pl-9 pr-4 py-2 bg-slate-900 border border-slate-800 rounded-xl text-xs text-white placeholder-slate-500 focus:outline-none focus:border-brand-500"
-          />
-        </div>
-
-        <button
-          onClick={() => setFilterNeverLoggedIn(!filterNeverLoggedIn)}
-          className={`px-3 py-2 text-xs font-semibold rounded-xl border transition-colors whitespace-nowrap ${
-            filterNeverLoggedIn
-              ? "bg-amber-500/20 border-amber-500/40 text-amber-300"
-              : "bg-slate-900 border-slate-800 text-slate-400 hover:text-white"
-          }`}
-        >
-          Ни разу не входили
-        </button>
-      </div>
-
-      {/* Staff List */}
-      <div className="space-y-3">
-        {filteredStaff.map((member) => {
-          const roleConfig = ROLE_CONFIG[member.role] || {
-            label: member.role,
-            labelUz: member.role,
-            icon: Shield,
-            color: "text-slate-400 bg-slate-500/10 border-slate-500/20",
-          };
-          const RoleIcon = roleConfig.icon;
-          const isInactive = member.status !== "ACTIVE";
-          const isSynthetic = member.user.email.endsWith("@noemail.local");
-
-          return (
-            <div
-              key={member.id}
-              className={`glass-panel p-5 rounded-2xl border border-slate-800 flex items-center gap-4 transition-all ${
-                isInactive ? "opacity-50" : ""
-              }`}
-            >
-              {/* Avatar */}
-              <div className="w-11 h-11 rounded-xl bg-slate-800 border border-slate-700 flex items-center justify-center text-sm font-bold text-brand-400 shrink-0">
-                {member.user.fullName.charAt(0).toUpperCase()}
-              </div>
-
-              {/* Info */}
-              <div className="flex-1 min-w-0">
-                <div className="flex items-center gap-2">
-                  <Link
-                    href={`/center/staff/${member.id}`}
-                    className="text-sm font-semibold text-white hover:text-brand-300 transition-colors truncate flex items-center gap-1.5"
-                  >
-                    <span>{member.user.fullName}</span>
-                    <ExternalLink className="w-3.5 h-3.5 opacity-60" />
-                  </Link>
-
-                  {member.status === "ARCHIVED" ? (
-                    <span className="px-2 py-0.5 rounded-full bg-amber-500/10 text-amber-400 text-[10px] font-semibold border border-amber-500/20">
-                      {isUz ? "Arxivlangan" : "Архивирован"}
-                    </span>
-                  ) : isInactive ? (
-                    <span className="px-2 py-0.5 rounded-full bg-red-500/10 text-red-400 text-[10px] font-semibold border border-red-500/20">
-                      {isUz ? "Faolsiz" : "Неактивен"}
-                    </span>
-                  ) : null}
+                <span className="truncate">{member.user.fullName}</span>
+                <ExternalLink className="h-3.5 w-3.5 opacity-60 shrink-0" aria-hidden="true" />
+              </Link>
+              {member.user.lastLoginAt ? (
+                <div className="mt-0.5 flex items-center gap-1 text-xs text-muted-foreground tabular-nums">
+                  <Clock className="h-3 w-3 shrink-0" aria-hidden="true" />
+                  <span>{new Date(member.user.lastLoginAt).toLocaleDateString()}</span>
                 </div>
-
-                <div className="flex flex-wrap items-center gap-3 mt-1 text-xs text-slate-400">
-                  {!isSynthetic && (
-                    <span className="flex items-center gap-1">
-                      <Mail className="w-3 h-3" />
-                      {member.user.email}
-                    </span>
-                  )}
-                  {member.user.phone && (
-                    <span className="flex items-center gap-1">
-                      <Phone className="w-3 h-3" />
-                      {member.user.phone}
-                    </span>
-                  )}
-
-                  {/* Last Login Indicator */}
-                  {member.user.lastLoginAt ? (
-                    <span className="flex items-center gap-1 text-[11px] text-slate-400 font-mono">
-                      <Clock className="w-3 h-3 text-slate-500" />
-                      {new Date(member.user.lastLoginAt).toLocaleDateString()}
-                    </span>
-                  ) : (
-                    <span className="inline-flex items-center gap-1 px-2 py-0.5 bg-amber-500/10 text-amber-400 border border-amber-500/20 rounded-full text-[10px] font-semibold">
-                      <Clock className="w-3 h-3" />
-                      Ни разу не входил
-                    </span>
-                  )}
-                </div>
-              </div>
-
-              {/* Role badge */}
-              <div
-                className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold border ${roleConfig.color} shrink-0`}
-              >
-                <RoleIcon className="w-3.5 h-3.5" />
-                {isUz ? roleConfig.labelUz : roleConfig.label}
-              </div>
-
-              {/* Actions */}
-              {member.role !== "DIRECTOR" && (
-                <div className="flex items-center gap-1 shrink-0">
-                  <Link
-                    href={`/center/staff/${member.id}`}
-                    className="p-2 rounded-lg transition-colors text-slate-400 hover:text-white hover:bg-slate-800"
-                    title="Профиль и доступ"
-                  >
-                    <Key className="w-4 h-4" />
-                  </Link>
-                  <button
-                    onClick={() => toggleStatus(member.id, member.status)}
-                    className={`p-2 rounded-lg transition-colors ${
-                      member.status === "ACTIVE"
-                        ? "text-slate-400 hover:text-red-400 hover:bg-red-500/10"
-                        : "text-slate-400 hover:text-emerald-400 hover:bg-emerald-500/10"
-                    }`}
-                    title={
-                      member.status === "ACTIVE"
-                        ? isUz ? "Faolsizlantirish" : "Деактивировать"
-                        : isUz ? "Faollashtirish" : "Активировать"
-                    }
-                  >
-                    {member.status === "ACTIVE" ? (
-                      <XCircle className="w-5 h-5" />
-                    ) : (
-                      <CheckCircle2 className="w-5 h-5" />
-                    )}
-                  </button>
-                  {member.status !== "ARCHIVED" && (
-                    <button
-                      onClick={() => handleArchive(member.id)}
-                      className="p-2 rounded-lg transition-colors text-slate-400 hover:text-amber-400 hover:bg-amber-500/10"
-                      title={isUz ? "Arxivlash" : "Архивировать"}
-                    >
-                      <Archive className="w-5 h-5" />
-                    </button>
-                  )}
-                  <button
-                    onClick={() => handleDelete(member.id)}
-                    className="p-2 rounded-lg transition-colors text-slate-400 hover:text-red-400 hover:bg-red-500/10"
-                    title={isUz ? "Oʻchirish" : "Удалить"}
-                  >
-                    <Trash2 className="w-5 h-5" />
-                  </button>
+              ) : (
+                <div className="mt-0.5 flex items-center gap-1 text-xs text-warning">
+                  <Clock className="h-3 w-3 shrink-0" aria-hidden="true" />
+                  <span>Ни разу не входил</span>
                 </div>
               )}
             </div>
-          );
-        })}
-
-        {filteredStaff.length === 0 && (
-          <div className="glass-panel p-8 rounded-2xl border border-slate-800 text-center">
-            <UserPlus className="w-10 h-10 text-slate-600 mx-auto mb-3" />
-            <p className="text-slate-400">
-              {isUz
-                ? "Hali xodimlar qoʻshilmagan"
-                : "Сотрудники не найдены"}
-            </p>
           </div>
-        )}
-      </div>
+        );
+      },
+    },
+    {
+      id: "contacts",
+      header: isUz ? "Kontaktlar" : "Контакты",
+      cell: (member) => {
+        const isSynthetic = member.user.email.endsWith("@noemail.local");
+        return (
+          <div className="space-y-0.5 text-xs text-muted-foreground">
+            {!isSynthetic && (
+              <div className="flex items-center gap-1.5">
+                <Mail className="h-3 w-3 shrink-0" aria-hidden="true" />
+                <span className="truncate">{member.user.email}</span>
+              </div>
+            )}
+            {member.user.phone && (
+              <div className="flex items-center gap-1.5 tabular-nums">
+                <Phone className="h-3 w-3 shrink-0" aria-hidden="true" />
+                <span>{member.user.phone}</span>
+              </div>
+            )}
+            {isSynthetic && !member.user.phone && <span>—</span>}
+          </div>
+        );
+      },
+    },
+    {
+      id: "role",
+      header: isUz ? "Rol" : "Роль",
+      sortable: true,
+      sortValue: (m) => m.role,
+      cell: (member) => {
+        const roleConfig = ROLE_CONFIG[member.role] || {
+          label: member.role,
+          labelUz: member.role,
+          icon: Shield,
+          variant: "neutral" as BadgeVariant,
+        };
+        const RoleIcon = roleConfig.icon;
+        return (
+          <Badge variant={roleConfig.variant}>
+            <RoleIcon className="h-3 w-3" aria-hidden="true" />
+            <span>{isUz ? roleConfig.labelUz : roleConfig.label}</span>
+          </Badge>
+        );
+      },
+    },
+    {
+      id: "status",
+      header: isUz ? "Holat" : "Статус",
+      cell: (member) => {
+        if (member.status === "ARCHIVED") {
+          return <Badge variant="warning">{isUz ? "Arxivlangan" : "Архивирован"}</Badge>;
+        }
+        if (member.status !== "ACTIVE") {
+          return <Badge variant="destructive">{isUz ? "Faolsiz" : "Неактивен"}</Badge>;
+        }
+        return <Badge variant="success">{isUz ? "Faol" : "Активен"}</Badge>;
+      },
+    },
+    {
+      id: "actions",
+      header: isUz ? "Amallar" : "Действия",
+      align: "right",
+      cell: (member) => {
+        if (member.role === "DIRECTOR") return null;
+        return (
+          <div className="inline-flex items-center gap-1" data-no-row-click="true">
+            <Link
+              href={`/center/staff/${member.id}`}
+              className="inline-flex h-8 w-8 items-center justify-center rounded-md text-muted-foreground hover:bg-muted hover:text-foreground transition-colors"
+              title="Профиль и доступ"
+            >
+              <Key className="h-4 w-4" aria-hidden="true" />
+            </Link>
+            <Button
+              type="button"
+              variant="ghost"
+              size="icon"
+              onClick={() => toggleStatus(member.id, member.status)}
+              title={
+                member.status === "ACTIVE"
+                  ? isUz ? "Faolsizlantirish" : "Деактивировать"
+                  : isUz ? "Faollashtirish" : "Активировать"
+              }
+            >
+              {member.status === "ACTIVE" ? (
+                <XCircle className="h-4 w-4 text-destructive" aria-hidden="true" />
+              ) : (
+                <CheckCircle2 className="h-4 w-4 text-success" aria-hidden="true" />
+              )}
+            </Button>
+            {member.status !== "ARCHIVED" && (
+              <Button
+                type="button"
+                variant="ghost"
+                size="icon"
+                onClick={() => handleArchive(member.id)}
+                title={isUz ? "Arxivlash" : "Архивировать"}
+              >
+                <Archive className="h-4 w-4 text-warning" aria-hidden="true" />
+              </Button>
+            )}
+            <Button
+              type="button"
+              variant="ghost"
+              size="icon"
+              onClick={() => setDeleteTarget(member)}
+              title={isUz ? "Oʻchirish" : "Удалить"}
+            >
+              <Trash2 className="h-4 w-4 text-destructive" aria-hidden="true" />
+            </Button>
+          </div>
+        );
+      },
+    },
+  ];
 
-      {/* Single-display Credentials Modal */}
+  const hasFilters = Boolean(search) || filterNeverLoggedIn;
+
+  return (
+    <div className="space-y-6">
+      <PageHeader
+        title={isUz ? "Markaz xodimlari" : "Сотрудники центра"}
+        description={isUz ? `Jami ${staff.length} xodim` : `Всего ${staff.length} сотрудников`}
+        actions={
+          <Button
+            type="button"
+            variant="primary"
+            size="sm"
+            onClick={() => {
+              setFormError(null);
+              setShowAddForm(true);
+            }}
+          >
+            <UserPlus className="h-4 w-4" aria-hidden="true" />
+            <span>{isUz ? "Xodim qoʻshish" : "Добавить сотрудника"}</span>
+          </Button>
+        }
+      />
+
+      {error && (
+        <Alert variant="destructive">
+          <AlertDescription className="flex items-center justify-between gap-2">
+            <span>{error}</span>
+            <button
+              type="button"
+              onClick={() => setError(null)}
+              aria-label="Close"
+              className="rounded p-1 text-destructive-subtle-foreground hover:opacity-75"
+            >
+              <X className="h-3.5 w-3.5" aria-hidden="true" />
+            </button>
+          </AlertDescription>
+        </Alert>
+      )}
+
+      {success && (
+        <Alert variant="success">
+          <AlertDescription className="flex items-center justify-between gap-2">
+            <span>{success}</span>
+            <button
+              type="button"
+              onClick={() => setSuccess(null)}
+              aria-label="Close"
+              className="rounded p-1 text-success-subtle-foreground hover:opacity-75"
+            >
+              <X className="h-3.5 w-3.5" aria-hidden="true" />
+            </button>
+          </AlertDescription>
+        </Alert>
+      )}
+
+      <FilterBar
+        locale={locale}
+        search={search}
+        onSearchChange={setSearch}
+        searchPlaceholder="Поиск сотрудника по имени, email, телефону..."
+        hasActiveFilters={hasFilters}
+        onReset={() => {
+          setSearch("");
+          setFilterNeverLoggedIn(false);
+        }}
+      >
+        <Button
+          type="button"
+          variant={filterNeverLoggedIn ? "primary" : "secondary"}
+          size="sm"
+          onClick={() => setFilterNeverLoggedIn(!filterNeverLoggedIn)}
+        >
+          Ни разу не входили
+        </Button>
+      </FilterBar>
+
+      <DataTable
+        data={filteredStaff}
+        columns={columns}
+        getRowId={(m) => m.id}
+        getRowHref={(m) => `/center/staff/${m.id}`}
+        locale={locale}
+        emptyTitle={
+          isUz
+            ? "Hali xodimlar qoʻshilmagan"
+            : staff.length === 0
+            ? "Сотрудники ещё не добавлены"
+            : "Сотрудники не найдены"
+        }
+        emptyDescription={
+          isUz
+            ? "Jamoaga oʻqituvchi yoki administrator qoʻshing."
+            : "Добавьте преподавателя или администратора в команду центра."
+        }
+        mobileMode="cards"
+      />
+
+      <Dialog
+        open={showAddForm}
+        onOpenChange={(next) => {
+          setShowAddForm(next);
+          if (!next) setFormError(null);
+        }}
+      >
+        <DialogContent className="max-w-lg">
+          <DialogHeader>
+            <DialogTitle>
+              {isUz ? "Yangi xodim qoʻshish" : "Добавить нового сотрудника"}
+            </DialogTitle>
+          </DialogHeader>
+
+          <form onSubmit={handleAddStaff} className="space-y-4">
+            {formError && (
+              <Alert variant="destructive">
+                <AlertDescription>{formError}</AlertDescription>
+              </Alert>
+            )}
+
+            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+              <FormField label={isUz ? "FISh" : "ФИО"} htmlFor="staff-fullname" required>
+                <Input
+                  id="staff-fullname"
+                  type="text"
+                  value={newName}
+                  onChange={(e) => setNewName(e.target.value)}
+                  required
+                  placeholder={isUz ? "Ism Familiya" : "Иван Петров"}
+                />
+              </FormField>
+
+              <FormField label="Email" htmlFor="staff-email">
+                <Input
+                  id="staff-email"
+                  type="email"
+                  value={newEmail}
+                  onChange={(e) => setNewEmail(e.target.value)}
+                  placeholder="staff@example.com"
+                />
+              </FormField>
+
+              <FormField label={isUz ? "Telefon" : "Телефон"} htmlFor="staff-phone">
+                <Input
+                  id="staff-phone"
+                  type="tel"
+                  value={newPhone}
+                  onChange={(e) => setNewPhone(e.target.value)}
+                  placeholder="+998 90 123 45 67"
+                />
+              </FormField>
+
+              <FormField label={isUz ? "Rol" : "Роль"} htmlFor="staff-role" required>
+                <select
+                  id="staff-role"
+                  value={newRole}
+                  onChange={(e) => setNewRole(e.target.value)}
+                  className={selectClassName}
+                >
+                  {assignableRoles.map((r) => (
+                    <option key={r} value={r}>
+                      {isUz ? ROLE_CONFIG[r]?.labelUz || r : ROLE_CONFIG[r]?.label || r}
+                    </option>
+                  ))}
+                </select>
+              </FormField>
+            </div>
+
+            <div className="space-y-3 border-t border-border pt-3">
+              <div className="flex flex-wrap items-center gap-4 text-sm text-foreground">
+                <label className="flex items-center gap-2 cursor-pointer">
+                  <input
+                    type="radio"
+                    name="passwordMode"
+                    checked={!isManualPassword}
+                    onChange={() => setIsManualPassword(false)}
+                    className="h-4 w-4 border-input text-primary focus:ring-ring"
+                  />
+                  <span>Сгенерировать безопасный пароль автоматически</span>
+                </label>
+                <label className="flex items-center gap-2 cursor-pointer">
+                  <input
+                    type="radio"
+                    name="passwordMode"
+                    checked={isManualPassword}
+                    onChange={() => setIsManualPassword(true)}
+                    className="h-4 w-4 border-input text-primary focus:ring-ring"
+                  />
+                  <span>Задать пароль вручную</span>
+                </label>
+              </div>
+
+              {isManualPassword && (
+                <FormField label="Пароль" htmlFor="staff-password">
+                  <Input
+                    id="staff-password"
+                    type="password"
+                    value={manualPassword}
+                    onChange={(e) => setManualPassword(e.target.value)}
+                    placeholder="Минимум 6 символов"
+                  />
+                </FormField>
+              )}
+            </div>
+
+            <FormActions>
+              <Button type="button" variant="secondary" onClick={() => setShowAddForm(false)}>
+                {isUz ? "Bekor qilish" : "Отмена"}
+              </Button>
+              <Button type="submit" variant="primary" disabled={saving} loading={saving}>
+                {isUz ? "Qoʻshish" : "Добавить"}
+              </Button>
+            </FormActions>
+          </form>
+        </DialogContent>
+      </Dialog>
+
+      <ConfirmDialog
+        open={Boolean(deleteTarget)}
+        onOpenChange={(next) => !next && setDeleteTarget(null)}
+        title={isUz ? "Xodimni oʻchirish" : "Удалить сотрудника"}
+        description={
+          deleteTarget
+            ? isUz
+              ? `${deleteTarget.user.fullName} markazdan oʻchiriladi.`
+              : `${deleteTarget.user.fullName} будет удалён(а) из центра.`
+            : undefined
+        }
+        confirmLabel={isUz ? "Oʻchirish" : "Удалить"}
+        cancelLabel={isUz ? "Bekor qilish" : "Отмена"}
+        variant="destructive"
+        locale={locale}
+        onConfirm={confirmDelete}
+      />
+
       {credentials && (
         <CredentialsModal
           isOpen={Boolean(credentials)}

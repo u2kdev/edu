@@ -3,6 +3,11 @@ import { z } from "zod";
 import { requireFinanceTenantAccess, logAuditEvent } from "@/lib/tenant";
 import { hasPermission } from "@/lib/permissions";
 import { disburseTeacherSalaries } from "@/lib/finance";
+import {
+  requirePlanFeature,
+  PlanFeatureLockedError,
+  formatPlanFeatureLockedPayload,
+} from "@/lib/plan-features";
 
 const disburseSchema = z.object({
   startDate: z.string().datetime({ offset: true }).or(z.string().min(8)),
@@ -24,6 +29,8 @@ export async function POST(req: Request) {
         { status: 403 }
       );
     }
+
+    await requirePlanFeature(tenantCtx.center.id, "financeAccounting");
 
     const tenantDb = tenantCtx.getTenantDb();
     const rawBody = await req.json();
@@ -93,6 +100,9 @@ export async function POST(req: Request) {
       transactions: result.transactions,
     });
   } catch (err: unknown) {
+    if (err instanceof PlanFeatureLockedError) {
+      return NextResponse.json(formatPlanFeatureLockedPayload(err), { status: 403 });
+    }
     const error = err as { message?: string; status?: number };
     return NextResponse.json(
       { error: error.message || "Failed to disburse teacher salaries" },

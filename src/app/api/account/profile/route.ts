@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { requireTenantAccess, TenantAccessError, logAuditEvent } from "@/lib/tenant";
 import { isActorImpersonating } from "@/lib/tenant-access";
+import { getAuthSession } from "@/lib/auth";
 import { normalizePhone } from "@/lib/phone";
 // Reason: Exception: Account self-service operates on platformUser model scoped by session.user.id.
 // eslint-disable-next-line no-restricted-imports
@@ -8,13 +9,15 @@ import { db } from "@/lib/db";
 import { z } from "zod";
 import { Language } from "@prisma/client";
 
-const updateProfileSchema = z.object({
-  fullName: z.string().min(2).max(120).optional(),
-  avatarUrl: z.string().max(500).optional().nullable(),
-  preferredLanguage: z.enum(["ru", "uz-Latn", "uz_Latn", "uz-Cyrl", "uz_Cyrl"]).optional(),
-  phone: z.string().max(30).optional().nullable(),
-  phoneConfirmationCode: z.string().max(10).optional(),
-});
+const updateProfileSchema = z
+  .object({
+    fullName: z.string().min(2).max(120).optional(),
+    avatarUrl: z.string().max(500).optional().nullable(),
+    preferredLanguage: z.enum(["ru", "uz-Latn", "uz_Latn", "uz-Cyrl", "uz_Cyrl"]).optional(),
+    phone: z.string().max(30).optional().nullable(),
+    phoneConfirmationCode: z.string().max(10).optional(),
+  })
+  .strict();
 
 function mapLanguageEnum(raw?: string): Language | undefined {
   if (!raw) return undefined;
@@ -30,13 +33,64 @@ function formatLanguageCode(lang: Language): string {
   return "ru";
 }
 
+function noStoreJson(body: unknown, status = 200) {
+  return NextResponse.json(body, {
+    status,
+    headers: { "Cache-Control": "no-store" },
+  });
+}
+
+async function resolveProfileActor(req: Request, isWrite: boolean) {
+  const rawSession = await getAuthSession(req);
+  if (!rawSession) {
+    throw new TenantAccessError("Unauthorized: No session found", "UNAUTHORIZED", 401);
+  }
+
+  if (rawSession.activeCenterId) {
+    const tenantCtx = await requireTenantAccess(req, { isWrite });
+    const canEditFullName =
+      tenantCtx.role === "DIRECTOR" ||
+      tenantCtx.role === "CENTER_ADMIN" ||
+      tenantCtx.isPlatformStaff;
+    return {
+      session: tenantCtx.session,
+      role: tenantCtx.role,
+      centerId: tenantCtx.center.id,
+      canEditFullName,
+      isReadOnly: isActorImpersonating(tenantCtx) || Boolean(tenantCtx.session.isReadOnly),
+    };
+  }
+
+  const platformRole = rawSession.user.platformRole || "NONE";
+  const isPlatformStaff =
+    platformRole !== "NONE" &&
+    ["DEVELOPER", "SUPERADMIN", "PLATFORM_ADMIN", "FULL_ACCESS", "PLATFORM_SUPPORT", "SEO_ADMIN"].includes(
+      platformRole
+    );
+  const readOnly =
+    Boolean(rawSession.isReadOnly) ||
+    Boolean(rawSession.impersonatorUserId) ||
+    platformRole === "PLATFORM_SUPPORT";
+
+  if (isWrite && readOnly) {
+    throw new TenantAccessError("Read-only impersonation mode", "FORBIDDEN", 403);
+  }
+
+  return {
+    session: rawSession,
+    role: platformRole !== "NONE" ? platformRole : "USER",
+    centerId: undefined as string | undefined,
+    canEditFullName: isPlatformStaff && platformRole !== "PLATFORM_SUPPORT",
+    isReadOnly: readOnly,
+  };
+}
+
 export async function GET(req: Request) {
   try {
-    const tenantCtx = await requireTenantAccess(req);
-    const { role, session } = tenantCtx;
+    const actor = await resolveProfileActor(req, false);
 
     const user = await db.platformUser.findUnique({
-      where: { id: session.user.id },
+      where: { id: actor.session.user.id },
       select: {
         id: true,
         fullName: true,
@@ -50,49 +104,41 @@ export async function GET(req: Request) {
     });
 
     if (!user) {
-      return NextResponse.json({ error: "User not found" }, { status: 404 });
+      return noStoreJson({ error: "User not found" }, 404);
     }
 
-    const canEditFullName =
-      role === "DIRECTOR" ||
-      role === "CENTER_ADMIN" ||
-      tenantCtx.isPlatformStaff;
-
-    return NextResponse.json({
+    return noStoreJson({
       profile: {
         ...user,
         preferredLanguage: formatLanguageCode(user.preferredLanguage),
-        role,
-        canEditFullName,
+        role: actor.role,
+        canEditFullName: actor.canEditFullName,
       },
     });
   } catch (error) {
     if (error instanceof TenantAccessError) {
-      return NextResponse.json({ error: error.message }, { status: error.status });
+      return noStoreJson({ error: error.message }, error.status);
     }
     console.error("[GET /api/account/profile]", error);
-    return NextResponse.json({ error: "Internal Server Error" }, { status: 500 });
+    return noStoreJson({ error: "Internal Server Error" }, 500);
   }
 }
 
 export async function PATCH(req: Request) {
   try {
-    const tenantCtx = await requireTenantAccess(req);
-    const { center, role, session } = tenantCtx;
+    const actor = await resolveProfileActor(req, true);
+    const { session, role, canEditFullName, centerId, isReadOnly } = actor;
 
-    if (isActorImpersonating(tenantCtx)) {
-      return NextResponse.json(
-        { error: "Read-only impersonation mode" },
-        { status: 403 }
-      );
+    if (isReadOnly) {
+      return noStoreJson({ error: "Read-only impersonation mode" }, 403);
     }
 
     const body = await req.json();
     const parsed = updateProfileSchema.safeParse(body);
     if (!parsed.success) {
-      return NextResponse.json(
+      return noStoreJson(
         { error: "Validation error", details: parsed.error.flatten() },
-        { status: 400 }
+        400
       );
     }
 
@@ -108,25 +154,20 @@ export async function PATCH(req: Request) {
     });
 
     if (!currentUser) {
-      return NextResponse.json({ error: "User not found" }, { status: 404 });
+      return noStoreJson({ error: "User not found" }, 404);
     }
-
-    const canEditFullName =
-      role === "DIRECTOR" ||
-      role === "CENTER_ADMIN" ||
-      tenantCtx.isPlatformStaff;
 
     if (
       parsed.data.fullName !== undefined &&
       parsed.data.fullName.trim() !== currentUser.fullName.trim() &&
       !canEditFullName
     ) {
-      return NextResponse.json(
+      return noStoreJson(
         {
           error:
             "Forbidden: ФИО может изменить только администрация учебного центра",
         },
-        { status: 403 }
+        403
       );
     }
 
@@ -137,12 +178,12 @@ export async function PATCH(req: Request) {
       } else {
         const norm = normalizePhone(parsed.data.phone);
         if (!norm) {
-          return NextResponse.json(
+          return noStoreJson(
             {
               error:
                 "Некорректный формат телефона. Используйте формат +998XXXXXXXXX",
             },
-            { status: 400 }
+            400
           );
         }
         const duplicatePhone = await db.platformUser.findFirst({
@@ -154,9 +195,9 @@ export async function PATCH(req: Request) {
           select: { id: true },
         });
         if (duplicatePhone) {
-          return NextResponse.json(
+          return noStoreJson(
             { error: "Этот номер телефона уже привязан к другому аккаунту" },
-            { status: 409 }
+            409
           );
         }
         normalizedPhone = norm;
@@ -190,7 +231,7 @@ export async function PATCH(req: Request) {
     });
 
     await logAuditEvent({
-      centerId: center.id,
+      ...(centerId ? { centerId } : {}),
       actorUserId: session.user.id,
       action: "USER_PROFILE_UPDATED",
       resource: "PlatformUser",
@@ -204,7 +245,7 @@ export async function PATCH(req: Request) {
       },
     });
 
-    return NextResponse.json({
+    return noStoreJson({
       success: true,
       profile: {
         ...updated,
@@ -215,9 +256,9 @@ export async function PATCH(req: Request) {
     });
   } catch (error) {
     if (error instanceof TenantAccessError) {
-      return NextResponse.json({ error: error.message }, { status: error.status });
+      return noStoreJson({ error: error.message }, error.status);
     }
     console.error("[PATCH /api/account/profile]", error);
-    return NextResponse.json({ error: "Internal Server Error" }, { status: 500 });
+    return noStoreJson({ error: "Internal Server Error" }, 500);
   }
 }

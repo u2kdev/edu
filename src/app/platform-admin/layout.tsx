@@ -1,6 +1,12 @@
 import { getAuthSession } from "@/lib/auth";
 import { redirect } from "next/navigation";
-import PlatformSidebar from "@/components/platform/PlatformSidebar";
+// Reason: Exception: Platform layout loads unread notification count for authenticated platform staff.
+// eslint-disable-next-line no-restricted-imports
+import { db } from "@/lib/db";
+import { PanelThemeProvider } from "@/components/theme/PanelThemeProvider";
+import { AppShell } from "@/components/shell/AppShell";
+import { getServerPanelTheme } from "@/lib/panel-theme";
+import { getServerSidebarCollapsed } from "@/lib/sidebar-state";
 
 export default async function PlatformAdminLayout({
   children,
@@ -15,10 +21,13 @@ export default async function PlatformAdminLayout({
   }
 
   const locale = session.user.preferredLanguage;
+  const [{ theme, resolvedTheme }, initialSidebarCollapsed] = await Promise.all([
+    getServerPanelTheme(),
+    Promise.resolve(getServerSidebarCollapsed()),
+  ]);
 
   // Only platform-level roles can access this section
   const allowedPlatformRoles = [
-    "DEVELOPER",
     "SUPERADMIN",
     "PLATFORM_ADMIN",
     "FULL_ACCESS",
@@ -30,19 +39,44 @@ export default async function PlatformAdminLayout({
     redirect("/center");
   }
 
+  let unreadNotificationsCount = 0;
+  try {
+    unreadNotificationsCount = await db.notification.count({
+      where: {
+        userId: session.user.id,
+        isRead: false,
+      },
+    });
+  } catch {
+    unreadNotificationsCount = 0;
+  }
+
+  const isSupportReadOnly =
+    Boolean(session.isReadOnly) ||
+    session.user.platformRole === "PLATFORM_SUPPORT";
+
   return (
-    <div className="min-h-screen bg-slate-50 flex flex-col md:flex-row text-slate-900 font-sans">
-      <PlatformSidebar
+    <PanelThemeProvider initialTheme={theme} initialResolvedTheme={resolvedTheme}>
+      <AppShell
+        scope="platform"
+        locale={locale}
+        initialSidebarCollapsed={initialSidebarCollapsed}
+        unreadNotificationsCount={unreadNotificationsCount}
         user={{
           fullName: session.user.fullName,
           email: session.user.email,
+          avatarUrl: session.user.avatarUrl,
           platformRole: session.user.platformRole,
         }}
-        locale={locale}
-      />
-      <main className="flex-1 p-4 md:p-8 overflow-y-auto">
-        <div className="max-w-7xl mx-auto">{children}</div>
-      </main>
-    </div>
+        navContext={{
+          scope: "platform",
+          platformRole: session.user.platformRole,
+        }}
+        readOnlyMode={isSupportReadOnly ? { active: true } : null}
+        showReturnToCenterLink
+      >
+        {children}
+      </AppShell>
+    </PanelThemeProvider>
   );
 }

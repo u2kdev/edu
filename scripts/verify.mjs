@@ -11,8 +11,13 @@ if (!fs.existsSync(reportsDir)) {
 const commands = [
   { name: 'tsc', cmd: 'npx tsc --noEmit' },
   { name: 'lint', cmd: 'npm run lint' },
+  { name: 'ui-tokens', cmd: 'node scripts/check-ui-tokens.mjs' },
   { name: 'vitest', cmd: 'npx vitest run' },
-  { name: 'build', cmd: 'npm run build' }
+  ...(process.env.DATABASE_URL_TEST
+    ? [{ name: 'integration', cmd: 'npm run test:integration' }]
+    : []),
+  { name: 'build', cmd: 'npm run build' },
+  { name: 'audit', cmd: 'node scripts/audit-check.mjs' }
 ];
 
 const results = [];

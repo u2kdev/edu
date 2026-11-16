@@ -1,7 +1,18 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { Users, ShieldAlert, Check, Plus } from "lucide-react";
+import { Check, ShieldAlert } from "lucide-react";
+import {
+  Badge,
+  Card,
+  PageHeader,
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui";
 
 interface PlatformOwnerItem {
   id: string;
@@ -24,76 +35,75 @@ export default function PlatformOwnersPage() {
       .finally(() => setLoading(false));
   }, []);
 
+  const roleBadgeVariant = (role: string) => {
+    if (role === "DEVELOPER") return "info" as const;
+    if (role === "SUPERADMIN") return "destructive" as const;
+    return "neutral" as const;
+  };
+
   return (
     <div className="space-y-6">
-      <div className="mb-8 flex justify-between items-center">
-        <div>
-          <h1 className="text-2xl font-bold text-zinc-100 flex items-center gap-3">
-            <Users className="w-6 h-6 text-emerald-400" />
-            Platform Administrators
-          </h1>
-          <p className="text-zinc-500 mt-1">Global system administrators and developers (Read-only)</p>
-        </div>
-      </div>
+      <PageHeader
+        title="Platform Administrators"
+        description="Global system administrators and developers (Read-only)"
+      />
 
-      <div className="bg-zinc-900 border border-zinc-800 rounded p-4">
-        <div className="overflow-x-auto">
-          <table className="w-full text-left font-mono text-sm">
-            <thead>
-              <tr className="border-b border-zinc-800 text-zinc-500 text-xs">
-                <th className="py-3 px-4 font-normal">EMAIL</th>
-                <th className="py-3 px-4 font-normal">NAME</th>
-                <th className="py-3 px-4 font-normal">ROLE</th>
-                <th className="py-3 px-4 font-normal">STATUS</th>
-                <th className="py-3 px-4 font-normal">CREATED</th>
-                <th className="py-3 px-4 font-normal text-right">ACTIONS</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-zinc-800/50">
+      <Card>
+        <div className="overflow-x-auto" tabIndex={0}>
+          <Table>
+            <TableHeader className="sticky top-0 z-10 bg-muted/60">
+              <TableRow>
+                <TableHead>Email</TableHead>
+                <TableHead>Name</TableHead>
+                <TableHead>Role</TableHead>
+                <TableHead>Status</TableHead>
+                <TableHead>Created</TableHead>
+                <TableHead className="text-right">Actions</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
               {loading ? (
-                <tr>
-                  <td colSpan={6} className="py-8 text-center text-zinc-600">
+                <TableRow>
+                  <TableCell colSpan={6} className="py-8 text-center text-sm text-muted-foreground">
                     Fetching administrators...
-                  </td>
-                </tr>
+                  </TableCell>
+                </TableRow>
               ) : (
                 owners.map((owner) => (
-                  <tr key={owner.id} className="hover:bg-zinc-800/30 text-zinc-300">
-                    <td className="py-3 px-4 text-emerald-400">{owner.email}</td>
-                    <td className="py-3 px-4 text-zinc-100">{owner.fullName}</td>
-                    <td className="py-3 px-4">
-                      <span className={`px-2 py-0.5 rounded text-xs font-bold ${
-                        owner.platformRole === "DEVELOPER" ? "bg-purple-500/20 text-purple-400" :
-                        owner.platformRole === "SUPERADMIN" ? "bg-red-500/20 text-red-400" :
-                        "bg-zinc-700 text-zinc-300"
-                      }`}>
+                  <TableRow key={owner.id}>
+                    <TableCell className="font-mono text-xs text-primary">{owner.email}</TableCell>
+                    <TableCell className="font-medium text-foreground">{owner.fullName}</TableCell>
+                    <TableCell>
+                      <Badge variant={roleBadgeVariant(owner.platformRole)}>
                         {owner.platformRole}
-                      </span>
-                    </td>
-                    <td className="py-3 px-4">
+                      </Badge>
+                    </TableCell>
+                    <TableCell>
                       {owner.isActive ? (
-                        <span className="flex items-center gap-1 text-emerald-400 text-xs">
-                          <Check className="w-3 h-3" /> ACTIVE
-                        </span>
+                        <Badge variant="success">
+                          <Check className="h-3 w-3" aria-hidden="true" />
+                          <span>ACTIVE</span>
+                        </Badge>
                       ) : (
-                        <span className="flex items-center gap-1 text-rose-400 text-xs">
-                          <ShieldAlert className="w-3 h-3" /> SUSPENDED
-                        </span>
+                        <Badge variant="destructive">
+                          <ShieldAlert className="h-3 w-3" aria-hidden="true" />
+                          <span>SUSPENDED</span>
+                        </Badge>
                       )}
-                    </td>
-                    <td className="py-3 px-4 text-zinc-500 text-xs">
+                    </TableCell>
+                    <TableCell className="text-xs text-muted-foreground tabular-nums">
                       {new Date(owner.createdAt).toLocaleDateString()}
-                    </td>
-                    <td className="py-3 px-4 text-right text-xs text-zinc-600">
+                    </TableCell>
+                    <TableCell className="text-right text-xs text-muted-foreground">
                       System Managed
-                    </td>
-                  </tr>
+                    </TableCell>
+                  </TableRow>
                 ))
               )}
-            </tbody>
-          </table>
+            </TableBody>
+          </Table>
         </div>
-      </div>
+      </Card>
     </div>
   );
 }

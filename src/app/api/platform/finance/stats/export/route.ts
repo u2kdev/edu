@@ -4,12 +4,7 @@ import { NextResponse } from "next/server";
 import { db } from "@/lib/db";
 import { requirePlatformPermission, handlePlatformError } from "@/lib/platformAuth";
 import { calculatePlatformMRR } from "@/lib/platform-finance";
-
-function escapeCsv(val: unknown): string {
-  if (val === null || val === undefined) return '""';
-  const str = String(val).replace(/"/g, '""');
-  return `"${str}"`;
-}
+import { sanitizeCsvCell } from "@/lib/csv";
 
 export async function GET(req: Request) {
   try {
@@ -60,20 +55,20 @@ export async function GET(req: Request) {
     });
 
     const lines: string[] = [];
-    lines.push("ФИНАНСОВЫЙ ОТЧЁТ ПЛАТФОРМЫ");
-    lines.push(`Дата выгрузки,${escapeCsv(now.toISOString().slice(0, 10))}`);
+    lines.push(sanitizeCsvCell("ФИНАНСОВЫЙ ОТЧЁТ ПЛАТФОРМЫ"));
+    lines.push(`Дата выгрузки,${sanitizeCsvCell(now.toISOString().slice(0, 10))}`);
     lines.push("");
     lines.push("МЕТРИКА,ЗНАЧЕНИЕ (UZS)");
-    lines.push(`MRR (Ежемесячная регулярная выручка),${mrrStats.mrr}`);
-    lines.push(`ARR (Годовая регулярная выручка),${mrrStats.arr}`);
-    lines.push(`ARPU (Средний чек на активный центр),${mrrStats.arpu}`);
-    lines.push(`Активных подписок,${mrrStats.activeSubscriptionsCount}`);
-    lines.push(`Выручка за текущий месяц,${monthRev}`);
-    lines.push(`Расходы за текущий месяц,${monthExp}`);
-    lines.push(`Прибыль за текущий месяц,${monthRev - monthExp}`);
-    lines.push(`Выручка за текущий год,${yearRev}`);
-    lines.push(`Расходы за текущий год,${yearExp}`);
-    lines.push(`Прибыль за текущий год,${yearRev - yearExp}`);
+    lines.push(`MRR (Ежемесячная регулярная выручка),${sanitizeCsvCell(mrrStats.mrr)}`);
+    lines.push(`ARR (Годовая регулярная выручка),${sanitizeCsvCell(mrrStats.arr)}`);
+    lines.push(`ARPU (Средний чек на активный центр),${sanitizeCsvCell(mrrStats.arpu)}`);
+    lines.push(`Активных подписок,${sanitizeCsvCell(mrrStats.activeSubscriptionsCount)}`);
+    lines.push(`Выручка за текущий месяц,${sanitizeCsvCell(monthRev)}`);
+    lines.push(`Расходы за текущий месяц,${sanitizeCsvCell(monthExp)}`);
+    lines.push(`Прибыль за текущий месяц,${sanitizeCsvCell(monthRev - monthExp)}`);
+    lines.push(`Выручка за текущий год,${sanitizeCsvCell(yearRev)}`);
+    lines.push(`Расходы за текущий год,${sanitizeCsvCell(yearExp)}`);
+    lines.push(`Прибыль за текущий год,${sanitizeCsvCell(yearRev - yearExp)}`);
     lines.push("");
     lines.push("СПИСОК ДЕБИТОРОВ (ЗАДОЛЖЕННОСТЬ ПО ПОДПИСКЕ)");
     lines.push("Учебный центр,Телефон,Email,Тариф,Сумма к оплате (UZS),Дата окончания,Дней просрочки,Статус центра");
@@ -81,14 +76,14 @@ export async function GET(req: Request) {
     for (const sub of overdueSubscriptions) {
       const days = Math.max(0, Math.floor((now.getTime() - sub.currentPeriodEndsAt.getTime()) / (1000 * 60 * 60 * 24)));
       lines.push([
-        escapeCsv(sub.center.name),
-        escapeCsv(sub.center.phone || "—"),
-        escapeCsv(sub.center.email || "—"),
-        escapeCsv(sub.plan.name),
-        escapeCsv(Math.round(sub.plan.priceMonthly)),
-        escapeCsv(sub.currentPeriodEndsAt.toISOString().slice(0, 10)),
-        escapeCsv(days),
-        escapeCsv(sub.center.status),
+        sanitizeCsvCell(sub.center.name),
+        sanitizeCsvCell(sub.center.phone || "—"),
+        sanitizeCsvCell(sub.center.email || "—"),
+        sanitizeCsvCell(sub.plan.name),
+        sanitizeCsvCell(Math.round(sub.plan.priceMonthly)),
+        sanitizeCsvCell(sub.currentPeriodEndsAt.toISOString().slice(0, 10)),
+        sanitizeCsvCell(days),
+        sanitizeCsvCell(sub.center.status),
       ].join(","));
     }
 

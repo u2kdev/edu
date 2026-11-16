@@ -133,6 +133,11 @@
     "switchCenter": "O'quv markazi",
     "switchRole": "Demo-rolni tezkor almashtirish",
     "language": "Ilova tili",
-    "pullToRefresh": "Yangilash uchun pastga torting"
+    "pullToRefresh": "Yangilash uchun pastga torting",
+    "telegramTitle": "Telegram-bot",
+    "telegramConnect": "Telegram ulash",
+    "telegramDisconnect": "Telegramni uzish",
+    "telegramConnected": "Ulangan",
+    "telegramHint": "To'lov eslatmalari, dars jadvali va balansni Telegram orqali oling."
   }
 }

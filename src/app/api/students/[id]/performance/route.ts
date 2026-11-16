@@ -1,5 +1,12 @@
 import { NextResponse } from "next/server";
 import { requireTenantAccess } from "@/lib/tenant";
+import {
+  DashboardAccessError,
+  getStudentPerformanceData,
+} from "@/lib/dashboard-analytics";
+import type { AnalyticsPeriodPreset } from "@/lib/finance-analytics";
+
+const NO_STORE_HEADERS = { "Cache-Control": "no-store" } as const;
 
 // GET /api/students/[id]/performance - Get aggregated performance report for student
 export async function GET(
@@ -11,6 +18,34 @@ export async function GET(
     const tenantDb = tenantCtx.getTenantDb();
     const studentMembershipId = params.id;
     const currentRole = tenantCtx.role;
+
+    const { searchParams } = new URL(req.url);
+    if (searchParams.get("detailed") === "1") {
+      const periodParam = searchParams.get("period");
+      const monthParam = searchParams.get("month");
+      const period: AnalyticsPeriodPreset =
+        periodParam === "7d" ||
+        periodParam === "30d" ||
+        periodParam === "90d" ||
+        periodParam === "12m"
+          ? periodParam
+          : "30d";
+
+      const performance = await getStudentPerformanceData({
+        centerId: tenantCtx.center.id,
+        studentMembershipId,
+        viewerRole: currentRole || "",
+        viewerMembershipId: tenantCtx.membership?.id ?? null,
+        isPlatformStaff: tenantCtx.isPlatformStaff,
+        period,
+        calendarMonth: monthParam,
+      });
+
+      return NextResponse.json(
+        { success: true, detailedPerformance: performance },
+        { headers: NO_STORE_HEADERS }
+      );
+    }
 
     // Check target student membership exists in this center
     const targetStudent = await tenantDb.centerMembership.findFirst({
@@ -121,7 +156,16 @@ export async function GET(
       },
     });
   } catch (err: unknown) {
+    if (err instanceof DashboardAccessError) {
+      return NextResponse.json(
+        { error: err.message, code: err.code },
+        { status: err.status, headers: NO_STORE_HEADERS }
+      );
+    }
     const error = err as { message?: string; status?: number };
-    return NextResponse.json({ error: error.status ? error.message : "Server error" }, { status: error.status || 500 });
+    return NextResponse.json(
+      { error: error.status ? error.message : "Server error" },
+      { status: error.status || 500, headers: NO_STORE_HEADERS }
+    );
   }
 }

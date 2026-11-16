@@ -18,6 +18,14 @@ export async function GET(req: Request) {
   try {
     const tenantCtx = await requireTenantAccess(req);
     const tenantDb = tenantCtx.getTenantDb();
+
+    if (tenantCtx.role === "ACCOUNTANT" || tenantCtx.role === "CENTER_SUPPORT") {
+      return NextResponse.json(
+        { error: "Forbidden: No permission to access homework" },
+        { status: 403 }
+      );
+    }
+
     const { searchParams } = new URL(req.url);
     const lessonId = searchParams.get("lessonId");
 
@@ -122,6 +130,10 @@ export async function GET(req: Request) {
             ? { teacherMembershipId: tenantCtx.membership.id }
             : { assistantMembershipId: tenantCtx.membership.id },
         select: {
+          enrollments: {
+            where: { status: "ACTIVE" },
+            select: { studentMembershipId: true },
+          },
           course: {
             select: {
               modules: {
@@ -132,13 +144,18 @@ export async function GET(req: Request) {
         },
       });
       scopedLessonIds = [];
+      const teacherStudentIds = new Set<string>();
       for (const g of groups) {
+        for (const e of g.enrollments) {
+          teacherStudentIds.add(e.studentMembershipId);
+        }
         for (const mod of g.course.modules) {
           for (const les of mod.lessons) {
             scopedLessonIds.push(les.id);
           }
         }
       }
+      allowedSubmissionStudentIds = Array.from(teacherStudentIds);
     }
 
     if (scopedLessonIds !== null) {
@@ -563,6 +580,18 @@ export async function PATCH(req: Request) {
         });
 
         if (existingGrade) {
+          if (
+            existingGrade.lifecycle === "FINAL" &&
+            tenantCtx.role !== "DIRECTOR" &&
+            tenantCtx.role !== "CENTER_ADMIN" &&
+            !tenantCtx.isPlatformStaff
+          ) {
+            return NextResponse.json(
+              { error: "Forbidden: Cannot modify a finalized grade" },
+              { status: 403 }
+            );
+          }
+
           await tenantDb.grade.updateMany({
             where: { id: existingGrade.id },
             data: {

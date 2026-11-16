@@ -1,13 +1,38 @@
 import { requireTenantPageAccess } from "@/lib/tenant";
 import { getAuthSession } from "@/lib/auth";
 import { redirect } from "next/navigation";
-import Link from "next/link";
-import { GraduationCap, Award, CheckCircle2, AlertCircle, Users } from "lucide-react";
+import { GraduationCap, Award } from "lucide-react";
 import { t, formatDateLocalized } from "@/i18n";
 import { Prisma } from "@prisma/client";
 import GradebookManager from "@/components/GradebookManager";
+import { getSelectedParentChildIds } from "@/lib/parent-child";
+import {
+  getStudentPerformanceData,
+  type StudentPerformanceDTO,
+} from "@/lib/dashboard-analytics";
+import type { AnalyticsPeriodPreset } from "@/lib/finance-analytics";
+import { StudentPerformanceView } from "@/components/students/StudentPerformanceView";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Badge } from "@/components/ui/badge";
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table";
 
-export default async function CenterGradesPage() {
+function normalizePeriod(raw?: string): AnalyticsPeriodPreset {
+  if (raw === "7d" || raw === "30d" || raw === "90d" || raw === "12m") return raw;
+  return "30d";
+}
+
+export default async function CenterGradesPage({
+  searchParams,
+}: {
+  searchParams?: { period?: string };
+}) {
   const tenantCtx = await requireTenantPageAccess();
 
   const session = await getAuthSession();
@@ -18,6 +43,7 @@ export default async function CenterGradesPage() {
 
   const locale = session.user.preferredLanguage;
   const activeRole = session.activeCenterRole || "";
+  const period = normalizePeriod(searchParams?.period);
 
   // Get the current user's membership in this center
   const currentMembership = session.memberships.find((m) => m.centerId === centerId);
@@ -30,16 +56,11 @@ export default async function CenterGradesPage() {
     activeRole === "DIRECTOR" || activeRole === "CENTER_ADMIN" || isPlatformStaff;
 
   // SECURITY: Build WHERE clause scoped by role.
-  // TEACHER/TEACHER_ASSISTANT: only grades for students in their own groups
-  // STUDENT: only their own grades
-  // PARENT: only their confirmed children
-  // DIRECTOR/CENTER_ADMIN/platform staff: all center grades
-  // Anything else (unknown/support role, or a role without a membership in the
-  // active center): an empty scope — never fall back to the whole center.
   const emptyScope = { id: { in: [] as string[] } };
 
   let submissionsWhere: Prisma.HomeworkSubmissionWhereInput;
   let testAttemptsWhere: Prisma.TestAttemptWhereInput;
+  let selectedChildIds: string[] = [];
 
   if (isCenterWide) {
     submissionsWhere = {
@@ -53,7 +74,6 @@ export default async function CenterGradesPage() {
     (activeRole === "TEACHER" || activeRole === "TEACHER_ASSISTANT") &&
     currentMembership
   ) {
-    // Scope to groups where this teacher (or assistant) is assigned
     const groupScope =
       activeRole === "TEACHER_ASSISTANT"
         ? { assistantMembershipId: currentMembership.id }
@@ -80,7 +100,6 @@ export default async function CenterGradesPage() {
       },
     };
   } else if (activeRole === "STUDENT" && currentMembership) {
-    // Students only see their own grades
     submissionsWhere = {
       homework: { lesson: { module: { course: { centerId } } } },
       grade: { not: null },
@@ -91,20 +110,21 @@ export default async function CenterGradesPage() {
       studentMembershipId: currentMembership.id,
     };
   } else if (activeRole === "PARENT" && currentMembership) {
-    // Parents see grades for their confirmed children
     const childLinks = await tenantCtx.getTenantDb().parentLink.findMany({
       where: { parentMembershipId: currentMembership.id, status: "CONFIRMED" },
       select: { studentMembershipId: true },
     });
-    const childIds = childLinks.map((l) => l.studentMembershipId);
+    selectedChildIds = getSelectedParentChildIds(
+      childLinks.map((l) => l.studentMembershipId)
+    );
     submissionsWhere = {
       homework: { lesson: { module: { course: { centerId } } } },
       grade: { not: null },
-      studentMembershipId: { in: childIds },
+      studentMembershipId: { in: selectedChildIds },
     };
     testAttemptsWhere = {
       test: { material: { centerId } },
-      studentMembershipId: { in: childIds },
+      studentMembershipId: { in: selectedChildIds },
     };
   } else {
     submissionsWhere = emptyScope;
@@ -132,12 +152,13 @@ export default async function CenterGradesPage() {
   });
 
   const totalGraded = submissions.filter((s) => s.grade !== null).length;
-  const avgGrade = totalGraded > 0
-    ? Math.round(submissions.reduce((sum, s) => sum + (s.grade || 0), 0) / totalGraded)
-    : 0;
+  const avgGrade =
+    totalGraded > 0
+      ? Math.round(
+          submissions.reduce((sum, s) => sum + (s.grade || 0), 0) / totalGraded
+        )
+      : 0;
 
-  // Gradebook matrix is only meaningful for staff with access to groups:
-  // management/platform staff (all groups) or teachers with a group scope.
   let groups: { id: string; name: string }[] = [];
   const hasOwnGroups =
     (activeRole === "TEACHER" || activeRole === "TEACHER_ASSISTANT") &&
@@ -157,30 +178,79 @@ export default async function CenterGradesPage() {
     groups = rawGroups;
   }
 
+  let performanceData: StudentPerformanceDTO | null = null;
+  if (!isPlatformStaff && currentMembership) {
+    if (activeRole === "STUDENT") {
+      performanceData = await getStudentPerformanceData({
+        centerId,
+        studentMembershipId: currentMembership.id,
+        viewerRole: "STUDENT",
+        viewerMembershipId: currentMembership.id,
+        period,
+      });
+    } else if (activeRole === "PARENT" && selectedChildIds.length > 0) {
+      performanceData = await getStudentPerformanceData({
+        centerId,
+        studentMembershipId: selectedChildIds[0],
+        viewerRole: "PARENT",
+        viewerMembershipId: currentMembership.id,
+        period,
+      });
+    }
+  }
+
+  const pageTitle =
+    activeRole === "STUDENT" || activeRole === "PARENT"
+      ? t(locale, "ui3.performanceTitle")
+      : t(locale, "nav.grades");
+
+  const pageSubtitle =
+    activeRole === "TEACHER"
+      ? t(locale, "grades.teacherDescription")
+      : activeRole === "STUDENT"
+      ? t(locale, "grades.studentDescription")
+      : activeRole === "PARENT"
+      ? t(locale, "grades.parentDescription")
+      : t(locale, "grades.allDescription");
+
   return (
-    <div className="space-y-8">
-      <div className="flex items-center justify-between">
+    <div className="space-y-6">
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between border-b border-border pb-4">
         <div>
-          <h2 className="text-xl font-bold text-white">{t(locale, "nav.grades")}</h2>
-          <p className="text-sm text-slate-400 mt-0.5">
-            {activeRole === "TEACHER"
-              ? t(locale, "grades.teacherDescription")
-              : activeRole === "STUDENT"
-              ? t(locale, "grades.studentDescription")
-              : activeRole === "PARENT"
-              ? t(locale, "grades.parentDescription")
-              : t(locale, "grades.allDescription")}
-          </p>
+          <h1 className="font-display text-2xl font-semibold tracking-tight text-foreground">
+            {pageTitle}
+          </h1>
+          <p className="text-sm text-muted-foreground mt-1">{pageSubtitle}</p>
         </div>
         {totalGraded > 0 && (
-          <div className="glass-panel px-5 py-3 rounded-2xl border border-slate-800 text-right">
-            <div className="text-xs text-slate-400 uppercase tracking-wider font-semibold">{t(locale, "grades.averageScore")}</div>
-            <div className={`text-2xl font-extrabold mt-0.5 ${avgGrade >= 70 ? "text-emerald-400" : avgGrade >= 50 ? "text-amber-400" : "text-red-400"}`}>
+          <div className="rounded-lg border border-border bg-card px-4 py-2.5 text-right shrink-0">
+            <div className="text-xs font-medium text-muted-foreground">
+              {t(locale, "grades.averageScore")}
+            </div>
+            <div
+              className={`font-display text-2xl font-semibold mt-0.5 tabular-nums ${
+                avgGrade >= 70
+                  ? "text-success"
+                  : avgGrade >= 50
+                  ? "text-warning"
+                  : "text-destructive"
+              }`}
+            >
               {avgGrade}%
             </div>
           </div>
         )}
       </div>
+
+      {/* Unified Student / Parent Performance Breakdown (Section E) */}
+      {performanceData && (
+        <StudentPerformanceView
+          initialData={performanceData}
+          locale={locale}
+          showPeriodControls
+          paymentsHref="/center/payments"
+        />
+      )}
 
       {/* Gradebook Matrix Component for Staff */}
       {groups.length > 0 && (
@@ -192,117 +262,138 @@ export default async function CenterGradesPage() {
       )}
 
       {/* Test Attempts Grades Table */}
-      <div className="space-y-4">
-        <h3 className="text-base font-bold text-white flex items-center gap-2">
-          <Award className="w-5 h-5 text-brand-400" />
-          <span>{t(locale, "materials.testDescription")}</span>
-          <span className="ml-auto text-xs font-normal text-slate-500">{t(locale, "common.recordsCount", { count: testAttempts.length })}</span>
-        </h3>
-
-        <div className="glass-panel rounded-2xl border border-slate-800 overflow-hidden">
-          <table className="w-full text-left text-sm text-slate-300">
-            <thead className="bg-slate-900/80 text-xs font-semibold uppercase text-slate-400 border-b border-slate-800">
-              <tr>
-                <th className="p-4">{t(locale, "nav.students")}</th>
-                <th className="p-4">{t(locale, "materials.test")}</th>
-                <th className="p-4">{t(locale, "performance.title")} (%)</th>
-                <th className="p-4">{t(locale, "common.status")}</th>
-                <th className="p-4">{t(locale, "common.date")}</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-slate-800/80">
+      <Card>
+        <CardHeader className="flex flex-row items-center justify-between pb-3">
+          <CardTitle className="flex items-center gap-2 text-base">
+            <Award className="h-4 w-4 text-primary" aria-hidden="true" />
+            <span>{t(locale, "materials.testDescription")}</span>
+          </CardTitle>
+          <span className="text-xs text-muted-foreground tabular-nums">
+            {t(locale, "common.recordsCount", { count: testAttempts.length })}
+          </span>
+        </CardHeader>
+        <CardContent className="pt-0">
+          <Table>
+            <TableHeader>
+              <TableRow>
+                <TableHead>{t(locale, "nav.students")}</TableHead>
+                <TableHead>{t(locale, "materials.test")}</TableHead>
+                <TableHead>{t(locale, "performance.title")} (%)</TableHead>
+                <TableHead>{t(locale, "common.status")}</TableHead>
+                <TableHead>{t(locale, "common.date")}</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
               {testAttempts.length === 0 ? (
-                <tr>
-                  <td colSpan={5} className="p-8 text-center">
-                    <div className="flex flex-col items-center gap-2">
-                      <Award className="w-8 h-8 text-slate-700" />
-                      <span className="text-slate-500 text-sm">{t(locale, "common.noData")}</span>
+                <TableRow>
+                  <TableCell colSpan={5} className="py-8 text-center">
+                    <div className="flex flex-col items-center gap-2 text-muted-foreground">
+                      <Award className="h-6 w-6 opacity-60" aria-hidden="true" />
+                      <span className="text-sm">{t(locale, "common.noData")}</span>
                     </div>
-                  </td>
-                </tr>
+                  </TableCell>
+                </TableRow>
               ) : (
                 testAttempts.map((att) => {
-                  const isPassed = (att.scorePercent || 0) >= att.test.passingScorePercent;
+                  const isPassed =
+                    (att.scorePercent || 0) >= att.test.passingScorePercent;
                   return (
-                    <tr key={att.id} className="hover:bg-slate-900/40 transition-colors">
-                      <td className="p-4 font-semibold text-white">{att.student.user.fullName}</td>
-                      <td className="p-4 text-slate-300">{att.test.material.title}</td>
-                      <td className="p-4 font-bold text-brand-400">
+                    <TableRow key={att.id}>
+                      <TableCell className="font-medium text-foreground">
+                        {att.student.user.fullName}
+                      </TableCell>
+                      <TableCell className="text-muted-foreground">
+                        {att.test.material.title}
+                      </TableCell>
+                      <TableCell className="font-semibold text-primary tabular-nums">
                         {att.scorePercent}% ({att.scorePoints}/{att.maxPoints})
-                      </td>
-                      <td className="p-4">
-                        <span className={`px-2.5 py-1 rounded-full text-xs font-semibold ${
-                          isPassed
-                            ? "bg-emerald-500/10 text-emerald-400 border border-emerald-500/20"
-                            : "bg-red-500/10 text-red-400 border border-red-500/20"
-                        }`}>
-                          {isPassed ? t(locale, "grades.passed") : t(locale, "grades.failed")}
-                        </span>
-                      </td>
-                      <td className="p-4 text-xs text-slate-400">
+                      </TableCell>
+                      <TableCell>
+                        <Badge variant={isPassed ? "success" : "destructive"}>
+                          {isPassed
+                            ? t(locale, "grades.passed")
+                            : t(locale, "grades.failed")}
+                        </Badge>
+                      </TableCell>
+                      <TableCell className="text-xs text-muted-foreground">
                         {formatDateLocalized(att.completedAt, locale)}
-                      </td>
-                    </tr>
+                      </TableCell>
+                    </TableRow>
                   );
                 })
               )}
-            </tbody>
-          </table>
-        </div>
-      </div>
+            </TableBody>
+          </Table>
+        </CardContent>
+      </Card>
 
       {/* Homework Grades Table */}
-      <div className="space-y-4">
-        <h3 className="text-base font-bold text-white flex items-center gap-2">
-          <GraduationCap className="w-5 h-5 text-emerald-400" />
-          <span>{t(locale, "homework.title")}</span>
-          <span className="ml-auto text-xs font-normal text-slate-500">{t(locale, "common.recordsCount", { count: submissions.length })}</span>
-        </h3>
-
-        <div className="glass-panel rounded-2xl border border-slate-800 overflow-hidden">
-          <table className="w-full text-left text-sm text-slate-300">
-            <thead className="bg-slate-900/80 text-xs font-semibold uppercase text-slate-400 border-b border-slate-800">
-              <tr>
-                <th className="p-4">{t(locale, "nav.students")}</th>
-                <th className="p-4">{t(locale, "homework.title")}</th>
-                <th className="p-4">{t(locale, "performance.title")}</th>
-                <th className="p-4">{t(locale, "homework.feedback")}</th>
-                <th className="p-4">{t(locale, "common.date")}</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-slate-800/80">
+      <Card>
+        <CardHeader className="flex flex-row items-center justify-between pb-3">
+          <CardTitle className="flex items-center gap-2 text-base">
+            <GraduationCap className="h-4 w-4 text-success" aria-hidden="true" />
+            <span>{t(locale, "homework.title")}</span>
+          </CardTitle>
+          <span className="text-xs text-muted-foreground tabular-nums">
+            {t(locale, "common.recordsCount", { count: submissions.length })}
+          </span>
+        </CardHeader>
+        <CardContent className="pt-0">
+          <Table>
+            <TableHeader>
+              <TableRow>
+                <TableHead>{t(locale, "nav.students")}</TableHead>
+                <TableHead>{t(locale, "homework.title")}</TableHead>
+                <TableHead>{t(locale, "performance.title")}</TableHead>
+                <TableHead>{t(locale, "homework.feedback")}</TableHead>
+                <TableHead>{t(locale, "common.date")}</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
               {submissions.length === 0 ? (
-                <tr>
-                  <td colSpan={5} className="p-8 text-center">
-                    <div className="flex flex-col items-center gap-2">
-                      <GraduationCap className="w-8 h-8 text-slate-700" />
-                      <span className="text-slate-500 text-sm">{t(locale, "common.noData")}</span>
+                <TableRow>
+                  <TableCell colSpan={5} className="py-8 text-center">
+                    <div className="flex flex-col items-center gap-2 text-muted-foreground">
+                      <GraduationCap className="h-6 w-6 opacity-60" aria-hidden="true" />
+                      <span className="text-sm">{t(locale, "common.noData")}</span>
                     </div>
-                  </td>
-                </tr>
+                  </TableCell>
+                </TableRow>
               ) : (
                 submissions.map((sub) => (
-                  <tr key={sub.id} className="hover:bg-slate-900/40 transition-colors">
-                    <td className="p-4 font-semibold text-white">{sub.student.user.fullName}</td>
-                    <td className="p-4 text-slate-300">{sub.homework.title}</td>
-                    <td className="p-4">
-                      <span className={`font-bold ${(sub.grade || 0) >= 70 ? "text-emerald-400" : (sub.grade || 0) >= 50 ? "text-amber-400" : "text-red-400"}`}>
+                  <TableRow key={sub.id}>
+                    <TableCell className="font-medium text-foreground">
+                      {sub.student.user.fullName}
+                    </TableCell>
+                    <TableCell className="text-muted-foreground">
+                      {sub.homework.title}
+                    </TableCell>
+                    <TableCell>
+                      <span
+                        className={`font-semibold tabular-nums ${
+                          (sub.grade || 0) >= 70
+                            ? "text-success"
+                            : (sub.grade || 0) >= 50
+                            ? "text-warning"
+                            : "text-destructive"
+                        }`}
+                      >
                         {sub.grade} / 100
                       </span>
-                    </td>
-                    <td className="p-4 text-slate-400 text-xs max-w-xs truncate">
+                    </TableCell>
+                    <TableCell className="text-xs text-muted-foreground max-w-xs truncate">
                       {sub.feedback || "—"}
-                    </td>
-                    <td className="p-4 text-xs text-slate-400">
+                    </TableCell>
+                    <TableCell className="text-xs text-muted-foreground">
                       {formatDateLocalized(sub.gradedAt, locale)}
-                    </td>
-                  </tr>
+                    </TableCell>
+                  </TableRow>
                 ))
               )}
-            </tbody>
-          </table>
-        </div>
-      </div>
+            </TableBody>
+          </Table>
+        </CardContent>
+      </Card>
     </div>
   );
 }

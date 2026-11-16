@@ -5,6 +5,8 @@ services:
     image: postgres:16-alpine
     container_name: aziz_lms_prod_postgres
     restart: unless-stopped
+    security_opt:
+      - "no-new-privileges:true"
     environment:
       POSTGRES_USER: ${POSTGRES_USER:-postgres}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD must be set}
@@ -25,8 +27,12 @@ services:
       dockerfile: Dockerfile
     container_name: aziz_lms_prod_app
     restart: unless-stopped
+    security_opt:
+      - "no-new-privileges:true"
     ports:
-      - "3000:3000"
+      - "127.0.0.1:3000:3000"
+    volumes:
+      - storage_prod_data:/app/storage
     environment:
       NODE_ENV: production
       PORT: 3000
@@ -39,6 +45,9 @@ services:
       RESEND_API_KEY: ${RESEND_API_KEY:?RESEND_API_KEY must be set}
       EMAIL_FROM: ${EMAIL_FROM:?EMAIL_FROM must be set (e.g. e-darschi LMS <noreply@example.com>)}
       CRON_SECRET: ${CRON_SECRET:?CRON_SECRET must be set (min 16 chars)}
+      TWO_FACTOR_ENC_KEY: ${TWO_FACTOR_ENC_KEY:?TWO_FACTOR_ENC_KEY must be set (32 hex bytes)}
+      SETUP_TOKEN: ${SETUP_TOKEN:-}
+      STORAGE_PATH: ${STORAGE_PATH:-/app/storage}
       TRUSTED_PROXY_HOPS: ${TRUSTED_PROXY_HOPS:-1}
       FEATURE_UPLOADS: ${FEATURE_UPLOADS:-false}
     depends_on:
@@ -55,6 +64,8 @@ services:
 
 volumes:
   postgres_prod_data:
+    driver: local
+  storage_prod_data:
     driver: local
 
 networks:

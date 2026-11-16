@@ -23,8 +23,11 @@ describe("Tier 3 Cross-Feature: Setup Token & Proxy IP Spoofing (R2 + R8)", () =
     const ids = superadmins.map((u) => u.id);
     if (ids.length > 0) {
       await db.learningCenter.deleteMany({ where: { ownerId: { in: ids } } });
+      await db.platformAnnouncementRead.deleteMany({ where: { userId: { in: ids } } });
+      await db.platformAnnouncement.deleteMany({ where: { createdBy: { in: ids } } });
       await db.userSession.deleteMany({ where: { userId: { in: ids } } });
       await db.auditLog.deleteMany({ where: { actorUserId: { in: ids } } });
+      await db.platformExpense.deleteMany({ where: { createdBy: { in: ids } } });
       await db.platformUser.deleteMany({ where: { id: { in: ids } } });
     }
   });
@@ -32,8 +35,11 @@ describe("Tier 3 Cross-Feature: Setup Token & Proxy IP Spoofing (R2 + R8)", () =
   afterEach(async () => {
     if (createdUserIds.length > 0) {
       await db.learningCenter.deleteMany({ where: { ownerId: { in: createdUserIds } } });
+      await db.platformAnnouncementRead.deleteMany({ where: { userId: { in: createdUserIds } } });
+      await db.platformAnnouncement.deleteMany({ where: { createdBy: { in: createdUserIds } } });
       await db.userSession.deleteMany({ where: { userId: { in: createdUserIds } } });
       await db.auditLog.deleteMany({ where: { actorUserId: { in: createdUserIds } } });
+      await db.platformExpense.deleteMany({ where: { createdBy: { in: createdUserIds } } });
       await db.platformUser.deleteMany({ where: { id: { in: createdUserIds } } });
       createdUserIds.length = 0;
     }

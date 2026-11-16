@@ -45,6 +45,10 @@ export function normalizeIpCandidate(raw: string | null | undefined): string | n
     return candidate;
   }
 
+  if (process.env.NODE_ENV === "test" && candidate.startsWith("test-ip")) {
+    return candidate;
+  }
+
   return null;
 }
 

@@ -2,18 +2,26 @@
 
 import React, { useState, useEffect, useCallback } from "react";
 import Link from "next/link";
+import { Calendar, CheckCircle2, CreditCard, ExternalLink } from "lucide-react";
 import {
-  FileText,
-  Filter,
-  CheckCircle2,
-  AlertTriangle,
-  ChevronLeft,
-  ChevronRight,
-  ExternalLink,
-  Calendar,
-  CreditCard,
-  Search,
-} from "lucide-react";
+  Alert,
+  AlertDescription,
+  Badge,
+  type BadgeVariant,
+  Button,
+  DataTable,
+  type DataTableColumn,
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+  FilterBar,
+  FormField,
+  PageHeader,
+} from "@/components/ui";
+import { t } from "@/i18n";
 
 interface SubscriptionItem {
   id: string;
@@ -35,6 +43,14 @@ interface SubscriptionItem {
   };
 }
 
+const STATUS_VARIANTS: Record<string, BadgeVariant> = {
+  ACTIVE: "success",
+  TRIAL: "info",
+  PAST_DUE: "destructive",
+  FROZEN: "warning",
+  CANCELLED: "neutral",
+};
+
 export default function PlatformSubscriptionsPage() {
   const [subscriptions, setSubscriptions] = useState<SubscriptionItem[]>([]);
   const [loading, setLoading] = useState(true);
@@ -46,10 +62,10 @@ export default function PlatformSubscriptionsPage() {
   const [page, setPage] = useState(1);
   const [totalPages, setTotalPages] = useState(1);
 
-  // Extend modal state
   const [extendSub, setExtendSub] = useState<SubscriptionItem | null>(null);
   const [extendMonths, setExtendMonths] = useState(1);
   const [extending, setExtending] = useState(false);
+  const [extendError, setExtendError] = useState<string | null>(null);
 
   const fetchSubscriptions = useCallback(async () => {
     setLoading(true);
@@ -81,6 +97,7 @@ export default function PlatformSubscriptionsPage() {
   const handleQuickExtend = async () => {
     if (!extendSub) return;
     setExtending(true);
+    setExtendError(null);
     try {
       const res = await fetch(`/api/platform/subscriptions/${extendSub.id}`, {
         method: "PATCH",
@@ -89,312 +106,290 @@ export default function PlatformSubscriptionsPage() {
       });
       const data = await res.json();
       if (!res.ok || !data.success) {
-        alert(data.error || "Ошибка продления");
+        setExtendError(data.error || "Ошибка продления");
       } else {
         setExtendSub(null);
         fetchSubscriptions();
       }
     } catch {
-      alert("Ошибка сети при продлении");
+      setExtendError("Ошибка сети при продлении");
     } finally {
       setExtending(false);
     }
   };
 
-  const statusBadges: Record<string, { bg: string; text: string; border: string }> = {
-    ACTIVE: { bg: "bg-emerald-50", text: "text-emerald-700", border: "border-emerald-200" },
-    TRIAL: { bg: "bg-blue-50", text: "text-blue-700", border: "border-blue-200" },
-    PAST_DUE: { bg: "bg-rose-50", text: "text-rose-700", border: "border-rose-200" },
-    FROZEN: { bg: "bg-amber-50", text: "text-amber-700", border: "border-amber-200" },
-    CANCELLED: { bg: "bg-slate-100", text: "text-slate-700", border: "border-slate-200" },
-  };
+  const columns: DataTableColumn<SubscriptionItem>[] = [
+    {
+      id: "center",
+      header: "Учебный центр",
+      isMobilePrimary: true,
+      sortable: true,
+      sortValue: (s) => s.center.name,
+      cell: (sub) => (
+        <div>
+          <Link
+            href={`/platform-admin/centers/${sub.center.id}`}
+            className="font-medium text-foreground hover:text-primary transition-colors block"
+          >
+            {sub.center.name}
+          </Link>
+          <div className="mt-0.5 font-mono text-xs text-muted-foreground">{sub.center.slug}</div>
+        </div>
+      ),
+    },
+    {
+      id: "plan",
+      header: "Тариф",
+      sortable: true,
+      sortValue: (s) => s.plan.priceMonthly,
+      cell: (sub) => (
+        <div>
+          <div className="font-medium text-foreground">{sub.plan.name}</div>
+          <div className="text-xs text-muted-foreground tabular-nums">
+            {sub.plan.priceMonthly.toLocaleString()} UZS/мес
+          </div>
+        </div>
+      ),
+    },
+    {
+      id: "status",
+      header: "Статус",
+      sortable: true,
+      sortValue: (s) => s.status,
+      cell: (sub) => (
+        <Badge variant={STATUS_VARIANTS[sub.status] || "neutral"}>{sub.status}</Badge>
+      ),
+    },
+    {
+      id: "period",
+      header: "Период действия",
+      sortable: true,
+      sortValue: (s) => s.currentPeriodEndsAt,
+      cell: (sub) => {
+        const isExpired = new Date(sub.currentPeriodEndsAt) < new Date();
+        return (
+          <div className="text-xs tabular-nums">
+            <div className={isExpired ? "font-semibold text-destructive" : "text-foreground"}>
+              До: {new Date(sub.currentPeriodEndsAt).toLocaleDateString()}
+              {isExpired && " (Истекла)"}
+            </div>
+            <div className="mt-0.5 text-muted-foreground">
+              С: {new Date(sub.currentPeriodStartsAt).toLocaleDateString()}
+            </div>
+          </div>
+        );
+      },
+    },
+    {
+      id: "autoRenew",
+      header: "Автопродление",
+      hideOnMobile: true,
+      cell: (sub) =>
+        sub.autoRenew ? (
+          <span className="inline-flex items-center gap-1 text-xs font-medium text-success">
+            <CheckCircle2 className="h-3.5 w-3.5" aria-hidden="true" />
+            Включено
+          </span>
+        ) : (
+          <span className="text-xs text-muted-foreground">Отключено</span>
+        ),
+    },
+    {
+      id: "actions",
+      header: "Действия",
+      align: "right",
+      hideable: false,
+      cell: (sub) => (
+        <div className="inline-flex flex-wrap items-center justify-end gap-1.5">
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            onClick={() => {
+              setExtendSub(sub);
+              setExtendMonths(1);
+              setExtendError(null);
+            }}
+          >
+            <Calendar className="h-3.5 w-3.5" aria-hidden="true" />
+            <span>Продлить</span>
+          </Button>
+          <Button asChild variant="outline" size="sm">
+            <Link href={`/platform-admin/finance/payments?centerId=${sub.center.id}&planId=${sub.plan.id}`}>
+              <CreditCard className="h-3.5 w-3.5" aria-hidden="true" />
+              <span>Записать оплату</span>
+            </Link>
+          </Button>
+          <Button asChild variant="ghost" size="icon" aria-label={sub.center.name}>
+            <Link href={`/platform-admin/centers/${sub.center.id}`}>
+              <ExternalLink className="h-3.5 w-3.5" aria-hidden="true" />
+            </Link>
+          </Button>
+        </div>
+      ),
+    },
+  ];
+
+  const hasFilters = Boolean(search || status || expiringInDays || debtorsOnly);
 
   return (
     <div className="space-y-6">
-      {/* Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-        <div>
-          <h1 className="text-2xl md:text-3xl font-extrabold text-slate-900 tracking-tight">
-            Подписки учебных центров
-          </h1>
-          <p className="text-sm text-slate-500 mt-1">
-            Контроль действующих тарифных планов, сроков оплаты и задолженностей
-          </p>
-        </div>
-        <div className="flex items-center gap-2">
-          <Link
-            href="/platform-admin/finance/payments"
-            className="inline-flex items-center gap-2 px-4 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white text-sm font-semibold rounded-xl shadow-sm transition-all"
-          >
-            <CreditCard className="w-4 h-4" />
-            <span>Платежи центров</span>
-          </Link>
-          <Link
-            href="/platform-admin/plans"
-            className="inline-flex items-center gap-2 px-4 py-2.5 bg-white hover:bg-slate-50 text-slate-700 text-sm font-semibold rounded-xl border border-slate-200 shadow-sm transition-all"
-          >
-            <span>Тарифы &rarr;</span>
-          </Link>
-        </div>
-      </div>
+      <PageHeader
+        title="Подписки учебных центров"
+        description="Контроль действующих тарифных планов, сроков оплаты и задолженностей"
+        actions={
+          <>
+            <Button asChild variant="primary" size="sm">
+              <Link href="/platform-admin/finance/payments">
+                <CreditCard className="h-4 w-4" aria-hidden="true" />
+                <span>Платежи центров</span>
+              </Link>
+            </Button>
+            <Button asChild variant="outline" size="sm">
+              <Link href="/platform-admin/plans">Тарифы</Link>
+            </Button>
+          </>
+        }
+      />
 
-      {/* Filter toolbar */}
-      <div className="bg-white p-4 rounded-2xl border border-slate-200 shadow-sm flex flex-wrap items-center justify-between gap-4">
-        <div className="flex flex-wrap items-center gap-3 w-full lg:w-auto">
-          {/* Search */}
-          <div className="relative min-w-[220px]">
-            <Search className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
-            <input
-              type="text"
-              placeholder="Поиск по центру..."
-              value={search}
-              onChange={(e) => {
-                setSearch(e.target.value);
-                setPage(1);
-              }}
-              className="w-full pl-9 pr-3 py-1.5 bg-slate-50 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500"
-            />
-          </div>
+      <FilterBar
+        search={search}
+        onSearchChange={(val) => {
+          setSearch(val);
+          setPage(1);
+        }}
+        searchPlaceholder="Поиск по центру..."
+        hasActiveFilters={hasFilters}
+        onReset={() => {
+          setSearch("");
+          setStatus("");
+          setExpiringInDays("");
+          setDebtorsOnly(false);
+          setPage(1);
+        }}
+      >
+        <select
+          aria-label="Статус подписки"
+          value={status}
+          onChange={(e) => {
+            setStatus(e.target.value);
+            setPage(1);
+          }}
+          className="h-9 rounded-md border border-input bg-background px-3 text-sm text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+        >
+          <option value="">Все статусы</option>
+          <option value="ACTIVE">ACTIVE (Активные)</option>
+          <option value="TRIAL">TRIAL (Пробный)</option>
+          <option value="PAST_DUE">PAST_DUE (Просрочена)</option>
+          <option value="FROZEN">FROZEN (Заморожена)</option>
+          <option value="CANCELLED">CANCELLED (Отменена)</option>
+        </select>
 
-          {/* Status */}
-          <div className="flex items-center gap-1.5">
-            <Filter className="w-3.5 h-3.5 text-slate-400" />
-            <select
-              value={status}
-              onChange={(e) => {
-                setStatus(e.target.value);
-                setPage(1);
-              }}
-              className="py-1.5 px-3 bg-slate-50 border border-slate-200 rounded-xl text-sm text-slate-700 focus:outline-none focus:ring-2 focus:ring-indigo-500/20 cursor-pointer"
-            >
-              <option value="">Все статусы</option>
-              <option value="ACTIVE">ACTIVE (Активные)</option>
-              <option value="TRIAL">TRIAL (Пробный)</option>
-              <option value="PAST_DUE">PAST_DUE (Просрочена)</option>
-              <option value="FROZEN">FROZEN (Заморожена)</option>
-              <option value="CANCELLED">CANCELLED (Отменена)</option>
-            </select>
-          </div>
+        <select
+          aria-label="Срок окончания"
+          value={expiringInDays}
+          onChange={(e) => {
+            setExpiringInDays(e.target.value);
+            setPage(1);
+          }}
+          className="h-9 rounded-md border border-input bg-background px-3 text-sm text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+        >
+          <option value="">Срок окончания: любой</option>
+          <option value="3">Истекают через 3 дня</option>
+          <option value="7">Истекают через 7 дней</option>
+          <option value="14">Истекают через 14 дней</option>
+          <option value="30">Истекают через 30 дней</option>
+        </select>
 
-          {/* Expiring In Days */}
-          <select
-            value={expiringInDays}
+        <label className="inline-flex h-9 cursor-pointer items-center gap-2 rounded-md border border-input bg-background px-3 text-xs font-medium text-foreground">
+          <input
+            type="checkbox"
+            checked={debtorsOnly}
             onChange={(e) => {
-              setExpiringInDays(e.target.value);
+              setDebtorsOnly(e.target.checked);
               setPage(1);
             }}
-            className="py-1.5 px-3 bg-slate-50 border border-slate-200 rounded-xl text-sm text-slate-700 focus:outline-none focus:ring-2 focus:ring-indigo-500/20 cursor-pointer"
-          >
-            <option value="">Срок окончания: Любой</option>
-            <option value="3">Истекают через 3 дня</option>
-            <option value="7">Истекают через 7 дней</option>
-            <option value="14">Истекают через 14 дней</option>
-            <option value="30">Истекают через 30 дней</option>
-          </select>
+            className="rounded border-input accent-primary"
+          />
+          <span>Только должники</span>
+        </label>
+      </FilterBar>
 
-          {/* Debtors checkbox */}
-          <label className="flex items-center gap-2 cursor-pointer text-xs font-semibold text-slate-700 bg-slate-50 px-3 py-2 rounded-xl border border-slate-200">
-            <input
-              type="checkbox"
-              checked={debtorsOnly}
-              onChange={(e) => {
-                setDebtorsOnly(e.target.checked);
+      <DataTable
+        data={subscriptions}
+        columns={columns}
+        getRowId={(s) => s.id}
+        loading={loading}
+        loadingLabel="Загрузка подписок..."
+        error={error}
+        onRetry={fetchSubscriptions}
+        page={page}
+        totalPages={totalPages}
+        onPageChange={setPage}
+        emptyTitle="Подписки не найдены"
+        emptyDescription={t("ru", "ui4.emptySubscriptionsDesc")}
+        emptyAction={
+          hasFilters ? (
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              onClick={() => {
+                setSearch("");
+                setStatus("");
+                setExpiringInDays("");
+                setDebtorsOnly(false);
                 setPage(1);
               }}
-              className="rounded text-indigo-600 focus:ring-indigo-500"
-            />
-            <AlertTriangle className="w-3.5 h-3.5 text-rose-500" />
-            Только должники
-          </label>
-        </div>
-      </div>
+            >
+              {t("ru", "ui4.resetFilters")}
+            </Button>
+          ) : undefined
+        }
+      />
 
-      {/* Table */}
-      {loading ? (
-        <div className="bg-white rounded-2xl border border-slate-200 p-12 text-center text-slate-500 text-sm shadow-sm animate-pulse">
-          Загрузка реестра подписок...
-        </div>
-      ) : error ? (
-        <div className="bg-rose-50 border border-rose-200 text-rose-800 p-6 rounded-2xl text-center text-sm shadow-sm">
-          {error}
-        </div>
-      ) : subscriptions.length === 0 ? (
-        <div className="bg-white rounded-2xl border border-slate-200 p-12 text-center shadow-sm">
-          <FileText className="w-12 h-12 text-slate-300 mx-auto mb-3" />
-          <h3 className="text-base font-semibold text-slate-800">Подписки не найдены</h3>
-          <p className="text-sm text-slate-500 mt-1">По выбранным фильтрам записей не обнаружено.</p>
-        </div>
-      ) : (
-        <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
-          <div className="overflow-x-auto">
-            <table className="w-full text-sm">
-              <thead>
-                <tr className="bg-slate-50/80 text-xs font-semibold text-slate-500 uppercase tracking-wider border-b border-slate-200">
-                  <th className="text-left px-6 py-3.5">Учебный центр</th>
-                  <th className="text-left px-6 py-3.5">Тариф</th>
-                  <th className="text-left px-6 py-3.5">Статус</th>
-                  <th className="text-left px-6 py-3.5">Период действия</th>
-                  <th className="text-left px-6 py-3.5">Автопродление</th>
-                  <th className="text-right px-6 py-3.5">Быстрые действия</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-slate-100">
-                {subscriptions.map((sub) => {
-                  const badge = statusBadges[sub.status] || {
-                    bg: "bg-slate-100",
-                    text: "text-slate-700",
-                    border: "border-slate-200",
-                  };
-                  const isExpired = new Date(sub.currentPeriodEndsAt) < new Date();
-                  return (
-                    <tr key={sub.id} className="hover:bg-slate-50/70 transition-colors">
-                      <td className="px-6 py-4">
-                        <Link
-                          href={`/platform-admin/centers/${sub.center.id}`}
-                          className="font-semibold text-slate-900 hover:text-indigo-600 transition-colors block"
-                        >
-                          {sub.center.name}
-                        </Link>
-                        <div className="text-xs text-slate-500 font-mono mt-0.5">{sub.center.slug}</div>
-                      </td>
-                      <td className="px-6 py-4">
-                        <div className="font-semibold text-slate-800">{sub.plan.name}</div>
-                        <div className="text-xs text-slate-500">{sub.plan.priceMonthly.toLocaleString()} UZS/мес</div>
-                      </td>
-                      <td className="px-6 py-4">
-                        <span
-                          className={`inline-flex px-2.5 py-0.5 rounded-full text-xs font-semibold border ${badge.bg} ${badge.text} ${badge.border}`}
-                        >
-                          {sub.status}
-                        </span>
-                      </td>
-                      <td className="px-6 py-4 text-xs text-slate-600">
-                        <div className={isExpired ? "text-rose-600 font-bold" : ""}>
-                          До: {new Date(sub.currentPeriodEndsAt).toLocaleDateString()}
-                          {isExpired && " (Истекла)"}
-                        </div>
-                        <div className="text-slate-400 mt-0.5">
-                          С: {new Date(sub.currentPeriodStartsAt).toLocaleDateString()}
-                        </div>
-                      </td>
-                      <td className="px-6 py-4 text-xs font-medium">
-                        {sub.autoRenew ? (
-                          <span className="text-emerald-700 flex items-center gap-1">
-                            <CheckCircle2 className="w-3.5 h-3.5" /> Включено
-                          </span>
-                        ) : (
-                          <span className="text-slate-400">Отключено</span>
-                        )}
-                      </td>
-                      <td className="px-6 py-4 text-right">
-                        <div className="inline-flex items-center gap-2">
-                          <button
-                            onClick={() => {
-                              setExtendSub(sub);
-                              setExtendMonths(1);
-                            }}
-                            className="inline-flex items-center gap-1 px-2.5 py-1 text-xs font-medium text-emerald-700 bg-emerald-50 hover:bg-emerald-100 rounded-lg transition-colors border border-emerald-200"
-                          >
-                            <Calendar className="w-3 h-3" />
-                            Продлить
-                          </button>
-                          <Link
-                            href={`/platform-admin/finance/payments?centerId=${sub.center.id}&planId=${sub.plan.id}`}
-                            className="inline-flex items-center gap-1 px-2.5 py-1 text-xs font-medium text-indigo-700 bg-indigo-50 hover:bg-indigo-100 rounded-lg transition-colors border border-indigo-200"
-                          >
-                            <CreditCard className="w-3 h-3" />
-                            Записать оплату
-                          </Link>
-                          <Link
-                            href={`/platform-admin/centers/${sub.center.id}`}
-                            className="inline-flex items-center gap-1 px-2.5 py-1 text-xs font-medium text-slate-700 bg-slate-100 hover:bg-slate-200 rounded-lg transition-colors"
-                          >
-                            <ExternalLink className="w-3 h-3" />
-                          </Link>
-                        </div>
-                      </td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
-          </div>
+      <Dialog open={Boolean(extendSub)} onOpenChange={(next) => !next && setExtendSub(null)}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle>Продлить подписку: {extendSub?.center.name}</DialogTitle>
+            {extendSub && (
+              <DialogDescription>
+                Текущий тариф: <strong>{extendSub.plan.name}</strong>. Действует до{" "}
+                <strong>{new Date(extendSub.currentPeriodEndsAt).toLocaleDateString()}</strong>.
+              </DialogDescription>
+            )}
+          </DialogHeader>
 
-          {/* Pagination */}
-          {totalPages > 1 && (
-            <div className="p-4 border-t border-slate-100 flex items-center justify-between bg-slate-50/50">
-              <button
-                onClick={() => setPage((p) => Math.max(1, p - 1))}
-                disabled={page === 1}
-                className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-slate-600 bg-white border border-slate-200 rounded-lg hover:bg-slate-50 disabled:opacity-40 transition-colors"
-              >
-                <ChevronLeft className="w-3.5 h-3.5" />
-                <span>Назад</span>
-              </button>
-              <span className="text-xs font-medium text-slate-500">
-                Страница {page} из {totalPages}
-              </span>
-              <button
-                onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
-                disabled={page === totalPages}
-                className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-slate-600 bg-white border border-slate-200 rounded-lg hover:bg-slate-50 disabled:opacity-40 transition-colors"
-              >
-                <span>Вперед</span>
-                <ChevronRight className="w-3.5 h-3.5" />
-              </button>
-            </div>
+          {extendError && (
+            <Alert variant="destructive">
+              <AlertDescription>{extendError}</AlertDescription>
+            </Alert>
           )}
-        </div>
-      )}
 
-      {/* Quick Extend Modal */}
-      {extendSub && (
-        <div className="fixed inset-0 z-50 bg-slate-900/40 backdrop-blur-sm flex items-center justify-center p-4">
-          <div className="bg-white rounded-2xl shadow-xl max-w-md w-full p-6 border border-slate-200 space-y-4">
-            <h3 className="text-lg font-bold text-slate-900">
-              Продлить подписку: {extendSub.center.name}
-            </h3>
-            <p className="text-sm text-slate-600">
-              Текущий тариф: <strong>{extendSub.plan.name}</strong>. Действует до:{" "}
-              <strong>{new Date(extendSub.currentPeriodEndsAt).toLocaleDateString()}</strong>
-            </p>
+          <FormField label="Количество месяцев для продления" htmlFor="extend-months">
+            <select
+              id="extend-months"
+              value={extendMonths}
+              onChange={(e) => setExtendMonths(parseInt(e.target.value, 10))}
+              className="h-9 w-full rounded-md border border-input bg-background px-3 text-sm text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+            >
+              <option value={1}>1 месяц</option>
+              <option value={3}>3 месяца (квартал)</option>
+              <option value={6}>6 месяцев (полгода)</option>
+              <option value={12}>12 месяцев (год)</option>
+            </select>
+          </FormField>
 
-            <div>
-              <label className="block text-xs font-semibold text-slate-700 uppercase mb-1">
-                Количество месяцев для продления
-              </label>
-              <select
-                value={extendMonths}
-                onChange={(e) => setExtendMonths(parseInt(e.target.value, 10))}
-                className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm"
-              >
-                <option value={1}>1 месяц</option>
-                <option value={3}>3 месяца (Квартал)</option>
-                <option value={6}>6 месяцев (Полгода)</option>
-                <option value={12}>12 месяцев (Год)</option>
-              </select>
-            </div>
-
-            <div className="flex justify-end gap-2 pt-2">
-              <button
-                type="button"
-                onClick={() => setExtendSub(null)}
-                className="px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl text-sm font-medium"
-              >
-                Отмена
-              </button>
-              <button
-                type="button"
-                onClick={handleQuickExtend}
-                disabled={extending}
-                className="px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-sm font-semibold shadow-sm disabled:opacity-50"
-              >
-                {extending ? "Продление..." : "Подтвердить продление"}
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
+          <DialogFooter>
+            <Button type="button" variant="outline" onClick={() => setExtendSub(null)}>
+              Отмена
+            </Button>
+            <Button type="button" variant="primary" onClick={handleQuickExtend} disabled={extending}>
+              {extending ? "Продление..." : "Подтвердить продление"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

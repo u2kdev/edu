@@ -17,7 +17,47 @@ const SAFE_METHODS = new Set(["GET", "HEAD", "OPTIONS"]);
  */
 export function middleware(req: NextRequest) {
   const method = req.method.toUpperCase();
+  const pathname = req.nextUrl.pathname;
 
+  // 1. Direct uploads access protection:
+  // Rewrite /uploads/* to authorized /api/files/* route, and reject path traversal attempts
+  if (pathname.startsWith("/uploads/")) {
+    const relativePath = pathname.replace(/^\/uploads\//, "");
+    if (relativePath.includes("..")) {
+      return NextResponse.json(
+        { error: "Forbidden: Invalid file path" },
+        { status: 403 }
+      );
+    }
+    const url = req.nextUrl.clone();
+    url.pathname = `/api/files/${relativePath}`;
+    return NextResponse.rewrite(url);
+  }
+
+  // 2. Request body limit (DoS defense against memory/buffer exhaustion)
+  if (!SAFE_METHODS.has(method)) {
+    const rawContentLength = req.headers.get("content-length");
+    if (rawContentLength) {
+      const contentLength = parseInt(rawContentLength, 10);
+      if (!Number.isNaN(contentLength)) {
+        // Large limit for file uploads and CSV imports (50MB)
+        const isUploadRoute =
+          pathname.startsWith("/api/upload") ||
+          pathname.startsWith("/api/students/import-csv") ||
+          pathname.startsWith("/api/invites/bulk-import");
+        const maxLimit = isUploadRoute ? 50 * 1024 * 1024 : 1 * 1024 * 1024; // 1MB default for JSON/form APIs
+
+        if (contentLength > maxLimit) {
+          return NextResponse.json(
+            { error: "Payload too large", code: "PAYLOAD_TOO_LARGE" },
+            { status: 413 }
+          );
+        }
+      }
+    }
+  }
+
+  // 3. CSRF protection on state-changing requests
   if (!SAFE_METHODS.has(method)) {
     const origin = req.headers.get("origin");
 
@@ -44,7 +84,18 @@ export function middleware(req: NextRequest) {
     }
   }
 
-  return NextResponse.next();
+  const res = NextResponse.next();
+
+  // 3. Global Cache-Control for sensitive API responses
+  if (pathname.startsWith("/api/")) {
+    res.headers.set(
+      "Cache-Control",
+      "private, no-cache, no-store, max-age=0, must-revalidate"
+    );
+    res.headers.set("Pragma", "no-cache");
+  }
+
+  return res;
 }
 
 export const config = {

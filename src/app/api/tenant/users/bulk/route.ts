@@ -4,7 +4,7 @@ import { z } from "zod";
 // eslint-disable-next-line no-restricted-imports
 import { db } from "@/lib/db";
 import { hashPassword } from "@/lib/auth";
-import { requireTenantAccess, logAuditEvent } from "@/lib/tenant";
+import { requireTenantAccess, logAuditEvent, TenantAccessError } from "@/lib/tenant";
 import { hasPermission } from "@/lib/permissions";
 import type { CenterRole } from "@/lib/permissions";
 import { checkSubscriptionLimit } from "@/lib/limits";
@@ -230,6 +230,9 @@ export async function POST(req: Request) {
       }
     );
   } catch (err: unknown) {
+    if (err instanceof TenantAccessError) {
+      return NextResponse.json({ error: err.message, code: err.code }, { status: err.status });
+    }
     if (err instanceof z.ZodError) {
       return NextResponse.json({ error: err.issues[0]?.message || "Validation error" }, { status: 400 });
     }

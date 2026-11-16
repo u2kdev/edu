@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { requireTenantAccess, TenantAccessError } from "@/lib/tenant";
 import { hasPermission } from "@/lib/permissions";
 import type { Prisma } from "@prisma/client";
+import { generateCsv } from "@/lib/csv";
 
 export async function GET(req: Request) {
   try {
@@ -92,22 +93,18 @@ export async function GET(req: Request) {
 
     if (isExport) {
       const header = ["Timestamp", "Actor", "Action", "Resource", "Resource ID", "IP Address", "Details"];
-      const escapeCsv = (str: string | null | undefined) => {
-        if (!str) return '""';
-        return `"${String(str).replace(/"/g, '""')}"`;
-      };
 
       const rows = logs.map((l) => [
-        escapeCsv(l.createdAt.toISOString()),
-        escapeCsv(l.actor ? `${l.actor.fullName} (${l.actor.email})` : "System"),
-        escapeCsv(l.action),
-        escapeCsv(l.resource),
-        escapeCsv(l.resourceId),
-        escapeCsv(l.ipAddress),
-        escapeCsv(l.detailsJson),
+        l.createdAt.toISOString(),
+        l.actor ? `${l.actor.fullName} (${l.actor.email})` : "System",
+        l.action,
+        l.resource,
+        l.resourceId,
+        l.ipAddress,
+        l.detailsJson,
       ]);
 
-      const csvContent = [header.join(","), ...rows.map((r) => r.join(","))].join("\r\n");
+      const csvContent = generateCsv(header, rows);
 
       return new NextResponse(csvContent, {
         headers: {

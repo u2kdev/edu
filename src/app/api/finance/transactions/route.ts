@@ -4,6 +4,11 @@ import { requireFinanceTenantAccess } from "@/lib/tenant";
 import { hasPermission } from "@/lib/permissions";
 import { checkRateLimit, getClientIp } from "@/lib/rate-limit";
 import { recordFinanceTransaction, getTashkentMonthBounds } from "@/lib/finance";
+import {
+  requirePlanFeature,
+  PlanFeatureLockedError,
+  formatPlanFeatureLockedPayload,
+} from "@/lib/plan-features";
 
 const createTransactionSchema = z.object({
   type: z.enum(["INCOME", "EXPENSE", "TRANSFER"]),
@@ -150,6 +155,8 @@ export async function POST(req: Request) {
       );
     }
 
+    await requirePlanFeature(tenantCtx.center.id, "financeAccounting");
+
     const ip = getClientIp(req);
     const allowed = await checkRateLimit(`finance_tx_post:${tenantCtx.session.user.id}:${ip}`, 100, 60_000);
     if (!allowed) {
@@ -191,6 +198,9 @@ export async function POST(req: Request) {
 
     return NextResponse.json({ transaction: created }, { status: 201 });
   } catch (err: unknown) {
+    if (err instanceof PlanFeatureLockedError) {
+      return NextResponse.json(formatPlanFeatureLockedPayload(err), { status: 403 });
+    }
     const error = err as { message?: string; status?: number; code?: string };
     const msg = error.message || "Failed to record finance transaction";
     const status =

@@ -2,6 +2,9 @@
 
 import { Clock, Download, RotateCcw, Send, User } from "lucide-react";
 import { t } from "@/i18n";
+import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
+import { Card, CardContent } from "@/components/ui/card";
 import {
   STATUS_BADGES,
   findMySubmission,
@@ -39,152 +42,148 @@ export function HomeworkListItem({
   const myFiles = mySubmission ? parseSubmissionFiles(mySubmission.filesJson) : [];
 
   return (
-    <div className="glass-panel p-4 sm:p-6 rounded-2xl border border-slate-800 space-y-4 hover:border-slate-700 transition-all">
-      {/* Header */}
-      <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-3">
-        <div>
-          <span className="text-xs font-semibold text-brand-400 uppercase tracking-wider">
-            {hw.lessonTitle}
-          </span>
-          <h3 className="text-base sm:text-lg font-bold text-white mt-0.5">{hw.title}</h3>
-          {hw.description && <p className="text-sm text-slate-400 mt-1">{hw.description}</p>}
-        </div>
-
-        <div className="flex flex-wrap items-center gap-2 shrink-0">
-          {hw.dueDate && (
-            <span className="flex items-center gap-1.5 px-3 py-1 bg-amber-500/10 border border-amber-500/20 text-amber-400 text-xs font-semibold rounded-full">
-              <Clock className="w-3.5 h-3.5" />
-              <span>{formatDueDate(hw.dueDate)}</span>
-            </span>
-          )}
-
-          {isStudent && (
-            <span className={`px-3 py-1 rounded-full text-xs font-semibold border ${badgeCfg.color}`}>
-              {t(locale, badgeCfg.labelKey)}
-            </span>
-          )}
-        </div>
-      </div>
-
-      {/* Student Action Bar */}
-      {isStudent && (
-        <div className="pt-3 border-t border-slate-800 space-y-2">
-          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-            <div className="text-xs text-slate-400">
-              {mySubmission?.grade !== null && mySubmission?.grade !== undefined ? (
-                <span className="font-bold text-emerald-400 mr-2">
-                  {t(locale, "performance.title")}: {mySubmission.grade}/100
-                </span>
-              ) : null}
-              {mySubmission?.feedback && (
-                <span className="italic text-slate-400">&quot;{mySubmission.feedback}&quot;</span>
-              )}
-            </div>
-
-            <button
-              type="button"
-              onClick={() => onOpenSubmit(hw)}
-              className="px-4 py-2 rounded-xl text-xs font-semibold bg-brand-500 hover:bg-brand-600 text-white transition-colors flex items-center justify-center gap-1.5"
-            >
-              {mySubmission ? (
-                <>
-                  <RotateCcw className="w-3.5 h-3.5" />
-                  <span>{t(locale, "homework.submitHomework")}</span>
-                </>
-              ) : (
-                <>
-                  <Send className="w-3.5 h-3.5" />
-                  <span>{t(locale, "homework.submitHomework")}</span>
-                </>
-              )}
-            </button>
+    <Card data-hw-card="" className="transition-colors hover:border-border">
+      <CardContent className="space-y-4 p-4 sm:p-5">
+        {/* Header */}
+        <div className="flex flex-col justify-between gap-3 sm:flex-row sm:items-start">
+          <div>
+            <span className="text-xs font-medium text-primary">{hw.lessonTitle}</span>
+            <h3 className="mt-0.5 text-base font-semibold text-foreground">{hw.title}</h3>
+            {hw.description && (
+              <p className="mt-1 text-sm text-muted-foreground">{hw.description}</p>
+            )}
           </div>
 
-          {myFiles.length > 0 && (
-            <div className="flex flex-wrap gap-2">
-              {myFiles.map((f, i) => (
-                <a
-                  key={i}
-                  href={f.fileUrl}
-                  download={f.fileName}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-slate-900 border border-slate-800 text-xs text-brand-400 hover:underline"
-                >
-                  <Download className="w-3 h-3" />
-                  <span>{f.fileName}</span>
-                </a>
-              ))}
-            </div>
-          )}
-        </div>
-      )}
+          <div className="flex shrink-0 flex-wrap items-center gap-2">
+            {hw.dueDate && (
+              <Badge variant="warning" className="tabular-nums">
+                <Clock className="h-3.5 w-3.5" aria-hidden="true" />
+                <span>{formatDueDate(hw.dueDate)}</span>
+              </Badge>
+            )}
 
-      {/* Teacher / Assistant / Admin Submissions View OR Parent Read-Only Child View */}
-      {(isTeacher || isParent) && hw.submissions.length > 0 && (
-        <div className="pt-3 border-t border-slate-800 space-y-2">
-          <h4 className="text-xs font-semibold text-slate-400 uppercase tracking-wider">
-            {t(locale, "homework.submitted")}: {hw.submissions.length}
-          </h4>
-          <div className="divide-y divide-slate-800/80">
-            {hw.submissions.map((sub) => {
-              const subBadge = STATUS_BADGES[sub.status] || STATUS_BADGES.SUBMITTED;
-              const subFiles = parseSubmissionFiles(sub.filesJson);
-              return (
-                <div
-                  key={sub.id}
-                  className="py-2.5 flex flex-col sm:flex-row sm:items-center justify-between gap-2 text-xs"
-                >
-                  <div className="space-y-1">
-                    <div className="flex items-center gap-2 flex-wrap">
-                      <User className="w-3.5 h-3.5 text-slate-500" />
-                      <span className="font-medium text-white">{sub.studentName}</span>
-                      <span
-                        className={`px-2 py-0.5 rounded-full text-2xs font-semibold border ${subBadge.color}`}
-                      >
-                        {t(locale, subBadge.labelKey)}
-                      </span>
-                      {sub.grade !== null && (
-                        <span className="font-bold text-brand-400">{sub.grade}/100</span>
+            {isStudent && <Badge variant={badgeCfg.variant}>{t(locale, badgeCfg.labelKey)}</Badge>}
+          </div>
+        </div>
+
+        {/* Student Action Bar */}
+        {isStudent && (
+          <div className="space-y-2 border-t border-border pt-3">
+            <div className="flex flex-col justify-between gap-3 sm:flex-row sm:items-center">
+              <div className="text-xs text-muted-foreground tabular-nums">
+                {mySubmission?.grade !== null && mySubmission?.grade !== undefined ? (
+                  <span className="mr-2 font-semibold text-success">
+                    {t(locale, "performance.title")}: {mySubmission.grade}/100
+                  </span>
+                ) : null}
+                {mySubmission?.feedback && (
+                  <span className="italic text-muted-foreground">
+                    &quot;{mySubmission.feedback}&quot;
+                  </span>
+                )}
+              </div>
+
+              <Button type="button" size="sm" onClick={() => onOpenSubmit(hw)}>
+                {mySubmission ? (
+                  <>
+                    <RotateCcw className="h-3.5 w-3.5" aria-hidden="true" />
+                    <span>{t(locale, "homework.submitHomework")}</span>
+                  </>
+                ) : (
+                  <>
+                    <Send className="h-3.5 w-3.5" aria-hidden="true" />
+                    <span>{t(locale, "homework.submitHomework")}</span>
+                  </>
+                )}
+              </Button>
+            </div>
+
+            {myFiles.length > 0 && (
+              <div className="flex flex-wrap gap-2">
+                {myFiles.map((f, i) => (
+                  <a
+                    key={i}
+                    href={f.fileUrl}
+                    download={f.fileName}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="inline-flex items-center gap-1.5 rounded-md border border-border bg-muted px-2.5 py-1 text-xs text-primary hover:underline"
+                  >
+                    <Download className="h-3 w-3" aria-hidden="true" />
+                    <span>{f.fileName}</span>
+                  </a>
+                ))}
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* Teacher / Assistant / Admin Submissions View OR Parent Read-Only Child View */}
+        {(isTeacher || isParent) && hw.submissions.length > 0 && (
+          <div className="space-y-2 border-t border-border pt-3">
+            <h4 className="text-xs font-medium text-muted-foreground">
+              {t(locale, "homework.submitted")}: {hw.submissions.length}
+            </h4>
+            <div className="divide-y divide-border">
+              {hw.submissions.map((sub) => {
+                const subBadge = STATUS_BADGES[sub.status] || STATUS_BADGES.SUBMITTED;
+                const subFiles = parseSubmissionFiles(sub.filesJson);
+                return (
+                  <div
+                    key={sub.id}
+                    className="flex flex-col justify-between gap-2 py-2.5 text-xs sm:flex-row sm:items-center"
+                  >
+                    <div className="space-y-1">
+                      <div className="flex flex-wrap items-center gap-2">
+                        <User className="h-3.5 w-3.5 text-muted-foreground" aria-hidden="true" />
+                        <span className="font-medium text-foreground">{sub.studentName}</span>
+                        <Badge variant={subBadge.variant}>{t(locale, subBadge.labelKey)}</Badge>
+                        {sub.grade !== null && (
+                          <span className="font-semibold text-primary tabular-nums">
+                            {sub.grade}/100
+                          </span>
+                        )}
+                      </div>
+                      {isParent && sub.feedback && (
+                        <p className="italic text-muted-foreground">&quot;{sub.feedback}&quot;</p>
+                      )}
+                      {subFiles.length > 0 && (
+                        <div className="flex flex-wrap gap-2">
+                          {subFiles.map((f, i) => (
+                            <a
+                              key={i}
+                              href={f.fileUrl}
+                              download={f.fileName}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="inline-flex items-center gap-1 text-primary hover:underline"
+                            >
+                              <Download className="h-3 w-3" aria-hidden="true" />
+                              <span>{f.fileName}</span>
+                            </a>
+                          ))}
+                        </div>
                       )}
                     </div>
-                    {isParent && sub.feedback && (
-                      <p className="text-slate-400 italic">&quot;{sub.feedback}&quot;</p>
-                    )}
-                    {subFiles.length > 0 && (
-                      <div className="flex flex-wrap gap-2">
-                        {subFiles.map((f, i) => (
-                          <a
-                            key={i}
-                            href={f.fileUrl}
-                            download={f.fileName}
-                            target="_blank"
-                            rel="noopener noreferrer"
-                            className="inline-flex items-center gap-1 text-brand-400 hover:underline"
-                          >
-                            <Download className="w-3 h-3" />
-                            <span>{f.fileName}</span>
-                          </a>
-                        ))}
-                      </div>
+
+                    {isTeacher && (
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        onClick={() => onOpenGrade(hw.id, sub)}
+                        className="self-start sm:self-auto"
+                      >
+                        {t(locale, "homework.gradeHomework")}
+                      </Button>
                     )}
                   </div>
-
-                  {isTeacher && (
-                    <button
-                      type="button"
-                      onClick={() => onOpenGrade(hw.id, sub)}
-                      className="px-3 py-1 rounded-lg text-xs font-medium border border-slate-700 bg-slate-800 hover:bg-slate-700 text-slate-200 transition-colors self-start sm:self-auto"
-                    >
-                      {t(locale, "homework.gradeHomework")}
-                    </button>
-                  )}
-                </div>
-              );
-            })}
+                );
+              })}
+            </div>
           </div>
-        </div>
-      )}
-    </div>
+        )}
+      </CardContent>
+    </Card>
   );
 }

@@ -19,7 +19,8 @@ export type ApiErrorCode =
   | "SESSION_REVOKED"
   | "EXPIRED_REFRESH_TOKEN"
   | "DEVICE_MISMATCH"
-  | "SOLE_DIRECTOR_CONFLICT";
+  | "SOLE_DIRECTOR_CONFLICT"
+  | "CAPTCHA_FAILED";
 
 export interface ApiErrorResponse {
   success: false;

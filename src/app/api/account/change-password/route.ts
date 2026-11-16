@@ -29,6 +29,9 @@ export async function POST(req: Request) {
     if (!session) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
+    if (session.user.platformRole === "PLATFORM_SUPPORT") {
+      return NextResponse.json({ error: "Forbidden: Platform support has read-only access" }, { status: 403 });
+    }
 
     const body = await req.json();
     const parsed = changePasswordSchema.safeParse(body);

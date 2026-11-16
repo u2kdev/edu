@@ -31,7 +31,10 @@ export default async function BranchesPage() {
     <BranchesManager
       initialBranches={branches.map((b) => ({
         ...b,
-        createdAt: b.createdAt.toISOString(),
+        createdAt:
+          typeof b.createdAt === "string"
+            ? b.createdAt
+            : b.createdAt?.toISOString?.() || new Date().toISOString(),
       }))}
       locale={session.user.preferredLanguage}
     />

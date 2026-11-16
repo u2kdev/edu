@@ -45,14 +45,22 @@ export interface JWTPayload {
   activeCenterId?: string;
   activeCenterRole?: CenterRole | string;
   impersonatorUserId?: string;
+  impersonatedBy?: string;
   impersonatedUserId?: string;
+  impersonationReason?: string;
+  isReadOnly?: boolean;
+  allowWrite?: boolean;
   originalToken?: string;
   startedAt?: number;
   jti?: string;
+  purpose?: string;
 }
 
+/** Precomputed valid cost-12 hash used to equalize execution time when user does not exist */
+export const DUMMY_BCRYPT_HASH = "$2b$12$jbA0ci44W./LngWWk18f6ObeRBpEBUttjW4g7U5Nl1em0794YsJ2O";
+
 export async function hashPassword(password: string): Promise<string> {
-  return bcrypt.hash(password, 10);
+  return bcrypt.hash(password, 12);
 }
 
 export async function comparePassword(password: string, hash: string): Promise<boolean> {
@@ -60,6 +68,47 @@ export async function comparePassword(password: string, hash: string): Promise<b
 }
 
 import crypto from "crypto";
+
+export function safeCompareTokens(a: string, b: string): boolean {
+  if (typeof a !== "string" || typeof b !== "string") return false;
+  const hashA = crypto.createHash("sha256").update(a).digest();
+  const hashB = crypto.createHash("sha256").update(b).digest();
+  return crypto.timingSafeEqual(hashA, hashB);
+}
+
+export function signPending2faToken(
+  user: { id: string; email: string; platformRole: string },
+  expiresIn: jwt.SignOptions["expiresIn"] = "5m"
+): string {
+  return jwt.sign(
+    {
+      purpose: "2fa_pending",
+      userId: user.id,
+      email: user.email,
+      platformRole: user.platformRole,
+    },
+    getJwtSecret(),
+    { expiresIn }
+  );
+}
+
+export function verifyPending2faToken(
+  token: string
+): { userId: string; email: string; platformRole: string } | null {
+  try {
+    const payload = jwt.verify(token, getJwtSecret()) as jwt.JwtPayload & JWTPayload;
+    if (!payload || payload.purpose !== "2fa_pending" || !payload.userId) {
+      return null;
+    }
+    return {
+      userId: payload.userId,
+      email: payload.email,
+      platformRole: payload.platformRole,
+    };
+  } catch {
+    return null;
+  }
+}
 
 export function signJWT(payload: JWTPayload, expiresIn: jwt.SignOptions["expiresIn"] = "7d", jwtId?: string): string {
   const options: jwt.SignOptions = { expiresIn };
@@ -130,6 +179,7 @@ export async function getAuthSession(req?: Request): Promise<{
     preferredLanguage: string;
     emailVerified: Date | null;
     mustChangePassword?: boolean;
+    twoFactorEnabled?: boolean;
   };
   activeCenterId?: string;
   activeCenterRole?: CenterRole | string;
@@ -144,6 +194,10 @@ export async function getAuthSession(req?: Request): Promise<{
   jti?: string;
   sessionId?: string;
   impersonatorUserId?: string;
+  impersonatedBy?: string;
+  impersonationReason?: string;
+  isReadOnly?: boolean;
+  allowWrite?: boolean;
 } | null> {
   let token: string | undefined;
 
@@ -192,6 +246,7 @@ export async function getAuthSession(req?: Request): Promise<{
 
   const payload = verifyJWT(token);
   if (!payload || !payload.userId) return null;
+  if (payload.purpose === "2fa_pending") return null;
 
   let session = null;
   if (payload.jti) {
@@ -277,23 +332,35 @@ export async function getAuthSession(req?: Request): Promise<{
     activeCenterRole = membershipsFormatted[0].role;
   }
 
+  const isImpersonating = Boolean(payload.impersonatorUserId || payload.impersonatedBy);
+  const isReadOnly = isImpersonating
+    ? payload.allowWrite === true
+      ? false
+      : payload.isReadOnly !== false
+    : Boolean(payload.isReadOnly);
+
   return {
     user: {
       id: user.id,
       email: user.email,
       username: user.username,
       fullName: user.fullName,
-      platformRole: user.platformRole,
+      platformRole: isImpersonating ? "NONE" : user.platformRole,
       avatarUrl: user.avatarUrl,
       preferredLanguage: languageToLocale(user.preferredLanguage),
       emailVerified: user.emailVerified,
       mustChangePassword: user.mustChangePassword,
+      twoFactorEnabled: Boolean(user.twoFactorEnabled),
     },
     activeCenterId,
     activeCenterRole,
     memberships: membershipsFormatted,
     jti: payload.jti,
     sessionId: session?.id,
-    impersonatorUserId: payload.impersonatorUserId,
+    impersonatorUserId: payload.impersonatorUserId || payload.impersonatedBy,
+    impersonatedBy: payload.impersonatedBy || payload.impersonatorUserId,
+    impersonationReason: payload.impersonationReason,
+    isReadOnly,
+    allowWrite: payload.allowWrite,
   };
 }

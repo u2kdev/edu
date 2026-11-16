@@ -2,6 +2,7 @@
 
 import { BookOpen } from "lucide-react";
 import { t } from "@/i18n";
+import { EmptyState } from "@/components/ui/empty-state";
 import type { HomeworkItem } from "./homework/homework-utils";
 import { useHomework } from "./homework/use-homework";
 import { HomeworkToolbar } from "./homework/HomeworkToolbar";
@@ -74,10 +75,10 @@ export default function HomeworkManager({
 
       <div className="space-y-4">
         {visibleHomeworks.length === 0 ? (
-          <div className="glass-panel p-8 rounded-2xl border border-slate-800 text-center">
-            <BookOpen className="w-10 h-10 text-slate-600 mx-auto mb-3" />
-            <p className="text-slate-400">{t(locale, "common.noData")}</p>
-          </div>
+          <EmptyState
+            icon={<BookOpen className="h-6 w-6 text-muted-foreground" aria-hidden="true" />}
+            title={t(locale, "common.noData")}
+          />
         ) : (
           visibleHomeworks.map((hw) => (
             <HomeworkListItem

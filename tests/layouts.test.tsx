@@ -6,6 +6,7 @@ import RootLayout, { metadata } from "@/app/layout";
 import CenterLayout from "@/app/center/layout";
 import PlatformAdminLayout from "@/app/platform-admin/layout";
 import DeveloperLayout from "@/app/developer/layout";
+import { getVisibleNavigation } from "@/config/navigation";
 
 /**
  * Application layouts.
@@ -25,6 +26,12 @@ const { redirectMock, getAuthSessionMock, requireTenantPageAccessMock } = vi.hoi
   requireTenantPageAccessMock: vi.fn(),
 }));
 
+vi.mock("next/font/google", () => ({
+  Wix_Madefor_Text: () => ({ variable: "--font-wix-text" }),
+  Wix_Madefor_Display: () => ({ variable: "--font-wix-display" }),
+  Inter: () => ({ variable: "--font-inter-fallback" }),
+  JetBrains_Mono: () => ({ variable: "--font-jetbrains-mono" }),
+}));
 vi.mock("next/navigation", () => ({ redirect: redirectMock }));
 vi.mock("@/lib/auth", () => ({ getAuthSession: getAuthSessionMock }));
 vi.mock("@/lib/tenant", () => ({ requireTenantPageAccess: requireTenantPageAccessMock }));
@@ -141,7 +148,7 @@ describe("root layout", () => {
     expect(String(metadata.description)).toContain("Закрытая образовательная экосистема");
   });
 
-  it("renders the html shell with fonts, lang and body classes", () => {
+  it("renders the html shell with self-hosted font variables, lang and body classes", () => {
     const element = RootLayout({ children: "CHILD" }) as {
       type: string;
       props: Record<string, unknown>;
@@ -149,10 +156,15 @@ describe("root layout", () => {
 
     expect(element.type).toBe("html");
     expect(element.props.lang).toBe("ru");
+    const htmlClasses = String(element.props.className ?? "");
+    expect(htmlClasses).toContain("--font-wix-text");
+    expect(htmlClasses).toContain("--font-wix-display");
+    expect(htmlClasses).toContain("--font-inter-fallback");
+    expect(htmlClasses).toContain("--font-jetbrains-mono");
+
     const hrefs = collectPropValues(element, "href");
-    expect(hrefs).toContain("https://fonts.googleapis.com");
-    expect(hrefs).toContain("https://fonts.gstatic.com");
-    expect(hrefs.some((h) => String(h).includes("fonts.googleapis.com/css2"))).toBe(true);
+    expect(hrefs.some((h) => String(h).includes("fonts.googleapis.com"))).toBe(false);
+    expect(hrefs.some((h) => String(h).includes("fonts.gstatic.com"))).toBe(false);
 
     const body = findElementByName(element, "body");
     expect(body).not.toBeNull();
@@ -191,7 +203,7 @@ describe("platform-admin layout", () => {
   );
 
   it.each(["SUPERADMIN", "PLATFORM_ADMIN", "FULL_ACCESS", "PLATFORM_SUPPORT", "SEO_ADMIN"])(
-    "renders the sidebar for platform role %s",
+    "renders the unified AppShell in platform scope for role %s",
     async (role) => {
       getAuthSessionMock.mockResolvedValue(
         session({
@@ -206,15 +218,17 @@ describe("platform-admin layout", () => {
       );
 
       const element = await callLayout(PlatformAdminLayout, "ADMIN_CHILD");
-      const sidebar = findElementByName(element, "PlatformSidebar");
+      const shell = findElementByName(element, "AppShell");
 
-      expect(sidebar).not.toBeNull();
-      expect(sidebar!.props.user).toEqual({
+      expect(shell).not.toBeNull();
+      expect(shell!.props.scope).toBe("platform");
+      expect(shell!.props.showReturnToCenterLink).toBe(true);
+      expect(shell!.props.user).toMatchObject({
         fullName: "Platform Bot",
         email: "bot@x.uz",
         platformRole: role,
       });
-      expect(sidebar!.props.locale).toBe("uz-Latn");
+      expect(shell!.props.locale).toBe("uz-Latn");
       expect(collectText(element)).toContain("ADMIN_CHILD");
     },
   );
@@ -240,22 +254,23 @@ describe("developer layout", () => {
     },
   );
 
-  it.each(["SUPERADMIN", "DEVELOPER"])("renders the dev console for %s", async (role) => {
+  it.each(["SUPERADMIN", "DEVELOPER"])("renders the dev console shell for %s", async (role) => {
     getAuthSessionMock.mockResolvedValue(
       session({ user: { id: "u-1", preferredLanguage: "ru", fullName: "X", email: "x@x.uz", platformRole: role } }),
     );
 
     const element = await callLayout(DeveloperLayout, "DEV_CHILD");
-    const text = flatText(element);
+    const shell = findElementByName(element, "AppShell");
 
-    expect(text).toContain("DEV_PANEL");
-    expect(text).toContain("System Health");
-    expect(text).toContain("Global Audit Logs");
-    expect(text).toContain("Platform Admins");
-    expect(text).toContain("Return to Platform UI");
-    expect(text).toContain("~/developer/control-panel");
-    expect(text).toContain("SYS_ONLINE");
-    expect(text).toContain("DEV_CHILD");
+    expect(shell).not.toBeNull();
+    expect(shell!.props.scope).toBe("developer");
+    expect(shell!.props.showReturnToPlatformUi).toBe(true);
+    const groups = getVisibleNavigation(shell!.props.navContext as Parameters<typeof getVisibleNavigation>[0]);
+    const labels = groups.flatMap((g) => g.items.map((i) => t("ru", i.labelKey)));
+    expect(labels).toContain(t("ru", "nav.systemHealth"));
+    expect(labels).toContain(t("ru", "nav.globalAudit"));
+    expect(labels).toContain(t("ru", "nav.platformOwners"));
+    expect(collectText(element)).toContain("DEV_CHILD");
   });
 });
 
@@ -313,21 +328,26 @@ describe("center layout", () => {
     setUp(session(), db);
 
     const element = await callLayout(CenterLayout, "CENTER_CHILD");
-    const text = flatText(element);
+    const shell = findElementByName(element, "AppShell");
 
-    expect(text).toContain("Bright Center");
-    expect(text).toContain(t("ru", "dashboard.directorCabinet"));
-    expect(text).toContain("Ivan Petrov");
-    expect(text).toContain("ivan@x.uz");
-    expect(text).toContain("CENTER_CHILD");
-    // DIRECTOR sees management navigation
-    expect(text).toContain(t("ru", "nav.branches"));
-    expect(text).toContain(t("ru", "nav.staff"));
-    expect(text).toContain(t("ru", "nav.invites"));
-    expect(text).toContain(t("ru", "nav.payments"));
-    expect(text).toContain(t("ru", "nav.reports"));
-    // platformRole "NONE" -> no platform-admin shortcut
-    expect(text).not.toContain(t("ru", "nav.platformAdmin"));
+    expect(shell).not.toBeNull();
+    expect(shell!.props.scope).toBe("center");
+    expect(shell!.props.center).toMatchObject({ id: "center-1", name: "Bright Center" });
+    expect(shell!.props.user).toMatchObject({
+      fullName: "Ivan Petrov",
+      email: "ivan@x.uz",
+      centerRole: "DIRECTOR",
+    });
+    expect(shell!.props.showPlatformAdminShortcut).toBe(false);
+    expect(collectText(element)).toContain("CENTER_CHILD");
+
+    const groups = getVisibleNavigation(shell!.props.navContext as Parameters<typeof getVisibleNavigation>[0]);
+    const labelKeys = groups.flatMap((g) => g.items.map((i) => i.labelKey));
+    expect(labelKeys).toContain("nav.branches");
+    expect(labelKeys).toContain("nav.staff");
+    expect(labelKeys).toContain("nav.invites");
+    expect(labelKeys).toContain("nav.payments");
+    expect(labelKeys).toContain("nav.reports");
 
     expect(db.learningCenter.findUnique).toHaveBeenCalledWith({ where: { id: "center-1" } });
     expect(db.notification.count).toHaveBeenCalledWith({
@@ -358,26 +378,31 @@ describe("center layout", () => {
     );
 
     const element = await callLayout(CenterLayout);
-    const text = flatText(element);
+    const shell = findElementByName(element, "AppShell");
+    expect(shell).not.toBeNull();
 
-    expect(text).toContain(t("ru", "dashboard.teacherCabinet"));
+    const groups = getVisibleNavigation(shell!.props.navContext as Parameters<typeof getVisibleNavigation>[0]);
+    const labelKeys = groups.flatMap((g) => g.items.map((i) => i.labelKey));
     // teacher-visible items
-    expect(text).toContain(t("ru", "nav.courses"));
-    expect(text).toContain(t("ru", "nav.attendance"));
-    expect(text).toContain(t("ru", "nav.homework"));
+    expect(labelKeys).toContain("nav.courses");
+    expect(labelKeys).toContain("nav.attendance");
+    expect(labelKeys).toContain("nav.homework");
+    expect(labelKeys).toContain("nav.myGroups");
+    expect(labelKeys).toContain("nav.substitutions");
+    expect(labelKeys).toContain("nav.mySalary");
+    expect(labelKeys).toContain("nav.support");
     // management-only items are filtered out
-    expect(text).not.toContain(t("ru", "nav.branches"));
-    expect(text).not.toContain(t("ru", "nav.staff"));
-    expect(text).not.toContain(t("ru", "nav.invites"));
-    expect(text).not.toContain(t("ru", "nav.payments"));
-    expect(text).not.toContain(t("ru", "nav.reports"));
-    expect(text).not.toContain(t("ru", "nav.support"));
+    expect(labelKeys).not.toContain("nav.branches");
+    expect(labelKeys).not.toContain("nav.staff");
+    expect(labelKeys).not.toContain("nav.invites");
+    expect(labelKeys).not.toContain("nav.payments");
+    expect(labelKeys).not.toContain("nav.reports");
     // platform staff shortcut + unread badge
-    expect(text).toContain(t("ru", "nav.platformAdmin"));
-    expect(text).toContain("5");
+    expect(shell!.props.showPlatformAdminShortcut).toBe(true);
+    expect(shell!.props.unreadNotificationsCount).toBe(5);
   });
 
-  it("caps the unread notification badge at 9+ and mounts the workspace switcher", async () => {
+  it("passes unread notification count and multiple memberships to AppShell", async () => {
     const db = makeDb();
     db.notification.count.mockResolvedValue(42);
     setUp(
@@ -391,16 +416,16 @@ describe("center layout", () => {
     );
 
     const element = await callLayout(CenterLayout);
-    const text = flatText(element);
-
-    expect(text).toContain("9+");
-    expect(findElementByName(element, "WorkspaceSwitcher")).not.toBeNull();
+    const shell = findElementByName(element, "AppShell");
+    expect(shell).not.toBeNull();
+    expect(shell!.props.unreadNotificationsCount).toBe(42);
+    expect(shell!.props.memberships as unknown[]).toHaveLength(2);
     // the notification query includes the center-scoped OR only once (active center)
     const notifWhere = db.notification.count.mock.calls[0][0].where as Record<string, unknown>;
     expect(notifWhere.OR).toEqual([{ centerId: "center-1" }, { centerId: null }]);
   });
 
-  it("renders a logo image when the center has one", async () => {
+  it("passes center logoUrl to AppShell when present", async () => {
     const db = makeDb();
     db.learningCenter.findUnique.mockResolvedValue({
       id: "center-1",
@@ -410,7 +435,8 @@ describe("center layout", () => {
     setUp(session(), db);
 
     const element = await callLayout(CenterLayout);
-    const srcs = collectPropValues(element, "src");
-    expect(srcs).toContain("https://cdn/logo.png");
+    const shell = findElementByName(element, "AppShell");
+    expect(shell).not.toBeNull();
+    expect((shell!.props.center as { logoUrl?: string }).logoUrl).toBe("https://cdn/logo.png");
   });
 });

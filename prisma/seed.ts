@@ -86,24 +86,119 @@ async function main() {
   const passwordHash = await bcrypt.hash(testPassword, 10);
   const now = new Date();
 
-  // 1. Subscription Plans
+  // 1. Subscription Plans (Старт / Рост / Про)
+  const startFeatures = JSON.stringify({
+    onlinePaymentsClick: false,
+    telegramBot: true,
+    smsReminders: false,
+    broadcasts: false,
+    advancedReports: false,
+    mobileApp: true,
+    pdfReceipts: true,
+    promoCodes: false,
+    financeAccounting: false,
+  });
+  const growthFeatures = JSON.stringify({
+    onlinePaymentsClick: true,
+    telegramBot: true,
+    smsReminders: true,
+    broadcasts: true,
+    advancedReports: true,
+    mobileApp: true,
+    pdfReceipts: true,
+    promoCodes: true,
+    financeAccounting: false,
+  });
+  const proFeatures = JSON.stringify({
+    onlinePaymentsClick: true,
+    telegramBot: true,
+    smsReminders: true,
+    broadcasts: true,
+    advancedReports: true,
+    mobileApp: true,
+    pdfReceipts: true,
+    promoCodes: true,
+    financeAccounting: true,
+  });
+
+  await prisma.subscriptionPlan.upsert({
+    where: { id: "plan-start" },
+    update: {
+      name: "Старт",
+      maxStudents: 50,
+      maxTeachers: 5,
+      maxCourses: 10,
+      maxBranches: 1,
+      maxStorage: 5120,
+      priceMonthly: 290000,
+      featuresJson: startFeatures,
+      isActive: true,
+    },
+    create: {
+      id: "plan-start",
+      name: "Старт",
+      maxStudents: 50,
+      maxTeachers: 5,
+      maxCourses: 10,
+      maxBranches: 1,
+      maxStorage: 5120,
+      priceMonthly: 290000,
+      featuresJson: startFeatures,
+      isActive: true,
+    },
+  });
+
+  await prisma.subscriptionPlan.upsert({
+    where: { id: "plan-growth" },
+    update: {
+      name: "Рост",
+      maxStudents: 150,
+      maxTeachers: 15,
+      maxCourses: 30,
+      maxBranches: 3,
+      maxStorage: 15360,
+      priceMonthly: 590000,
+      featuresJson: growthFeatures,
+      isActive: true,
+    },
+    create: {
+      id: "plan-growth",
+      name: "Рост",
+      maxStudents: 150,
+      maxTeachers: 15,
+      maxCourses: 30,
+      maxBranches: 3,
+      maxStorage: 15360,
+      priceMonthly: 590000,
+      featuresJson: growthFeatures,
+      isActive: true,
+    },
+  });
+
   const planPro = await prisma.subscriptionPlan.upsert({
     where: { id: "plan-pro" },
     update: {
-      name: "Профессиональный",
-      maxStudents: 250,
-      maxTeachers: 20,
-      maxCourses: 50,
-      priceMonthly: 7900,
+      name: "Про",
+      maxStudents: 500,
+      maxTeachers: 50,
+      maxCourses: 100,
+      maxBranches: 10,
+      maxStorage: 51200,
+      priceMonthly: 990000,
+      featuresJson: proFeatures,
+      isActive: true,
     },
     create: {
       id: "plan-pro",
-      name: "Профессиональный",
-      maxStudents: 250,
-      maxTeachers: 20,
-      maxCourses: 50,
-      priceMonthly: 7900,
-      featuresJson: JSON.stringify(["Кастомный брендинг", "Приоритетный саппорт", "Расширенные отчеты", "Уведомления"]),
+      name: "Про",
+      maxStudents: 500,
+      maxTeachers: 50,
+      maxCourses: 100,
+      maxBranches: 10,
+      maxStorage: 51200,
+      priceMonthly: 990000,
+      featuresJson: proFeatures,
+      isActive: true,
     },
   });
 

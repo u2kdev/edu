@@ -1,8 +1,18 @@
 "use client";
 
 import { useState } from "react";
-import { Copy, Check, Printer, AlertTriangle, ShieldCheck, X } from "lucide-react";
+import { Copy, Check, Printer, ShieldAlert, ShieldCheck } from "lucide-react";
 import { t } from "@/i18n";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import { Button } from "@/components/ui/button";
+import { Alert } from "@/components/ui/alert";
 
 export interface CredentialsData {
   login: string;
@@ -13,12 +23,21 @@ export interface CredentialsData {
   mustChangePassword?: boolean;
 }
 
-interface CredentialsModalProps {
+export interface CredentialsModalProps {
   isOpen: boolean;
   onClose: () => void;
   credentials: CredentialsData;
   locale?: string;
   parentCredentials?: CredentialsData | null;
+}
+
+function escapeHtml(value: string): string {
+  return value
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#39;");
 }
 
 export function CredentialsModal({
@@ -31,11 +50,19 @@ export function CredentialsModal({
   const [copied, setCopied] = useState(false);
   const [copiedParent, setCopiedParent] = useState(false);
 
-  if (!isOpen) return null;
-
   const handleCopy = (creds: CredentialsData, isParent = false) => {
-    const text = `e-darschi LMS\n${t(locale, "common.fullName")}: ${creds.fullName}\nЛогин: ${creds.login}\nПароль: ${creds.password || "(уже установлен)"}\nВход: ${creds.loginUrl}`;
-    navigator.clipboard.writeText(text);
+    const text = [
+      t(locale, "common.brandName"),
+      `${t(locale, "ui4.credentialsUser")}: ${creds.fullName}`,
+      `${t(locale, "ui4.credentialsLogin")}: ${creds.login}`,
+      `${t(locale, "ui4.credentialsPassword")}: ${creds.password || t(locale, "ui4.credentialsExistingPassword")}`,
+      `${t(locale, "ui4.credentialsLoginUrl")}: ${creds.loginUrl}`,
+    ].join("\n");
+
+    if (typeof navigator !== "undefined" && navigator.clipboard?.writeText) {
+      void navigator.clipboard.writeText(text);
+    }
+
     if (isParent) {
       setCopiedParent(true);
       setTimeout(() => setCopiedParent(false), 2000);
@@ -46,50 +73,56 @@ export function CredentialsModal({
   };
 
   const handlePrint = () => {
-    const printWindow = window.open("", "_blank", "width=600,height=600");
+    const printWindow = window.open("", "_blank", "width=600,height=640");
     if (!printWindow) return;
+
+    const title = escapeHtml(`${t(locale, "ui4.oneTimeSecretTitle")} — ${credentials.fullName}`);
+    const fullName = escapeHtml(credentials.fullName);
+    const login = escapeHtml(credentials.login);
+    const password = credentials.password ? escapeHtml(credentials.password) : "";
+    const loginUrl = escapeHtml(credentials.loginUrl);
 
     printWindow.document.write(`
       <html>
         <head>
-          <title>Данные для входа — ${credentials.fullName}</title>
+          <title>${title}</title>
           <style>
-            body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; padding: 40px; color: #1e293b; }
-            .card { border: 2px dashed #cbd5e1; border-radius: 12px; padding: 24px; max-width: 480px; margin: 0 auto; }
-            .title { font-size: 20px; font-weight: bold; margin-bottom: 4px; color: #0f172a; }
-            .subtitle { font-size: 13px; color: #64748b; margin-bottom: 20px; }
+            body { font-family: system-ui, -apple-system, sans-serif; padding: 32px; color: hsl(222 47% 11%); background: hsl(0 0% 100%); }
+            .card { border: 1px dashed hsl(213 27% 84%); border-radius: 8px; padding: 24px; max-width: 480px; margin: 0 auto; }
+            .title { font-size: 18px; font-weight: 700; margin-bottom: 4px; color: hsl(222 47% 11%); }
+            .subtitle { font-size: 13px; color: hsl(215 19% 35%); margin-bottom: 20px; }
             .row { margin-bottom: 12px; }
-            .label { font-size: 11px; text-transform: uppercase; letter-spacing: 0.05em; color: #64748b; font-weight: 600; }
-            .val { font-size: 16px; font-weight: bold; font-family: monospace; color: #0f172a; margin-top: 2px; }
-            .warning { font-size: 12px; color: #b45309; background: #fef3c7; padding: 10px; border-radius: 6px; margin-top: 20px; }
+            .label { font-size: 12px; color: hsl(215 19% 35%); font-weight: 600; }
+            .val { font-size: 15px; font-weight: 600; font-family: monospace; color: hsl(222 47% 11%); margin-top: 2px; word-break: break-all; }
+            .warning { font-size: 12px; color: hsl(23 83% 31%); background: hsl(48 100% 96%); border: 1px solid hsl(26 90% 37%); padding: 10px 12px; border-radius: 6px; margin-top: 20px; }
           </style>
         </head>
         <body>
           <div class="card">
-            <div class="title">e-darschi LMS</div>
-            <div class="subtitle">Карточка доступа пользователя</div>
+            <div class="title">${escapeHtml(t(locale, "common.brandName"))}</div>
+            <div class="subtitle">${escapeHtml(t(locale, "ui4.oneTimeSecretTitle"))}</div>
             <div class="row">
-              <div class="label">ФИО</div>
-              <div class="val">${credentials.fullName}</div>
+              <div class="label">${escapeHtml(t(locale, "ui4.credentialsUser"))}</div>
+              <div class="val">${fullName}</div>
             </div>
             <div class="row">
-              <div class="label">Логин (Email / Телефон)</div>
-              <div class="val">${credentials.login}</div>
+              <div class="label">${escapeHtml(t(locale, "ui4.credentialsLogin"))}</div>
+              <div class="val">${login}</div>
             </div>
             ${
-              credentials.password
+              password
                 ? `<div class="row">
-                    <div class="label">Временный пароль</div>
-                    <div class="val">${credentials.password}</div>
+                    <div class="label">${escapeHtml(t(locale, "ui4.credentialsTempPassword"))}</div>
+                    <div class="val">${password}</div>
                   </div>`
                 : ""
             }
             <div class="row">
-              <div class="label">Адрес входа</div>
-              <div class="val">${credentials.loginUrl}</div>
+              <div class="label">${escapeHtml(t(locale, "ui4.credentialsLoginUrl"))}</div>
+              <div class="val">${loginUrl}</div>
             </div>
             <div class="warning">
-              Сохраните пароль. При первом входе потребуется изменить пароль на собственный.
+              ${escapeHtml(t(locale, "ui4.oneTimeSecretWarn"))}
             </div>
           </div>
           <script>window.print();</script>
@@ -100,146 +133,154 @@ export function CredentialsModal({
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm animate-fade-in">
-      <div className="relative w-full max-w-lg bg-slate-900 border border-slate-800 rounded-3xl p-6 shadow-2xl space-y-6">
-        {/* Header */}
-        <div className="flex items-start justify-between">
-          <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-2xl bg-amber-500/10 border border-amber-500/30 flex items-center justify-center text-amber-400">
-              <ShieldCheck className="w-5 h-5" />
+    <Dialog open={isOpen} onOpenChange={(next) => !next && onClose()}>
+      <DialogContent className="max-w-lg">
+        <DialogHeader>
+          <div className="flex items-center gap-2.5">
+            <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-md border border-warning/30 bg-warning-subtle text-warning-subtle-foreground">
+              <ShieldCheck className="h-4 w-4" aria-hidden="true" />
             </div>
+            <div className="min-w-0">
+              <DialogTitle>{t(locale, "ui4.oneTimeSecretTitle")}</DialogTitle>
+              <DialogDescription className="text-warning-subtle-foreground">
+                {t(locale, "ui4.oneTimeSecretWarn")}
+              </DialogDescription>
+            </div>
+          </div>
+        </DialogHeader>
+
+        <div className="space-y-4">
+          <div className="space-y-3 rounded-lg border border-border bg-muted/40 p-4">
             <div>
-              <h2 className="text-lg font-bold text-white">Данные для входа</h2>
-              <p className="text-xs text-amber-400/90 font-medium flex items-center gap-1 mt-0.5">
-                <AlertTriangle className="w-3.5 h-3.5" />
-                Показываются только один раз
-              </p>
-            </div>
-          </div>
-          <button
-            onClick={onClose}
-            className="p-1.5 text-slate-400 hover:text-white rounded-xl hover:bg-slate-800 transition-colors"
-          >
-            <X className="w-5 h-5" />
-          </button>
-        </div>
-
-        {/* Credentials Display Card */}
-        <div className="bg-slate-950/80 border border-slate-800 rounded-2xl p-5 space-y-4">
-          <div>
-            <span className="text-[11px] font-semibold uppercase tracking-wider text-slate-400">
-              Пользователь
-            </span>
-            <div className="text-base font-bold text-white mt-0.5">
-              {credentials.fullName}
-            </div>
-          </div>
-
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 pt-2 border-t border-slate-800/60">
-            <div>
-              <span className="text-[11px] font-semibold uppercase tracking-wider text-slate-400">
-                Логин для входа
-              </span>
-              <div className="text-sm font-mono font-medium text-brand-300 mt-1 select-all break-all">
-                {credentials.login}
+              <div className="text-xs font-medium text-muted-foreground">
+                {t(locale, "ui4.credentialsUser")}
+              </div>
+              <div className="mt-0.5 text-sm font-semibold text-foreground">
+                {credentials.fullName}
               </div>
             </div>
 
-            {credentials.password ? (
+            <div className="grid grid-cols-1 gap-3 border-t border-border pt-3 sm:grid-cols-2">
               <div>
-                <span className="text-[11px] font-semibold uppercase tracking-wider text-slate-400">
-                  Временный пароль
-                </span>
-                <div className="text-sm font-mono font-bold text-emerald-400 mt-1 select-all tracking-wider">
-                  {credentials.password}
+                <div className="text-xs font-medium text-muted-foreground">
+                  {t(locale, "ui4.credentialsLogin")}
+                </div>
+                <div className="mt-1 select-all break-all font-mono text-sm font-medium text-primary">
+                  {credentials.login}
                 </div>
               </div>
-            ) : (
-              <div>
-                <span className="text-[11px] font-semibold uppercase tracking-wider text-slate-400">
-                  Пароль
-                </span>
-                <div className="text-xs text-slate-400 mt-1">
-                  Используется существующий пароль пользователя
-                </div>
-              </div>
-            )}
-          </div>
 
-          <div className="pt-2 border-t border-slate-800/60 flex items-center justify-between text-xs text-slate-400">
-            <span>Адрес входа:</span>
-            <span className="font-mono text-slate-300">{credentials.loginUrl}</span>
-          </div>
-
-          {credentials.mustChangePassword && (
-            <div className="text-[11px] text-amber-300/80 bg-amber-500/10 border border-amber-500/20 rounded-xl p-2.5">
-              Пользователю будет предложено изменить пароль при первом входе в систему.
-            </div>
-          )}
-
-          <div className="flex gap-2 pt-1">
-            <button
-              onClick={() => handleCopy(credentials)}
-              className="flex-1 inline-flex items-center justify-center gap-2 px-3 py-2 bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-semibold rounded-xl border border-slate-700 transition-colors"
-            >
-              {copied ? <Check className="w-3.5 h-3.5 text-emerald-400" /> : <Copy className="w-3.5 h-3.5" />}
-              <span>{copied ? "Скопировано!" : "Копировать"}</span>
-            </button>
-            <button
-              onClick={handlePrint}
-              className="inline-flex items-center justify-center gap-2 px-3 py-2 bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-semibold rounded-xl border border-slate-700 transition-colors"
-            >
-              <Printer className="w-3.5 h-3.5" />
-              <span>Печать карточки</span>
-            </button>
-          </div>
-        </div>
-
-        {/* Optional Parent Credentials if created together */}
-        {parentCredentials && (
-          <div className="bg-slate-950/80 border border-emerald-900/30 rounded-2xl p-5 space-y-3">
-            <div className="flex items-center justify-between">
-              <div>
-                <span className="text-[11px] font-semibold uppercase tracking-wider text-emerald-400">
-                  Аккаунт родителя
-                </span>
-                <div className="text-sm font-bold text-white mt-0.5">
-                  {parentCredentials.fullName}
-                </div>
-              </div>
-              <button
-                onClick={() => handleCopy(parentCredentials, true)}
-                className="inline-flex items-center gap-1.5 px-2.5 py-1 bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-semibold rounded-lg border border-slate-700"
-              >
-                {copiedParent ? <Check className="w-3 h-3 text-emerald-400" /> : <Copy className="w-3 h-3" />}
-                <span>{copiedParent ? "Скопировано!" : "Копировать"}</span>
-              </button>
-            </div>
-            <div className="grid grid-cols-2 gap-4 text-xs font-mono">
-              <div>
-                <span className="text-slate-500 block text-[10px] uppercase">Логин</span>
-                <span className="text-slate-300">{parentCredentials.login}</span>
-              </div>
-              {parentCredentials.password && (
+              {credentials.password ? (
                 <div>
-                  <span className="text-slate-500 block text-[10px] uppercase">Пароль</span>
-                  <span className="text-emerald-400 font-bold">{parentCredentials.password}</span>
+                  <div className="text-xs font-medium text-muted-foreground">
+                    {t(locale, "ui4.credentialsTempPassword")}
+                  </div>
+                  <div className="mt-1 select-all break-all font-mono text-sm font-semibold text-success">
+                    {credentials.password}
+                  </div>
+                </div>
+              ) : (
+                <div>
+                  <div className="text-xs font-medium text-muted-foreground">
+                    {t(locale, "ui4.credentialsPassword")}
+                  </div>
+                  <div className="mt-1 text-xs text-muted-foreground">
+                    {t(locale, "ui4.credentialsExistingPassword")}
+                  </div>
                 </div>
               )}
             </div>
-          </div>
-        )}
 
-        {/* Footer */}
-        <div className="flex justify-end pt-2">
-          <button
-            onClick={onClose}
-            className="w-full sm:w-auto px-5 py-2.5 bg-brand-600 hover:bg-brand-500 text-white text-xs font-bold rounded-xl shadow-lg transition-colors"
-          >
-            Понятно, я сохранил данные
-          </button>
+            <div className="flex flex-wrap items-center justify-between gap-2 border-t border-border pt-3 text-xs">
+              <span className="text-muted-foreground">{t(locale, "ui4.credentialsLoginUrl")}</span>
+              <span className="font-mono text-foreground">{credentials.loginUrl}</span>
+            </div>
+
+            {credentials.mustChangePassword && (
+              <Alert variant="warning" className="text-xs">
+                <span className="inline-flex items-center gap-1.5">
+                  <ShieldAlert className="h-3.5 w-3.5 shrink-0" aria-hidden="true" />
+                  {t(locale, "ui4.credentialsMustChange")}
+                </span>
+              </Alert>
+            )}
+
+            <div className="flex flex-wrap justify-end gap-2 pt-1">
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                onClick={() => handleCopy(credentials)}
+              >
+                {copied ? <Check className="h-3.5 w-3.5 text-success" /> : <Copy className="h-3.5 w-3.5" />}
+                <span>
+                  {copied ? t(locale, "ui4.copied") : t(locale, "ui4.copyCredentials")}
+                </span>
+              </Button>
+              <Button type="button" variant="outline" size="sm" onClick={handlePrint}>
+                <Printer className="h-3.5 w-3.5" />
+                <span>{t(locale, "ui4.printCard")}</span>
+              </Button>
+            </div>
+          </div>
+
+          {parentCredentials && (
+            <div className="space-y-3 rounded-lg border border-border bg-card p-4">
+              <div className="flex items-center justify-between gap-2">
+                <div>
+                  <div className="text-xs font-medium text-success">
+                    {t(locale, "ui4.parentAccount")}
+                  </div>
+                  <div className="mt-0.5 text-sm font-semibold text-foreground">
+                    {parentCredentials.fullName}
+                  </div>
+                </div>
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  onClick={() => handleCopy(parentCredentials, true)}
+                >
+                  {copiedParent ? (
+                    <Check className="h-3.5 w-3.5 text-success" />
+                  ) : (
+                    <Copy className="h-3.5 w-3.5" />
+                  )}
+                  <span>
+                    {copiedParent ? t(locale, "ui4.copied") : t(locale, "ui4.copyCredentials")}
+                  </span>
+                </Button>
+              </div>
+              <div className="grid grid-cols-1 gap-3 border-t border-border pt-3 text-xs sm:grid-cols-2">
+                <div>
+                  <span className="block text-muted-foreground">
+                    {t(locale, "ui4.credentialsLogin")}
+                  </span>
+                  <span className="mt-0.5 block select-all font-mono text-foreground">
+                    {parentCredentials.login}
+                  </span>
+                </div>
+                {parentCredentials.password && (
+                  <div>
+                    <span className="block text-muted-foreground">
+                      {t(locale, "ui4.credentialsTempPassword")}
+                    </span>
+                    <span className="mt-0.5 block select-all font-mono font-semibold text-success">
+                      {parentCredentials.password}
+                    </span>
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
         </div>
-      </div>
-    </div>
+
+        <DialogFooter>
+          <Button type="button" variant="primary" onClick={onClose}>
+            {t(locale, "ui4.savedConfirm")}
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
   );
 }

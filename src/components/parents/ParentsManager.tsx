@@ -2,20 +2,26 @@
 
 import { useState } from "react";
 import Link from "next/link";
-import {
-  Users,
-  Search,
-  Plus,
-  Heart,
-  Mail,
-  Phone,
-  Clock,
-  Send,
-  GraduationCap,
-  AlertTriangle,
-  CheckCircle,
-} from "lucide-react";
+import { Clock, Mail, Phone, Plus, Send, Users } from "lucide-react";
 import { t } from "@/i18n";
+import {
+  Alert,
+  AlertDescription,
+  Badge,
+  Button,
+  DataTable,
+  type DataTableColumn,
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+  FilterBar,
+  FormActions,
+  FormField,
+  Input,
+  PageHeader,
+} from "@/components/ui";
 import { CredentialsModal, type CredentialsData } from "@/components/CredentialsModal";
 
 export interface ParentItem {
@@ -39,6 +45,9 @@ interface ParentsManagerProps {
   role: string;
 }
 
+const selectClassName =
+  "flex h-9 w-full rounded-md border border-input bg-card px-3 py-1.5 text-sm text-foreground transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-1 focus-visible:ring-offset-background";
+
 export function ParentsManager({
   initialParents,
   locale,
@@ -48,7 +57,6 @@ export function ParentsManager({
   const [search, setSearch] = useState("");
   const [filterNeverLoggedIn, setFilterNeverLoggedIn] = useState(false);
 
-  // Add Parent Modal State
   const [addModalOpen, setAddModalOpen] = useState(false);
   const [addName, setAddName] = useState("");
   const [addPhone, setAddPhone] = useState("");
@@ -57,9 +65,10 @@ export function ParentsManager({
   const [addLoading, setAddLoading] = useState(false);
   const [addError, setAddError] = useState<string | null>(null);
 
-  // Single-display credentials
   const [credentials, setCredentials] = useState<CredentialsData | null>(null);
   const [actionNotice, setActionNotice] = useState<{ type: "success" | "error"; text: string } | null>(null);
+
+  const canManage = role === "DIRECTOR" || role === "CENTER_ADMIN" || role === "";
 
   const filteredParents = parents.filter((p) => {
     const q = search.toLowerCase();
@@ -153,248 +162,247 @@ export function ParentsManager({
     }
   };
 
-  return (
-    <div className="space-y-6">
-      {/* Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-        <div>
-          <h1 className="text-2xl font-bold text-white tracking-tight flex items-center gap-2.5">
-            <Heart className="w-6 h-6 text-brand-400" />
-            <span>{t(locale, "nav.parents")}</span>
-          </h1>
-          <p className="text-xs text-slate-400 mt-1">
-            Управление аккаунтами родителей и привязками к ученикам центра
-          </p>
-        </div>
-
-        <button
-          onClick={() => setAddModalOpen(true)}
-          className="inline-flex items-center gap-2 px-4 py-2 bg-brand-600 hover:bg-brand-500 text-white text-xs font-bold rounded-xl shadow-lg transition-colors"
-        >
-          <Plus className="w-4 h-4" />
-          <span>Добавить родителя</span>
-        </button>
-      </div>
-
-      {actionNotice && (
-        <div
-          className={`p-3 rounded-xl text-xs flex items-center gap-2 border ${
-            actionNotice.type === "success"
-              ? "bg-emerald-500/10 border-emerald-500/20 text-emerald-400"
-              : "bg-rose-500/10 border-rose-500/20 text-rose-400"
-          }`}
-        >
-          {actionNotice.type === "success" ? <CheckCircle className="w-4 h-4" /> : <AlertTriangle className="w-4 h-4" />}
-          <span>{actionNotice.text}</span>
-        </div>
-      )}
-
-      {/* Toolbar */}
-      <div className="glass-panel p-4 rounded-2xl border border-slate-800 flex flex-col sm:flex-row items-center gap-3">
-        <div className="relative flex-1 w-full">
-          <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-slate-500" />
-          <input
-            type="text"
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-            placeholder="Поиск по имени, телефону, email или имени ребенка..."
-            className="w-full pl-9 pr-4 py-2 bg-slate-900 border border-slate-800 rounded-xl text-xs text-white placeholder-slate-500 focus:outline-none focus:border-brand-500"
-          />
-        </div>
-
-        <div className="flex items-center gap-2 w-full sm:w-auto">
-          <button
-            onClick={() => setFilterNeverLoggedIn(!filterNeverLoggedIn)}
-            className={`px-3 py-2 text-xs font-semibold rounded-xl border transition-colors whitespace-nowrap ${
-              filterNeverLoggedIn
-                ? "bg-amber-500/20 border-amber-500/40 text-amber-300"
-                : "bg-slate-900 border-slate-800 text-slate-400 hover:text-white"
-            }`}
-          >
-            Ни разу не входили
-          </button>
-        </div>
-      </div>
-
-      {/* Table */}
-      <div className="glass-panel rounded-2xl border border-slate-800 overflow-hidden">
-        <div className="overflow-x-auto">
-          <table className="w-full text-left text-xs">
-            <thead className="bg-slate-900/60 text-slate-400 text-[11px] uppercase tracking-wider border-b border-slate-800">
-              <tr>
-                <th className="px-5 py-3 font-semibold">Родитель</th>
-                <th className="px-4 py-3 font-semibold">Контакты</th>
-                <th className="px-4 py-3 font-semibold">Дети (ученики)</th>
-                <th className="px-4 py-3 font-semibold">Последний вход</th>
-                <th className="px-4 py-3 font-semibold">Статус</th>
-                <th className="px-4 py-3 font-semibold text-right">Действия</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-slate-800/60">
-              {filteredParents.length === 0 ? (
-                <tr>
-                  <td colSpan={6} className="px-5 py-8 text-center text-slate-500">
-                    Родители не найдены
-                  </td>
-                </tr>
-              ) : (
-                filteredParents.map((parent) => (
-                  <tr key={parent.id} className="hover:bg-slate-800/30 transition-colors">
-                    <td className="px-5 py-3.5">
-                      <div className="font-bold text-white text-xs">{parent.fullName}</div>
-                    </td>
-                    <td className="px-4 py-3.5 font-mono text-[11px] text-slate-300">
-                      {parent.phone && <div>{parent.phone}</div>}
-                      {parent.email && <div className="text-slate-500">{parent.email}</div>}
-                      {!parent.phone && !parent.email && <span className="text-slate-600">—</span>}
-                    </td>
-                    <td className="px-4 py-3.5">
-                      {parent.children.length === 0 ? (
-                        <span className="text-slate-500">Нет привязанных детей</span>
-                      ) : (
-                        <div className="flex flex-wrap gap-1.5">
-                          {parent.children.map((child) => (
-                            <Link
-                              key={child.id}
-                              href={`/center/students/${child.id}`}
-                              className="inline-flex items-center gap-1 px-2 py-0.5 bg-brand-500/10 hover:bg-brand-500/20 text-brand-400 border border-brand-500/20 rounded-md text-[11px] font-medium transition-colors"
-                            >
-                              <GraduationCap className="w-3 h-3" />
-                              <span>{child.fullName}</span>
-                              {child.relationship && (
-                                <span className="text-[9px] text-slate-400">({child.relationship})</span>
-                              )}
-                            </Link>
-                          ))}
-                        </div>
-                      )}
-                    </td>
-                    <td className="px-4 py-3.5">
-                      {parent.lastLoginAt ? (
-                        <span className="text-slate-300 font-mono text-[11px]">
-                          {new Date(parent.lastLoginAt).toLocaleDateString()}
-                        </span>
-                      ) : (
-                        <span className="inline-flex items-center gap-1 px-2 py-0.5 bg-amber-500/10 text-amber-400 border border-amber-500/20 rounded-full text-[10px] font-semibold">
-                          <Clock className="w-3 h-3" />
-                          Ни разу не входил
-                        </span>
-                      )}
-                    </td>
-                    <td className="px-4 py-3.5">
-                      <span
-                        className={`px-2 py-0.5 rounded-full text-[10px] font-semibold border ${
-                          parent.status === "ACTIVE"
-                            ? "bg-emerald-500/10 border-emerald-500/20 text-emerald-400"
-                            : "bg-rose-500/10 border-rose-500/20 text-rose-400"
-                        }`}
-                      >
-                        {parent.status === "ACTIVE" ? "Активен" : "Заблокирован"}
-                      </span>
-                    </td>
-                    <td className="px-4 py-3.5 text-right">
-                      <button
-                        onClick={() => handleSendReset(parent.id)}
-                        className="p-1.5 text-slate-400 hover:text-white rounded-lg hover:bg-slate-800 transition-colors"
-                        title="Отправить ссылку сброса пароля"
-                      >
-                        <Send className="w-3.5 h-3.5" />
-                      </button>
-                    </td>
-                  </tr>
-                ))
-              )}
-            </tbody>
-          </table>
-        </div>
-      </div>
-
-      {/* Add Parent Modal */}
-      {addModalOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm">
-          <div className="w-full max-w-md bg-slate-900 border border-slate-800 rounded-3xl p-6 space-y-4 shadow-2xl">
-            <h3 className="text-base font-bold text-white">Добавить родителя</h3>
-            <p className="text-xs text-slate-400">
-              Создайте учетную запись родителя. Данные для входа будут показаны один раз.
-            </p>
-
-            {addError && (
-              <div className="p-3 bg-rose-500/10 border border-rose-500/20 text-rose-400 rounded-xl text-xs">
-                {addError}
-              </div>
+  const columns: DataTableColumn<ParentItem>[] = [
+    {
+      id: "fullName",
+      header: "Родитель",
+      isMobilePrimary: true,
+      sortable: true,
+      sortValue: (p) => p.fullName,
+      cell: (p) => (
+        <div className="space-y-1">
+          <div className="font-medium text-foreground">{p.fullName}</div>
+          <div className="text-xs text-muted-foreground flex items-center gap-1.5">
+            <Clock className="h-3 w-3 shrink-0" aria-hidden="true" />
+            {p.lastLoginAt ? (
+              <span className="tabular-nums">
+                Последний вход: {new Date(p.lastLoginAt).toLocaleDateString()}
+              </span>
+            ) : (
+              <span>Ни разу не входил</span>
             )}
-
-            <form onSubmit={handleCreateParent} className="space-y-3">
-              <div>
-                <label className="block text-xs font-semibold text-slate-300 mb-1">ФИО</label>
-                <input
-                  type="text"
-                  value={addName}
-                  onChange={(e) => setAddName(e.target.value)}
-                  placeholder="ФИО родителя"
-                  required
-                  className="w-full px-3.5 py-2 bg-slate-950 border border-slate-800 rounded-xl text-xs text-white focus:outline-none focus:border-brand-500"
-                />
-              </div>
-
-              <div>
-                <label className="block text-xs font-semibold text-slate-300 mb-1">Телефон</label>
-                <input
-                  type="text"
-                  value={addPhone}
-                  onChange={(e) => setAddPhone(e.target.value)}
-                  placeholder="+998901234567"
-                  className="w-full px-3.5 py-2 bg-slate-950 border border-slate-800 rounded-xl text-xs text-white focus:outline-none focus:border-brand-500"
-                />
-              </div>
-
-              <div>
-                <label className="block text-xs font-semibold text-slate-300 mb-1">Email</label>
-                <input
-                  type="email"
-                  value={addEmail}
-                  onChange={(e) => setAddEmail(e.target.value)}
-                  placeholder="parent@example.com"
-                  className="w-full px-3.5 py-2 bg-slate-950 border border-slate-800 rounded-xl text-xs text-white focus:outline-none focus:border-brand-500"
-                />
-              </div>
-
-              <div>
-                <label className="block text-xs font-semibold text-slate-300 mb-1">Родство по умолчанию</label>
-                <select
-                  value={addRelationship}
-                  onChange={(e) => setAddRelationship(e.target.value)}
-                  className="w-full px-3.5 py-2 bg-slate-950 border border-slate-800 rounded-xl text-xs text-white focus:outline-none focus:border-brand-500"
-                >
-                  <option value="MOTHER">Мама</option>
-                  <option value="FATHER">Папа</option>
-                  <option value="GUARDIAN">Опекун</option>
-                  <option value="OTHER">Другой родственник</option>
-                </select>
-              </div>
-
-              <div className="flex justify-end gap-3 pt-3">
-                <button
-                  type="button"
-                  onClick={() => setAddModalOpen(false)}
-                  className="px-4 py-2 bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-semibold rounded-xl"
-                >
-                  Отмена
-                </button>
-                <button
-                  type="submit"
-                  disabled={addLoading}
-                  className="px-4 py-2 bg-brand-600 hover:bg-brand-500 text-white text-xs font-bold rounded-xl disabled:opacity-50"
-                >
-                  {addLoading ? "Создание..." : "Создать аккаунт"}
-                </button>
-              </div>
-            </form>
           </div>
         </div>
+      ),
+    },
+    {
+      id: "contacts",
+      header: "Контакты",
+      cell: (p) => (
+        <div className="space-y-0.5 text-xs text-muted-foreground">
+          {p.phone && (
+            <div className="flex items-center gap-1.5 tabular-nums">
+              <Phone className="h-3 w-3 shrink-0" aria-hidden="true" />
+              <span>{p.phone}</span>
+            </div>
+          )}
+          {p.email && (
+            <div className="flex items-center gap-1.5">
+              <Mail className="h-3 w-3 shrink-0" aria-hidden="true" />
+              <span className="truncate">{p.email}</span>
+            </div>
+          )}
+          {!p.phone && !p.email && <span>—</span>}
+        </div>
+      ),
+    },
+    {
+      id: "children",
+      header: "Ученики",
+      cell: (p) =>
+        p.children.length === 0 ? (
+          <span className="text-xs text-muted-foreground">Нет привязок</span>
+        ) : (
+          <div className="flex flex-wrap gap-1.5">
+            {p.children.map((c) => (
+              <Link key={c.id} href={`/center/students/${c.id}`}>
+                <Badge variant="primary" className="hover:opacity-85 transition-opacity">
+                  <Users className="h-3 w-3" aria-hidden="true" />
+                  <span>{c.fullName}</span>
+                </Badge>
+              </Link>
+            ))}
+          </div>
+        ),
+    },
+    {
+      id: "status",
+      header: "Статус",
+      cell: (p) => (
+        <Badge variant={p.status === "ACTIVE" ? "success" : p.status === "BLOCKED" ? "destructive" : "neutral"}>
+          {p.status === "ACTIVE" ? "Активен" : p.status === "BLOCKED" ? "Заблокирован" : "В архиве"}
+        </Badge>
+      ),
+    },
+    {
+      id: "actions",
+      header: "Действия",
+      align: "right",
+      cell: (p) => (
+        <Button
+          type="button"
+          variant="secondary"
+          size="sm"
+          onClick={() => handleSendReset(p.id)}
+        >
+          <Send className="h-3.5 w-3.5" aria-hidden="true" />
+          <span>Сброс пароля</span>
+        </Button>
+      ),
+    },
+  ];
+
+  const hasFilters = Boolean(search) || filterNeverLoggedIn;
+
+  return (
+    <div className="space-y-6">
+      <PageHeader
+        title={t(locale, "nav.parents")}
+        description="Управление аккаунтами родителей и привязками к ученикам центра"
+        actions={
+          canManage ? (
+            <Button
+              type="button"
+              variant="primary"
+              size="sm"
+              onClick={() => {
+                setAddError(null);
+                setAddModalOpen(true);
+              }}
+            >
+              <Plus className="h-4 w-4" aria-hidden="true" />
+              <span>Добавить родителя</span>
+            </Button>
+          ) : undefined
+        }
+      />
+
+      {actionNotice && (
+        <Alert variant={actionNotice.type === "success" ? "success" : "destructive"}>
+          <AlertDescription>{actionNotice.text}</AlertDescription>
+        </Alert>
       )}
 
-      {/* Single-display credentials */}
+      <FilterBar
+        locale={locale}
+        search={search}
+        onSearchChange={setSearch}
+        searchPlaceholder="Поиск по имени, телефону, email или ребёнку..."
+        hasActiveFilters={hasFilters}
+        onReset={() => {
+          setSearch("");
+          setFilterNeverLoggedIn(false);
+        }}
+      >
+        <Button
+          type="button"
+          variant={filterNeverLoggedIn ? "primary" : "secondary"}
+          size="sm"
+          onClick={() => setFilterNeverLoggedIn(!filterNeverLoggedIn)}
+        >
+          Ни разу не входил
+        </Button>
+      </FilterBar>
+
+      <DataTable
+        data={filteredParents}
+        columns={columns}
+        getRowId={(p) => p.id}
+        locale={locale}
+        emptyTitle="Родители не найдены"
+        emptyDescription={t(locale, "ui4.emptyParentsDesc")}
+        emptyAction={
+          canManage ? (
+            <Button
+              type="button"
+              variant="primary"
+              size="sm"
+              onClick={() => {
+                setAddError(null);
+                setAddModalOpen(true);
+              }}
+            >
+              <Plus className="h-4 w-4" aria-hidden="true" />
+              <span>Добавить родителя</span>
+            </Button>
+          ) : undefined
+        }
+        mobileMode="cards"
+      />
+
+      <Dialog open={addModalOpen} onOpenChange={(next) => !next && setAddModalOpen(false)}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle>Добавить родителя</DialogTitle>
+            <DialogDescription>
+              Создайте аккаунт родителя. Если нужно привязать существующего к ученику, сделайте это в карточке ученика.
+            </DialogDescription>
+          </DialogHeader>
+
+          <form onSubmit={handleCreateParent} className="space-y-4">
+            {addError && (
+              <Alert variant="destructive">
+                <AlertDescription>{addError}</AlertDescription>
+              </Alert>
+            )}
+
+            <FormField label="ФИО родителя" htmlFor="parent-fullname" required>
+              <Input
+                id="parent-fullname"
+                type="text"
+                required
+                value={addName}
+                onChange={(e) => setAddName(e.target.value)}
+                placeholder="Имя Фамилия"
+              />
+            </FormField>
+
+            <FormField label="Телефон" htmlFor="parent-phone">
+              <Input
+                id="parent-phone"
+                type="text"
+                value={addPhone}
+                onChange={(e) => setAddPhone(e.target.value)}
+                placeholder="+998901234567"
+              />
+            </FormField>
+
+            <FormField label="Email (необязательно)" htmlFor="parent-email">
+              <Input
+                id="parent-email"
+                type="email"
+                value={addEmail}
+                onChange={(e) => setAddEmail(e.target.value)}
+                placeholder="parent@example.uz"
+              />
+            </FormField>
+
+            <FormField label="Кем приходится" htmlFor="parent-rel">
+              <select
+                id="parent-rel"
+                value={addRelationship}
+                onChange={(e) => setAddRelationship(e.target.value)}
+                className={selectClassName}
+              >
+                <option value="MOTHER">Мама</option>
+                <option value="FATHER">Папа</option>
+                <option value="GUARDIAN">Опекун</option>
+                <option value="OTHER">Другой родственник</option>
+              </select>
+            </FormField>
+
+            <FormActions>
+              <Button type="button" variant="secondary" onClick={() => setAddModalOpen(false)}>
+                Отмена
+              </Button>
+              <Button type="submit" variant="primary" disabled={addLoading} loading={addLoading}>
+                {addLoading ? "Создание..." : "Создать аккаунт"}
+              </Button>
+            </FormActions>
+          </form>
+        </DialogContent>
+      </Dialog>
+
       {credentials && (
         <CredentialsModal
           isOpen={Boolean(credentials)}

@@ -31,6 +31,7 @@ describe("Stage D0 Item 11: Director Isolation Tests across 10 Core Resources", 
   let lessonBId: string;
   let inviteBId: string;
   let accountBId: string;
+  let testPlanId: string;
 
   let tokenA: string;
   let tokenB: string;
@@ -60,16 +61,17 @@ describe("Stage D0 Item 11: Director Isolation Tests across 10 Core Resources", 
     dirBUserId = userB.id;
 
     // 2. Create Subscription Plan & Centers
-    const plan = (await db.subscriptionPlan.findFirst()) || (await db.subscriptionPlan.create({
+    const plan = await db.subscriptionPlan.create({
       data: {
-        name: "Standard Plan",
+        name: `Standard Plan Iso ${ts}`,
         maxStudents: 100,
         maxTeachers: 20,
         maxCourses: 50,
         maxBranches: 5,
         priceMonthly: 500000,
       },
-    }));
+    });
+    testPlanId = plan.id;
 
     const centerA = await db.learningCenter.create({
       data: {
@@ -252,6 +254,7 @@ describe("Stage D0 Item 11: Director Isolation Tests across 10 Core Resources", 
     await db.course.deleteMany({ where: { centerId: { in: [centerAId, centerBId] } } });
     await db.centerMembership.deleteMany({ where: { centerId: { in: [centerAId, centerBId] } } });
     await db.subscription.deleteMany({ where: { centerId: { in: [centerAId, centerBId] } } });
+    await db.subscriptionPlan.deleteMany({ where: { id: testPlanId } });
     await db.learningCenter.deleteMany({ where: { id: { in: [centerAId, centerBId] } } });
     await db.platformUser.deleteMany({ where: { id: { in: [dirAUserId, dirBUserId] } } });
   });

@@ -4,10 +4,11 @@ import { z } from "zod";
 // eslint-disable-next-line no-restricted-imports
 import { db } from "@/lib/db";
 import { getAuthSession, hashPassword } from "@/lib/auth";
-import { hasPermission } from "@/lib/permissions";
+import { hasPermission, canAssignPlatformRole } from "@/lib/permissions";
 import { generateSecurePassword } from "@/lib/generatePassword";
 import { logAuditEvent } from "@/lib/tenant";
 import { getClientIp } from "@/lib/ip";
+import { SAFE_USER_SELECT, serializeUser } from "@/lib/user-dto";
 import type { Prisma } from "@prisma/client";
 
 const addTeamMemberSchema = z.object({
@@ -15,13 +16,13 @@ const addTeamMemberSchema = z.object({
   email: z.string().email(),
   role: z.enum(["PLATFORM_ADMIN", "PLATFORM_SUPPORT", "SEO_ADMIN"]),
   password: z.string().min(8).optional(),
-});
+}).strict();
 
 const patchTeamMemberSchema = z.object({
   id: z.string().min(1),
   role: z.enum(["PLATFORM_ADMIN", "PLATFORM_SUPPORT", "SEO_ADMIN", "NONE"]).optional(),
   isActive: z.boolean().optional(),
-});
+}).strict();
 
 // GET /api/platform/team - List platform team members
 export async function GET(req: Request) {
@@ -74,6 +75,9 @@ export async function POST(req: Request) {
     }
 
     const { fullName, email: rawEmail, role, password: manualPassword } = parsed.data;
+    if (!canAssignPlatformRole(session.user.platformRole, role)) {
+      return NextResponse.json({ error: "Forbidden: cannot assign this platform role" }, { status: 403 });
+    }
     const cleanEmail = rawEmail.toLowerCase().trim();
 
     const existing = await db.platformUser.findUnique({ where: { email: cleanEmail } });
@@ -142,6 +146,9 @@ export async function PATCH(req: Request) {
     }
 
     const { id, role, isActive } = parsed.data;
+    if (role !== undefined && !canAssignPlatformRole(session.user.platformRole, role)) {
+      return NextResponse.json({ error: "Forbidden: cannot assign this platform role" }, { status: 403 });
+    }
 
     const targetUser = await db.platformUser.findUnique({ where: { id } });
     if (!targetUser) return NextResponse.json({ error: "Сотрудник не найден" }, { status: 404 });
@@ -164,6 +171,7 @@ export async function PATCH(req: Request) {
     const updated = await db.platformUser.update({
       where: { id },
       data: updateData,
+      select: SAFE_USER_SELECT,
     });
 
     if (isActive === false) {
@@ -179,7 +187,7 @@ export async function PATCH(req: Request) {
       details: { role, isActive },
     });
 
-    return NextResponse.json({ success: true, member: updated });
+    return NextResponse.json({ success: true, member: serializeUser(updated) });
   } catch (error) {
     console.error("[PATCH /api/platform/team]", error);
     return NextResponse.json({ error: "Internal server error" }, { status: 500 });

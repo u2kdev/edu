@@ -1,15 +1,16 @@
 import { NextResponse } from "next/server";
 import { requireTenantAccess } from "@/lib/tenant";
 import { checkRateLimit, getClientIp } from "@/lib/rate-limit";
+import { assertMaterialAccess, TenantAccessError } from "@/lib/tenant-access";
 
 export async function POST(req: Request) {
   try {
     const tenantCtx = await requireTenantAccess(req);
     const tenantDb = tenantCtx.getTenantDb();
 
-    if (!tenantCtx.membership?.id) {
+    if (tenantCtx.role !== "STUDENT" || !tenantCtx.membership?.id) {
       return NextResponse.json(
-        { error: "Only members can start tests" },
+        { error: "Forbidden: Only enrolled students can start tests" },
         { status: 403 }
       );
     }
@@ -32,12 +33,14 @@ export async function POST(req: Request) {
     }
 
     const test = await tenantDb.test.findFirst({
-      where: { id: testId },
+      where: { id: testId, centerId: tenantCtx.center.id },
     });
 
     if (!test) {
       return NextResponse.json({ error: "Test not found" }, { status: 404 });
     }
+
+    await assertMaterialAccess(tenantCtx, test.materialId);
 
     // Check completed attempts
     const completedAttemptsCount = await tenantDb.testAttempt.count({

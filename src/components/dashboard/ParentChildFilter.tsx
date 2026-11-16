@@ -3,66 +3,87 @@
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import { Suspense, type ReactNode } from "react";
+import { t } from "@/i18n";
+import { cn } from "@/lib/utils";
 
 interface ChildNavItem {
   studentMembershipId: string;
   fullName: string;
 }
 
-function SwitcherInner({ childrenList }: { childrenList: ChildNavItem[] }) {
+function SwitcherInner({
+  childrenList,
+  locale = "ru",
+}: {
+  childrenList: ChildNavItem[];
+  locale?: string;
+}) {
   const searchParams = useSearchParams();
-  const selectedChildFilter = searchParams.get("childId");
+  const selectedChildFilter = searchParams?.get("childId") || null;
 
   return (
-    <div className="flex flex-wrap items-center gap-2 p-3 rounded-2xl bg-slate-900/60 border border-slate-800">
-      <span className="text-xs font-semibold uppercase tracking-wider text-slate-400 mr-2">
-        Переключение между детьми:
+    <div className="flex flex-wrap items-center gap-2 rounded-lg border border-border bg-card p-3">
+      <span className="mr-1 text-xs font-medium text-muted-foreground">
+        {t(locale, "shell.parentChildLabel")}:
       </span>
       <Link
         href="/center"
-        className={`px-3.5 py-1.5 rounded-xl text-xs font-semibold transition-all ${
+        className={cn(
+          "rounded-md px-3 py-1.5 text-xs font-medium transition-colors",
           !selectedChildFilter
-            ? "bg-brand-600 text-white shadow-lg shadow-brand-600/20"
-            : "bg-slate-800 text-slate-300 hover:bg-slate-700"
-        }`}
+            ? "bg-primary text-primary-foreground"
+            : "bg-muted text-muted-foreground hover:text-foreground"
+        )}
       >
-        Все дети ({childrenList.length})
+        {t(locale, "shell.parentChildAll")} ({childrenList.length})
       </Link>
-      {childrenList.map((c) => (
-        <Link
-          key={c.studentMembershipId}
-          href={`/center?childId=${c.studentMembershipId}`}
-          className={`px-3.5 py-1.5 rounded-xl text-xs font-semibold transition-all ${
-            selectedChildFilter === c.studentMembershipId
-              ? "bg-brand-600 text-white shadow-lg shadow-brand-600/20"
-              : "bg-slate-800 text-slate-300 hover:bg-slate-700"
-          }`}
-        >
-          {c.fullName}
-        </Link>
-      ))}
+      {childrenList.map((c) => {
+        const active = selectedChildFilter === c.studentMembershipId;
+        return (
+          <Link
+            key={c.studentMembershipId}
+            href={`/center?childId=${encodeURIComponent(c.studentMembershipId)}`}
+            className={cn(
+              "rounded-md px-3 py-1.5 text-xs font-medium transition-colors",
+              active
+                ? "bg-primary text-primary-foreground"
+                : "bg-muted text-muted-foreground hover:text-foreground"
+            )}
+          >
+            {c.fullName}
+          </Link>
+        );
+      })}
     </div>
   );
 }
 
-export function ParentChildSwitcherBar({ childrenList }: { childrenList: ChildNavItem[] }) {
+export function ParentChildSwitcherBar({
+  childrenList,
+  locale = "ru",
+}: {
+  childrenList: ChildNavItem[];
+  locale?: string;
+}) {
   if (childrenList.length <= 1) return null;
   return (
     <Suspense fallback={null}>
-      <SwitcherInner childrenList={childrenList} />
+      <SwitcherInner childrenList={childrenList} locale={locale} />
     </Suspense>
   );
 }
 
 function SlotInner({
   studentMembershipId,
+  initialSelectedChildId,
   children,
 }: {
   studentMembershipId: string;
+  initialSelectedChildId?: string | null;
   children: ReactNode;
 }) {
   const searchParams = useSearchParams();
-  const selectedChildFilter = searchParams.get("childId");
+  const selectedChildFilter = searchParams?.get("childId") || initialSelectedChildId || null;
   if (selectedChildFilter && selectedChildFilter !== studentMembershipId) {
     return null;
   }
@@ -71,14 +92,21 @@ function SlotInner({
 
 export function ParentChildFilterSlot({
   studentMembershipId,
+  initialSelectedChildId,
   children,
 }: {
   studentMembershipId: string;
+  initialSelectedChildId?: string | null;
   children: ReactNode;
 }) {
   return (
     <Suspense fallback={<>{children}</>}>
-      <SlotInner studentMembershipId={studentMembershipId}>{children}</SlotInner>
+      <SlotInner
+        studentMembershipId={studentMembershipId}
+        initialSelectedChildId={initialSelectedChildId}
+      >
+        {children}
+      </SlotInner>
     </Suspense>
   );
 }

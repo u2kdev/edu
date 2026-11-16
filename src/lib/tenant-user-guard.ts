@@ -24,6 +24,14 @@ export async function canManageUserAccount(
   targetUserId: string,
   prismaClient: typeof db = db
 ): Promise<UserAccountManageability> {
+  if (!targetUserId) {
+    return {
+      canManage: false,
+      isShared: false,
+      otherCenterCount: 0,
+      reason: "User not found",
+    };
+  }
   const user = await prismaClient.platformUser.findUnique({
     where: { id: targetUserId },
     select: {
@@ -105,12 +113,13 @@ export function canActorManageRole(
   }
 
   if (actorRole === "CENTER_ADMIN") {
-    if (targetRole === "CENTER_ADMIN" || targetRole === "DIRECTOR") {
+    if (targetRole === "CENTER_ADMIN" || targetRole === "DIRECTOR" || targetRole === "ACCOUNTANT") {
       return {
         allowed: false,
-        reason: "Администратор центра не может управлять другими администраторами или директором",
+        reason: "Администратор центра не может управлять другими администраторами, бухгалтером или директором",
       };
     }
+    return { allowed: true };
   }
 
   if (actorRole === "DIRECTOR") {

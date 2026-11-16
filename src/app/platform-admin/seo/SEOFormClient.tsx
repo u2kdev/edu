@@ -1,7 +1,8 @@
 "use client";
 
 import React, { useState } from "react";
-import { Save, CheckCircle2, AlertTriangle } from "lucide-react";
+import { Save } from "lucide-react";
+import { Alert, AlertDescription, Button } from "@/components/ui";
 
 interface SEOFormClientProps {
   initialTitle: string;
@@ -54,30 +55,26 @@ export default function SEOFormClient({ children }: SEOFormClientProps) {
   return (
     <form onSubmit={handleSubmit} className="space-y-4">
       {error && (
-        <div className="p-3.5 rounded-xl bg-red-50 dark:bg-red-900/20 text-red-700 dark:text-red-400 text-xs flex items-center gap-2">
-          <AlertTriangle className="w-4 h-4 shrink-0" />
-          {error}
-        </div>
+        <Alert variant="destructive">
+          <AlertDescription>{error}</AlertDescription>
+        </Alert>
       )}
 
       {success && (
-        <div className="p-3.5 rounded-xl bg-emerald-50 dark:bg-emerald-900/20 text-emerald-700 dark:text-emerald-400 text-xs flex items-center gap-2">
-          <CheckCircle2 className="w-4 h-4 shrink-0" />
-          SEO мета-теги успешно сохранены в базе данных платформы
-        </div>
+        <Alert variant="success">
+          <AlertDescription>
+            SEO мета-теги сохранены в базе данных платформы
+          </AlertDescription>
+        </Alert>
       )}
 
       {children}
 
       <div className="flex justify-end pt-2">
-        <button
-          type="submit"
-          disabled={saving}
-          className="inline-flex items-center gap-2 px-5 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white font-medium text-xs rounded-xl shadow-sm transition disabled:opacity-50"
-        >
-          <Save className="w-4 h-4" />
-          {saving ? "Сохранение..." : "Сохранить SEO теги"}
-        </button>
+        <Button type="submit" variant="primary" disabled={saving}>
+          <Save className="h-4 w-4" aria-hidden="true" />
+          <span>{saving ? "Сохранение..." : "Сохранить SEO теги"}</span>
+        </Button>
       </div>
     </form>
   );

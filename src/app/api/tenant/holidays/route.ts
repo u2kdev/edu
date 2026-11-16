@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
-import { requireTenantAccess, logAuditEvent } from "@/lib/tenant";
+import { requireTenantAccess, logAuditEvent, TenantAccessError } from "@/lib/tenant";
 import { hasPermission } from "@/lib/permissions";
 import type { CenterRole } from "@/lib/permissions";
 import { getUzbekistanOfficialHolidays } from "@/lib/calendar-holidays";
@@ -26,6 +26,9 @@ export async function GET(req: Request) {
 
     return NextResponse.json({ holidays });
   } catch (err: unknown) {
+    if (err instanceof TenantAccessError) {
+      return NextResponse.json({ error: err.message, code: err.code }, { status: err.status });
+    }
     console.error("GET /api/tenant/holidays error:", err);
     return NextResponse.json({ error: "Не удалось загрузить праздники" }, { status: 500 });
   }
@@ -141,6 +144,9 @@ export async function POST(req: Request) {
 
     return NextResponse.json({ success: true, holiday }, { status: 201 });
   } catch (err: unknown) {
+    if (err instanceof TenantAccessError) {
+      return NextResponse.json({ error: err.message, code: err.code }, { status: err.status });
+    }
     if (err instanceof z.ZodError) {
       return NextResponse.json({ error: err.issues[0]?.message || "Validation error" }, { status: 400 });
     }

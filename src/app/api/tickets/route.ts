@@ -3,6 +3,7 @@ import { NextResponse } from "next/server";
 // eslint-disable-next-line no-restricted-imports
 import { db } from "@/lib/db";
 import { getAuthSession } from "@/lib/auth";
+import { hasPermission } from "@/lib/permissions";
 import { logAuditEvent } from "@/lib/tenant";
 import type { TicketPriority, TicketScope } from "@prisma/client";
 
@@ -12,13 +13,10 @@ const TICKET_SCOPES: TicketScope[] = ["TENANT", "PLATFORM"];
 // GET /api/tickets - List support tickets for current user or tenant/platform
 export async function GET(req: Request) {
   try {
-    const session = await getAuthSession();
+    const session = await getAuthSession(req);
     if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
-    const isPlatformStaff =
-      session.user.platformRole === "SUPERADMIN" ||
-      session.user.platformRole === "PLATFORM_ADMIN" ||
-      session.user.platformRole === "PLATFORM_SUPPORT";
+    const isPlatformStaff = hasPermission("platform.support", session.user.platformRole);
 
     let tickets;
 
@@ -46,7 +44,10 @@ export async function GET(req: Request) {
             },
         include: {
           creator: { select: { fullName: true, email: true } },
-          messages: { orderBy: { createdAt: "asc" } },
+          messages: {
+            where: { isInternal: false },
+            orderBy: { createdAt: "asc" },
+          },
         },
         orderBy: { createdAt: "desc" },
       });
@@ -54,15 +55,15 @@ export async function GET(req: Request) {
 
     return NextResponse.json({ tickets });
   } catch (err: unknown) {
-    const message = err instanceof Error ? err.message : "Server error";
-    return NextResponse.json({ error: message }, { status: 500 });
+    console.error("[GET /api/tickets]", err);
+    return NextResponse.json({ error: "Internal server error" }, { status: 500 });
   }
 }
 
 // POST /api/tickets - Create a support ticket
 export async function POST(req: Request) {
   try {
-    const session = await getAuthSession();
+    const session = await getAuthSession(req);
     if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
     const { subject, message, priority, scope } = await req.json();
@@ -83,11 +84,14 @@ export async function POST(req: Request) {
           create: {
             senderUserId: session.user.id,
             message,
+            isInternal: false,
           },
         },
       },
       include: {
-        messages: true,
+        messages: {
+          where: { isInternal: false },
+        },
       },
     });
 
@@ -102,7 +106,7 @@ export async function POST(req: Request) {
 
     return NextResponse.json({ success: true, ticket });
   } catch (err: unknown) {
-    const message = err instanceof Error ? err.message : "Server error";
-    return NextResponse.json({ error: message }, { status: 500 });
+    console.error("[GET /api/tickets]", err);
+    return NextResponse.json({ error: "Internal server error" }, { status: 500 });
   }
 }

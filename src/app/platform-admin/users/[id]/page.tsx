@@ -4,30 +4,42 @@ import { useEffect, useState, useCallback } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import {
-  User,
-  Mail,
-  Phone,
-  Shield,
-  Key,
-  Lock,
-  Unlock,
-  Trash2,
-  Eye,
-  Building,
-  Activity,
-  Clock,
-  Laptop,
-  AlertCircle,
-  CheckCircle2,
   Check,
   Copy,
-  ArrowLeft,
-  X,
-  Plus,
-  RefreshCw,
+  Eye,
+  Key,
+  Laptop,
+  Lock,
   LogOut,
-  Sparkles,
+  Plus,
+  Trash2,
+  Unlock,
 } from "lucide-react";
+import {
+  Alert,
+  AlertDescription,
+  Badge,
+  Button,
+  Card,
+  CardContent,
+  ConfirmDialog,
+  DataTable,
+  type DataTableColumn,
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  EmptyState,
+  EntityDetailHeader,
+  FormActions,
+  FormField,
+  Input,
+  Skeleton,
+  Tabs,
+  TabsList,
+  TabsTrigger,
+} from "@/components/ui";
+import { t } from "@/i18n";
 
 interface CenterMembershipItem {
   id: string;
@@ -96,7 +108,6 @@ export default function UserDetailsPage({ params }: { params: { id: string } }) 
   const [errorBanner, setErrorBanner] = useState("");
   const [successBanner, setSuccessBanner] = useState("");
 
-  // Edit profile state
   const [editFullName, setEditFullName] = useState("");
   const [editEmail, setEditEmail] = useState("");
   const [editPhone, setEditPhone] = useState("");
@@ -106,19 +117,20 @@ export default function UserDetailsPage({ params }: { params: { id: string } }) 
   const [editReason, setEditReason] = useState("");
   const [savingProfile, setSavingProfile] = useState(false);
 
-  // Modals
   const [isResetPassModalOpen, setIsResetPassModalOpen] = useState(false);
   const [newGeneratedPassword, setNewGeneratedPassword] = useState<string | null>(null);
   const [copiedPass, setCopiedPass] = useState(false);
   const [resettingPass, setResettingPass] = useState(false);
 
   const [isBlockModalOpen, setIsBlockModalOpen] = useState(false);
-  const [blockReason, setBlockReason] = useState("");
   const [blockingUser, setBlockingUser] = useState(false);
 
   const [isDeleteModalOpen, setIsDeleteModalOpen] = useState(false);
-  const [deleteReason, setDeleteReason] = useState("");
   const [deletingUser, setDeletingUser] = useState(false);
+
+  const [revokeSessionsConfirmOpen, setRevokeSessionsConfirmOpen] = useState(false);
+  const [pendingDeleteMembershipId, setPendingDeleteMembershipId] = useState<string | null>(null);
+  const [mutatingMembershipOrSessions, setMutatingMembershipOrSessions] = useState(false);
 
   const [isAddMembershipOpen, setIsAddMembershipOpen] = useState(false);
   const [centers, setCenters] = useState<CenterOption[]>([]);
@@ -127,8 +139,6 @@ export default function UserDetailsPage({ params }: { params: { id: string } }) 
   const [savingMembership, setSavingMembership] = useState(false);
 
   const [impersonating, setImpersonating] = useState(false);
-
-  // Active tab
   const [activeTab, setActiveTab] = useState<"profile" | "memberships" | "sessions" | "audit">("profile");
 
   const fetchUser = useCallback(async () => {
@@ -145,9 +155,13 @@ export default function UserDetailsPage({ params }: { params: { id: string } }) 
       setEditEmail(json.user.email);
       setEditPhone(json.user.phone || "");
       setEditUsername(json.user.username || "");
-      setEditLang(json.user.preferredLanguage === "uz_Latn" || json.user.preferredLanguage === "uz-Latn" ? "uz-Latn" : "ru");
+      setEditLang(
+        json.user.preferredLanguage === "uz_Latn" || json.user.preferredLanguage === "uz-Latn"
+          ? "uz-Latn"
+          : "ru"
+      );
       setEditRole(json.user.platformRole);
-    } catch (err) {
+    } catch {
       setErrorBanner("Ошибка сети при загрузке данных");
     } finally {
       setLoading(false);
@@ -159,12 +173,12 @@ export default function UserDetailsPage({ params }: { params: { id: string } }) 
     fetch("/api/platform/centers?pageSize=100")
       .then((res) => res.json())
       .then((json) => {
-        if (json.centers) setCenters(json.centers.map((c: { id: string; name: string }) => ({ id: c.id, name: c.name })));
+        if (json.centers)
+          setCenters(json.centers.map((c: { id: string; name: string }) => ({ id: c.id, name: c.name })));
       })
       .catch(() => {});
   }, [fetchUser]);
 
-  // Handle Save Profile
   const handleSaveProfile = async (e: React.FormEvent) => {
     e.preventDefault();
     setSavingProfile(true);
@@ -192,7 +206,7 @@ export default function UserDetailsPage({ params }: { params: { id: string } }) 
         return;
       }
 
-      setSuccessBanner("Данные профиля успешно обновлены");
+      setSuccessBanner("Данные профиля обновлены");
       fetchUser();
     } catch (err) {
       setErrorBanner(err instanceof Error ? err.message : "Ошибка сохранения");
@@ -201,7 +215,6 @@ export default function UserDetailsPage({ params }: { params: { id: string } }) 
     }
   };
 
-  // Handle Reset Password
   const handleResetPassword = async () => {
     setResettingPass(true);
     setErrorBanner("");
@@ -223,14 +236,8 @@ export default function UserDetailsPage({ params }: { params: { id: string } }) 
     }
   };
 
-  // Handle Block / Unblock
-  const handleToggleBlock = async () => {
-    if (!user) return;
-    if (blockReason.trim().length < 5) {
-      setErrorBanner("Причина должна содержать не менее 5 символов");
-      return;
-    }
-
+  const handleToggleBlock = async (reason?: string) => {
+    if (!user || !reason) return;
     setBlockingUser(true);
     setErrorBanner("");
     try {
@@ -240,7 +247,7 @@ export default function UserDetailsPage({ params }: { params: { id: string } }) 
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           isActive: targetState,
-          reason: blockReason,
+          reason,
         }),
       });
 
@@ -251,7 +258,6 @@ export default function UserDetailsPage({ params }: { params: { id: string } }) 
       }
 
       setIsBlockModalOpen(false);
-      setBlockReason("");
       setSuccessBanner(targetState ? "Пользователь разблокирован" : "Пользователь заблокирован");
       fetchUser();
     } catch (err) {
@@ -261,20 +267,15 @@ export default function UserDetailsPage({ params }: { params: { id: string } }) 
     }
   };
 
-  // Handle Soft Delete
-  const handleDeleteUser = async () => {
-    if (deleteReason.trim().length < 5) {
-      setErrorBanner("Причина удаления должна содержать не менее 5 символов");
-      return;
-    }
-
+  const handleDeleteUser = async (reason?: string) => {
+    if (!reason) return;
     setDeletingUser(true);
     setErrorBanner("");
     try {
       const res = await fetch(`/api/platform/users/${id}`, {
         method: "DELETE",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ reason: deleteReason }),
+        body: JSON.stringify({ reason }),
       });
 
       const json = await res.json();
@@ -284,7 +285,7 @@ export default function UserDetailsPage({ params }: { params: { id: string } }) 
       }
 
       setIsDeleteModalOpen(false);
-      setSuccessBanner("Пользователь успешно удален");
+      setSuccessBanner("Пользователь удалён");
       fetchUser();
     } catch (err) {
       setErrorBanner(err instanceof Error ? err.message : "Ошибка при удалении");
@@ -293,9 +294,9 @@ export default function UserDetailsPage({ params }: { params: { id: string } }) 
     }
   };
 
-  // Handle Revoke All Sessions
-  const handleRevokeSessions = async () => {
-    if (!confirm("Завершить все активные сессии пользователя?")) return;
+  const confirmRevokeSessions = async () => {
+    setMutatingMembershipOrSessions(true);
+    setErrorBanner("");
     try {
       const res = await fetch(`/api/platform/users/${id}/sessions`, { method: "DELETE" });
       const json = await res.json();
@@ -305,12 +306,14 @@ export default function UserDetailsPage({ params }: { params: { id: string } }) 
       } else {
         setErrorBanner(json.error || "Не удалось завершить сессии");
       }
-    } catch (err) {
+    } catch {
       setErrorBanner("Ошибка сети");
+    } finally {
+      setMutatingMembershipOrSessions(false);
+      setRevokeSessionsConfirmOpen(false);
     }
   };
 
-  // Handle Impersonate
   const handleImpersonate = async () => {
     if (!user) return;
     setImpersonating(true);
@@ -331,16 +334,14 @@ export default function UserDetailsPage({ params }: { params: { id: string } }) 
         return;
       }
 
-      // Redirect to center dashboard
       router.push("/center");
       router.refresh();
-    } catch (err) {
+    } catch {
       setErrorBanner("Ошибка при запуске имперсонации");
       setImpersonating(false);
     }
   };
 
-  // Handle Add Membership
   const handleAddMembership = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!newMemCenterId) return;
@@ -363,21 +364,22 @@ export default function UserDetailsPage({ params }: { params: { id: string } }) 
       setIsAddMembershipOpen(false);
       setSuccessBanner("Членство добавлено");
       fetchUser();
-    } catch (err) {
+    } catch {
       setErrorBanner("Ошибка сети");
     } finally {
       setSavingMembership(false);
     }
   };
 
-  // Handle Delete Membership
-  const handleDeleteMembership = async (membershipId: string) => {
-    if (!confirm("Удалить членство пользователя в этом учебном центре?")) return;
+  const confirmDeleteMembership = async () => {
+    if (!pendingDeleteMembershipId) return;
+    setMutatingMembershipOrSessions(true);
+    setErrorBanner("");
     try {
       const res = await fetch(`/api/platform/users/${id}/memberships`, {
         method: "DELETE",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ membershipId }),
+        body: JSON.stringify({ membershipId: pendingDeleteMembershipId }),
       });
       const json = await res.json();
       if (!res.ok || !json.success) {
@@ -386,626 +388,531 @@ export default function UserDetailsPage({ params }: { params: { id: string } }) 
       }
       setSuccessBanner("Членство удалено");
       fetchUser();
-    } catch (err) {
+    } catch {
       setErrorBanner("Ошибка сети");
+    } finally {
+      setMutatingMembershipOrSessions(false);
+      setPendingDeleteMembershipId(null);
     }
   };
 
   if (loading) {
     return (
-      <div className="py-24 text-center text-slate-400">
-        <RefreshCw className="w-8 h-8 animate-spin mx-auto mb-3 text-blue-500" />
-        Загрузка карточки пользователя...
+      <div className="space-y-4 py-8">
+        <Skeleton className="h-12 w-72" />
+        <Skeleton className="h-64 w-full rounded-lg" />
       </div>
     );
   }
 
   if (!user) {
     return (
-      <div className="p-8 text-center bg-white rounded-3xl border border-slate-200">
-        <AlertCircle className="w-10 h-10 text-rose-500 mx-auto mb-2" />
-        <h2 className="text-lg font-bold text-slate-800">Пользователь не найден</h2>
-        <Link
-          href="/platform-admin/users"
-          className="mt-4 inline-flex items-center gap-1.5 text-xs text-blue-600 font-semibold"
-        >
-          <ArrowLeft className="w-4 h-4" /> Вернуться к списку
-        </Link>
-      </div>
+      <EmptyState
+        title="Пользователь не найден"
+        description="Проверьте идентификатор пользователя или вернитесь к общему списку."
+        action={
+          <Button asChild variant="outline" size="sm">
+            <Link href="/platform-admin/users">Вернуться к списку</Link>
+          </Button>
+        }
+      />
     );
   }
 
-  return (
-    <div className="space-y-6">
-      {/* Top breadcrumb & quick actions */}
-      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
-        <div className="flex items-center gap-3">
+  const membershipColumns: DataTableColumn<CenterMembershipItem>[] = [
+    {
+      id: "center",
+      header: "Учебный центр",
+      isMobilePrimary: true,
+      cell: (m) => (
+        <div>
           <Link
-            href="/platform-admin/users"
-            className="p-2 rounded-xl border border-slate-200 bg-white hover:bg-slate-50 text-slate-600 transition-colors shadow-sm"
+            href={`/platform-admin/centers/${m.centerId}`}
+            className="font-medium text-foreground hover:text-primary"
           >
-            <ArrowLeft className="w-4 h-4" />
+            {m.center.name}
           </Link>
-          <div>
-            <div className="flex items-center gap-2">
-              <h1 className="text-2xl font-bold tracking-tight text-slate-900">
-                {user.fullName}
-              </h1>
-              {user.deletedAt ? (
-                <span className="px-2.5 py-0.5 rounded-full text-xs font-semibold bg-rose-100 text-rose-700">
-                  Удален
-                </span>
-              ) : user.isActive ? (
-                <span className="px-2.5 py-0.5 rounded-full text-xs font-semibold bg-emerald-100 text-emerald-700">
-                  Активен
-                </span>
-              ) : (
-                <span className="px-2.5 py-0.5 rounded-full text-xs font-semibold bg-slate-200 text-slate-700">
-                  Заблокирован
-                </span>
-              )}
-            </div>
-            <p className="text-xs text-slate-400 mt-0.5">
-              ID: {user.id} &bull; Регистрация: {new Date(user.createdAt).toLocaleDateString()}
-            </p>
+          <div className="text-xs text-muted-foreground tabular-nums">
+            Статус: {m.center.status} • Добавлен: {new Date(m.createdAt).toLocaleDateString()}
           </div>
         </div>
+      ),
+    },
+    {
+      id: "role",
+      header: "Роль",
+      cell: (m) => <Badge variant="primary">{m.role}</Badge>,
+    },
+    {
+      id: "actions",
+      header: "Действия",
+      align: "right",
+      hideable: false,
+      cell: (m) => (
+        <Button
+          type="button"
+          variant="ghost"
+          size="sm"
+          className="text-destructive hover:text-destructive"
+          onClick={() => setPendingDeleteMembershipId(m.id)}
+        >
+          Исключить
+        </Button>
+      ),
+    },
+  ];
 
-        {/* Action Buttons */}
-        <div className="flex flex-wrap items-center gap-2">
-          {!user.deletedAt && (
-            <button
+  const sessionColumns: DataTableColumn<UserSessionItem>[] = [
+    {
+      id: "agent",
+      header: "Устройство / Браузер",
+      isMobilePrimary: true,
+      cell: (s) => (
+        <div className="flex items-center gap-2 text-xs">
+          <Laptop className="h-4 w-4 shrink-0 text-muted-foreground" aria-hidden="true" />
+          <span className="font-medium text-foreground">{s.userAgent || "Неизвестный браузер"}</span>
+        </div>
+      ),
+    },
+    {
+      id: "ip",
+      header: "IP / Создана",
+      cell: (s) => (
+        <span className="font-mono text-xs text-muted-foreground tabular-nums">
+          {s.ipAddress || "Неизвестен"} • {new Date(s.createdAt).toLocaleString()}
+        </span>
+      ),
+    },
+    {
+      id: "expiresAt",
+      header: "Истекает",
+      align: "right",
+      cell: (s) => (
+        <span className="text-xs text-muted-foreground tabular-nums">
+          {new Date(s.expiresAt).toLocaleDateString()}
+        </span>
+      ),
+    },
+  ];
+
+  const auditColumns: DataTableColumn<AuditLogItem>[] = [
+    {
+      id: "action",
+      header: "Действие",
+      isMobilePrimary: true,
+      cell: (log) => (
+        <div>
+          <span className="font-medium text-foreground">{log.action}</span>
+          <span className="ml-2 text-xs text-muted-foreground">[{log.resource}]</span>
+          {log.ipAddress && (
+            <span className="ml-2 font-mono text-xs text-muted-foreground">IP: {log.ipAddress}</span>
+          )}
+        </div>
+      ),
+    },
+    {
+      id: "createdAt",
+      header: "Дата",
+      align: "right",
+      cell: (log) => (
+        <span className="font-mono text-xs text-muted-foreground tabular-nums">
+          {new Date(log.createdAt).toLocaleString()}
+        </span>
+      ),
+    },
+  ];
+
+  const statusLabel = user.deletedAt
+    ? "Удалён"
+    : user.isActive
+    ? "Активен"
+    : "Заблокирован";
+  const statusVariant = user.deletedAt ? "destructive" : user.isActive ? "success" : "neutral";
+
+  return (
+    <div className="space-y-6">
+      <EntityDetailHeader
+        backHref="/platform-admin/users"
+        title={user.fullName}
+        subtitle={`ID: ${user.id} • Регистрация: ${new Date(user.createdAt).toLocaleDateString()}`}
+        statusLabel={statusLabel}
+        statusVariant={statusVariant}
+        primaryAction={
+          !user.deletedAt ? (
+            <Button
+              type="button"
+              variant="primary"
+              size="sm"
               onClick={handleImpersonate}
               disabled={impersonating}
-              className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-purple-600 hover:bg-purple-700 text-white text-xs font-semibold shadow-sm transition-colors"
             >
-              <Eye className="w-3.5 h-3.5" />
-              {impersonating ? "Вход..." : "Войти как"}
-            </button>
-          )}
-
-          <button
-            onClick={() => {
+              <Eye className="h-3.5 w-3.5" aria-hidden="true" />
+              <span>{impersonating ? "Вход..." : "Войти как"}</span>
+            </Button>
+          ) : undefined
+        }
+        menuActions={[
+          {
+            id: "reset-password",
+            label: "Сбросить пароль",
+            icon: <Key className="h-3.5 w-3.5" aria-hidden="true" />,
+            onSelect: () => {
               setNewGeneratedPassword(null);
               setIsResetPassModalOpen(true);
-            }}
-            className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl border border-slate-200 bg-white hover:bg-slate-50 text-slate-700 text-xs font-medium shadow-sm transition-colors"
-          >
-            <Key className="w-3.5 h-3.5 text-amber-500" />
-            Сбросить пароль
-          </button>
+            },
+          },
+          ...(!user.deletedAt
+            ? [
+                {
+                  id: "toggle-block",
+                  label: user.isActive ? "Заблокировать" : "Разблокировать",
+                  icon: user.isActive ? (
+                    <Lock className="h-3.5 w-3.5" aria-hidden="true" />
+                  ) : (
+                    <Unlock className="h-3.5 w-3.5" aria-hidden="true" />
+                  ),
+                  onSelect: () => setIsBlockModalOpen(true),
+                },
+                {
+                  id: "delete-user",
+                  label: "Удалить учётную запись",
+                  icon: <Trash2 className="h-3.5 w-3.5" aria-hidden="true" />,
+                  destructive: true,
+                  separatorBefore: true,
+                  onSelect: () => setIsDeleteModalOpen(true),
+                },
+              ]
+            : []),
+        ]}
+      />
 
-          {!user.deletedAt && (
-            <button
-              onClick={() => {
-                setBlockReason("");
-                setIsBlockModalOpen(true);
-              }}
-              className={`inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl border text-xs font-medium shadow-sm transition-colors ${
-                user.isActive
-                  ? "border-amber-200 bg-amber-50 text-amber-800 hover:bg-amber-100"
-                  : "border-emerald-200 bg-emerald-50 text-emerald-800 hover:bg-emerald-100"
-              }`}
-            >
-              {user.isActive ? <Lock className="w-3.5 h-3.5" /> : <Unlock className="w-3.5 h-3.5" />}
-              {user.isActive ? "Заблокировать" : "Разблокировать"}
-            </button>
-          )}
-
-          {!user.deletedAt && (
-            <button
-              onClick={() => {
-                setDeleteReason("");
-                setIsDeleteModalOpen(true);
-              }}
-              className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl border border-rose-200 bg-rose-50 text-rose-700 hover:bg-rose-100 text-xs font-medium shadow-sm transition-colors"
-            >
-              <Trash2 className="w-3.5 h-3.5" />
-              Удалить
-            </button>
-          )}
-        </div>
-      </div>
-
-      {/* Notifications banner */}
       {errorBanner && (
-        <div className="p-3.5 bg-rose-50 border border-rose-200 rounded-2xl text-xs text-rose-800 flex items-center gap-2">
-          <AlertCircle className="w-4 h-4 text-rose-600 shrink-0" />
-          <span>{errorBanner}</span>
-        </div>
+        <Alert variant="destructive">
+          <AlertDescription>{errorBanner}</AlertDescription>
+        </Alert>
       )}
 
       {successBanner && (
-        <div className="p-3.5 bg-emerald-50 border border-emerald-200 rounded-2xl text-xs text-emerald-800 flex items-center gap-2">
-          <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
-          <span>{successBanner}</span>
-        </div>
+        <Alert variant="success">
+          <AlertDescription>{successBanner}</AlertDescription>
+        </Alert>
       )}
 
-      {/* Tabs */}
-      <div className="flex border-b border-slate-200 space-x-6 text-sm font-medium">
-        <button
-          onClick={() => setActiveTab("profile")}
-          className={`pb-3 transition-colors ${
-            activeTab === "profile"
-              ? "border-b-2 border-blue-600 text-blue-600 font-semibold"
-              : "text-slate-500 hover:text-slate-800"
-          }`}
-        >
-          Профиль
-        </button>
-        <button
-          onClick={() => setActiveTab("memberships")}
-          className={`pb-3 transition-colors flex items-center gap-1.5 ${
-            activeTab === "memberships"
-              ? "border-b-2 border-blue-600 text-blue-600 font-semibold"
-              : "text-slate-500 hover:text-slate-800"
-          }`}
-        >
-          Членства в центрах ({user.memberships.length})
-        </button>
-        <button
-          onClick={() => setActiveTab("sessions")}
-          className={`pb-3 transition-colors flex items-center gap-1.5 ${
-            activeTab === "sessions"
-              ? "border-b-2 border-blue-600 text-blue-600 font-semibold"
-              : "text-slate-500 hover:text-slate-800"
-          }`}
-        >
-          Активные сессии ({user.userSessions.length})
-        </button>
-        <button
-          onClick={() => setActiveTab("audit")}
-          className={`pb-3 transition-colors ${
-            activeTab === "audit"
-              ? "border-b-2 border-blue-600 text-blue-600 font-semibold"
-              : "text-slate-500 hover:text-slate-800"
-          }`}
-        >
-          Журнал действий ({user.auditLogs.length})
-        </button>
-      </div>
+      <Tabs
+        value={activeTab}
+        onValueChange={(v) => setActiveTab(v as "profile" | "memberships" | "sessions" | "audit")}
+      >
+        <TabsList>
+          <TabsTrigger value="profile">Профиль</TabsTrigger>
+          <TabsTrigger value="memberships">
+            Членства в центрах ({user.memberships.length})
+          </TabsTrigger>
+          <TabsTrigger value="sessions">
+            Активные сессии ({user.userSessions.length})
+          </TabsTrigger>
+          <TabsTrigger value="audit">
+            Журнал действий ({user.auditLogs.length})
+          </TabsTrigger>
+        </TabsList>
+      </Tabs>
 
-      {/* Tab 1: Profile */}
       {activeTab === "profile" && (
-        <div className="bg-white rounded-3xl border border-slate-200 p-6 shadow-sm">
-          <form onSubmit={handleSaveProfile} className="space-y-4 max-w-2xl">
-            <h3 className="text-base font-bold text-slate-900 mb-2">Основные данные профиля</h3>
+        <Card>
+          <CardContent className="p-6">
+            <form onSubmit={handleSaveProfile} className="max-w-2xl space-y-4">
+              <h3 className="font-display text-base font-semibold text-foreground">
+                Основные данные профиля
+              </h3>
 
-            <div>
-              <label className="block text-xs font-semibold text-slate-700 uppercase tracking-wider mb-1">
-                ФИО
-              </label>
-              <input
-                type="text"
-                required
-                value={editFullName}
-                onChange={(e) => setEditFullName(e.target.value)}
-                className="w-full px-3 py-2 text-sm bg-slate-50 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500"
-              />
-            </div>
-
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-              <div>
-                <label className="block text-xs font-semibold text-slate-700 uppercase tracking-wider mb-1">
-                  Email
-                </label>
-                <input
-                  type="email"
+              <FormField label="ФИО" htmlFor="u-edit-name" required>
+                <Input
+                  id="u-edit-name"
+                  type="text"
                   required
-                  value={editEmail}
-                  onChange={(e) => setEditEmail(e.target.value)}
-                  className="w-full px-3 py-2 text-sm bg-slate-50 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  value={editFullName}
+                  onChange={(e) => setEditFullName(e.target.value)}
                 />
+              </FormField>
+
+              <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                <FormField label="Email" htmlFor="u-edit-email" required>
+                  <Input
+                    id="u-edit-email"
+                    type="email"
+                    required
+                    value={editEmail}
+                    onChange={(e) => setEditEmail(e.target.value)}
+                  />
+                </FormField>
+
+                <FormField label="Телефон (+998...)" htmlFor="u-edit-phone">
+                  <Input
+                    id="u-edit-phone"
+                    type="text"
+                    value={editPhone}
+                    onChange={(e) => setEditPhone(e.target.value)}
+                    placeholder="+998901234567"
+                  />
+                </FormField>
               </div>
 
-              <div>
-                <label className="block text-xs font-semibold text-slate-700 uppercase tracking-wider mb-1">
-                  Телефон (+998...)
-                </label>
-                <input
-                  type="text"
-                  value={editPhone}
-                  onChange={(e) => setEditPhone(e.target.value)}
-                  placeholder="+998901234567"
-                  className="w-full px-3 py-2 text-sm bg-slate-50 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500"
-                />
-              </div>
-            </div>
+              <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                <FormField label="Username (логин)" htmlFor="u-edit-username">
+                  <Input
+                    id="u-edit-username"
+                    type="text"
+                    value={editUsername}
+                    onChange={(e) => setEditUsername(e.target.value)}
+                    placeholder="username"
+                  />
+                </FormField>
 
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-              <div>
-                <label className="block text-xs font-semibold text-slate-700 uppercase tracking-wider mb-1">
-                  Username (логин)
-                </label>
-                <input
-                  type="text"
-                  value={editUsername}
-                  onChange={(e) => setEditUsername(e.target.value)}
-                  placeholder="username"
-                  className="w-full px-3 py-2 text-sm bg-slate-50 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500"
-                />
+                <FormField label="Язык интерфейса" htmlFor="u-edit-lang">
+                  <select
+                    id="u-edit-lang"
+                    value={editLang}
+                    onChange={(e) => setEditLang(e.target.value as "ru" | "uz-Latn")}
+                    className="h-9 w-full rounded-md border border-input bg-background px-3 text-sm text-foreground"
+                  >
+                    <option value="ru">Русский</option>
+                    <option value="uz-Latn">Oʻzbekcha (Lotin)</option>
+                  </select>
+                </FormField>
               </div>
 
-              <div>
-                <label className="block text-xs font-semibold text-slate-700 uppercase tracking-wider mb-1">
-                  Язык интерфейса
-                </label>
+              <FormField label="Платформенная роль" htmlFor="u-edit-role">
                 <select
-                  value={editLang}
-                  onChange={(e) => setEditLang(e.target.value as "ru" | "uz-Latn")}
-                  className="w-full px-3 py-2 text-sm bg-slate-50 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  id="u-edit-role"
+                  value={editRole}
+                  onChange={(e) => setEditRole(e.target.value)}
+                  className="h-9 w-full rounded-md border border-input bg-background px-3 text-sm text-foreground"
                 >
-                  <option value="ru">Русский</option>
-                  <option value="uz-Latn">Oʻzbekcha (Lotin)</option>
+                  <option value="NONE">Без платформенной роли (NONE)</option>
+                  <option value="PLATFORM_ADMIN">PLATFORM_ADMIN</option>
+                  <option value="PLATFORM_SUPPORT">PLATFORM_SUPPORT</option>
+                  <option value="SEO_ADMIN">SEO_ADMIN</option>
                 </select>
-              </div>
-            </div>
+              </FormField>
 
-            <div>
-              <label className="block text-xs font-semibold text-slate-700 uppercase tracking-wider mb-1">
-                Платформенная роль
-              </label>
-              <select
-                value={editRole}
-                onChange={(e) => setEditRole(e.target.value)}
-                className="w-full px-3 py-2 text-sm bg-slate-50 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500"
-              >
-                <option value="NONE">Без платформенной роли (NONE)</option>
-                <option value="PLATFORM_ADMIN">PLATFORM_ADMIN</option>
-                <option value="PLATFORM_SUPPORT">PLATFORM_SUPPORT</option>
-                <option value="SEO_ADMIN">SEO_ADMIN</option>
-              </select>
-            </div>
+              <FormField label="Причина изменения (для аудита)" htmlFor="u-edit-reason">
+                <Input
+                  id="u-edit-reason"
+                  type="text"
+                  value={editReason}
+                  onChange={(e) => setEditReason(e.target.value)}
+                  placeholder="Например: Обновление контактных данных по запросу пользователя"
+                />
+              </FormField>
 
-            <div>
-              <label className="block text-xs font-semibold text-slate-700 uppercase tracking-wider mb-1">
-                Причина изменения (для аудита)
-              </label>
-              <input
-                type="text"
-                value={editReason}
-                onChange={(e) => setEditReason(e.target.value)}
-                placeholder="Например: Обновление контактных данных по запросу пользователя"
-                className="w-full px-3 py-2 text-sm bg-slate-50 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500"
-              />
-            </div>
-
-            <div className="pt-2">
-              <button
-                type="submit"
-                disabled={savingProfile}
-                className="px-5 py-2.5 rounded-xl bg-blue-600 hover:bg-blue-700 text-white text-xs font-semibold shadow-md shadow-blue-500/20 disabled:opacity-50 transition-colors"
-              >
-                {savingProfile ? "Сохранение..." : "Сохранить изменения"}
-              </button>
-            </div>
-          </form>
-        </div>
+              <FormActions>
+                <Button type="submit" variant="primary" disabled={savingProfile}>
+                  {savingProfile ? "Сохранение..." : "Сохранить изменения"}
+                </Button>
+              </FormActions>
+            </form>
+          </CardContent>
+        </Card>
       )}
 
-      {/* Tab 2: Memberships */}
       {activeTab === "memberships" && (
-        <div className="bg-white rounded-3xl border border-slate-200 p-6 shadow-sm space-y-4">
+        <div className="space-y-4">
           <div className="flex items-center justify-between">
-            <h3 className="text-base font-bold text-slate-900">Учебные центры пользователя</h3>
-            <button
+            <h3 className="font-display text-base font-semibold text-foreground">
+              Учебные центры пользователя
+            </h3>
+            <Button
+              type="button"
+              variant="primary"
+              size="sm"
               onClick={() => setIsAddMembershipOpen(true)}
-              className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-blue-50 text-blue-600 hover:bg-blue-100 text-xs font-semibold transition-colors"
             >
-              <Plus className="w-3.5 h-3.5" />
-              Добавить в центр
-            </button>
+              <Plus className="h-3.5 w-3.5" aria-hidden="true" />
+              <span>Добавить в центр</span>
+            </Button>
           </div>
 
-          <div className="divide-y divide-slate-100">
-            {user.memberships.length === 0 ? (
-              <p className="text-xs text-slate-400 py-6 text-center">
-                Пользователь не привязан ни к одному учебному центру
-              </p>
-            ) : (
-              user.memberships.map((m) => (
-                <div key={m.id} className="py-3 flex items-center justify-between">
-                  <div>
-                    <div className="font-semibold text-slate-800 text-sm">{m.center.name}</div>
-                    <div className="text-xs text-slate-400">
-                      Статус центра: {m.center.status} &bull; Добавлен:{" "}
-                      {new Date(m.createdAt).toLocaleDateString()}
-                    </div>
-                  </div>
-                  <div className="flex items-center gap-3">
-                    <span className="px-2.5 py-0.5 rounded-full text-xs font-bold bg-blue-50 text-blue-700">
-                      {m.role}
-                    </span>
-                    <button
-                      onClick={() => handleDeleteMembership(m.id)}
-                      className="text-xs text-rose-500 hover:text-rose-700 font-medium"
-                    >
-                      Исключить
-                    </button>
-                  </div>
-                </div>
-              ))
-            )}
-          </div>
+          <DataTable
+            data={user.memberships}
+            columns={membershipColumns}
+            getRowId={(m) => m.id}
+            showColumnToggle={false}
+            showDensityToggle={false}
+            emptyTitle="Нет привязок к учебным центрам"
+            emptyDescription="Пользователь пока не привязан ни к одному центру."
+          />
         </div>
       )}
 
-      {/* Tab 3: Sessions */}
       {activeTab === "sessions" && (
-        <div className="bg-white rounded-3xl border border-slate-200 p-6 shadow-sm space-y-4">
-          <div className="flex items-center justify-between">
+        <div className="space-y-4">
+          <div className="flex flex-wrap items-center justify-between gap-2">
             <div>
-              <h3 className="text-base font-bold text-slate-900">Активные сессии пользователя</h3>
-              <p className="text-xs text-slate-500">Устройства и браузеры, авторизованные в системе</p>
+              <h3 className="font-display text-base font-semibold text-foreground">
+                Активные сессии пользователя
+              </h3>
+              <p className="text-xs text-muted-foreground">
+                Устройства и браузеры, авторизованные в системе
+              </p>
             </div>
             {user.userSessions.length > 0 && (
-              <button
-                onClick={handleRevokeSessions}
-                className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl border border-rose-200 bg-rose-50 text-rose-700 hover:bg-rose-100 text-xs font-semibold transition-colors"
+              <Button
+                type="button"
+                variant="destructive"
+                size="sm"
+                onClick={() => setRevokeSessionsConfirmOpen(true)}
               >
-                <LogOut className="w-3.5 h-3.5" />
-                Завершить все сессии
-              </button>
+                <LogOut className="h-3.5 w-3.5" aria-hidden="true" />
+                <span>Завершить все сессии</span>
+              </Button>
             )}
           </div>
 
-          <div className="divide-y divide-slate-100">
-            {user.userSessions.length === 0 ? (
-              <p className="text-xs text-slate-400 py-6 text-center">
-                Нет активных авторизованных сессий
-              </p>
-            ) : (
-              user.userSessions.map((s) => (
-                <div key={s.id} className="py-3 flex items-center justify-between text-xs">
-                  <div>
-                    <div className="font-medium text-slate-800 flex items-center gap-2">
-                      <Laptop className="w-4 h-4 text-slate-400" />
-                      <span>{s.userAgent || "Неизвестный браузер"}</span>
-                    </div>
-                    <div className="text-slate-400 mt-0.5">
-                      IP: {s.ipAddress || "Неизвестен"} &bull; Создана:{" "}
-                      {new Date(s.createdAt).toLocaleString()}
-                    </div>
-                  </div>
-                  <div className="text-right text-slate-500">
-                    Истекает: {new Date(s.expiresAt).toLocaleDateString()}
-                  </div>
-                </div>
-              ))
-            )}
-          </div>
+          <DataTable
+            data={user.userSessions}
+            columns={sessionColumns}
+            getRowId={(s) => s.id}
+            showColumnToggle={false}
+            showDensityToggle={false}
+            emptyTitle="Нет активных сессий"
+          />
         </div>
       )}
 
-      {/* Tab 4: Audit */}
       {activeTab === "audit" && (
-        <div className="bg-white rounded-3xl border border-slate-200 p-6 shadow-sm space-y-4">
-          <h3 className="text-base font-bold text-slate-900">Последние действия (AuditLog)</h3>
-          <div className="divide-y divide-slate-100 text-xs">
-            {user.auditLogs.length === 0 ? (
-              <p className="text-slate-400 py-6 text-center">Записей в журнале не найдено</p>
-            ) : (
-              user.auditLogs.map((log) => (
-                <div key={log.id} className="py-2.5 flex items-center justify-between">
-                  <div>
-                    <span className="font-semibold text-slate-800">{log.action}</span>
-                    <span className="text-slate-400 ml-2">[{log.resource}]</span>
-                    {log.ipAddress && (
-                      <span className="text-slate-400 ml-2">IP: {log.ipAddress}</span>
-                    )}
-                  </div>
-                  <div className="text-slate-400 font-mono">
-                    {new Date(log.createdAt).toLocaleString()}
-                  </div>
-                </div>
-              ))
-            )}
-          </div>
-        </div>
+        <DataTable
+          data={user.auditLogs}
+          columns={auditColumns}
+          getRowId={(l) => l.id}
+          showColumnToggle={false}
+          showDensityToggle={false}
+          emptyTitle="Записей в журнале не найдено"
+        />
       )}
 
-      {/* Modal: Reset Password */}
-      {isResetPassModalOpen && (
-        <div className="fixed inset-0 z-50 bg-slate-900/40 backdrop-blur-sm flex items-center justify-center p-4">
-          <div className="bg-white rounded-3xl border border-slate-200 shadow-2xl max-w-md w-full p-6">
-            {newGeneratedPassword ? (
-              <div className="space-y-4">
-                <div className="flex items-center gap-3">
-                  <div className="w-12 h-12 rounded-2xl bg-amber-100 text-amber-600 flex items-center justify-center font-bold">
-                    <Key className="w-6 h-6" />
-                  </div>
-                  <div>
-                    <h2 className="text-lg font-bold text-slate-900">Пароль сброшен</h2>
-                    <p className="text-xs text-slate-500">Новый временный пароль</p>
-                  </div>
-                </div>
+      <Dialog open={isResetPassModalOpen} onOpenChange={setIsResetPassModalOpen}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle>{newGeneratedPassword ? "Пароль сброшен" : "Сброс пароля"}</DialogTitle>
+          </DialogHeader>
 
-                <div className="p-3.5 bg-amber-50 border border-amber-200 rounded-2xl text-xs text-amber-800">
-                  <p className="font-semibold">Показывается один раз!</p>
-                  <p className="mt-0.5">
-                    Все активные сессии пользователя отозваны. При следующем входе система
-                    потребует сменить этот пароль.
-                  </p>
-                </div>
+          {newGeneratedPassword ? (
+            <div className="space-y-4">
+              <Alert variant="warning">
+                <AlertDescription className="text-xs">
+                  <strong>{t("ru", "ui4.oneTimeSecretWarn")}</strong> Все активные сессии отозваны. При следующем входе потребуется сменить пароль.
+                </AlertDescription>
+              </Alert>
 
-                <div className="p-4 bg-slate-50 rounded-2xl border border-slate-200 font-mono text-center text-sm font-bold text-blue-600">
-                  {newGeneratedPassword}
-                </div>
+              <div className="rounded-lg border border-border bg-muted/40 p-4 text-center font-mono text-sm font-semibold text-primary select-all">
+                {newGeneratedPassword}
+              </div>
 
-                <button
+              <FormActions>
+                <Button
+                  type="button"
+                  variant="outline"
                   onClick={() => {
                     navigator.clipboard.writeText(newGeneratedPassword);
                     setCopiedPass(true);
                     setTimeout(() => setCopiedPass(false), 2000);
                   }}
-                  className="w-full py-2.5 rounded-xl border border-slate-200 bg-white hover:bg-slate-50 text-xs font-semibold text-slate-800 flex items-center justify-center gap-2 shadow-sm"
                 >
-                  {copiedPass ? <Check className="w-4 h-4 text-emerald-600" /> : <Copy className="w-4 h-4" />}
-                  {copiedPass ? "Скопировано!" : "Копировать пароль"}
-                </button>
-
-                <button
-                  onClick={() => setIsResetPassModalOpen(false)}
-                  className="w-full py-2 text-xs text-slate-500 hover:text-slate-800"
-                >
+                  {copiedPass ? <Check className="h-3.5 w-3.5 text-success" /> : <Copy className="h-3.5 w-3.5" />}
+                  <span>{copiedPass ? "Скопировано" : "Копировать пароль"}</span>
+                </Button>
+                <Button type="button" variant="primary" onClick={() => setIsResetPassModalOpen(false)}>
                   Закрыть
-                </button>
-              </div>
-            ) : (
-              <div className="space-y-4">
-                <div className="flex items-center justify-between pb-3 border-b border-slate-100">
-                  <h2 className="text-lg font-bold text-slate-900">Сброс пароля</h2>
-                  <button onClick={() => setIsResetPassModalOpen(false)} className="text-slate-400">
-                    <X className="w-5 h-5" />
-                  </button>
-                </div>
-                <p className="text-xs text-slate-600">
-                  Будет сгенерирован новый случайный пароль из 16 символов, старый пароль будет
-                  аннулирован, все существующие сессии пользователя будут немедленно завершены, и
-                  будет установлен флаг обязательной смены пароля при входе.
-                </p>
-                <div className="flex items-center justify-end gap-2 pt-2 border-t border-slate-100">
-                  <button
-                    onClick={() => setIsResetPassModalOpen(false)}
-                    className="px-4 py-2 rounded-xl border border-slate-200 text-xs font-medium text-slate-600"
-                  >
-                    Отмена
-                  </button>
-                  <button
-                    onClick={handleResetPassword}
-                    disabled={resettingPass}
-                    className="px-4 py-2 rounded-xl bg-amber-600 hover:bg-amber-700 text-white text-xs font-semibold shadow-sm"
-                  >
-                    {resettingPass ? "Сброс..." : "Подтвердить сброс"}
-                  </button>
-                </div>
-              </div>
-            )}
-          </div>
-        </div>
-      )}
+                </Button>
+              </FormActions>
+            </div>
+          ) : (
+            <div className="space-y-4">
+              <p className="text-sm text-muted-foreground">
+                Будет сгенерирован новый пароль из 16 символов, старый пароль аннулирован, все
+                активные сессии завершены и включена обязательная смена пароля при входе.
+              </p>
+              <FormActions>
+                <Button type="button" variant="outline" onClick={() => setIsResetPassModalOpen(false)}>
+                  Отмена
+                </Button>
+                <Button type="button" variant="primary" onClick={handleResetPassword} disabled={resettingPass}>
+                  {resettingPass ? "Сброс..." : "Подтвердить сброс"}
+                </Button>
+              </FormActions>
+            </div>
+          )}
+        </DialogContent>
+      </Dialog>
 
-      {/* Modal: Block */}
-      {isBlockModalOpen && (
-        <div className="fixed inset-0 z-50 bg-slate-900/40 backdrop-blur-sm flex items-center justify-center p-4">
-          <div className="bg-white rounded-3xl border border-slate-200 shadow-2xl max-w-md w-full p-6 space-y-4">
-            <div className="flex items-center justify-between pb-3 border-b border-slate-100">
-              <h2 className="text-lg font-bold text-slate-900">
-                {user.isActive ? "Блокировка пользователя" : "Разблокировка пользователя"}
-              </h2>
-              <button onClick={() => setIsBlockModalOpen(false)} className="text-slate-400">
-                <X className="w-5 h-5" />
-              </button>
-            </div>
-            <p className="text-xs text-slate-600">
-              {user.isActive
-                ? "При блокировке пользователь не сможет войти в систему, а все текущие сессии будут сброшены."
-                : "Пользователь снова получит возможность авторизоваться в системе."}
-            </p>
-            <div>
-              <label className="block text-xs font-semibold text-slate-700 uppercase tracking-wider mb-1">
-                Причина (обязательно, мин. 5 символов)
-              </label>
-              <textarea
-                rows={3}
-                required
-                value={blockReason}
-                onChange={(e) => setBlockReason(e.target.value)}
-                placeholder="Укажите причину действия для аудита..."
-                className="w-full px-3 py-2 text-sm bg-slate-50 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500"
-              />
-            </div>
-            <div className="flex items-center justify-end gap-2 pt-2 border-t border-slate-100">
-              <button
-                onClick={() => setIsBlockModalOpen(false)}
-                className="px-4 py-2 rounded-xl border border-slate-200 text-xs font-medium text-slate-600"
-              >
-                Отмена
-              </button>
-              <button
-                onClick={handleToggleBlock}
-                disabled={blockingUser || blockReason.trim().length < 5}
-                className="px-4 py-2 rounded-xl bg-blue-600 hover:bg-blue-700 text-white text-xs font-semibold shadow-sm disabled:opacity-50"
-              >
-                {blockingUser ? "Обработка..." : "Подтвердить"}
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
+      <ConfirmDialog
+        open={isBlockModalOpen}
+        onOpenChange={setIsBlockModalOpen}
+        title={user.isActive ? "Блокировка пользователя" : "Разблокировка пользователя"}
+        description={
+          user.isActive
+            ? "При блокировке пользователь не сможет войти в систему, а все текущие сессии будут сброшены."
+            : "Пользователь снова получит возможность авторизоваться в системе."
+        }
+        variant={user.isActive ? "destructive" : "primary"}
+        loading={blockingUser}
+        reasonLabel="Причина (минимум 5 символов)"
+        reasonPlaceholder="Укажите причину действия для аудита..."
+        reasonRequired
+        reasonMinLength={5}
+        reasonMultiline
+        onConfirm={handleToggleBlock}
+      />
 
-      {/* Modal: Delete */}
-      {isDeleteModalOpen && (
-        <div className="fixed inset-0 z-50 bg-slate-900/40 backdrop-blur-sm flex items-center justify-center p-4">
-          <div className="bg-white rounded-3xl border border-slate-200 shadow-2xl max-w-md w-full p-6 space-y-4">
-            <div className="flex items-center justify-between pb-3 border-b border-slate-100">
-              <h2 className="text-lg font-bold text-rose-600 flex items-center gap-2">
-                <Trash2 className="w-5 h-5" />
-                Мягкое удаление пользователя
-              </h2>
-              <button onClick={() => setIsDeleteModalOpen(false)} className="text-slate-400">
-                <X className="w-5 h-5" />
-              </button>
-            </div>
-            <p className="text-xs text-slate-600">
-              Учетная запись будет деактивирована, email и номер телефона освобождены для
-              возможной повторной регистрации, все активные сессии завершены.
-            </p>
-            <div>
-              <label className="block text-xs font-semibold text-slate-700 uppercase tracking-wider mb-1">
-                Обязательная причина удаления (мин. 5 символов)
-              </label>
-              <textarea
-                rows={3}
-                required
-                value={deleteReason}
-                onChange={(e) => setDeleteReason(e.target.value)}
-                placeholder="Укажите причину удаления..."
-                className="w-full px-3 py-2 text-sm bg-slate-50 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-rose-500"
-              />
-            </div>
-            <div className="flex items-center justify-end gap-2 pt-2 border-t border-slate-100">
-              <button
-                onClick={() => setIsDeleteModalOpen(false)}
-                className="px-4 py-2 rounded-xl border border-slate-200 text-xs font-medium text-slate-600"
-              >
-                Отмена
-              </button>
-              <button
-                onClick={handleDeleteUser}
-                disabled={deletingUser || deleteReason.trim().length < 5}
-                className="px-4 py-2 rounded-xl bg-rose-600 hover:bg-rose-700 text-white text-xs font-semibold shadow-sm disabled:opacity-50"
-              >
-                {deletingUser ? "Удаление..." : "Удалить учетную запись"}
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
+      <ConfirmDialog
+        open={isDeleteModalOpen}
+        onOpenChange={setIsDeleteModalOpen}
+        title="Мягкое удаление пользователя"
+        description="Учётная запись будет деактивирована, email и телефон освобождены, все активные сессии завершены."
+        variant="destructive"
+        loading={deletingUser}
+        reasonLabel="Обязательная причина удаления (минимум 5 символов)"
+        reasonPlaceholder="Укажите причину удаления..."
+        reasonRequired
+        reasonMinLength={5}
+        reasonMultiline
+        confirmLabel="Удалить учётную запись"
+        onConfirm={handleDeleteUser}
+      />
 
-      {/* Modal: Add Membership */}
-      {isAddMembershipOpen && (
-        <div className="fixed inset-0 z-50 bg-slate-900/40 backdrop-blur-sm flex items-center justify-center p-4">
-          <form
-            onSubmit={handleAddMembership}
-            className="bg-white rounded-3xl border border-slate-200 shadow-2xl max-w-md w-full p-6 space-y-4"
-          >
-            <div className="flex items-center justify-between pb-3 border-b border-slate-100">
-              <h2 className="text-lg font-bold text-slate-900">Добавить в учебный центр</h2>
-              <button onClick={() => setIsAddMembershipOpen(false)} className="text-slate-400">
-                <X className="w-5 h-5" />
-              </button>
-            </div>
-            <div>
-              <label className="block text-xs font-semibold text-slate-700 uppercase tracking-wider mb-1">
-                Учебный центр
-              </label>
+      <ConfirmDialog
+        open={revokeSessionsConfirmOpen}
+        onOpenChange={setRevokeSessionsConfirmOpen}
+        title="Завершить все сессии"
+        description="Завершить все активные сессии пользователя?"
+        variant="destructive"
+        loading={mutatingMembershipOrSessions}
+        onConfirm={confirmRevokeSessions}
+      />
+
+      <ConfirmDialog
+        open={Boolean(pendingDeleteMembershipId)}
+        onOpenChange={(next) => !next && setPendingDeleteMembershipId(null)}
+        title="Удалить членство"
+        description="Удалить членство пользователя в этом учебном центре?"
+        variant="destructive"
+        loading={mutatingMembershipOrSessions}
+        onConfirm={confirmDeleteMembership}
+      />
+
+      <Dialog open={isAddMembershipOpen} onOpenChange={setIsAddMembershipOpen}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle>Добавить в учебный центр</DialogTitle>
+          </DialogHeader>
+
+          <form onSubmit={handleAddMembership} className="space-y-4">
+            <FormField label="Учебный центр" htmlFor="mem-center" required>
               <select
+                id="mem-center"
                 required
                 value={newMemCenterId}
                 onChange={(e) => setNewMemCenterId(e.target.value)}
-                className="w-full px-3 py-2 text-sm bg-slate-50 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500"
+                className="h-9 w-full rounded-md border border-input bg-background px-3 text-sm text-foreground"
               >
                 <option value="">Выберите учебный центр</option>
                 {centers.map((c) => (
@@ -1014,44 +921,36 @@ export default function UserDetailsPage({ params }: { params: { id: string } }) 
                   </option>
                 ))}
               </select>
-            </div>
-            <div>
-              <label className="block text-xs font-semibold text-slate-700 uppercase tracking-wider mb-1">
-                Роль в центре
-              </label>
+            </FormField>
+
+            <FormField label="Роль в центре" htmlFor="mem-role" required>
               <select
+                id="mem-role"
                 value={newMemRole}
                 onChange={(e) => setNewMemRole(e.target.value)}
-                className="w-full px-3 py-2 text-sm bg-slate-50 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500"
+                className="h-9 w-full rounded-md border border-input bg-background px-3 text-sm text-foreground"
               >
                 <option value="DIRECTOR">Директор (DIRECTOR)</option>
                 <option value="CENTER_ADMIN">Администратор (CENTER_ADMIN)</option>
                 <option value="ACCOUNTANT">Бухгалтер (ACCOUNTANT)</option>
                 <option value="TEACHER">Преподаватель (TEACHER)</option>
                 <option value="TEACHER_ASSISTANT">Ассистент (TEACHER_ASSISTANT)</option>
-                <option value="STUDENT">Студент (STUDENT)</option>
+                <option value="STUDENT">Ученик (STUDENT)</option>
                 <option value="PARENT">Родитель (PARENT)</option>
               </select>
-            </div>
-            <div className="flex items-center justify-end gap-2 pt-2 border-t border-slate-100">
-              <button
-                type="button"
-                onClick={() => setIsAddMembershipOpen(false)}
-                className="px-4 py-2 rounded-xl border border-slate-200 text-xs font-medium text-slate-600"
-              >
+            </FormField>
+
+            <FormActions>
+              <Button type="button" variant="outline" onClick={() => setIsAddMembershipOpen(false)}>
                 Отмена
-              </button>
-              <button
-                type="submit"
-                disabled={savingMembership || !newMemCenterId}
-                className="px-4 py-2 rounded-xl bg-blue-600 hover:bg-blue-700 text-white text-xs font-semibold shadow-sm disabled:opacity-50"
-              >
+              </Button>
+              <Button type="submit" variant="primary" disabled={savingMembership || !newMemCenterId}>
                 {savingMembership ? "Добавление..." : "Добавить"}
-              </button>
-            </div>
+              </Button>
+            </FormActions>
           </form>
-        </div>
-      )}
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

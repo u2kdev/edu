@@ -50,7 +50,11 @@ export async function checkSubscriptionLimit(
 
   if (resourceType === "teachers") {
     const currentCount = await db.centerMembership.count({
-      where: { centerId, role: { in: ["TEACHER", "TEACHER_ASSISTANT"] } },
+      where: {
+        centerId,
+        role: { in: ["TEACHER", "TEACHER_ASSISTANT"] },
+        status: { not: "ARCHIVED" },
+      },
     });
     return currentCount + incrementAmount <= plan.maxTeachers;
   }

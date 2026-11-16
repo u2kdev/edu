@@ -22,6 +22,7 @@ export interface PlatformSettingsMap {
   "system.maintenanceBannerText": string;
   "support.contacts": SupportContactsSetting;
   "platform.seo": PlatformSeoSetting;
+  "security.require2faForStaff": boolean;
 }
 
 export const DEFAULT_PLATFORM_SETTINGS: PlatformSettingsMap = {
@@ -42,6 +43,7 @@ export const DEFAULT_PLATFORM_SETTINGS: PlatformSettingsMap = {
     ogImageUrl: "https://e-darschi.uz/og-banner.png",
     keywords: "LMS, учебный центр, CRM для курсов, Узбекистан, образование",
   },
+  "security.require2faForStaff": false,
 };
 
 /**

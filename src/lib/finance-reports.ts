@@ -3,6 +3,7 @@ import {
   calculateAccountBalance,
   getTashkentYearMonth,
 } from "./finance";
+import { roundUzs } from "./money";
 
 export interface FinanceReportParams {
   centerId: string;
@@ -76,43 +77,70 @@ export async function generateFinanceReport(params: FinanceReportParams) {
     whereBase.branchId = params.branchId;
   }
 
-  const [transactions, accounts, categories, branches, courses, groups] = await Promise.all([
-    tenantDb.financeTransaction.findMany({
-      where: whereBase,
-      select: {
-        id: true,
-        type: true,
-        amount: true,
-        accountId: true,
-        targetAccountId: true,
-        transferDirection: true,
-        categoryId: true,
-        branchId: true,
-        courseId: true,
-        groupId: true,
-        date: true,
-        isReversal: true,
-      },
-      orderBy: { date: "asc" },
-    }),
-    tenantDb.account.findMany({
-      where: { isActive: true },
-      select: { id: true, name: true, type: true },
-      orderBy: [{ isDefault: "desc" }, { createdAt: "asc" }],
-    }),
-    tenantDb.financeCategory.findMany({
-      select: { id: true, name: true, type: true },
-    }),
-    tenantDb.branch.findMany({
-      select: { id: true, name: true },
-    }),
-    tenantDb.course.findMany({
-      select: { id: true, title: true },
-    }),
-    tenantDb.group.findMany({
-      select: { id: true, name: true },
-    }),
-  ]);
+  const [transactions, accounts, categories, branches, courses, groups, standaloneDiscountAgg, chargeDiscountAgg] =
+    await Promise.all([
+      tenantDb.financeTransaction.findMany({
+        where: whereBase,
+        select: {
+          id: true,
+          type: true,
+          amount: true,
+          accountId: true,
+          targetAccountId: true,
+          transferDirection: true,
+          categoryId: true,
+          branchId: true,
+          courseId: true,
+          groupId: true,
+          date: true,
+          isReversal: true,
+        },
+        orderBy: { date: "asc" },
+      }),
+      tenantDb.account.findMany({
+        where: { isActive: true },
+        select: { id: true, name: true, type: true },
+        orderBy: [{ isDefault: "desc" }, { createdAt: "asc" }],
+      }),
+      tenantDb.financeCategory.findMany({
+        select: { id: true, name: true, type: true },
+      }),
+      tenantDb.branch.findMany({
+        select: { id: true, name: true },
+      }),
+      tenantDb.course.findMany({
+        select: { id: true, title: true },
+      }),
+      tenantDb.group.findMany({
+        select: { id: true, name: true },
+      }),
+      tenantDb.centerPayment.aggregate({
+        where: {
+          deletedAt: null,
+          status: { in: ["PAID", "PARTIALLY_PAID"] },
+          discountAmount: { gt: 0 },
+          chargeAllocations: { none: {} },
+          OR: [
+            { paidAt: { gte: params.startDate, lte: params.endDate } },
+            { paidAt: null, createdAt: { gte: params.startDate, lte: params.endDate } },
+          ],
+        },
+        _sum: { discountAmount: true },
+      }),
+      tenantDb.charge.aggregate({
+        where: {
+          status: { in: ["PENDING", "PARTIAL", "PAID"] },
+          discountAmount: { gt: 0 },
+          createdAt: { gte: params.startDate, lte: params.endDate },
+        },
+        _sum: { discountAmount: true },
+      }),
+    ]);
+
+  const totalDiscounts = roundUzs(
+    (standaloneDiscountAgg._sum.discountAmount ?? 0) +
+      (chargeDiscountAgg._sum.discountAmount ?? 0)
+  );
 
   const categoryMap = new Map(categories.map((c) => [c.id, c]));
   const branchMap = new Map(branches.map((b) => [b.id, b.name]));
@@ -136,7 +164,7 @@ export async function generateFinanceReport(params: FinanceReportParams) {
 
   for (const tx of transactions) {
     const sign = tx.isReversal ? -1 : 1;
-    const signedAmount = tx.amount * sign;
+    const signedAmount = roundUzs(tx.amount) * sign;
 
     const { year, month } = getTashkentYearMonth(tx.date);
     const ymKey = `${year}-${String(month).padStart(2, "0")}`;
@@ -278,6 +306,7 @@ export async function generateFinanceReport(params: FinanceReportParams) {
       totalExpense,
       netProfit: totalIncome - totalExpense,
       totalTransferVolume,
+      totalDiscounts,
       currency: "UZS",
     },
     accountsCashflow,
@@ -291,6 +320,8 @@ export async function generateFinanceReport(params: FinanceReportParams) {
 
 export interface DebtorRow {
   paymentId: string;
+  sourceType?: "PAYMENT" | "CHARGE";
+  invoiceNumber?: string | null;
   studentMembershipId: string;
   studentName: string;
   studentPhone: string | null;
@@ -307,6 +338,7 @@ export interface DebtorRow {
 
 /**
  * Calculates Debtors report with aging buckets: 0-30, 31-60, and 61+ days.
+ * Combines open Charges (PENDING/PARTIAL) and unallocated legacy pending CenterPayments.
  */
 export async function calculateDebtorsReport(params: {
   centerId: string;
@@ -316,26 +348,45 @@ export async function calculateDebtorsReport(params: {
   const tenantDb = getTenantDb(params.centerId);
   const asOf = params.asOfDate ?? new Date();
 
-  const where: Record<string, unknown> = {
+  const paymentWhere: Record<string, unknown> = {
     deletedAt: null,
     status: { in: ["PENDING", "PARTIALLY_PAID"] },
+    chargeAllocations: { none: {} },
+  };
+  const chargeWhere: Record<string, unknown> = {
+    status: { in: ["PENDING", "PARTIAL"] },
   };
   if (params.groupId) {
-    where.groupId = params.groupId;
+    paymentWhere.groupId = params.groupId;
+    chargeWhere.groupId = params.groupId;
   }
 
-  const unpaidPayments = await tenantDb.centerPayment.findMany({
-    where,
-    include: {
-      student: {
-        include: {
-          user: { select: { fullName: true, phone: true, email: true } },
+  const [unpaidPayments, openCharges] = await Promise.all([
+    tenantDb.centerPayment.findMany({
+      where: paymentWhere,
+      include: {
+        student: {
+          include: {
+            user: { select: { fullName: true, phone: true, email: true } },
+          },
         },
+        group: { select: { id: true, name: true } },
       },
-      group: { select: { id: true, name: true } },
-    },
-    orderBy: { createdAt: "asc" },
-  });
+      orderBy: { createdAt: "asc" },
+    }),
+    tenantDb.charge.findMany({
+      where: chargeWhere,
+      include: {
+        student: {
+          include: {
+            user: { select: { fullName: true, phone: true, email: true } },
+          },
+        },
+        group: { select: { id: true, name: true } },
+      },
+      orderBy: { dueDate: "asc" },
+    }),
+  ]);
 
   let totalDebt = 0;
   let aging0to30 = 0;
@@ -345,9 +396,9 @@ export async function calculateDebtorsReport(params: {
   const debtors: DebtorRow[] = [];
 
   for (const p of unpaidPayments) {
-    const orig = Math.round(p.originalAmount ?? p.amount);
-    const disc = Math.round(p.discountAmount ?? 0);
-    const paid = p.status === "PARTIALLY_PAID" ? Math.round(p.amount) : 0;
+    const orig = roundUzs(p.originalAmount ?? p.amount);
+    const disc = roundUzs(p.discountAmount ?? 0);
+    const paid = p.status === "PARTIALLY_PAID" ? roundUzs(p.amount) : 0;
     const debtAmount = Math.max(0, orig - disc - paid);
     if (debtAmount <= 0) continue;
 
@@ -369,6 +420,8 @@ export async function calculateDebtorsReport(params: {
 
     debtors.push({
       paymentId: p.id,
+      sourceType: "PAYMENT",
+      invoiceNumber: p.receiptNumber ?? null,
       studentMembershipId: p.studentMembershipId,
       studentName: p.student?.user?.fullName ?? "Студент",
       studentPhone: p.student?.user?.phone ?? null,
@@ -381,6 +434,45 @@ export async function calculateDebtorsReport(params: {
       daysOverdue,
       agingBucket,
       createdAt: p.createdAt,
+    });
+  }
+
+  for (const c of openCharges) {
+    const debtAmount = Math.max(0, c.amount - c.paidAmount);
+    if (debtAmount <= 0) continue;
+
+    const diffMs = Math.max(0, asOf.getTime() - c.dueDate.getTime());
+    const daysOverdue = Math.floor(diffMs / (24 * 3600 * 1000));
+
+    let agingBucket: "0-30" | "31-60" | "61+" = "0-30";
+    if (daysOverdue > 60) {
+      agingBucket = "61+";
+      aging61plus += debtAmount;
+    } else if (daysOverdue > 30) {
+      agingBucket = "31-60";
+      aging31to60 += debtAmount;
+    } else {
+      aging0to30 += debtAmount;
+    }
+
+    totalDebt += debtAmount;
+
+    debtors.push({
+      paymentId: c.id,
+      sourceType: "CHARGE",
+      invoiceNumber: c.invoiceNumber,
+      studentMembershipId: c.studentMembershipId,
+      studentName: c.student?.user?.fullName ?? "Студент",
+      studentPhone: c.student?.user?.phone ?? null,
+      groupId: c.groupId,
+      groupName: c.group?.name ?? null,
+      originalAmount: c.originalAmount,
+      paidAmount: c.paidAmount,
+      discountAmount: c.discountAmount,
+      debtAmount,
+      daysOverdue,
+      agingBucket,
+      createdAt: c.dueDate,
     });
   }
 
@@ -483,14 +575,14 @@ export async function calculateTeacherSalariesReport(params: {
   const paidLessonAmountMap = new Map<string, number>();
   for (const tx of lessonSalaryTxs) {
     if (tx.lessonId && !tx.reversedBy) {
-      paidLessonAmountMap.set(tx.lessonId, tx.amount);
+      paidLessonAmountMap.set(tx.lessonId, roundUzs(tx.amount));
     }
   }
 
   const groupIncomeMap = new Map<string, number>();
   for (const tx of groupIncomeTxs) {
     if (!tx.groupId) continue;
-    const signed = tx.isReversal ? -tx.amount : tx.amount;
+    const signed = tx.isReversal ? -roundUzs(tx.amount) : roundUzs(tx.amount);
     groupIncomeMap.set(tx.groupId, (groupIncomeMap.get(tx.groupId) ?? 0) + signed);
   }
 
@@ -532,13 +624,13 @@ export async function calculateTeacherSalariesReport(params: {
     if (rate.rateType === "HOURLY") {
       // Sum lesson-by-lesson integer amounts so calculatedSalary matches per-lesson disbursements
       calculatedSalary = matchingLessons.reduce(
-        (sum, l) => sum + Math.round(((l.durationMinutes || 60) * rate.amount) / 60),
+        (sum, l) => sum + roundUzs(((l.durationMinutes || 60) * rate.amount) / 60),
         0
       );
     } else if (rate.rateType === "PERCENTAGE") {
-      calculatedSalary = Math.round((groupIncomeInPeriod * rate.amount) / 100);
+      calculatedSalary = roundUzs((groupIncomeInPeriod * rate.amount) / 100);
     } else if (rate.rateType === "FIXED") {
-      calculatedSalary = rate.amount;
+      calculatedSalary = roundUzs(rate.amount);
     }
 
     const unpaidSalaryAmount = Math.max(0, calculatedSalary - paidSalaryAmount);

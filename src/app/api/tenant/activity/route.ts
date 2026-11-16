@@ -144,9 +144,8 @@ export async function GET(req: Request) {
     if (err instanceof TenantAccessError) {
       return NextResponse.json({ error: err.message, code: err.code }, { status: err.status });
     }
-    const message = err instanceof Error ? err.message : "Internal server error";
-    const status = message.includes("Access denied") ? 403 : 500;
-    return NextResponse.json({ error: message }, { status });
+    console.error("[GET /api/tenant/activity]", err);
+    return NextResponse.json({ error: "Internal server error" }, { status: 500 });
   }
 }
 
@@ -262,8 +261,7 @@ export async function POST(req: Request) {
     if (err instanceof TenantAccessError) {
       return NextResponse.json({ error: err.message, code: err.code }, { status: err.status });
     }
-    const message = err instanceof Error ? err.message : "Internal server error";
-    const status = message.includes("Access denied") ? 403 : 500;
-    return NextResponse.json({ error: message }, { status });
+    console.error("[GET /api/tenant/activity]", err);
+    return NextResponse.json({ error: "Internal server error" }, { status: 500 });
   }
 }

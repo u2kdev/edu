@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
-import { render, screen, fireEvent, waitFor, cleanup } from "@testing-library/react";
+import { render, screen, fireEvent, waitFor, cleanup, within } from "@testing-library/react";
 import PaymentsManager, {
   type PaymentItem,
   type StudentSelectItem,
@@ -64,13 +64,14 @@ describe("PaymentsManager (UI)", () => {
   it("renders the commission banner, the history table and every payment method label", () => {
     render(<PaymentsManager initialPayments={payments} students={students} role="DIRECTOR" />);
 
-    expect(screen.getByText(/0% Комиссия Платформы!/)).toBeTruthy();
-    expect(screen.getAllByText("Алишер Каримов").length).toBeGreaterThan(0);
-    expect(screen.getByText("💵 Наличные / Касса")).toBeTruthy();
-    expect(screen.getByText("💳 Онлайн Эквайринг")).toBeTruthy();
-    expect(screen.getByText("🏦 Банковский перевод")).toBeTruthy();
-    expect(screen.getAllByText("PAID")).toHaveLength(2);
-    expect(screen.getByText("PENDING")).toBeTruthy();
+    expect(screen.getByText(/0% комиссия платформы/)).toBeTruthy();
+    const table = within(screen.getByRole("table"));
+    expect(table.getAllByText("Алишер Каримов").length).toBeGreaterThan(0);
+    expect(table.getByText("Наличные / Касса")).toBeTruthy();
+    expect(table.getByText("Онлайн эквайринг")).toBeTruthy();
+    expect(table.getByText("Банковский перевод")).toBeTruthy();
+    expect(table.getAllByText("PAID")).toHaveLength(2);
+    expect(table.getByText("PENDING")).toBeTruthy();
   });
 
   it("renders the empty state when there is no payment history", () => {
@@ -82,13 +83,13 @@ describe("PaymentsManager (UI)", () => {
   it("hides the record button for roles that cannot manage payments", () => {
     render(<PaymentsManager initialPayments={payments} students={students} role="TEACHER" />);
 
-    expect(screen.queryByRole("button", { name: /Зафиксировать Платеж/ })).toBeNull();
+    expect(screen.queryByRole("button", { name: /Зафиксировать платёж/ })).toBeNull();
   });
 
   it("hides the record button when no role is provided", () => {
     render(<PaymentsManager initialPayments={payments} students={students} />);
 
-    expect(screen.queryByRole("button", { name: /Зафиксировать Платеж/ })).toBeNull();
+    expect(screen.queryByRole("button", { name: /Зафиксировать платёж/ })).toBeNull();
   });
 
   it("opens the modal, records a payment and refreshes the router on success", async () => {
@@ -96,18 +97,17 @@ describe("PaymentsManager (UI)", () => {
       { match: "/api/center-payments", method: "POST", reply: jsonResponse({ id: "new" }, 201) },
     ]);
 
-    const { container } = render(
-      <PaymentsManager initialPayments={payments} students={students} role="CENTER_ADMIN" />,
-    );
+    render(<PaymentsManager initialPayments={payments} students={students} role="CENTER_ADMIN" />);
 
-    fireEvent.click(screen.getByRole("button", { name: /Зафиксировать Платеж/ }));
-    expect(screen.getByText("Зафиксировать Оплату Учеником")).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: /Зафиксировать платёж/ }));
+    const dialog = screen.getByRole("dialog");
+    expect(within(dialog).getByText("Зафиксировать оплату учеником")).toBeTruthy();
 
-    const form = container.querySelector("form")!;
-    fireEvent.change(container.querySelector('input[type="number"]')!, {
+    const form = dialog.querySelector("form")!;
+    fireEvent.change(dialog.querySelector('input[type="number"]')!, {
       target: { value: "250000" },
     });
-    const selects = container.querySelectorAll("select");
+    const selects = dialog.querySelectorAll("select");
     fireEvent.change(selects[1], { target: { value: "ONLINE" } });
     fireEvent.submit(form);
 
@@ -119,11 +119,10 @@ describe("PaymentsManager (UI)", () => {
       amount: "250000",
       paymentMethod: "ONLINE",
     });
-    // modal closed on success
-    await waitFor(() => expect(screen.queryByText("Зафиксировать Оплату Учеником")).toBeNull());
+    await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
   });
 
-  it("surfaces a validation error returned by the API via alert", async () => {
+  it("surfaces a validation error returned by the API via inline alert", async () => {
     installFetchMock([
       {
         match: "/api/center-payments",
@@ -132,44 +131,42 @@ describe("PaymentsManager (UI)", () => {
       },
     ]);
 
-    const { container } = render(
-      <PaymentsManager initialPayments={payments} students={students} role="DIRECTOR" />,
-    );
+    render(<PaymentsManager initialPayments={payments} students={students} role="DIRECTOR" />);
 
-    fireEvent.click(screen.getByRole("button", { name: /Зафиксировать Платеж/ }));
-    fireEvent.change(container.querySelector('input[type="number"]')!, {
+    fireEvent.click(screen.getByRole("button", { name: /Зафиксировать платёж/ }));
+    const dialog = screen.getByRole("dialog");
+    fireEvent.change(dialog.querySelector('input[type="number"]')!, {
       target: { value: "1" },
     });
-    fireEvent.submit(container.querySelector("form")!);
+    fireEvent.submit(dialog.querySelector("form")!);
 
-    await waitFor(() =>
-      expect(window.alert).toHaveBeenCalledWith("Сумма должна быть больше нуля"),
-    );
-    // The modal stays open so the operator can fix the input.
-    expect(screen.getByText("Зафиксировать Оплату Учеником")).toBeTruthy();
+    expect(await within(dialog).findByText("Сумма должна быть больше нуля")).toBeTruthy();
+    expect(window.alert).not.toHaveBeenCalled();
+    expect(within(dialog).getByText("Зафиксировать оплату учеником")).toBeTruthy();
   });
 
-  it("reports a network failure with a generic alert", async () => {
-    installFetchMock([]); // any request throws -> network error branch
+  it("reports a network failure inline without window.alert", async () => {
+    installFetchMock([]);
 
-    const { container } = render(
-      <PaymentsManager initialPayments={payments} students={students} role="DIRECTOR" />,
-    );
+    render(<PaymentsManager initialPayments={payments} students={students} role="DIRECTOR" />);
 
-    fireEvent.click(screen.getByRole("button", { name: /Зафиксировать Платеж/ }));
-    fireEvent.submit(container.querySelector("form")!);
+    fireEvent.click(screen.getByRole("button", { name: /Зафиксировать платёж/ }));
+    const dialog = screen.getByRole("dialog");
+    fireEvent.submit(dialog.querySelector("form")!);
 
-    await waitFor(() => expect(window.alert).toHaveBeenCalledWith("Ошибка сети"));
+    expect(await within(dialog).findByText("Ошибка сети")).toBeTruthy();
+    expect(window.alert).not.toHaveBeenCalled();
   });
 
   it("closes the modal without sending a request when cancelled", () => {
     const { calls } = installFetchMock([]);
     render(<PaymentsManager initialPayments={payments} students={students} role="DIRECTOR" />);
 
-    fireEvent.click(screen.getByRole("button", { name: /Зафиксировать Платеж/ }));
-    fireEvent.click(screen.getByRole("button", { name: "Отмена" }));
+    fireEvent.click(screen.getByRole("button", { name: /Зафиксировать платёж/ }));
+    const dialog = screen.getByRole("dialog");
+    fireEvent.click(within(dialog).getByRole("button", { name: "Отмена" }));
 
-    expect(screen.queryByText("Зафиксировать Оплату Учеником")).toBeNull();
+    expect(screen.queryByRole("dialog")).toBeNull();
     expect(calls).toHaveLength(0);
   });
 });

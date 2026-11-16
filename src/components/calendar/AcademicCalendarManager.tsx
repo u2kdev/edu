@@ -7,12 +7,29 @@ import {
   Trash2,
   Edit2,
   Calendar,
-  Sparkles,
-  CheckCircle2,
-  AlertCircle,
+  Download,
   Clock,
   Layers,
+  X,
 } from "lucide-react";
+import { Alert, AlertDescription } from "@/components/ui/alert";
+import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
+import { Card, CardContent } from "@/components/ui/card";
+import { ConfirmDialog } from "@/components/ui/confirm-dialog";
+import {
+  Dialog,
+  DialogContent,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import { EmptyState } from "@/components/ui/empty-state";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { PageHeader } from "@/components/ui/page-header";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { cn } from "@/lib/utils";
 
 export interface AcademicTermItem {
   id: string;
@@ -34,6 +51,11 @@ interface AcademicCalendarManagerProps {
   canManage: boolean;
 }
 
+type ConfirmAction =
+  | { type: "import-uz" }
+  | { type: "delete-term"; id: string; name: string }
+  | { type: "delete-holiday"; id: string; name: string };
+
 export default function AcademicCalendarManager({
   initialTerms,
   initialHolidays,
@@ -44,6 +66,7 @@ export default function AcademicCalendarManager({
   const [holidays, setHolidays] = useState<HolidayItem[]>(initialHolidays);
   const [loading, setLoading] = useState(false);
   const [notice, setNotice] = useState<{ type: "success" | "error"; text: string } | null>(null);
+  const [confirmAction, setConfirmAction] = useState<ConfirmAction | null>(null);
 
   // Term modal state
   const [termModalOpen, setTermModalOpen] = useState(false);
@@ -78,23 +101,52 @@ export default function AcademicCalendarManager({
     } catch {}
   };
 
-  // Import Uzbekistan holidays
-  const handleImportUzHolidays = async () => {
-    if (!window.confirm("Импортировать официальные государственные праздники Узбекистана на текущий год?")) return;
+  const handleConfirmAction = async () => {
+    if (!confirmAction) return;
     setLoading(true);
     setNotice(null);
+
     try {
-      const res = await fetch("/api/tenant/holidays", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ action: "IMPORT_UZ_HOLIDAYS", year: new Date().getFullYear() }),
-      });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error || "Ошибка импорта");
-      setHolidays(data.holidays);
-      setNotice({ type: "success", text: data.message || "Праздники успешно импортированы" });
+      if (confirmAction.type === "import-uz") {
+        const res = await fetch("/api/tenant/holidays", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            action: "IMPORT_UZ_HOLIDAYS",
+            year: new Date().getFullYear(),
+          }),
+        });
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.error || "Ошибка импорта");
+        setHolidays(data.holidays);
+        setNotice({
+          type: "success",
+          text: data.message || "Праздники успешно импортированы",
+        });
+      } else if (confirmAction.type === "delete-term") {
+        const res = await fetch(`/api/tenant/academic-terms/${confirmAction.id}`, {
+          method: "DELETE",
+        });
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.error || "Ошибка удаления");
+        await refreshTerms();
+        setNotice({ type: "success", text: "Учебный период удалён" });
+      } else if (confirmAction.type === "delete-holiday") {
+        const res = await fetch(`/api/tenant/holidays/${confirmAction.id}`, {
+          method: "DELETE",
+        });
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.error || "Ошибка удаления");
+        await refreshHolidays();
+        setNotice({ type: "success", text: "Праздник удалён" });
+      }
+      setConfirmAction(null);
     } catch (err: unknown) {
-      setNotice({ type: "error", text: err instanceof Error ? err.message : "Ошибка импорта" });
+      setNotice({
+        type: "error",
+        text: err instanceof Error ? err.message : "Ошибка выполнения операции",
+      });
+      setConfirmAction(null);
     } finally {
       setLoading(false);
     }
@@ -112,16 +164,24 @@ export default function AcademicCalendarManager({
         const res = await fetch(`/api/tenant/academic-terms/${editTermId}`, {
           method: "PATCH",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ name: termName.trim(), startDate: termStart, endDate: termEnd }),
+          body: JSON.stringify({
+            name: termName.trim(),
+            startDate: termStart,
+            endDate: termEnd,
+          }),
         });
         const data = await res.json();
         if (!res.ok) throw new Error(data.error || "Ошибка сохранения");
-        setNotice({ type: "success", text: "Учебный период обновлен" });
+        setNotice({ type: "success", text: "Учебный период обновлён" });
       } else {
         const res = await fetch("/api/tenant/academic-terms", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ name: termName.trim(), startDate: termStart, endDate: termEnd }),
+          body: JSON.stringify({
+            name: termName.trim(),
+            startDate: termStart,
+            endDate: termEnd,
+          }),
         });
         const data = await res.json();
         if (!res.ok) throw new Error(data.error || "Ошибка создания");
@@ -135,24 +195,10 @@ export default function AcademicCalendarManager({
       setTermEnd("");
       await refreshTerms();
     } catch (err: unknown) {
-      setNotice({ type: "error", text: err instanceof Error ? err.message : "Ошибка сохранения" });
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  // Delete Term
-  const handleDeleteTerm = async (id: string) => {
-    if (!window.confirm("Удалить этот учебный период?")) return;
-    setLoading(true);
-    try {
-      const res = await fetch(`/api/tenant/academic-terms/${id}`, { method: "DELETE" });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error || "Ошибка удаления");
-      await refreshTerms();
-      setNotice({ type: "success", text: "Учебный период удален" });
-    } catch (err: unknown) {
-      setNotice({ type: "error", text: err instanceof Error ? err.message : "Ошибка удаления" });
+      setNotice({
+        type: "error",
+        text: err instanceof Error ? err.message : "Ошибка сохранения",
+      });
     } finally {
       setLoading(false);
     }
@@ -186,24 +232,10 @@ export default function AcademicCalendarManager({
       await refreshHolidays();
       setNotice({ type: "success", text: "Праздник успешно добавлен" });
     } catch (err: unknown) {
-      setNotice({ type: "error", text: err instanceof Error ? err.message : "Ошибка сохранения" });
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  // Delete Holiday
-  const handleDeleteHoliday = async (id: string) => {
-    if (!window.confirm("Удалить этот праздник?")) return;
-    setLoading(true);
-    try {
-      const res = await fetch(`/api/tenant/holidays/${id}`, { method: "DELETE" });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error || "Ошибка удаления");
-      await refreshHolidays();
-      setNotice({ type: "success", text: "Праздник удален" });
-    } catch (err: unknown) {
-      setNotice({ type: "error", text: err instanceof Error ? err.message : "Ошибка удаления" });
+      setNotice({
+        type: "error",
+        text: err instanceof Error ? err.message : "Ошибка сохранения",
+      });
     } finally {
       setLoading(false);
     }
@@ -211,7 +243,11 @@ export default function AcademicCalendarManager({
 
   const formatDate = (iso: string) => {
     try {
-      return new Date(iso).toLocaleDateString("ru-RU", { day: "numeric", month: "long", year: "numeric" });
+      return new Date(iso).toLocaleDateString("ru-RU", {
+        day: "numeric",
+        month: "long",
+        year: "numeric",
+      });
     } catch {
       return iso;
     }
@@ -230,116 +266,96 @@ export default function AcademicCalendarManager({
   const now = new Date().getTime();
 
   return (
-    <div className="space-y-6 max-w-5xl mx-auto pb-12">
-      {/* Top Banner */}
-      <div className="glass-panel p-6 sm:p-8 rounded-3xl border border-slate-800 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-        <div>
-          <h1 className="text-2xl font-black text-white flex items-center gap-3">
-            <CalendarDays className="w-7 h-7 text-brand-400" />
-            <span>Учебный календарь и праздники</span>
-          </h1>
-          <p className="text-sm text-slate-400 mt-1 max-w-xl">
-            Настройте четверти, семестры и праздничные дни. Расписание автоматически пропускает праздники, а отчёты фильтруются по учебным периодам.
-          </p>
-        </div>
-
-        {canManage && (
-          <div className="flex flex-wrap items-center gap-2.5">
-            <button
-              onClick={handleImportUzHolidays}
-              disabled={loading}
-              className="px-4 py-2.5 bg-slate-800 hover:bg-slate-700 text-amber-300 border border-amber-500/30 rounded-xl text-xs font-semibold flex items-center gap-2 shadow-sm transition-all"
-            >
-              <Sparkles className="w-4 h-4 text-amber-400" />
-              <span>Импорт праздников Узбекистана</span>
-            </button>
-            {activeTab === "TERMS" ? (
-              <button
-                onClick={() => {
-                  setEditTermId(null);
-                  setTermName("");
-                  setTermStart("");
-                  setTermEnd("");
-                  setTermModalOpen(true);
-                }}
-                className="px-4 py-2.5 bg-brand-600 hover:bg-brand-500 text-white rounded-xl text-xs font-semibold flex items-center gap-2 shadow-lg shadow-brand-600/20"
+    <div className="space-y-6 max-w-5xl mx-auto">
+      <PageHeader
+        title="Учебный календарь и праздники"
+        description="Настройте четверти, семестры и праздничные дни. Расписание автоматически пропускает праздники, а отчёты фильтруются по учебным периодам."
+        actions={
+          canManage ? (
+            <div className="flex flex-wrap items-center gap-2">
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                onClick={() => setConfirmAction({ type: "import-uz" })}
+                disabled={loading}
               >
-                <Plus className="w-4 h-4" />
-                <span>Добавить период</span>
-              </button>
-            ) : (
-              <button
-                onClick={() => {
-                  setHolidayName("");
-                  setHolidayStart("");
-                  setHolidayEnd("");
-                  setHolidayModalOpen(true);
-                }}
-                className="px-4 py-2.5 bg-brand-600 hover:bg-brand-500 text-white rounded-xl text-xs font-semibold flex items-center gap-2 shadow-lg shadow-brand-600/20"
-              >
-                <Plus className="w-4 h-4" />
-                <span>Добавить праздник</span>
-              </button>
-            )}
-          </div>
-        )}
-      </div>
+                <Download className="w-4 h-4" aria-hidden="true" />
+                <span>Импорт праздников Узбекистана</span>
+              </Button>
+              {activeTab === "TERMS" ? (
+                <Button
+                  type="button"
+                  size="sm"
+                  onClick={() => {
+                    setEditTermId(null);
+                    setTermName("");
+                    setTermStart("");
+                    setTermEnd("");
+                    setTermModalOpen(true);
+                  }}
+                >
+                  <Plus className="w-4 h-4" aria-hidden="true" />
+                  <span>Добавить период</span>
+                </Button>
+              ) : (
+                <Button
+                  type="button"
+                  size="sm"
+                  onClick={() => {
+                    setHolidayName("");
+                    setHolidayStart("");
+                    setHolidayEnd("");
+                    setHolidayModalOpen(true);
+                  }}
+                >
+                  <Plus className="w-4 h-4" aria-hidden="true" />
+                  <span>Добавить праздник</span>
+                </Button>
+              )}
+            </div>
+          ) : undefined
+        }
+      />
 
       {notice && (
-        <div
-          className={`p-4 rounded-xl border flex items-center justify-between ${
-            notice.type === "success"
-              ? "bg-emerald-500/10 border-emerald-500/30 text-emerald-300"
-              : "bg-rose-500/10 border-rose-500/30 text-rose-300"
-          }`}
-        >
-          <div className="flex items-center gap-2 text-sm">
-            {notice.type === "success" ? <CheckCircle2 className="w-4 h-4" /> : <AlertCircle className="w-4 h-4" />}
+        <Alert variant={notice.type === "success" ? "success" : "destructive"}>
+          <AlertDescription className="flex items-center justify-between gap-2">
             <span>{notice.text}</span>
-          </div>
-          <button onClick={() => setNotice(null)} className="text-xs opacity-70 hover:opacity-100">
-            ✕
-          </button>
-        </div>
+            <button
+              type="button"
+              onClick={() => setNotice(null)}
+              aria-label="Закрыть уведомление"
+              className="text-current opacity-70 hover:opacity-100 shrink-0"
+            >
+              <X className="w-3.5 h-3.5" aria-hidden="true" />
+            </button>
+          </AlertDescription>
+        </Alert>
       )}
 
-      {/* Tabs */}
-      <div className="flex items-center gap-2 border-b border-slate-800 pb-2">
-        <button
-          onClick={() => setActiveTab("TERMS")}
-          className={`px-4 py-2 rounded-xl text-sm font-semibold transition-all flex items-center gap-2 ${
-            activeTab === "TERMS"
-              ? "bg-brand-500/20 text-brand-300 border border-brand-500/30"
-              : "text-slate-400 hover:text-white"
-          }`}
-        >
-          <Layers className="w-4 h-4" />
-          <span>Учебные периоды ({terms.length})</span>
-        </button>
-        <button
-          onClick={() => setActiveTab("HOLIDAYS")}
-          className={`px-4 py-2 rounded-xl text-sm font-semibold transition-all flex items-center gap-2 ${
-            activeTab === "HOLIDAYS"
-              ? "bg-brand-500/20 text-brand-300 border border-brand-500/30"
-              : "text-slate-400 hover:text-white"
-          }`}
-        >
-          <Calendar className="w-4 h-4" />
-          <span>Праздники и каникулы ({holidays.length})</span>
-        </button>
-      </div>
+      <Tabs
+        value={activeTab}
+        onValueChange={(v) => setActiveTab(v as "TERMS" | "HOLIDAYS")}
+      >
+        <TabsList>
+          <TabsTrigger value="TERMS">
+            <Layers className="w-4 h-4" aria-hidden="true" />
+            <span>Учебные периоды ({terms.length})</span>
+          </TabsTrigger>
+          <TabsTrigger value="HOLIDAYS">
+            <Calendar className="w-4 h-4" aria-hidden="true" />
+            <span>Праздники и каникулы ({holidays.length})</span>
+          </TabsTrigger>
+        </TabsList>
 
-      {/* Content Tab 1: Terms */}
-      {activeTab === "TERMS" && (
-        <div className="space-y-4">
+        <TabsContent value="TERMS" className="space-y-4">
           {terms.length === 0 ? (
-            <div className="glass-panel p-12 rounded-3xl border border-slate-800 text-center">
-              <CalendarDays className="w-12 h-12 text-slate-600 mx-auto mb-3" />
-              <h3 className="text-base font-semibold text-white">Учебные периоды не заданы</h3>
-              <p className="text-xs text-slate-400 mt-1 max-w-sm mx-auto">
-                Создайте четверти или семестры для фильтрации оценок и посещаемости.
-              </p>
-            </div>
+            <EmptyState
+              icon={<CalendarDays className="w-5 h-5" aria-hidden="true" />}
+              title="Учебные периоды не заданы"
+              description="Создайте четверти или семестры для фильтрации оценок и посещаемости."
+            />
           ) : (
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               {terms.map((term) => {
@@ -349,44 +365,39 @@ export default function AcademicCalendarManager({
                 const isPast = now > e;
 
                 return (
-                  <div
+                  <Card
                     key={term.id}
-                    className={`glass-panel p-5 rounded-2xl border transition-all ${
-                      isCurrent
-                        ? "border-brand-500/40 bg-brand-500/5 shadow-lg shadow-brand-500/10"
-                        : "border-slate-800/80 bg-slate-900/40"
-                    }`}
+                    className={cn(isCurrent && "border-primary/40 bg-primary/5")}
                   >
-                    <div className="flex items-start justify-between gap-3">
-                      <div>
-                        <div className="flex items-center gap-2">
-                          <h3 className="text-base font-bold text-white">{term.name}</h3>
-                          {isCurrent && (
-                            <span className="px-2 py-0.5 rounded-full bg-brand-500/20 border border-brand-500/40 text-brand-300 text-[10px] font-bold uppercase">
-                              Текущий
-                            </span>
-                          )}
-                          {isPast && (
-                            <span className="px-2 py-0.5 rounded-full bg-slate-800 text-slate-400 text-[10px] font-bold uppercase">
-                              Завершен
-                            </span>
-                          )}
+                    <CardContent className="p-5 flex items-start justify-between gap-3">
+                      <div className="space-y-1.5 min-w-0">
+                        <div className="flex flex-wrap items-center gap-2">
+                          <h3 className="text-sm font-semibold text-foreground">
+                            {term.name}
+                          </h3>
+                          {isCurrent && <Badge variant="primary">Текущий</Badge>}
+                          {isPast && <Badge variant="neutral">Завершён</Badge>}
                         </div>
-                        <p className="text-xs text-slate-400 mt-2 flex items-center gap-1.5">
-                          <Calendar className="w-3.5 h-3.5 text-slate-500" />
+                        <p className="text-xs text-muted-foreground flex items-center gap-1.5">
+                          <Calendar className="w-3.5 h-3.5 shrink-0" aria-hidden="true" />
                           <span>
                             {formatDate(term.startDate)} — {formatDate(term.endDate)}
                           </span>
                         </p>
-                        <p className="text-xs text-slate-500 mt-1 flex items-center gap-1.5">
-                          <Clock className="w-3.5 h-3.5 text-slate-600" />
-                          <span>Продолжительность: {getDaysCount(term.startDate, term.endDate)} дн.</span>
+                        <p className="text-xs text-muted-foreground flex items-center gap-1.5 tabular-nums">
+                          <Clock className="w-3.5 h-3.5 shrink-0" aria-hidden="true" />
+                          <span>
+                            Продолжительность: {getDaysCount(term.startDate, term.endDate)} дн.
+                          </span>
                         </p>
                       </div>
 
                       {canManage && (
-                        <div className="flex items-center gap-1">
-                          <button
+                        <div className="flex items-center gap-1 shrink-0">
+                          <Button
+                            type="button"
+                            variant="ghost"
+                            size="icon"
                             onClick={() => {
                               setEditTermId(term.id);
                               setTermName(term.name);
@@ -394,208 +405,238 @@ export default function AcademicCalendarManager({
                               setTermEnd(term.endDate.split("T")[0]);
                               setTermModalOpen(true);
                             }}
-                            className="p-1.5 rounded-lg text-slate-400 hover:text-white hover:bg-slate-800"
                             title="Редактировать"
+                            aria-label="Редактировать"
                           >
-                            <Edit2 className="w-4 h-4" />
-                          </button>
-                          <button
-                            onClick={() => handleDeleteTerm(term.id)}
-                            className="p-1.5 rounded-lg text-slate-400 hover:text-rose-400 hover:bg-rose-500/10"
+                            <Edit2 className="w-4 h-4" aria-hidden="true" />
+                          </Button>
+                          <Button
+                            type="button"
+                            variant="ghost"
+                            size="icon"
+                            onClick={() =>
+                              setConfirmAction({
+                                type: "delete-term",
+                                id: term.id,
+                                name: term.name,
+                              })
+                            }
                             title="Удалить"
+                            aria-label="Удалить"
+                            className="hover:text-destructive"
                           >
-                            <Trash2 className="w-4 h-4" />
-                          </button>
+                            <Trash2 className="w-4 h-4" aria-hidden="true" />
+                          </Button>
                         </div>
                       )}
-                    </div>
-                  </div>
+                    </CardContent>
+                  </Card>
                 );
               })}
             </div>
           )}
-        </div>
-      )}
+        </TabsContent>
 
-      {/* Content Tab 2: Holidays */}
-      {activeTab === "HOLIDAYS" && (
-        <div className="space-y-4">
+        <TabsContent value="HOLIDAYS" className="space-y-4">
           {holidays.length === 0 ? (
-            <div className="glass-panel p-12 rounded-3xl border border-slate-800 text-center">
-              <Calendar className="w-12 h-12 text-slate-600 mx-auto mb-3" />
-              <h3 className="text-base font-semibold text-white">Список праздников пуст</h3>
-              <p className="text-xs text-slate-400 mt-1 max-w-sm mx-auto">
-                Добавьте праздники вручную или нажмите «Импорт праздников Узбекистана» выше.
-              </p>
-            </div>
+            <EmptyState
+              icon={<Calendar className="w-5 h-5" aria-hidden="true" />}
+              title="Список праздников пуст"
+              description="Добавьте праздники вручную или нажмите «Импорт праздников Узбекистана»."
+            />
           ) : (
             <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-3">
               {holidays.map((h) => (
-                <div
-                  key={h.id}
-                  className="glass-panel p-4 rounded-xl border border-slate-800/80 bg-slate-900/50 flex items-center justify-between gap-3"
-                >
-                  <div className="flex-1 min-w-0">
-                    <h4 className="text-sm font-semibold text-white truncate">{h.name}</h4>
-                    <p className="text-xs text-slate-400 mt-1">
-                      {formatDate(h.startDate)}
-                      {h.endDate && h.endDate.split("T")[0] !== h.startDate.split("T")[0] ? ` — ${formatDate(h.endDate)}` : ""}
-                    </p>
-                  </div>
-                  {canManage && (
-                    <button
-                      onClick={() => handleDeleteHoliday(h.id)}
-                      className="p-1.5 rounded-lg text-slate-500 hover:text-rose-400 hover:bg-rose-500/10 shrink-0"
-                      title="Удалить"
-                    >
-                      <Trash2 className="w-4 h-4" />
-                    </button>
-                  )}
-                </div>
+                <Card key={h.id}>
+                  <CardContent className="p-4 flex items-center justify-between gap-3">
+                    <div className="flex-1 min-w-0">
+                      <h4 className="text-sm font-semibold text-foreground truncate">
+                        {h.name}
+                      </h4>
+                      <p className="text-xs text-muted-foreground mt-1">
+                        {formatDate(h.startDate)}
+                        {h.endDate &&
+                        h.endDate.split("T")[0] !== h.startDate.split("T")[0]
+                          ? ` — ${formatDate(h.endDate)}`
+                          : ""}
+                      </p>
+                    </div>
+                    {canManage && (
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="icon"
+                        onClick={() =>
+                          setConfirmAction({
+                            type: "delete-holiday",
+                            id: h.id,
+                            name: h.name,
+                          })
+                        }
+                        title="Удалить"
+                        aria-label="Удалить"
+                        className="shrink-0 hover:text-destructive"
+                      >
+                        <Trash2 className="w-4 h-4" aria-hidden="true" />
+                      </Button>
+                    )}
+                  </CardContent>
+                </Card>
               ))}
             </div>
           )}
-        </div>
-      )}
+        </TabsContent>
+      </Tabs>
 
       {/* Term Modal */}
-      {termModalOpen && (
-        <div className="fixed inset-0 z-50 bg-black/70 backdrop-blur-sm flex items-center justify-center p-4">
-          <div className="glass-panel w-full max-w-md p-6 rounded-3xl border border-slate-800 space-y-4">
-            <h3 className="text-lg font-bold text-white">
+      <Dialog open={termModalOpen} onOpenChange={setTermModalOpen}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle>
               {editTermId ? "Редактирование периода" : "Новый учебный период"}
-            </h3>
-            <form onSubmit={handleSaveTerm} className="space-y-4">
-              <div>
-                <label className="block text-xs font-semibold text-slate-300 uppercase tracking-wider mb-1.5">
-                  Название периода *
-                </label>
-                <input
-                  type="text"
+            </DialogTitle>
+          </DialogHeader>
+
+          <form onSubmit={handleSaveTerm} className="space-y-4">
+            <div className="space-y-1.5">
+              <Label htmlFor="term-name">Название периода *</Label>
+              <Input
+                id="term-name"
+                type="text"
+                required
+                placeholder="Например: I четверть или 1 семестр"
+                value={termName}
+                onChange={(e) => setTermName(e.target.value)}
+              />
+            </div>
+
+            <div className="grid grid-cols-2 gap-3">
+              <div className="space-y-1.5">
+                <Label htmlFor="term-start">Дата начала *</Label>
+                <Input
+                  id="term-start"
+                  type="date"
                   required
-                  placeholder="Например: I четверть или 1 семестр"
-                  value={termName}
-                  onChange={(e) => setTermName(e.target.value)}
-                  className="w-full px-4 py-2.5 bg-slate-900 border border-slate-700 rounded-xl text-white text-sm focus:outline-none focus:border-brand-500"
+                  value={termStart}
+                  onChange={(e) => setTermStart(e.target.value)}
                 />
               </div>
 
-              <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <label className="block text-xs font-semibold text-slate-300 uppercase tracking-wider mb-1.5">
-                    Дата начала *
-                  </label>
-                  <input
-                    type="date"
-                    required
-                    value={termStart}
-                    onChange={(e) => setTermStart(e.target.value)}
-                    className="w-full px-4 py-2.5 bg-slate-900 border border-slate-700 rounded-xl text-white text-sm"
-                  />
-                </div>
-
-                <div>
-                  <label className="block text-xs font-semibold text-slate-300 uppercase tracking-wider mb-1.5">
-                    Дата окончания *
-                  </label>
-                  <input
-                    type="date"
-                    required
-                    value={termEnd}
-                    onChange={(e) => setTermEnd(e.target.value)}
-                    className="w-full px-4 py-2.5 bg-slate-900 border border-slate-700 rounded-xl text-white text-sm"
-                  />
-                </div>
+              <div className="space-y-1.5">
+                <Label htmlFor="term-end">Дата окончания *</Label>
+                <Input
+                  id="term-end"
+                  type="date"
+                  required
+                  value={termEnd}
+                  onChange={(e) => setTermEnd(e.target.value)}
+                />
               </div>
+            </div>
 
-              <div className="flex justify-end gap-3 pt-3 border-t border-slate-800">
-                <button
-                  type="button"
-                  onClick={() => setTermModalOpen(false)}
-                  className="px-4 py-2 bg-slate-800 text-slate-300 font-semibold rounded-xl text-sm"
-                >
-                  Отмена
-                </button>
-                <button
-                  type="submit"
-                  disabled={loading}
-                  className="px-4 py-2 bg-brand-600 hover:bg-brand-500 text-white font-semibold rounded-xl text-sm"
-                >
-                  {loading ? "Сохранение..." : "Сохранить"}
-                </button>
-              </div>
-            </form>
-          </div>
-        </div>
-      )}
+            <DialogFooter>
+              <Button
+                type="button"
+                variant="outline"
+                onClick={() => setTermModalOpen(false)}
+              >
+                Отмена
+              </Button>
+              <Button type="submit" loading={loading}>
+                Сохранить
+              </Button>
+            </DialogFooter>
+          </form>
+        </DialogContent>
+      </Dialog>
 
       {/* Holiday Modal */}
-      {holidayModalOpen && (
-        <div className="fixed inset-0 z-50 bg-black/70 backdrop-blur-sm flex items-center justify-center p-4">
-          <div className="glass-panel w-full max-w-md p-6 rounded-3xl border border-slate-800 space-y-4">
-            <h3 className="text-lg font-bold text-white">Добавить праздничный день</h3>
-            <form onSubmit={handleSaveHoliday} className="space-y-4">
-              <div>
-                <label className="block text-xs font-semibold text-slate-300 uppercase tracking-wider mb-1.5">
-                  Название праздника / каникул *
-                </label>
-                <input
-                  type="text"
+      <Dialog open={holidayModalOpen} onOpenChange={setHolidayModalOpen}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle>Добавить праздничный день</DialogTitle>
+          </DialogHeader>
+
+          <form onSubmit={handleSaveHoliday} className="space-y-4">
+            <div className="space-y-1.5">
+              <Label htmlFor="holiday-name">Название праздника / каникул *</Label>
+              <Input
+                id="holiday-name"
+                type="text"
+                required
+                placeholder="Например: Осенние каникулы"
+                value={holidayName}
+                onChange={(e) => setHolidayName(e.target.value)}
+              />
+            </div>
+
+            <div className="grid grid-cols-2 gap-3">
+              <div className="space-y-1.5">
+                <Label htmlFor="holiday-start">Дата начала *</Label>
+                <Input
+                  id="holiday-start"
+                  type="date"
                   required
-                  placeholder="Например: Осенние каникулы"
-                  value={holidayName}
-                  onChange={(e) => setHolidayName(e.target.value)}
-                  className="w-full px-4 py-2.5 bg-slate-900 border border-slate-700 rounded-xl text-white text-sm focus:outline-none focus:border-brand-500"
+                  value={holidayStart}
+                  onChange={(e) => setHolidayStart(e.target.value)}
                 />
               </div>
 
-              <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <label className="block text-xs font-semibold text-slate-300 uppercase tracking-wider mb-1.5">
-                    Дата начала *
-                  </label>
-                  <input
-                    type="date"
-                    required
-                    value={holidayStart}
-                    onChange={(e) => setHolidayStart(e.target.value)}
-                    className="w-full px-4 py-2.5 bg-slate-900 border border-slate-700 rounded-xl text-white text-sm"
-                  />
-                </div>
-
-                <div>
-                  <label className="block text-xs font-semibold text-slate-300 uppercase tracking-wider mb-1.5">
-                    Дата окончания
-                  </label>
-                  <input
-                    type="date"
-                    value={holidayEnd}
-                    onChange={(e) => setHolidayEnd(e.target.value)}
-                    className="w-full px-4 py-2.5 bg-slate-900 border border-slate-700 rounded-xl text-white text-sm"
-                  />
-                </div>
+              <div className="space-y-1.5">
+                <Label htmlFor="holiday-end">Дата окончания</Label>
+                <Input
+                  id="holiday-end"
+                  type="date"
+                  value={holidayEnd}
+                  onChange={(e) => setHolidayEnd(e.target.value)}
+                />
               </div>
+            </div>
 
-              <div className="flex justify-end gap-3 pt-3 border-t border-slate-800">
-                <button
-                  type="button"
-                  onClick={() => setHolidayModalOpen(false)}
-                  className="px-4 py-2 bg-slate-800 text-slate-300 font-semibold rounded-xl text-sm"
-                >
-                  Отмена
-                </button>
-                <button
-                  type="submit"
-                  disabled={loading}
-                  className="px-4 py-2 bg-brand-600 hover:bg-brand-500 text-white font-semibold rounded-xl text-sm"
-                >
-                  {loading ? "Сохранение..." : "Добавить праздник"}
-                </button>
-              </div>
-            </form>
-          </div>
-        </div>
-      )}
+            <DialogFooter>
+              <Button
+                type="button"
+                variant="outline"
+                onClick={() => setHolidayModalOpen(false)}
+              >
+                Отмена
+              </Button>
+              <Button type="submit" loading={loading}>
+                Добавить праздник
+              </Button>
+            </DialogFooter>
+          </form>
+        </DialogContent>
+      </Dialog>
+
+      <ConfirmDialog
+        open={Boolean(confirmAction)}
+        onOpenChange={(open) => {
+          if (!open) setConfirmAction(null);
+        }}
+        variant={confirmAction?.type === "import-uz" ? "primary" : "destructive"}
+        loading={loading}
+        title={
+          confirmAction?.type === "import-uz"
+            ? "Импорт праздников Узбекистана"
+            : confirmAction?.type === "delete-term"
+            ? "Удалить учебный период"
+            : "Удалить праздник"
+        }
+        description={
+          confirmAction?.type === "import-uz"
+            ? "Импортировать официальные государственные праздники Узбекистана на текущий год?"
+            : confirmAction?.type === "delete-term"
+            ? `Удалить учебный период «${confirmAction.name}»?`
+            : confirmAction?.type === "delete-holiday"
+            ? `Удалить праздник «${confirmAction.name}»?`
+            : undefined
+        }
+        confirmLabel={
+          confirmAction?.type === "import-uz" ? "Импортировать" : "Удалить"
+        }
+        onConfirm={handleConfirmAction}
+      />
     </div>
   );
 }

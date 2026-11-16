@@ -1,7 +1,9 @@
 import { NextResponse } from "next/server";
 import { requireTenantAccess, TenantAccessError } from "@/lib/tenant";
 import { assertMaterialAccess } from "@/lib/tenant-access";
+import { safeResolvePath, getStorageDir, getLegacyStorageDir } from "@/lib/storage";
 import fs from "fs/promises";
+import fsSync from "fs";
 import path from "path";
 
 export async function GET(
@@ -46,30 +48,71 @@ export async function GET(
       );
     }
 
-    if (targetUrl.startsWith("/uploads/")) {
-      const normalizedRelative = targetUrl.replace(/^\/+/, "");
-      const absoluteFilePath = path.join(
-        process.cwd(),
-        "public",
-        normalizedRelative
-      );
+    if (targetUrl.startsWith("/uploads/") || targetUrl.startsWith("/api/files/")) {
+      // Reject Path Traversal attempts
+      if (targetUrl.includes("..")) {
+        return NextResponse.json(
+          { error: "Forbidden: Invalid file path" },
+          { status: 403 }
+        );
+      }
+
+      const relativePart = targetUrl.replace(/^\/(uploads|api\/files)\//, "");
+
+      let safePath = safeResolvePath(getStorageDir(), relativePart);
+      let fileExists = safePath ? fsSync.existsSync(safePath) : false;
+
+      if (!fileExists) {
+        const legacyPath = safeResolvePath(getLegacyStorageDir(), relativePart);
+        if (legacyPath && fsSync.existsSync(legacyPath)) {
+          safePath = legacyPath;
+          fileExists = true;
+        }
+      }
+
+      if (!safePath || !fileExists) {
+        return NextResponse.json(
+          { error: "File not found" },
+          { status: 404 }
+        );
+      }
+
       try {
-        const buffer = await fs.readFile(absoluteFilePath);
-        const fileName = path.basename(absoluteFilePath);
+        const buffer = await fs.readFile(safePath);
+        const fileName = path.basename(safePath);
         return new NextResponse(buffer, {
           status: 200,
           headers: {
             "Content-Type": "application/octet-stream",
             "Content-Disposition": `attachment; filename="${encodeURIComponent(fileName)}"`,
-            "Cache-Control": "private, no-store",
+            "Cache-Control": "private, no-cache, no-store, max-age=0, must-revalidate",
+            "X-Content-Type-Options": "nosniff",
           },
         });
       } catch {
-        // Fallback to redirect
+        return NextResponse.json(
+          { error: "File not found" },
+          { status: 404 }
+        );
       }
     }
 
-    return NextResponse.redirect(new URL(targetUrl, req.url));
+    // Validate external URL
+    try {
+      const parsedUrl = new URL(targetUrl, req.url);
+      if (parsedUrl.protocol !== "http:" && parsedUrl.protocol !== "https:") {
+        return NextResponse.json(
+          { error: "Forbidden: Invalid external URL protocol" },
+          { status: 403 }
+        );
+      }
+      return NextResponse.redirect(parsedUrl);
+    } catch {
+      return NextResponse.json(
+        { error: "Invalid URL" },
+        { status: 400 }
+      );
+    }
   } catch (error) {
     if (error instanceof TenantAccessError) {
       return NextResponse.json(

@@ -5,6 +5,11 @@ import { requireFinanceTenantAccess, logAuditEvent } from "@/lib/tenant";
 import { hasPermission } from "@/lib/permissions";
 import { checkRateLimit, getClientIp } from "@/lib/rate-limit";
 import { calculateAccountBalance } from "@/lib/finance";
+import {
+  requirePlanFeature,
+  PlanFeatureLockedError,
+  formatPlanFeatureLockedPayload,
+} from "@/lib/plan-features";
 
 const createAccountSchema = z.object({
   name: z.string().trim().min(2).max(120),
@@ -87,6 +92,8 @@ export async function POST(req: Request) {
       );
     }
 
+    await requirePlanFeature(tenantCtx.center.id, "financeAccounting");
+
     const ip = getClientIp(req);
     const allowed = await checkRateLimit(`finance_accounts:${tenantCtx.session.user.id}:${ip}`, 60, 60_000);
     if (!allowed) {
@@ -135,6 +142,9 @@ export async function POST(req: Request) {
 
     return NextResponse.json({ account: { ...created, balance: 0 } }, { status: 201 });
   } catch (err: unknown) {
+    if (err instanceof PlanFeatureLockedError) {
+      return NextResponse.json(formatPlanFeatureLockedPayload(err), { status: 403 });
+    }
     const error = err as { message?: string; status?: number; code?: string };
     return NextResponse.json(
       { error: error.message || "Failed to create account", code: error.code },
@@ -152,6 +162,8 @@ export async function PATCH(req: Request) {
         { status: 403 }
       );
     }
+
+    await requirePlanFeature(tenantCtx.center.id, "financeAccounting");
 
     const ip = getClientIp(req);
     const allowed = await checkRateLimit(`finance_accounts_patch:${tenantCtx.session.user.id}:${ip}`, 60, 60_000);
@@ -196,6 +208,9 @@ export async function PATCH(req: Request) {
     const balance = await calculateAccountBalance(tenantCtx.center.id, id);
     return NextResponse.json({ account: { ...updated, balance } });
   } catch (err: unknown) {
+    if (err instanceof PlanFeatureLockedError) {
+      return NextResponse.json(formatPlanFeatureLockedPayload(err), { status: 403 });
+    }
     const error = err as { message?: string; status?: number; code?: string };
     return NextResponse.json(
       { error: error.message || "Failed to update account", code: error.code },

@@ -6,6 +6,7 @@ import {
   fireEvent,
   waitFor,
   cleanup,
+  within,
 } from "@testing-library/react";
 import InvitesManager, {
   type InviteItem,
@@ -38,7 +39,6 @@ const groups: GroupSelectItem[] = [
   { id: "g-2", name: "Группа B" },
 ];
 
-// i-1 -> bound to a course, i-2 -> bound to a group, i-3 -> unbound center code.
 const invites: InviteItem[] = [
   {
     id: "i-1",
@@ -73,9 +73,8 @@ const redeemForm = () =>
   screen.getByRole("button", { name: "Применить код" }).closest("form")!;
 
 const generateForm = () =>
-  screen.getByRole("button", { name: "Создать Код" }).closest("form")!;
+  screen.getByRole("button", { name: "Создать код" }).closest("form")!;
 
-/** A deferred value used to keep a fetch response pending. */
 function deferred<T>() {
   let resolve!: (value: T) => void;
   const promise = new Promise<T>((r) => {
@@ -100,38 +99,33 @@ describe("InvitesManager (UI)", () => {
   });
 
   it("always renders the redeem banner and lists the admin invite table", () => {
-    const { container } = render(
+    render(
       <InvitesManager initialInvites={invites} courses={courses} groups={groups} role="DIRECTOR" />,
     );
 
-    // Redeem banner (visible for every role).
-    expect(screen.getByText("Активировать Инвайт-код")).toBeTruthy();
+    expect(screen.getByText("Активировать инвайт-код")).toBeTruthy();
     expect(screen.getByRole("button", { name: "Применить код" })).toBeTruthy();
 
-    // Admin table for DIRECTOR.
-    expect(screen.getByText("Существующие Инвайт-коды Центра")).toBeTruthy();
-    expect(screen.getByText("JOIN-JS2026")).toBeTruthy();
-    expect(screen.getByText("PARENT-1234")).toBeTruthy();
-    expect(screen.getByText("TEACH-777")).toBeTruthy();
+    expect(screen.getByText("Существующие инвайт-коды центра")).toBeTruthy();
+    const table = within(screen.getByRole("table"));
+    expect(table.getByText("JOIN-JS2026")).toBeTruthy();
+    expect(table.getByText("PARENT-1234")).toBeTruthy();
+    expect(table.getByText("TEACH-777")).toBeTruthy();
 
-    // Role badges.
-    expect(screen.getByText("STUDENT")).toBeTruthy();
-    expect(screen.getByText("PARENT")).toBeTruthy();
-    expect(screen.getByText("TEACHER")).toBeTruthy();
+    expect(table.getByText("STUDENT")).toBeTruthy();
+    expect(table.getByText("PARENT")).toBeTruthy();
+    expect(table.getByText("TEACHER")).toBeTruthy();
 
-    // Course / group / fallback target cells.
-    expect(screen.getByText("Frontend React")).toBeTruthy();
-    expect(screen.getByText("Группа A")).toBeTruthy();
-    expect(screen.getByText("Общий код центра")).toBeTruthy();
+    expect(table.getByText("Frontend React")).toBeTruthy();
+    expect(table.getByText("Группа A")).toBeTruthy();
+    expect(table.getByText("Общий код центра")).toBeTruthy();
 
-    // Usage counters (span + " / " + maxUses collapse into one cell text).
-    const usage = Array.from(container.querySelectorAll("tbody tr")).map((r) =>
+    const usage = Array.from(screen.getByRole("table").querySelectorAll("tbody tr")).map((r) =>
       r.children[3].textContent?.replace(/\s+/g, " ").trim(),
     );
     expect(usage).toEqual(["3 / 10", "0 /", "1 / 5"]);
 
-    // One copy button per invite.
-    expect(screen.getAllByRole("button", { name: /Копировать/ })).toHaveLength(3);
+    expect(table.getAllByRole("button", { name: /Копировать/ })).toHaveLength(3);
   });
 
   it("shows the empty state when the center has no invites", () => {
@@ -145,41 +139,40 @@ describe("InvitesManager (UI)", () => {
     const { unmount } = render(
       <InvitesManager initialInvites={invites} courses={courses} groups={groups} role="TEACHER" />,
     );
-    expect(screen.queryByText("Существующие Инвайт-коды Центра")).toBeNull();
-    expect(screen.queryByRole("button", { name: /Сгенерировать Код/ })).toBeNull();
-    // Redeem banner remains available.
-    expect(screen.getByText("Активировать Инвайт-код")).toBeTruthy();
+    expect(screen.queryByText("Существующие инвайт-коды центра")).toBeNull();
+    expect(screen.queryByRole("button", { name: /Сгенерировать код/ })).toBeNull();
+    expect(screen.getByText("Активировать инвайт-код")).toBeTruthy();
     unmount();
 
     render(<InvitesManager initialInvites={invites} courses={courses} groups={groups} />);
-    expect(screen.queryByText("Существующие Инвайт-коды Центра")).toBeNull();
-    expect(screen.queryByRole("button", { name: /Сгенерировать Код/ })).toBeNull();
+    expect(screen.queryByText("Существующие инвайт-коды центра")).toBeNull();
+    expect(screen.queryByRole("button", { name: /Сгенерировать код/ })).toBeNull();
   });
 
   it("copies an invite code to the clipboard and flashes the copied state", () => {
     render(<InvitesManager initialInvites={invites} courses={courses} groups={groups} role="DIRECTOR" />);
 
-    fireEvent.click(screen.getAllByRole("button", { name: /Копировать/ })[0]);
+    const table = within(screen.getByRole("table"));
+    fireEvent.click(table.getAllByRole("button", { name: /Копировать/ })[0]);
 
     expect(navigator.clipboard.writeText).toHaveBeenCalledWith("JOIN-JS2026");
-    expect(screen.getByRole("button", { name: "Скопировано" })).toBeTruthy();
-    // The other rows still show the plain copy label.
-    expect(screen.getAllByRole("button", { name: /Копировать/ })).toHaveLength(2);
+    expect(table.getByRole("button", { name: "Скопировано" })).toBeTruthy();
+    expect(table.getAllByRole("button", { name: /Копировать/ })).toHaveLength(2);
   });
 
   it("opens the generate modal and closes it on cancel without sending a request", () => {
     const { calls } = installFetchMock([]);
     render(<InvitesManager initialInvites={invites} courses={courses} groups={groups} role="DIRECTOR" />);
 
-    fireEvent.click(screen.getByRole("button", { name: /Сгенерировать Код/ }));
-    expect(screen.getByText("Создать Новый Инвайт-код")).toBeTruthy();
-    // Course options are listed inside the modal select.
-    expect(screen.getByRole("option", { name: "Frontend React" })).toBeTruthy();
-    expect(screen.getByRole("option", { name: "Python Basics" })).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: /Сгенерировать код/ }));
+    const dialog = screen.getByRole("dialog");
+    expect(within(dialog).getByText("Создать новый инвайт-код")).toBeTruthy();
+    expect(within(dialog).getByRole("option", { name: "Frontend React" })).toBeTruthy();
+    expect(within(dialog).getByRole("option", { name: "Python Basics" })).toBeTruthy();
 
-    fireEvent.click(screen.getByRole("button", { name: "Отмена" }));
+    fireEvent.click(within(dialog).getByRole("button", { name: "Отмена" }));
 
-    expect(screen.queryByText("Создать Новый Инвайт-код")).toBeNull();
+    expect(screen.queryByRole("dialog")).toBeNull();
     expect(calls).toHaveLength(0);
   });
 
@@ -188,16 +181,17 @@ describe("InvitesManager (UI)", () => {
       { match: "/api/invites/generate", method: "POST", reply: jsonResponse({ id: "new" }, 201) },
     ]);
 
-    const { container } = render(
+    render(
       <InvitesManager initialInvites={invites} courses={courses} groups={groups} role="DIRECTOR" />,
     );
 
-    fireEvent.click(screen.getByRole("button", { name: /Сгенерировать Код/ }));
+    fireEvent.click(screen.getByRole("button", { name: /Сгенерировать код/ }));
+    const dialog = screen.getByRole("dialog");
 
-    const selects = screen.getAllByRole("combobox");
+    const selects = within(dialog).getAllByRole("combobox");
     fireEvent.change(selects[0], { target: { value: "CENTER_ADMIN" } });
     fireEvent.change(selects[1], { target: { value: "c-2" } });
-    fireEvent.change(container.querySelector('input[type="number"]')!, { target: { value: "5" } });
+    fireEvent.change(dialog.querySelector('input[type="number"]')!, { target: { value: "5" } });
 
     fireEvent.submit(generateForm());
 
@@ -212,7 +206,7 @@ describe("InvitesManager (UI)", () => {
       groupId: "",
       maxUses: "5",
     });
-    await waitFor(() => expect(screen.queryByText("Создать Новый Инвайт-код")).toBeNull());
+    await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
   });
 
   it("shows the pending label while the generate request is in flight", async () => {
@@ -221,16 +215,16 @@ describe("InvitesManager (UI)", () => {
     installFetchMock([{ match: "/api/invites/generate", method: "POST", reply: pending }]);
 
     render(<InvitesManager initialInvites={invites} courses={courses} groups={groups} role="DIRECTOR" />);
-    fireEvent.click(screen.getByRole("button", { name: /Сгенерировать Код/ }));
+    fireEvent.click(screen.getByRole("button", { name: /Сгенерировать код/ }));
     fireEvent.submit(generateForm());
 
     expect(screen.getByRole("button", { name: "Генерация..." })).toBeTruthy();
 
     d.resolve({ id: "new" });
-    await waitFor(() => expect(screen.queryByText("Создать Новый Инвайт-код")).toBeNull());
+    await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
   });
 
-  it("surfaces a generate API error via alert and keeps the modal open", async () => {
+  it("surfaces a generate API error via inline alert and keeps the modal open", async () => {
     installFetchMock([
       {
         match: "/api/invites/generate",
@@ -240,35 +234,41 @@ describe("InvitesManager (UI)", () => {
     ]);
 
     render(<InvitesManager initialInvites={invites} courses={courses} groups={groups} role="DIRECTOR" />);
-    fireEvent.click(screen.getByRole("button", { name: /Сгенерировать Код/ }));
+    fireEvent.click(screen.getByRole("button", { name: /Сгенерировать код/ }));
     fireEvent.submit(generateForm());
 
-    await waitFor(() => expect(window.alert).toHaveBeenCalledWith("Лимит инвайтов исчерпан"));
-    expect(screen.getByText("Создать Новый Инвайт-код")).toBeTruthy();
+    const dialog = screen.getByRole("dialog");
+    expect(await within(dialog).findByText("Лимит инвайтов исчерпан")).toBeTruthy();
+    expect(window.alert).not.toHaveBeenCalled();
+    expect(within(dialog).getByText("Создать новый инвайт-код")).toBeTruthy();
     expect(refresh).not.toHaveBeenCalled();
   });
 
-  it("falls back to a generic alert when a generate error body has no message", async () => {
+  it("falls back to a generic inline error when a generate error body has no message", async () => {
     installFetchMock([
       { match: "/api/invites/generate", method: "POST", reply: jsonResponse({}, 400) },
     ]);
 
     render(<InvitesManager initialInvites={invites} courses={courses} groups={groups} role="DIRECTOR" />);
-    fireEvent.click(screen.getByRole("button", { name: /Сгенерировать Код/ }));
+    fireEvent.click(screen.getByRole("button", { name: /Сгенерировать код/ }));
     fireEvent.submit(generateForm());
 
-    await waitFor(() => expect(window.alert).toHaveBeenCalledWith("Не удалось создать код"));
-    expect(screen.getByText("Создать Новый Инвайт-код")).toBeTruthy();
+    const dialog = screen.getByRole("dialog");
+    expect(await within(dialog).findByText("Не удалось создать код")).toBeTruthy();
+    expect(window.alert).not.toHaveBeenCalled();
+    expect(within(dialog).getByText("Создать новый инвайт-код")).toBeTruthy();
   });
 
-  it("reports a generate network failure with a generic alert", async () => {
-    installFetchMock([]); // any request throws -> network error branch
+  it("reports a generate network failure inline", async () => {
+    installFetchMock([]);
 
     render(<InvitesManager initialInvites={invites} courses={courses} groups={groups} role="DIRECTOR" />);
-    fireEvent.click(screen.getByRole("button", { name: /Сгенерировать Код/ }));
+    fireEvent.click(screen.getByRole("button", { name: /Сгенерировать код/ }));
     fireEvent.submit(generateForm());
 
-    await waitFor(() => expect(window.alert).toHaveBeenCalledWith("Ошибка сети"));
+    const dialog = screen.getByRole("dialog");
+    expect(await within(dialog).findByText("Ошибка сети")).toBeTruthy();
+    expect(window.alert).not.toHaveBeenCalled();
   });
 
   it("redeems a code successfully, shows the center name, clears the input and refreshes", async () => {
@@ -288,7 +288,7 @@ describe("InvitesManager (UI)", () => {
 
     expect(
       await screen.findByText(
-        "Успешно! Вы присоединились к центру «IT Academy» с ролью STUDENT",
+        "Вы успешно присоединились к центру «IT Academy» с ролью STUDENT",
       ),
     ).toBeTruthy();
 
@@ -322,20 +322,19 @@ describe("InvitesManager (UI)", () => {
       { match: "/api/invites/accept", method: "POST", reply: jsonResponse({}, 400) },
     ]);
 
-    const { container } = render(<InvitesManager initialInvites={invites} courses={courses} groups={groups} />);
+    render(<InvitesManager initialInvites={invites} courses={courses} groups={groups} />);
 
     const input = screen.getByPlaceholderText("e.g. JOIN-JS2026 или PARENT-1234");
     fireEvent.change(input, { target: { value: "BAD-CODE" } });
     fireEvent.submit(redeemForm());
 
     await waitFor(() => expect(window.alert).not.toHaveBeenCalled());
-    expect(screen.queryByText(/Успешно!/)).toBeNull();
-    // data.error is undefined -> the falsy guard renders no error box.
-    expect(container.querySelector(".text-rose-400")).toBeNull();
+    expect(screen.queryByText(/присоединились к центру/)).toBeNull();
+    expect(screen.queryByRole("alert")).toBeNull();
   });
 
   it("reports a redeem network failure", async () => {
-    installFetchMock([]); // no route -> fetch throws
+    installFetchMock([]);
 
     render(<InvitesManager initialInvites={invites} courses={courses} groups={groups} />);
 
@@ -343,7 +342,6 @@ describe("InvitesManager (UI)", () => {
     fireEvent.change(input, { target: { value: "JOIN-JS2026" } });
     fireEvent.submit(redeemForm());
 
-    // The component stores the message with a leading space; Testing Library trims it.
     expect(await screen.findByText("Ошибка при активации")).toBeTruthy();
   });
 });

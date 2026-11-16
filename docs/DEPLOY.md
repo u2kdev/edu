@@ -44,6 +44,18 @@ Serverless-архитектура Vercel порождает изолирован
      ```
    - **Важно:** `DIRECT_URL` строго обязателен для выполнения DDL-миграций Prisma (`prisma migrate deploy`), так как транзакционный пулер PgBouncer не поддерживает транзакционные DDL-команды и Prisma advisory locks.
 
+3. **Параметры пула соединений Prisma и сайзинг PgBouncer**:
+   - Для бессерверных и контейнерных инстансов добавьте параметры размера пула и таймаута в `DATABASE_URL`:
+     ```env
+     DATABASE_URL="postgres://username:password@ep-xyz-pooler.eu-central-1.aws.neon.tech/neondb?sslmode=require&pgbouncer=true&connection_limit=10&pool_timeout=15"
+     ```
+   - `connection_limit=10`: ограничивает максимальное число одновременных TCP-соединений от одного инстанса к пулеру PgBouncer, предотвращая исчерпание пула при автомасштабировании.
+   - `pool_timeout=15`: таймаут ожидания свободного коннекта в секундах до генерации ошибки клиенту (вместо бесконечного зависания воркера).
+   - `pgbouncer=true`: отключает Prisma prepared statements, несовместимые с Transaction Pooling режимом PgBouncer.
+   - **Двухуровневая защита пула**:
+     - Слой 1 (In-Memory Pre-Check): `BoundedMemoryRateLimiter` в `src/lib/rate-limit.ts` отсекает паразитный трафик до обращения к PostgreSQL.
+     - Слой 2 (Advisory Locks): крон-эндпоинты используют `withAdvisoryLock` (`pg_try_advisory_lock`), предотвращая конкурентное дублирование тяжелых транзакций между репликами.
+
 ### Шаг 2.3. Конфигурация в Prisma
 В файле `prisma/schema.prisma` источник данных сконфигурирован для автоматического разделения:
 ```prisma
@@ -85,18 +97,25 @@ npx prisma migrate deploy
 | `DATABASE_URL` | Строка подключения к PostgreSQL через пулер Neon (PgBouncer) | **Строго обязательно** | `postgres://user:pass@ep-pooler.region.neon.tech/neondb?sslmode=require&pgbouncer=true` |
 | `DIRECT_URL` | Прямое подключение к PostgreSQL без пулера для миграций | **Строго обязательно** | `postgres://user:pass@ep.region.neon.tech/neondb?sslmode=require` |
 | `JWT_SECRET` | Криптографический ключ для подписи сессионных токенов (не менее 32 символов) | **Строго обязательно** | `openssl rand -base64 32` |
+| `PAYMENT_CONFIG_ENCRYPTION_KEY` | Отдельный 32+ символьный ключ AES-256-GCM для шифрования ключей мерчанта Click (должен отличаться от `JWT_SECRET`) | **Строго обязательно** | `openssl rand -hex 32` |
+| `RECEIPT_VERIFY_SECRET` | Отдельный 32+ символьный HMAC-секрет для QR-верификации квитанций (должен отличаться от `JWT_SECRET` и `PAYMENT_CONFIG_ENCRYPTION_KEY`) | **Строго обязательно** | `openssl rand -hex 32` |
+| `CLICK_ALLOWED_IPS` | Список доверенных IP / CIDR адресов Click через запятую (`CLICK_IP_ALLOWLIST` также поддерживается) | Рекомендуется | `195.158.0.0/16,185.8.212.0/22` |
 | `APP_URL` | Канонический базовый URL платформы без завершающего слеша | **Строго обязательно** | `https://lms.yourdomain.uz` |
 | `EMAIL_PROVIDER` | Почтовый драйвер. В production должен иметь значение `resend` | **Строго обязательно** | `resend` |
 | `RESEND_API_KEY` | Секретный API-ключ от сервиса Resend | **Строго обязательно** | `re_123456789abcdef` |
 | `EMAIL_FROM` | Валидированный email отправителя в сервисе Resend | **Строго обязательно** | `Academia LMS <noreply@yourdomain.uz>` |
 | `TRUSTED_PROXY_HOPS` | Количество доверенных обратных прокси. Для Vercel равно `1` (при Vercel + Cloudflare — `2`) | **Строго обязательно** | `1` |
 | `CRON_SECRET` | Секретный токен для авторизации Vercel Cron вызовов в эндпоинтах `/api/cron/*` | **Строго обязательно** | `openssl rand -hex 24` |
+| `TWO_FACTOR_ENC_KEY` | 32-байтный hex-ключ для шифрования 2FA TOTP секретов алгоритмом AES-256-GCM | **Строго обязательно** | `openssl rand -hex 32` |
+| `SETUP_TOKEN` | Одноразовый секретный токен для первичной инициализации владельца платформы | **Обязательно для setup** | `openssl rand -hex 24` |
+| `TURNSTILE_SITE_KEY` | Публичный ключ Cloudflare Turnstile CAPTCHA | Рекомендуется | `0x4AAAAAA...` |
+| `TURNSTILE_SECRET_KEY` | Приватный секретный ключ Cloudflare Turnstile | Рекомендуется | `0x4AAAAAA...` |
 | `FEATURE_UPLOADS` | Флаг включения загрузок S3/R2 (`false` по умолчанию) | Опционально | `false` |
 | `DEV_LOGIN` | Флаг режима обхода авторизации для разработки (`false` в production) | Опционально | `false` |
 | `DEV_EMAIL_LOG` | Флаг вывода писем в консоль (`false` в production) | Опционально | `false` |
 
 > [!CAUTION]
-> **Контроль запуска в Production**: При старте сервера в `NODE_ENV=production` приложение выполняет валидацию всех обязательных переменных окружения (`JWT_SECRET`, `DATABASE_URL`, `DIRECT_URL`, `APP_URL`, `EMAIL_PROVIDER=resend`, `RESEND_API_KEY`, `EMAIL_FROM`, `TRUSTED_PROXY_HOPS`, `CRON_SECRET`). При отсутствии любой из них или если длина `JWT_SECRET < 32` сервер немедленно выбрасывает фатальную ошибку.
+> **Контроль запуска в Production**: При старте сервера в `NODE_ENV=production` приложение выполняет валидацию всех обязательных переменных окружения (`JWT_SECRET`, `PAYMENT_CONFIG_ENCRYPTION_KEY`, `RECEIPT_VERIFY_SECRET`, `DATABASE_URL`, `DIRECT_URL`, `APP_URL`, `EMAIL_PROVIDER=resend`, `RESEND_API_KEY`, `EMAIL_FROM`, `TRUSTED_PROXY_HOPS`, `CRON_SECRET`), а также проверяет раздельность секретов и формат `CLICK_ALLOWED_IPS` (если задан). При отсутствии или некорректном формате сервер немедленно выбрасывает фатальную ошибку.
 
 > [!NOTE]
 > Сборка приложения (`next build`) не требует боевых секретов базы данных или Resend. Проверка осуществляется исключительно во время запуска сервера (server runtime).
@@ -123,24 +142,44 @@ npx prisma migrate deploy
 {
   "crons": [
     {
-      "path": "/api/cron/cleanup",
-      "schedule": "0 3 * * *"
+      "path": "/api/cron/email-outbox",
+      "schedule": "*/5 * * * *"
     },
     {
-      "path": "/api/cron/email-retry",
-      "schedule": "*/10 * * * *"
+      "path": "/api/cron/click-reconcile",
+      "schedule": "*/15 * * * *"
+    },
+    {
+      "path": "/api/cron/cleanup",
+      "schedule": "0 4 * * *"
+    },
+    {
+      "path": "/api/cron/subscriptions",
+      "schedule": "0 3 * * *"
     }
   ]
 }
 ```
 
 ### Задачи Cron:
-1. `/api/cron/cleanup`:
+1. `/api/cron/email-outbox` (ранее `/api/cron/email-retry`):
+   - Запускается каждые 5 минут.
+   - Обрабатывает очередь неотправленных писем `EmailOutbox` с экспоненциальной задержкой и защитой через `withAdvisoryLock` (Lock ID `8802`).
+2. `/api/cron/click-reconcile`:
+   - Запускается каждые 15 минут.
+   - Истекает зависшие `PaymentIntent` и выполняет сверку онлайн-оплат Click с защитой через `withAdvisoryLock` (Lock ID `8804`).
+3. `/api/cron/cleanup`:
+   - Запускается раз в сутки в 04:00 UTC.
+   - Выполняет ротацию и очистку устаревших записей `RateLimitRecord` и архивацию старых писем `EmailOutbox` под `withAdvisoryLock` (Lock ID `8801`).
+4. `/api/cron/subscriptions`:
    - Запускается раз в сутки в 03:00 UTC.
-   - Выполняет ротацию и очистку устаревших записей `RateLimitRecord` и успешно отправленных или безнадежно отмененных писем в `EmailOutbox`.
-2. `/api/cron/email-retry`:
-   - Запускается каждые 10 минут.
-   - Повторяет отправку неотправленных писем из очереди `EmailOutbox` с экспоненциальной задержкой и лимитом до 5 попыток.
+   - Проверяет сроки действия планов учебных центров, переводит просроченные в `OVERDUE` / `PAUSED` под `withAdvisoryLock` (Lock ID `8803`).
+5. `/api/cron/payment-reminders`:
+   - Запускается каждый час (`0 * * * *`).
+   - Отправляет напоминания об оплате (`-3, 0, +3, +7` дней в `Asia/Tashkent`), досылает отложенные после тихих часов уведомления и запускает отложенные рассылки под `withAdvisoryLock` (Lock ID `8805`).
+
+### Внешний планировщик (если Vercel Hobby или VPS):
+На бесплатном плане Vercel Hobby поддерживаются только суточные задачи, поэтому для `/api/cron/email-outbox` (`*/5 * * * *`), `/api/cron/click-reconcile` (`*/15 * * * *`) и `/api/cron/payment-reminders` (`0 * * * *`) настройте внешний планировщик (Upstash QStash, Cloudflare Workers Cron, GitHub Actions или системный `crontab`) с заголовком `Authorization: Bearer $CRON_SECRET`.
 
 ### Защита эндпоинтов Cron:
 Все эндпоинты `/api/cron/*` защищены заголовком `Authorization: Bearer <CRON_SECRET>`. Vercel Pro автоматически передает этот заголовок при вызове Cron-задач. Несанкционированные вызовы отклоняются со статусом `401 Unauthorized`.
@@ -178,12 +217,13 @@ npx prisma migrate deploy
    ```
    https://lms.yourdomain.uz/setup
    ```
-2. Данная страница доступна **исключительно** до тех пор, пока в базе данных насчитывается **0** пользователей с ролью `SUPERADMIN`.
-3. Заполните форму первичной инициализации:
+2. Данная страница и связанный API-эндпоинт `/api/platform/first-owner` доступны **исключительно** до тех пор, пока в базе данных насчитывается **0** пользователей с ролью `SUPERADMIN`, и требуют обязательной передачи одноразового секретного токена `SETUP_TOKEN` из переменных окружения (сравнение выполняется через `crypto.timingSafeEqual`).
+3. При отсутствии валидного токена или после создания первого суперадмина эндпоинт и страница `/setup` возвращают **`404 Not Found`**, не раскрывая статус инициализации платформы во внешнюю сеть.
+4. Заполните форму первичной инициализации:
    - Имя владельца платформы
    - Email адрес
    - Надежный пароль (не менее 10 символов)
-4. После создания первого суперпользователя страница `/setup` **безвозвратно блокируется** и при последующих обращениях возвращает `403 Forbidden`.
+5. После создания первого суперпользователя эндпоинт первичной настройки **безвозвратно отключается**.
 
 ### Способ Б: Консольная команда (`npm run setup:first-owner`)
 Вы можете инициализировать владельца платформы через защищенную CLI-команду:

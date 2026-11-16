@@ -52,6 +52,7 @@ export function useStudents({ role, locale, messages }: UseStudentsArgs) {
   const [addGroupId, setAddGroupId] = useState("");
   const [addWithInvite, setAddWithInvite] = useState(true);
   const [addLoading, setAddLoading] = useState(false);
+  const [addError, setAddError] = useState<string | null>(null);
   const [addCreatedCode, setAddCreatedCode] = useState<string | null>(null);
   const [createdCredentials, setCreatedCredentials] = useState<CredentialsData | null>(null);
 
@@ -59,6 +60,7 @@ export function useStudents({ role, locale, messages }: UseStudentsArgs) {
   const [csvContent, setCsvContent] = useState("");
   const [csvPreviewData, setCsvPreviewData] = useState<CsvPreviewData | null>(null);
   const [csvLoading, setCsvLoading] = useState(false);
+  const [csvError, setCsvError] = useState<string | null>(null);
   const [csvResult, setCsvResult] = useState<CsvImportResult | null>(null);
 
   const canManage = canManageStudents(role);
@@ -118,18 +120,30 @@ export function useStudents({ role, locale, messages }: UseStudentsArgs) {
   const goPrevPage = () => setPage((p) => Math.max(1, p - 1));
   const goNextPage = () => setPage((p) => Math.min(totalPages, p + 1));
 
+  const resetFilters = () => {
+    setSearch("");
+    setSelectedGroup("");
+    setSelectedStatus("");
+    setPage(1);
+  };
+
   const resetAddForm = () => {
     setAddFullName("");
     setAddEmail("");
     setAddPhone("");
     setAddGroupId("");
+    setAddError(null);
   };
 
   const openAddModal = () => {
     setAddCreatedCode(null);
+    setAddError(null);
     setShowAddModal(true);
   };
-  const closeAddModal = () => setShowAddModal(false);
+  const closeAddModal = () => {
+    setShowAddModal(false);
+    setAddError(null);
+  };
   const closeAddModalAndReset = () => {
     setShowAddModal(false);
     setAddCreatedCode(null);
@@ -140,14 +154,19 @@ export function useStudents({ role, locale, messages }: UseStudentsArgs) {
     setCsvPreviewData(null);
     setCsvResult(null);
     setCsvContent("");
+    setCsvError(null);
     setShowCsvModal(true);
   };
-  const closeCsvModal = () => setShowCsvModal(false);
+  const closeCsvModal = () => {
+    setShowCsvModal(false);
+    setCsvError(null);
+  };
 
   const handleAddSubmit = async (e: FormEvent) => {
     e.preventDefault();
+    setAddError(null);
     if (!addEmail && !addPhone) {
-      alert("Необходимо указать email или номер телефона");
+      setAddError("Необходимо указать email или номер телефона");
       return;
     }
     setAddLoading(true);
@@ -165,7 +184,7 @@ export function useStudents({ role, locale, messages }: UseStudentsArgs) {
       });
       const data = await res.json();
       if (!res.ok) {
-        alert(data.error || messages.createError);
+        setAddError(data.error || messages.createError);
       } else {
         if (data.credentials) {
           setCreatedCredentials(data.credentials);
@@ -179,7 +198,7 @@ export function useStudents({ role, locale, messages }: UseStudentsArgs) {
         fetchStudents();
       }
     } catch {
-      alert(messages.networkError);
+      setAddError(messages.networkError);
     } finally {
       setAddLoading(false);
     }
@@ -187,6 +206,7 @@ export function useStudents({ role, locale, messages }: UseStudentsArgs) {
 
   const handleCsvPreview = async () => {
     if (!csvContent.trim()) return;
+    setCsvError(null);
     setCsvLoading(true);
     try {
       const res = await fetch("/api/students/import-csv", {
@@ -196,12 +216,12 @@ export function useStudents({ role, locale, messages }: UseStudentsArgs) {
       });
       const data = await res.json();
       if (!res.ok) {
-        alert(data.error || messages.csvPreviewError);
+        setCsvError(data.error || messages.csvPreviewError);
       } else {
         setCsvPreviewData(data);
       }
     } catch {
-      alert(messages.networkError);
+      setCsvError(messages.networkError);
     } finally {
       setCsvLoading(false);
     }
@@ -209,6 +229,7 @@ export function useStudents({ role, locale, messages }: UseStudentsArgs) {
 
   const handleCsvExecute = async () => {
     if (!csvContent.trim()) return;
+    setCsvError(null);
     setCsvLoading(true);
     try {
       const res = await fetch("/api/students/import-csv", {
@@ -218,13 +239,13 @@ export function useStudents({ role, locale, messages }: UseStudentsArgs) {
       });
       const data = await res.json();
       if (!res.ok) {
-        alert(data.error || messages.csvExecuteError);
+        setCsvError(data.error || messages.csvExecuteError);
       } else {
         setCsvResult(data);
         fetchStudents();
       }
     } catch {
-      alert(messages.networkError);
+      setCsvError(messages.networkError);
     } finally {
       setCsvLoading(false);
     }
@@ -244,10 +265,12 @@ export function useStudents({ role, locale, messages }: UseStudentsArgs) {
     sortOrder,
     updateSort,
     page,
+    setPage,
     totalPages,
     totalCount,
     goPrevPage,
     goNextPage,
+    resetFilters,
     canManage,
     fetchStudents,
     showAddModal,
@@ -265,6 +288,7 @@ export function useStudents({ role, locale, messages }: UseStudentsArgs) {
     addWithInvite,
     setAddWithInvite,
     addLoading,
+    addError,
     addCreatedCode,
     createdCredentials,
     setCreatedCredentials,
@@ -277,6 +301,7 @@ export function useStudents({ role, locale, messages }: UseStudentsArgs) {
     csvPreviewData,
     csvResult,
     csvLoading,
+    csvError,
     handleCsvPreview,
     handleCsvExecute,
   };

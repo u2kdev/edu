@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { requireTenantAccess } from "@/lib/tenant";
 import { hasPermission } from "@/lib/permissions";
+import { sanitizeCsvCell } from "@/lib/csv";
 
 export async function GET(
   req: Request,
@@ -171,33 +172,58 @@ export async function GET(
 
     const url = new URL(req.url);
     if (url.searchParams.get("format") === "csv") {
-      // Build CSV
+      // Build CSV with formula injection sanitization
       const rows: string[] = [];
-      rows.push(`"ТАБЕЛЬ УСПЕВАЕМОСТИ: ${student.user.fullName}"`);
-      rows.push(`"Учебный центр:","${tenantCtx.center.name}"`);
-      rows.push(`"Дата формирования:","${new Date().toLocaleDateString("ru-RU")}"`);
-      rows.push(`"Посещаемость:","${attendanceRate}% (${presentCount} из ${totalAttendances} занятий)"`);
-      rows.push(`"Средний балл:","${avgGrade}"`);
-      rows.push(`"Средний балл за тесты:","${avgTestScore}%"`);
+      rows.push(sanitizeCsvCell(`ТАБЕЛЬ УСПЕВАЕМОСТИ: ${student.user.fullName}`));
+      rows.push(`${sanitizeCsvCell("Учебный центр:")},${sanitizeCsvCell(tenantCtx.center.name)}`);
+      rows.push(`${sanitizeCsvCell("Дата формирования:")},${sanitizeCsvCell(new Date().toLocaleDateString("ru-RU"))}`);
+      rows.push(`${sanitizeCsvCell("Посещаемость:")},${sanitizeCsvCell(`${attendanceRate}% (${presentCount} из ${totalAttendances} занятий)`)}`);
+      rows.push(`${sanitizeCsvCell("Средний балл:")},${sanitizeCsvCell(avgGrade)}`);
+      rows.push(`${sanitizeCsvCell("Средний балл за тесты:")},${sanitizeCsvCell(`${avgTestScore}%`)}`);
       rows.push("");
-      rows.push(`"ОЦЕНКИ"`);
-      rows.push(`"Дата","Предмет/Группа","Тип","Оценка","Макс","Комментарий"`);
+      rows.push(sanitizeCsvCell("ОЦЕНКИ"));
+      rows.push([
+        sanitizeCsvCell("Дата"),
+        sanitizeCsvCell("Предмет/Группа"),
+        sanitizeCsvCell("Тип"),
+        sanitizeCsvCell("Оценка"),
+        sanitizeCsvCell("Макс"),
+        sanitizeCsvCell("Комментарий"),
+      ].join(","));
       student.gradesAsStudent.forEach((g) => {
         const dateStr = new Date(g.createdAt).toLocaleDateString("ru-RU");
         const groupStr = g.group?.name || "-";
-        const comm = (g.comment || "").replace(/"/g, '""');
-        rows.push(`"${dateStr}","${groupStr}","${g.gradeType}","${g.value}","${g.maxValue}","${comm}"`);
+        rows.push([
+          sanitizeCsvCell(dateStr),
+          sanitizeCsvCell(groupStr),
+          sanitizeCsvCell(g.gradeType),
+          sanitizeCsvCell(g.value),
+          sanitizeCsvCell(g.maxValue),
+          sanitizeCsvCell(g.comment || ""),
+        ].join(","));
       });
       rows.push("");
-      rows.push(`"ТЕСТЫ"`);
-      rows.push(`"Дата","Тест","Результат (%)","Баллы","Статус"`);
+      rows.push(sanitizeCsvCell("ТЕСТЫ"));
+      rows.push([
+        sanitizeCsvCell("Дата"),
+        sanitizeCsvCell("Тест"),
+        sanitizeCsvCell("Результат (%)"),
+        sanitizeCsvCell("Баллы"),
+        sanitizeCsvCell("Статус"),
+      ].join(","));
       completedAttempts.forEach((a) => {
         const dateStr = a.completedAt
           ? new Date(a.completedAt).toLocaleDateString("ru-RU")
           : "-";
-        const title = a.test.material.title.replace(/"/g, '""');
+        const title = a.test.material.title;
         const status = (a.scorePercent ?? 0) >= a.test.passingScorePercent ? "СДАН" : "НЕ СДАН";
-        rows.push(`"${dateStr}","${title}","${a.scorePercent}%","${a.scorePoints}/${a.maxPoints}","${status}"`);
+        rows.push([
+          sanitizeCsvCell(dateStr),
+          sanitizeCsvCell(title),
+          sanitizeCsvCell(`${a.scorePercent}%`),
+          sanitizeCsvCell(`${a.scorePoints}/${a.maxPoints}`),
+          sanitizeCsvCell(status),
+        ].join(","));
       });
 
       const csvContent = "\uFEFF" + rows.join("\r\n");

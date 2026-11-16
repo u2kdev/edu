@@ -66,7 +66,7 @@ describe("LoginPage", () => {
       expect(pushMock).toHaveBeenCalledWith("/invites/accept?pendingInviteId=abc"),
     );
     expect(refreshMock).toHaveBeenCalled();
-    expect(sentBody(calls[0])).toEqual({
+    expect(sentBody(calls[0])).toMatchObject({
       email: "director@example.com",
       password: "S3cret!!",
       rememberMe: true,

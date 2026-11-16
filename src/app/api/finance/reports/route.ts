@@ -7,6 +7,10 @@ import {
   calculateDebtorsReport,
   calculateTeacherSalariesReport,
 } from "@/lib/finance-reports";
+import {
+  getCachedFinanceReport,
+  setCachedFinanceReport,
+} from "@/lib/finance-reports-cache";
 
 export async function GET(req: Request) {
   try {
@@ -26,6 +30,13 @@ export async function GET(req: Request) {
     const startDateParam = searchParams.get("startDate");
     const endDateParam = searchParams.get("endDate");
     const branchId = searchParams.get("branchId");
+    const bypassCache = searchParams.get("refresh") === "true";
+
+    const cacheKey = `${tenantCtx.center.id}:${periodParam || ""}:${startDateParam || ""}_${endDateParam || ""}:${branchId || "all"}`;
+    const cached = !bypassCache ? getCachedFinanceReport(cacheKey) : null;
+    if (cached) {
+      return NextResponse.json(cached);
+    }
 
     let startDate: Date;
     let endDate: Date;
@@ -62,7 +73,7 @@ export async function GET(req: Request) {
       }),
     ]);
 
-    return NextResponse.json({
+    const payload = {
       period: {
         startDate: startDate.toISOString(),
         endDate: endDate.toISOString(),
@@ -70,7 +81,11 @@ export async function GET(req: Request) {
       report,
       debtors,
       salaries,
-    });
+    };
+
+    setCachedFinanceReport(cacheKey, payload);
+
+    return NextResponse.json(payload);
   } catch (err: unknown) {
     const error = err as { message?: string; status?: number; code?: string };
     return NextResponse.json(

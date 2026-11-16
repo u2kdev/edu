@@ -41,9 +41,8 @@ export async function PATCH(req: Request) {
     });
   } catch (err: unknown) {
     console.error("Language update error:", err);
-    const message = err instanceof Error ? err.message : "Server error";
     return NextResponse.json(
-      { error: message },
+      { error: "Internal server error" },
       { status: 500 }
     );
   }

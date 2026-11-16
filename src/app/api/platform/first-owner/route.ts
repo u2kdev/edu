@@ -71,8 +71,11 @@ export async function POST(req: Request) {
 
     const { email, password, fullName } = parsed.data;
 
-    // 5. Transactional double-checked creation
+    // 5. Transactional double-checked creation with advisory transaction lock
     const result = await db.$transaction(async (tx) => {
+      // Serialize concurrent setup attempts via PostgreSQL advisory transaction lock
+      await tx.$executeRawUnsafe("SELECT pg_advisory_xact_lock(42424242)");
+
       const count = await tx.platformUser.count({
         where: { platformRole: "SUPERADMIN" },
       });

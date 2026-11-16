@@ -39,6 +39,7 @@ describe("TDD Attack Suite: R2 Platform First-Owner Setup Hardening", () => {
       await db.learningCenter.deleteMany({ where: { ownerId: { in: createdUserIds } } });
       await db.userSession.deleteMany({ where: { userId: { in: createdUserIds } } });
       await db.auditLog.deleteMany({ where: { actorUserId: { in: createdUserIds } } });
+      await db.platformExpense.deleteMany({ where: { createdBy: { in: createdUserIds } } });
       await db.platformUser.deleteMany({ where: { id: { in: createdUserIds } } });
     }
   });
@@ -49,6 +50,7 @@ describe("TDD Attack Suite: R2 Platform First-Owner Setup Hardening", () => {
       await db.learningCenter.deleteMany({ where: { ownerId: { in: createdUserIds } } });
       await db.userSession.deleteMany({ where: { userId: { in: createdUserIds } } });
       await db.auditLog.deleteMany({ where: { actorUserId: { in: createdUserIds } } });
+      await db.platformExpense.deleteMany({ where: { createdBy: { in: createdUserIds } } });
       await db.platformUser.deleteMany({ where: { id: { in: createdUserIds } } });
     }
   });

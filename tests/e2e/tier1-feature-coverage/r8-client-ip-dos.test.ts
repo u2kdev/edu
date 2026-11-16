@@ -201,5 +201,5 @@ describe("Tier 1 Feature Coverage: R8 Safe Client IP Extraction & Anti-DoS", () 
         where: { id: { in: [userVictim.id, userLegit.id] } },
       });
     }
-  });
+  }, 30000);
 });

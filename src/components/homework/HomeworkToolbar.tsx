@@ -21,10 +21,10 @@ export function HomeworkToolbar({
           key={st}
           type="button"
           onClick={() => onFilterChange(st)}
-          className={`px-3 py-1.5 rounded-xl text-xs font-semibold border transition-colors ${
+          className={`rounded-md border px-3 py-1.5 text-xs font-medium transition-colors ${
             filterStatus === st
-              ? "bg-brand-500 text-white border-brand-400"
-              : "bg-slate-900 border-slate-800 text-slate-400 hover:bg-slate-800"
+              ? "border-primary bg-primary text-primary-foreground"
+              : "border-border bg-card text-muted-foreground hover:bg-muted hover:text-foreground"
           }`}
         >
           {st === "ALL"

@@ -3,9 +3,23 @@
 import type { FormEvent } from "react";
 import { ArrowRightLeft } from "lucide-react";
 import { t } from "@/i18n";
+import {
+  Alert,
+  AlertDescription,
+  Button,
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+  FormActions,
+  FormField,
+  Input,
+} from "@/components/ui";
 import { transferTargets, type GroupItem } from "./groups-utils";
 
 interface TransferStudentModalProps {
+  open: boolean;
   locale: string;
   studentName: string;
   sourceGroupId: string;
@@ -16,11 +30,16 @@ interface TransferStudentModalProps {
   onReasonChange: (value: string) => void;
   reasonPlaceholder: string;
   loading: boolean;
+  error?: string | null;
   onSubmit: (e: FormEvent) => void;
   onClose: () => void;
 }
 
+const selectClassName =
+  "flex h-9 w-full rounded-md border border-input bg-card px-3 py-1.5 text-sm text-foreground transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-1 focus-visible:ring-offset-background";
+
 export function TransferStudentModal({
+  open,
   locale,
   studentName,
   sourceGroupId,
@@ -31,31 +50,37 @@ export function TransferStudentModal({
   onReasonChange,
   reasonPlaceholder,
   loading,
+  error,
   onSubmit,
   onClose,
 }: TransferStudentModalProps) {
   return (
-    <div className="fixed inset-0 z-50 bg-black/75 backdrop-blur-sm flex items-center justify-center p-4">
-      <div className="glass-panel w-full max-w-md p-6 rounded-3xl border border-slate-800 space-y-4">
-        <h3 className="text-lg font-bold text-white flex items-center gap-2">
-          <ArrowRightLeft className="w-5 h-5 text-brand-400" />
-          <span>{t(locale, "groups.transferStudent")}</span>
-        </h3>
-
-        <p className="text-xs text-slate-300">
-          {t(locale, "groups.studentLabel", { name: studentName })}
-        </p>
+    <Dialog open={open} onOpenChange={(next) => !next && onClose()}>
+      <DialogContent className="max-w-md">
+        <DialogHeader>
+          <DialogTitle className="flex items-center gap-2">
+            <ArrowRightLeft className="h-4 w-4 text-primary" aria-hidden="true" />
+            <span>{t(locale, "groups.transferStudent")}</span>
+          </DialogTitle>
+          <DialogDescription>
+            {t(locale, "groups.studentLabel", { name: studentName })}
+          </DialogDescription>
+        </DialogHeader>
 
         <form onSubmit={onSubmit} className="space-y-4">
-          <div>
-            <label className="block text-xs font-semibold text-slate-300 uppercase tracking-wider mb-2">
-              {t(locale, "groups.transferTarget")}
-            </label>
+          {error && (
+            <Alert variant="destructive">
+              <AlertDescription>{error}</AlertDescription>
+            </Alert>
+          )}
+
+          <FormField label={t(locale, "groups.transferTarget")} htmlFor="transfer-target-group" required>
             <select
+              id="transfer-target-group"
               required
               value={targetGroupId}
               onChange={(e) => onTargetGroupIdChange(e.target.value)}
-              className="w-full px-4 py-2.5 bg-slate-900 border border-slate-700 rounded-xl text-white text-xs focus:outline-none focus:border-brand-500"
+              className={selectClassName}
             >
               {transferTargets(groups, sourceGroupId).map((g) => (
                 <option key={g.id} value={g.id}>
@@ -63,39 +88,28 @@ export function TransferStudentModal({
                 </option>
               ))}
             </select>
-          </div>
+          </FormField>
 
-          <div>
-            <label className="block text-xs font-semibold text-slate-300 uppercase tracking-wider mb-2">
-              {t(locale, "groups.transferReasonLabel")}
-            </label>
-            <input
+          <FormField label={t(locale, "groups.transferReasonLabel")} htmlFor="transfer-reason">
+            <Input
+              id="transfer-reason"
               type="text"
               value={reason}
               onChange={(e) => onReasonChange(e.target.value)}
               placeholder={reasonPlaceholder}
-              className="w-full px-4 py-2.5 bg-slate-900 border border-slate-700 rounded-xl text-white text-xs focus:outline-none focus:border-brand-500"
             />
-          </div>
+          </FormField>
 
-          <div className="flex justify-end gap-2.5 pt-3 border-t border-slate-800">
-            <button
-              type="button"
-              onClick={onClose}
-              className="px-4 py-2 bg-slate-800 hover:bg-slate-700 text-slate-300 font-semibold rounded-xl text-xs"
-            >
+          <FormActions>
+            <Button type="button" variant="secondary" onClick={onClose}>
               {t(locale, "common.cancel")}
-            </button>
-            <button
-              type="submit"
-              disabled={loading}
-              className="px-4 py-2 bg-brand-600 hover:bg-brand-500 text-white font-semibold rounded-xl text-xs shadow-lg shadow-brand-600/30"
-            >
+            </Button>
+            <Button type="submit" variant="primary" disabled={loading} loading={loading}>
               {loading ? t(locale, "common.loading") : t(locale, "groups.transferStudent")}
-            </button>
-          </div>
+            </Button>
+          </FormActions>
         </form>
-      </div>
-    </div>
+      </DialogContent>
+    </Dialog>
   );
 }

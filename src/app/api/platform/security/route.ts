@@ -49,7 +49,16 @@ export async function GET(req: Request) {
         },
         orderBy: { lastSeenAt: "desc" },
         take: 50,
-        include: {
+        select: {
+          id: true,
+          userId: true,
+          deviceId: true,
+          userAgent: true,
+          ipAddress: true,
+          createdAt: true,
+          lastSeenAt: true,
+          expiresAt: true,
+          revokedAt: true,
           user: {
             select: {
               id: true,

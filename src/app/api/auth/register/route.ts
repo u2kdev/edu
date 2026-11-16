@@ -9,6 +9,7 @@ import { getClientIp } from "@/lib/ip";
 import { logAuditEvent } from "@/lib/tenant";
 import { sendEmail, enqueueEmailOutbox } from "@/lib/email";
 import { registerSchema } from "@/lib/validation/auth";
+import { verifyTurnstileToken } from "@/lib/turnstile";
 import crypto from "crypto";
 import { REGISTER_CONFIG } from "@/lib/config";
 
@@ -18,6 +19,14 @@ export async function POST(req: Request) {
 
     const body = await req.json().catch(() => ({}));
     const rawCode = typeof body.inviteCode === "string" ? body.inviteCode.toUpperCase().trim() : "UNKNOWN";
+
+    // Turnstile bot protection check (when configured)
+    const turnstileToken = (body as { turnstileToken?: string }).turnstileToken ||
+      req.headers.get("cf-turnstile-response") ||
+      req.headers.get("x-turnstile-token") || undefined;
+    if (!(await verifyTurnstileToken(turnstileToken, ip))) {
+      return apiError("Captcha verification failed", "CAPTCHA_FAILED", 400);
+    }
 
     if (!(await checkRateLimit(ip + "_register", REGISTER_CONFIG.IP_HOURLY_LIMIT, 3600000))) {
       return apiError("Too many registration attempts from this IP", "RATE_LIMITED", 429);
